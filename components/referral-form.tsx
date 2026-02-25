@@ -151,15 +151,16 @@ export default function ReferralForm({ practices, defaultValues, referralId }: R
         await updateReferral(referralId, clean)
       } else {
         const result = await createReferral(clean)
-        if (result && "id" in result) {
+        if (result && "id" in result && result.id) {
+          const newId = result.id
           // Upload any attached files before navigating
           for (const file of files) {
             const fd = new FormData()
             fd.append("file", file)
-            fd.append("referralId", result.id)
+            fd.append("referralId", newId)
             await fetch("/api/documents/upload", { method: "POST", body: fd })
           }
-          router.push(`/referrals/${result.id}`)
+          router.push(`/referrals/${newId}`)
         }
       }
     })
