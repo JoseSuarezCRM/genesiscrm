@@ -1,0 +1,132 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+enum ReferralStatus {
+  NEW
+  CONTACTED
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  password  String
+  role      Role       @default(STAFF)
+  createdAt DateTime   @default(now())
+  referrals Referral[]
+}
+
+model ReferringPractice {
+  id        String             @id @default(cuid())
+  name      String
+  phone     String?
+  fax       String?
+  address   String?
+  createdAt DateTime           @default(now())
+  locations PracticeLocation[]
+  doctors   ReferringDoctor[]
+  referrals Referral[]
+}
+
+// A specific office/campus of a practice
+model PracticeLocation {
+  id         String            @id @default(cuid())
+  name       String            // e.g. "Main Office", "North Campus"
+  phone      String?
+  fax        String?
+  address    String?
+  practiceId String
+  practice   ReferringPractice @relation(fields: [practiceId], references: [id])
+  doctors    DoctorLocation[]
+  referrals  Referral[]
+  createdAt  DateTime          @default(now())
+}
+
+// A provider — belongs to one practice, can work at multiple locations
+model ReferringDoctor {
+  id         String            @id @default(cuid())
+  name       String
+  title      String?           // MD, DO, NP, PA-C, DPM, etc.
+  npi        String?           // National Provider Identifier (10 digits)
+  specialty  String?
+  phone      String?
+  email      String?
+  practiceId String
+  practice   ReferringPractice @relation(fields: [practiceId], references: [id])
+  locations  DoctorLocation[]
+  referrals  Referral[]
+  createdAt  DateTime          @default(now())
+}
+
+// Join table: doctor <-> location (many-to-many)
+model DoctorLocation {
+  doctorId   String
+  locationId String
+  doctor     ReferringDoctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  location   PracticeLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([doctorId, locationId])
+}
+
+model Referral {
+  id                  String             @id @default(cuid())
+  // Patient info
+  patientFirstName    String
+  patientLastName     String
+  patientPhone        String?
+  patientEmail        String?
+  patientDob          DateTime?
+  // Referring source (cascading: Practice > Location > Doctor)
+  referringPracticeId  String?
+  referringPractice    ReferringPractice? @relation(fields: [referringPracticeId], references: [id])
+  referringLocationId  String?
+  referringLocation    PracticeLocation?  @relation(fields: [referringLocationId], references: [id])
+  referringDoctorId    String?
+  referringDoctor      ReferringDoctor?   @relation(fields: [referringDoctorId], references: [id])
+  referringDoctorName  String?            // free-text fallback if doctor not in system
+  // Status pipeline
+  status              ReferralStatus     @default(NEW)
+  referralDate        DateTime           @default(now())
+  appointmentDate     DateTime?
+  // Insurance
+  insuranceProvider   String?
+  insuranceMemberId   String?
+  insuranceGroup      String?
+  authStatus          String?
+  // Notes & meta
+  notes               String?
+  createdById         String
+  createdBy           User               @relation(fields: [createdById], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  documents           Document[]
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  referralId   String
+  referral     Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileUrl      String
+  fileSize     Int?
+  contentType  String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+}
