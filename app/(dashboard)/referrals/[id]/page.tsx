@@ -120,9 +120,10 @@ export default async function ReferralDetailPage({ params }: Props) {
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <Row label="Name" value={`${referral.patientFirstName} ${referral.patientLastName}`} />
+            <Row label="MRN" value={referral.patientMrn} />
+            <Row label="Date of Birth" value={formatDate(referral.patientDob)} />
             <Row label="Phone" value={referral.patientPhone} />
             <Row label="Email" value={referral.patientEmail} />
-            <Row label="Date of Birth" value={formatDate(referral.patientDob)} />
           </CardContent>
         </Card>
 

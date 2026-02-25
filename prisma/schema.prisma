@@ -90,6 +90,7 @@ model Referral {
   // Patient info
   patientFirstName    String
   patientLastName     String
+  patientMrn          String?            // Medical Record Number
   patientPhone        String?
   patientEmail        String?
   patientDob          DateTime?

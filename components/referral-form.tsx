@@ -48,6 +48,7 @@ interface Practice {
 const schema = z.object({
   patientFirstName: z.string().min(1, "Required"),
   patientLastName: z.string().min(1, "Required"),
+  patientMrn: z.string().optional(),
   patientPhone: z.string().optional(),
   patientEmail: z.string().email("Invalid email").optional().or(z.literal("")),
   patientDob: z.string().optional(),
@@ -179,14 +180,17 @@ export default function ReferralForm({ practices, defaultValues, referralId }: R
           <Field label="Last Name *" error={errors.patientLastName?.message}>
             <Input {...register("patientLastName")} placeholder="Smith" />
           </Field>
+          <Field label="MRN" error={errors.patientMrn?.message}>
+            <Input {...register("patientMrn")} placeholder="Medical Record Number" />
+          </Field>
+          <Field label="Date of Birth" error={errors.patientDob?.message}>
+            <Input {...register("patientDob")} type="date" />
+          </Field>
           <Field label="Phone" error={errors.patientPhone?.message}>
             <Input {...register("patientPhone")} type="tel" placeholder="555-123-4567" />
           </Field>
           <Field label="Email" error={errors.patientEmail?.message}>
             <Input {...register("patientEmail")} type="email" placeholder="jane@example.com" />
-          </Field>
-          <Field label="Date of Birth" error={errors.patientDob?.message}>
-            <Input {...register("patientDob")} type="date" />
           </Field>
         </div>
       </section>

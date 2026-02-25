@@ -10,6 +10,7 @@ import { ReferralStatus } from "@prisma/client"
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
   patientLastName: z.string().min(1, "Last name is required"),
+  patientMrn: z.string().optional(),
   patientPhone: z.string().optional(),
   patientEmail: z.string().email().optional().or(z.literal("")),
   patientDob: z.string().optional(),
@@ -48,6 +49,7 @@ export async function createReferral(data: unknown) {
     data: {
       patientFirstName: d.patientFirstName,
       patientLastName: d.patientLastName,
+      patientMrn: d.patientMrn || null,
       patientPhone: d.patientPhone || null,
       patientEmail: d.patientEmail || null,
       patientDob: parseDate(d.patientDob),
@@ -88,6 +90,7 @@ export async function updateReferral(id: string, data: unknown) {
     data: {
       patientFirstName: d.patientFirstName,
       patientLastName: d.patientLastName,
+      patientMrn: d.patientMrn || null,
       patientPhone: d.patientPhone || null,
       patientEmail: d.patientEmail || null,
       patientDob: parseDate(d.patientDob),
