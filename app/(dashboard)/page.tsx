@@ -103,18 +103,21 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {statCards.map(({ status, label, icon: Icon, color, bg }) => {
           const count = status === null ? total : (statusMap[status] ?? 0)
+          const href = status === null ? "/referrals" : `/referrals?status=${status}`
           return (
-            <Card key={label}>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-slate-600">{label}</p>
-                  <div className={`p-2 rounded-lg ${bg}`}>
-                    <Icon className={`h-4 w-4 ${color}`} />
+            <Link key={label} href={href} className="group">
+              <Card className="hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-slate-600 group-hover:text-blue-600 transition-colors">{label}</p>
+                    <div className={`p-2 rounded-lg ${bg}`}>
+                      <Icon className={`h-4 w-4 ${color}`} />
+                    </div>
                   </div>
-                </div>
-                <p className="text-3xl font-bold text-slate-900">{count}</p>
-              </CardContent>
-            </Card>
+                  <p className="text-3xl font-bold text-slate-900">{count}</p>
+                </CardContent>
+              </Card>
+            </Link>
           )
         })}
       </div>
