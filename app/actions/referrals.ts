@@ -115,6 +115,19 @@ export async function updateReferral(id: string, data: unknown) {
   redirect(`/referrals/${id}`)
 }
 
+export async function updateReferralNotes(id: string, notes: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  await prisma.referral.update({
+    where: { id },
+    data: { notes: notes || null },
+  })
+
+  revalidatePath(`/referrals/${id}`)
+  return { success: true }
+}
+
 export async function updateReferralStatus(id: string, status: ReferralStatus) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")

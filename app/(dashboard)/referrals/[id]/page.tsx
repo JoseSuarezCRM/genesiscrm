@@ -12,6 +12,7 @@ import { updateReferralStatus, deleteReferral } from "@/app/actions/referrals"
 import DocumentUpload from "@/components/document-upload"
 import DocumentList from "@/components/document-list"
 import EditReferralDialog from "@/components/edit-referral-dialog"
+import ReferralNotesEditor from "@/components/referral-notes-editor"
 
 interface Props {
   params: { id: string }
@@ -179,16 +180,14 @@ export default async function ReferralDetailPage({ params }: Props) {
       </div>
 
       {/* Notes */}
-      {referral.notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap">{referral.notes}</p>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Notes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ReferralNotesEditor referralId={referral.id} initialNotes={referral.notes} />
+        </CardContent>
+      </Card>
 
       {/* Documents */}
       <Card>
