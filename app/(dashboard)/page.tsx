@@ -25,7 +25,7 @@ async function getStats() {
     prisma.referral.findMany({
       take: 10,
       orderBy: { createdAt: "desc" },
-      include: { referringPractice: true },
+      include: { referringPractice: true, referringDoctor: true },
     }),
   ])
 
@@ -175,6 +175,7 @@ export default async function DashboardPage() {
                 <tr className="border-b bg-slate-50">
                   <th className="text-left px-6 py-3 font-medium text-slate-500">Patient</th>
                   <th className="text-left px-6 py-3 font-medium text-slate-500">Referring Practice</th>
+                  <th className="text-left px-6 py-3 font-medium text-slate-500">Referring Provider</th>
                   <th className="text-left px-6 py-3 font-medium text-slate-500">Date</th>
                   <th className="text-left px-6 py-3 font-medium text-slate-500">Status</th>
                 </tr>
@@ -182,7 +183,7 @@ export default async function DashboardPage() {
               <tbody>
                 {recent.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-slate-400">
+                    <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
                       No referrals yet. <Link href="/referrals/new" className="text-blue-600 hover:underline">Add the first one</Link>.
                     </td>
                   </tr>
@@ -199,6 +200,11 @@ export default async function DashboardPage() {
                       </td>
                       <td className="px-6 py-3 text-slate-600">
                         {r.referringPractice?.name ?? "—"}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">
+                        {r.referringDoctor
+                          ? [(r.referringDoctor as any).title, r.referringDoctor.name].filter(Boolean).join(" ")
+                          : r.referringDoctorName ?? "—"}
                       </td>
                       <td className="px-6 py-3 text-slate-600">
                         {formatDate(r.referralDate)}
