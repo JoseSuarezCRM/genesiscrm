@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  BarChart2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -27,8 +28,13 @@ const navItems = [
   },
   {
     href: "/referring-doctors",
-    label: "Referring Doctors",
+    label: "Referring Providers",
     icon: UserCheck,
+  },
+  {
+    href: "/reports",
+    label: "Reports",
+    icon: BarChart2,
   },
 ]
 
