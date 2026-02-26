@@ -68,6 +68,7 @@ model ReferringDoctor {
   specialty  String?
   phone      String?
   email      String?
+  notes      String?
   practiceId String
   practice   ReferringPractice @relation(fields: [practiceId], references: [id])
   locations  DoctorLocation[]

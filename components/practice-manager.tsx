@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2 } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink } from "lucide-react"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -299,9 +300,10 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
                       <div className="space-y-1.5">
                         {p.doctors.map((d) => (
                           <div key={d.id} className="flex items-center gap-2 bg-white border rounded-md px-3 py-2 text-sm">
-                            <span className="font-medium text-slate-800 flex-1 min-w-0 truncate">
-                              {(d as any).title ? <span className="text-slate-500 font-normal mr-1">{(d as any).title}</span> : null}{d.name}
-                            </span>
+                            <Link href={`/referring-doctors/${d.id}`} className="font-medium text-blue-600 hover:underline flex-1 min-w-0 truncate flex items-center gap-1">
+                              {(d as any).title ? <span className="text-slate-500 font-normal">{(d as any).title}</span> : null}{d.name}
+                              <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
+                            </Link>
                             {d.specialty && <span className="text-slate-500 text-xs hidden md:block">{d.specialty}</span>}
                             <span className="text-xs text-slate-400 hidden sm:block shrink-0">
                               {d.locations.length > 0 ? d.locations.map((dl) => dl.location.name).join(", ") : "No locations"}

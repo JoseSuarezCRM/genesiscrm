@@ -207,6 +207,19 @@ export async function updateDoctor(id: string, data: unknown) {
   return { success: true }
 }
 
+export async function updateProviderNotes(id: string, notes: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  await prisma.referringDoctor.update({
+    where: { id },
+    data: { notes: notes || null },
+  })
+
+  revalidatePath(`/referring-doctors/${id}`)
+  return { success: true }
+}
+
 export async function deleteDoctor(id: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
