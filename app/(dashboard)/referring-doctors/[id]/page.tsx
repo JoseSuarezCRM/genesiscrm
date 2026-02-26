@@ -5,7 +5,7 @@ import { ChevronLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
-import ProviderNotesEditor from "@/components/provider-notes-editor"
+import ProviderNotesSection from "@/components/provider-notes-section"
 
 interface Props {
   params: { id: string }
@@ -28,7 +28,10 @@ export default async function ProviderDetailPage({ params }: Props) {
       locations: { include: { location: true } },
       referrals: {
         orderBy: { referralDate: "desc" },
-        include: { referringPractice: true },
+      },
+      providerNotes: {
+        orderBy: { createdAt: "desc" },
+        include: { createdBy: { select: { name: true, email: true } } },
       },
     },
   })
@@ -147,10 +150,15 @@ export default async function ProviderDetailPage({ params }: Props) {
       {/* Notes */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Notes</CardTitle>
+          <CardTitle className="text-base">
+            Notes ({provider.providerNotes.length})
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <ProviderNotesEditor providerId={provider.id} initialNotes={provider.notes} />
+          <ProviderNotesSection
+            providerId={provider.id}
+            initialNotes={provider.providerNotes}
+          />
         </CardContent>
       </Card>
     </div>

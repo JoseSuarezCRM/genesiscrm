@@ -24,13 +24,14 @@ enum ReferralStatus {
 }
 
 model User {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  name      String?
-  password  String
-  role      Role       @default(STAFF)
-  createdAt DateTime   @default(now())
-  referrals Referral[]
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  password      String
+  role          Role           @default(STAFF)
+  createdAt     DateTime       @default(now())
+  referrals     Referral[]
+  providerNotes ProviderNote[]
 }
 
 model ReferringPractice {
@@ -67,13 +68,13 @@ model ReferringDoctor {
   npi        String?           // National Provider Identifier (10 digits)
   specialty  String?
   phone      String?
-  email      String?
-  notes      String?
-  practiceId String
-  practice   ReferringPractice @relation(fields: [practiceId], references: [id])
-  locations  DoctorLocation[]
-  referrals  Referral[]
-  createdAt  DateTime          @default(now())
+  email         String?
+  practiceId    String
+  practice      ReferringPractice @relation(fields: [practiceId], references: [id])
+  locations     DoctorLocation[]
+  referrals     Referral[]
+  providerNotes ProviderNote[]
+  createdAt     DateTime          @default(now())
 }
 
 // Join table: doctor <-> location (many-to-many)
@@ -119,6 +120,17 @@ model Referral {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   documents           Document[]
+}
+
+model ProviderNote {
+  id         String          @id @default(cuid())
+  content    String
+  providerId String
+  provider   ReferringDoctor @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy  User            @relation(fields: [createdById], references: [id])
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 }
 
 model Document {

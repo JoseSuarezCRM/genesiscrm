@@ -207,16 +207,44 @@ export async function updateDoctor(id: string, data: unknown) {
   return { success: true }
 }
 
-export async function updateProviderNotes(id: string, notes: string) {
+export async function createProviderNote(providerId: string, content: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+  if (!content.trim()) return { error: "Note cannot be empty" }
+
+  await prisma.providerNote.create({
+    data: {
+      content: content.trim(),
+      providerId,
+      createdById: session.user.id,
+    },
+  })
+
+  revalidatePath(`/referring-doctors/${providerId}`)
+  return { success: true }
+}
+
+export async function updateProviderNote(noteId: string, content: string, providerId: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+  if (!content.trim()) return { error: "Note cannot be empty" }
+
+  await prisma.providerNote.update({
+    where: { id: noteId },
+    data: { content: content.trim() },
+  })
+
+  revalidatePath(`/referring-doctors/${providerId}`)
+  return { success: true }
+}
+
+export async function deleteProviderNote(noteId: string, providerId: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
-  await prisma.referringDoctor.update({
-    where: { id },
-    data: { notes: notes || null },
-  })
+  await prisma.providerNote.delete({ where: { id: noteId } })
 
-  revalidatePath(`/referring-doctors/${id}`)
+  revalidatePath(`/referring-doctors/${providerId}`)
   return { success: true }
 }
 
