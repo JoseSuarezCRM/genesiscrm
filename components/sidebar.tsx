@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import {
-  Activity,
   Users,
   UserCheck,
   LayoutDashboard,
@@ -51,9 +51,7 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
     <div className="flex flex-col h-full w-64 bg-slate-900 text-white">
       {/* Brand */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700">
-        <div className="flex items-center justify-center w-9 h-9 bg-blue-500 rounded-lg">
-          <Activity className="h-5 w-5 text-white" />
-        </div>
+        <Image src="/logo.png" alt="Genesis Ortho" width={40} height={40} className="rounded-lg shrink-0" />
         <div>
           <p className="font-semibold text-sm leading-tight">Genesis Ortho</p>
           <p className="text-xs text-slate-400 leading-tight">Referral CRM</p>
