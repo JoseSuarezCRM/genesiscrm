@@ -15,6 +15,25 @@ enum Role {
   STAFF
 }
 
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  LOGIN_LOCKED
+  LOGOUT
+  REFERRAL_VIEW
+  REFERRAL_CREATE
+  REFERRAL_UPDATE
+  REFERRAL_DELETE
+  DOCUMENT_UPLOAD
+  DOCUMENT_VIEW
+  DOCUMENT_DELETE
+  EXPORT_CSV
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  PASSWORD_RESET
+}
+
 enum ReferralStatus {
   NEW
   CONTACTED
@@ -24,14 +43,20 @@ enum ReferralStatus {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String?
-  password      String
-  role          Role           @default(STAFF)
-  createdAt     DateTime       @default(now())
-  referrals     Referral[]
-  providerNotes ProviderNote[]
+  id                  String         @id @default(cuid())
+  email               String         @unique
+  name                String?
+  password            String
+  role                Role           @default(STAFF)
+  createdAt           DateTime       @default(now())
+  // HIPAA security fields
+  failedLoginAttempts Int            @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  isActive            Boolean        @default(true)
+  referrals           Referral[]
+  providerNotes       ProviderNote[]
+  auditLogs           AuditLog[]
 }
 
 model ReferringPractice {
@@ -143,4 +168,22 @@ model Document {
   contentType  String?
   uploadedById String?
   createdAt    DateTime @default(now())
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action       AuditAction
+  resourceType String?
+  resourceId   String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([resourceType, resourceId])
 }

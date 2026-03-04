@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { createAuditLog } from "@/lib/audit"
 import { STATUS_LABELS } from "@/lib/utils"
-import { ReferralStatus } from "@prisma/client"
+import { ReferralStatus, AuditAction } from "@prisma/client"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 })
+  }
+
+  // HIPAA: bulk PHI export is admin-only
+  const isAdmin = (session.user as { role?: string }).role === "ADMIN"
+  if (!isAdmin) {
+    return new NextResponse("Forbidden", { status: 403 })
   }
 
   const { searchParams } = new URL(req.url)
@@ -86,6 +93,15 @@ export async function GET(req: NextRequest) {
   const csv = [headers, ...rows]
     .map((row) => row.map(escape).join(","))
     .join("\n")
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.EXPORT_CSV,
+    metadata: {
+      filters: { status, from, to },
+      recordCount: referrals.length,
+    },
+  })
 
   return new NextResponse(csv, {
     headers: {

@@ -5,7 +5,8 @@ import { redirect } from "next/navigation"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { ReferralStatus } from "@prisma/client"
+import { createAuditLog } from "@/lib/audit"
+import { ReferralStatus, AuditAction } from "@prisma/client"
 
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
@@ -32,6 +33,26 @@ function parseDate(val: string | undefined): Date | null {
   if (!val) return null
   const d = new Date(val)
   return isNaN(d.getTime()) ? null : d
+}
+
+// Verifies authentication and that the caller owns the referral (or is admin)
+async function assertReferralAccess(referralId: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  const referral = await prisma.referral.findUnique({
+    where: { id: referralId },
+    select: { id: true, createdById: true },
+  })
+
+  if (!referral) throw new Error("Referral not found")
+
+  const isAdmin = (session.user as { role?: string }).role === "ADMIN"
+  const isOwner = referral.createdById === session.user.id
+
+  if (!isAdmin && !isOwner) throw new Error("Forbidden")
+
+  return { session, referral }
 }
 
 export async function createReferral(data: unknown) {
@@ -69,14 +90,20 @@ export async function createReferral(data: unknown) {
     },
   })
 
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.REFERRAL_CREATE,
+    resourceType: "Referral",
+    resourceId: referral.id,
+  })
+
   revalidatePath("/referrals")
   revalidatePath("/")
   return { id: referral.id }
 }
 
 export async function updateReferral(id: string, data: unknown) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const { session } = await assertReferralAccess(id)
 
   const parsed = ReferralSchema.safeParse(data)
   if (!parsed.success) {
@@ -109,6 +136,13 @@ export async function updateReferral(id: string, data: unknown) {
     },
   })
 
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.REFERRAL_UPDATE,
+    resourceType: "Referral",
+    resourceId: id,
+  })
+
   revalidatePath(`/referrals/${id}`)
   revalidatePath("/referrals")
   revalidatePath("/")
@@ -116,12 +150,19 @@ export async function updateReferral(id: string, data: unknown) {
 }
 
 export async function updateReferralNotes(id: string, notes: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const { session } = await assertReferralAccess(id)
 
   await prisma.referral.update({
     where: { id },
     data: { notes: notes || null },
+  })
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.REFERRAL_UPDATE,
+    resourceType: "Referral",
+    resourceId: id,
+    metadata: { field: "notes" },
   })
 
   revalidatePath(`/referrals/${id}`)
@@ -129,12 +170,19 @@ export async function updateReferralNotes(id: string, notes: string) {
 }
 
 export async function updateReferralStatus(id: string, status: ReferralStatus) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const { session } = await assertReferralAccess(id)
 
   await prisma.referral.update({
     where: { id },
     data: { status },
+  })
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.REFERRAL_UPDATE,
+    resourceType: "Referral",
+    resourceId: id,
+    metadata: { field: "status", newValue: status },
   })
 
   revalidatePath(`/referrals/${id}`)
@@ -143,10 +191,16 @@ export async function updateReferralStatus(id: string, status: ReferralStatus) {
 }
 
 export async function deleteReferral(id: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const { session } = await assertReferralAccess(id)
 
   await prisma.referral.delete({ where: { id } })
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.REFERRAL_DELETE,
+    resourceType: "Referral",
+    resourceId: id,
+  })
 
   revalidatePath("/referrals")
   revalidatePath("/")

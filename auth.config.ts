@@ -5,6 +5,12 @@ export const authConfig: NextAuthConfig = {
   pages: {
     signIn: "/login",
   },
+  // HIPAA: automatic logoff after 30 minutes of inactivity
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 60,    // 30 minutes
+    updateAge: 5 * 60,  // slide window every 5 minutes of activity
+  },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
