@@ -11,6 +11,7 @@ import {
   LogOut,
   Settings,
   BarChart2,
+  MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -91,13 +92,25 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
               href="/settings/users"
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                pathname.startsWith("/settings")
+                pathname === "/settings/users"
                   ? "bg-blue-600 text-white"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
               )}
             >
               <Settings className="h-4 w-4 shrink-0" />
               User Management
+            </Link>
+            <Link
+              href="/settings/outreach"
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                pathname === "/settings/outreach"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              )}
+            >
+              <MessageSquare className="h-4 w-4 shrink-0" />
+              Outreach Templates
             </Link>
           </>
         )}

@@ -6,20 +6,19 @@ import { createAuditLog } from "@/lib/audit"
 import { sendSMS } from "@/lib/twilio"
 import { sendEmail } from "@/lib/resend-client"
 import {
-  appointmentConfirmationSMS,
-  appointmentConfirmationEmail,
-  appointmentReminderSMS,
-  appointmentReminderEmail,
-  followUpSMS,
-  followUpEmail,
-} from "@/lib/outreach-templates"
-import {
   AuditAction,
   OutreachChannel,
   OutreachTrigger,
   OutreachStatus,
 } from "@prisma/client"
 import { format } from "date-fns"
+
+const PRACTICE_NAME = process.env.PRACTICE_NAME ?? "Genesis Ortho"
+const PRACTICE_PHONE = process.env.PRACTICE_PHONE ?? "our office"
+
+function renderTemplate(body: string, vars: Record<string, string>): string {
+  return body.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "")
+}
 
 type ManualChannel = "SMS" | "EMAIL" | "BOTH"
 
@@ -113,26 +112,31 @@ export async function triggerAutoOutreach(
       ? format(referral.appointmentDate, "MMMM d, yyyy")
       : ""
 
-    const firstName = referral.patientFirstName
-
-    let smsBody: string
-    let emailContent: { subject: string; html: string }
-
-    if (trigger === OutreachTrigger.STATUS_SCHEDULED) {
-      smsBody = appointmentConfirmationSMS(firstName, dateStr)
-      emailContent = appointmentConfirmationEmail(firstName, dateStr)
-    } else if (trigger === OutreachTrigger.REMINDER_24HR) {
-      smsBody = appointmentReminderSMS(firstName, dateStr)
-      emailContent = appointmentReminderEmail(firstName, dateStr)
-    } else {
-      // STATUS_COMPLETED
-      smsBody = followUpSMS(firstName)
-      emailContent = followUpEmail(firstName)
+    const vars = {
+      firstName: referral.patientFirstName,
+      appointmentDate: dateStr,
+      practiceName: PRACTICE_NAME,
+      practicePhone: PRACTICE_PHONE,
     }
+
+    // Load templates from DB — skip channel if no active template found
+    const [smsTemplate, emailTemplate] = await Promise.all([
+      referral.patientPhone
+        ? prisma.outreachTemplate.findUnique({
+            where: { trigger_channel: { trigger, channel: OutreachChannel.SMS } },
+          })
+        : null,
+      referral.patientEmail
+        ? prisma.outreachTemplate.findUnique({
+            where: { trigger_channel: { trigger, channel: OutreachChannel.EMAIL } },
+          })
+        : null,
+    ])
 
     const sends: Promise<void>[] = []
 
-    if (referral.patientPhone) {
+    if (smsTemplate?.isActive && referral.patientPhone) {
+      const smsBody = renderTemplate(smsTemplate.body, vars)
       sends.push(
         sendSMS(referral.patientPhone, smsBody).then(async (result) => {
           await prisma.outreachMessage.create({
@@ -150,23 +154,23 @@ export async function triggerAutoOutreach(
       )
     }
 
-    if (referral.patientEmail) {
+    if (emailTemplate?.isActive && referral.patientEmail) {
+      const emailSubject = renderTemplate(emailTemplate.subject ?? "", vars)
+      const emailHtml = renderTemplate(emailTemplate.body, vars)
       sends.push(
-        sendEmail(referral.patientEmail, emailContent.subject, emailContent.html).then(
-          async (result) => {
-            await prisma.outreachMessage.create({
-              data: {
-                referralId,
-                channel: OutreachChannel.EMAIL,
-                trigger,
-                status: result.success ? OutreachStatus.SENT : OutreachStatus.FAILED,
-                recipient: referral.patientEmail!,
-                message: emailContent.subject,
-                error: result.error ?? null,
-              },
-            })
-          }
-        )
+        sendEmail(referral.patientEmail, emailSubject, emailHtml).then(async (result) => {
+          await prisma.outreachMessage.create({
+            data: {
+              referralId,
+              channel: OutreachChannel.EMAIL,
+              trigger,
+              status: result.success ? OutreachStatus.SENT : OutreachStatus.FAILED,
+              recipient: referral.patientEmail!,
+              message: emailSubject,
+              error: result.error ?? null,
+            },
+          })
+        })
       )
     }
 

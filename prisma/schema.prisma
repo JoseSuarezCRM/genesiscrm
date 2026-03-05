@@ -225,3 +225,16 @@ model OutreachMessage {
   @@index([referralId])
   @@index([createdAt])
 }
+
+model OutreachTemplate {
+  id        String          @id @default(cuid())
+  trigger   OutreachTrigger
+  channel   OutreachChannel
+  subject   String?         // email subject line (email only)
+  body      String
+  isActive  Boolean         @default(true)
+  updatedAt DateTime        @updatedAt
+  createdAt DateTime        @default(now())
+
+  @@unique([trigger, channel])
+}
