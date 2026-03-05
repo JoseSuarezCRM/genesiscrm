@@ -6,7 +6,8 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
-import { ReferralStatus, AuditAction } from "@prisma/client"
+import { triggerAutoOutreach } from "@/app/actions/outreach"
+import { ReferralStatus, AuditAction, OutreachTrigger } from "@prisma/client"
 
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
@@ -184,6 +185,12 @@ export async function updateReferralStatus(id: string, status: ReferralStatus) {
     resourceId: id,
     metadata: { field: "status", newValue: status },
   })
+
+  if (status === "SCHEDULED") {
+    await triggerAutoOutreach(id, OutreachTrigger.STATUS_SCHEDULED)
+  } else if (status === "COMPLETED") {
+    await triggerAutoOutreach(id, OutreachTrigger.STATUS_COMPLETED)
+  }
 
   revalidatePath(`/referrals/${id}`)
   revalidatePath("/referrals")

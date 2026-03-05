@@ -13,6 +13,7 @@ import DocumentUpload from "@/components/document-upload"
 import DocumentList from "@/components/document-list"
 import EditReferralDialog from "@/components/edit-referral-dialog"
 import ReferralNotesEditor from "@/components/referral-notes-editor"
+import OutreachDialog from "@/components/outreach-dialog"
 
 interface Props {
   params: { id: string }
@@ -68,6 +69,9 @@ export default async function ReferralDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            {(referral.patientPhone || referral.patientEmail) && (
+              <OutreachDialog referral={referral} />
+            )}
             <EditReferralDialog referral={referral} practices={practices} />
             <form
               action={async () => {
