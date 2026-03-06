@@ -2,7 +2,7 @@
 
 import { useTransition, useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { ReferralStatus } from "@prisma/client"
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { STATUS_LABELS } from "@/lib/utils"
 import { Loader2, Paperclip, X } from "lucide-react"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 // ─── Types passed from server ─────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ export default function ReferralForm({ practices, defaultValues, referralId }: R
   const [files, setFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, setValue, watch, control, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { status: ReferralStatus.NEW, referralDate: today, ...defaultValues },
   })
@@ -187,7 +188,13 @@ export default function ReferralForm({ practices, defaultValues, referralId }: R
             <Input {...register("patientDob")} type="date" />
           </Field>
           <Field label="Phone" error={errors.patientPhone?.message}>
-            <Input {...register("patientPhone")} type="tel" placeholder="555-123-4567" />
+            <Controller
+              name="patientPhone"
+              control={control}
+              render={({ field }) => (
+                <PhoneInput value={field.value} onChange={field.onChange} />
+              )}
+            />
           </Field>
           <Field label="Email" error={errors.patientEmail?.message}>
             <Input {...register("patientEmail")} type="email" placeholder="jane@example.com" />

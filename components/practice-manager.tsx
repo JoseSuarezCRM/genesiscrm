@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
 import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink } from "lucide-react"
+import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -64,7 +65,7 @@ function PracticeForm({ defaultValues, onSubmit, isPending, onClose }: {
   return (
     <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, phone, fax, address }) }} className="space-y-4">
       <Field label="Practice Name *" error={err}><Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Downtown Family Medicine" /></Field>
-      <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" placeholder="555-100-2000" /></Field>
+      <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
       <Field label="Fax"><Input value={fax} onChange={(e) => setFax(e.target.value)} type="tel" placeholder="555-100-2001" /></Field>
       <Field label="Address"><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St" /></Field>
       <DialogFooter>
@@ -93,7 +94,7 @@ function LocationForm({ practiceId, defaultValues, onSubmit, isPending, onClose 
   return (
     <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, phone, fax, address, practiceId }) }} className="space-y-4">
       <Field label="Location Name *" error={err}><Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Main Office" /></Field>
-      <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" placeholder="555-100-2002" /></Field>
+      <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
       <Field label="Fax"><Input value={fax} onChange={(e) => setFax(e.target.value)} type="tel" placeholder="555-100-2003" /></Field>
       <Field label="Address"><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, Suite 100" /></Field>
       <DialogFooter>
@@ -150,7 +151,7 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
         <Input value={npi} onChange={(e) => setNpi(e.target.value)} placeholder="1234567890" maxLength={10} />
       </Field>
       <Field label="Specialty"><Input value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="Orthopedic Surgery" /></Field>
-      <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" placeholder="555-100-2000" /></Field>
+      <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
       <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="dr.johnson@clinic.com" /></Field>
       <div className="space-y-1.5">
         <Label>Locations (check all that apply)</Label>
