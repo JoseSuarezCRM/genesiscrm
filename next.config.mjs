@@ -53,11 +53,18 @@ const nextConfig = {
     },
   },
   async headers() {
+    // Embed page: strip X-Frame-Options and open frame-ancestors so any site can iframe it
+    const embedHeaders = securityHeaders
+      .filter((h) => h.key !== "X-Frame-Options")
+      .map((h) =>
+        h.key === "Content-Security-Policy"
+          ? { ...h, value: h.value.replace("frame-ancestors 'none'", "frame-ancestors *") }
+          : h
+      )
+
     return [
-      {
-        source: "/:path*",
-        headers: securityHeaders,
-      },
+      { source: "/refer", headers: embedHeaders },
+      { source: "/:path*", headers: securityHeaders },
     ]
   },
 }
