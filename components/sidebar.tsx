@@ -12,6 +12,7 @@ import {
   Settings,
   BarChart2,
   MessageSquare,
+  Code2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -111,6 +112,18 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
             >
               <MessageSquare className="h-4 w-4 shrink-0" />
               Outreach Templates
+            </Link>
+            <Link
+              href="/settings/embed"
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                pathname === "/settings/embed"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              )}
+            >
+              <Code2 className="h-4 w-4 shrink-0" />
+              Embed Referral Form
             </Link>
           </>
         )}
