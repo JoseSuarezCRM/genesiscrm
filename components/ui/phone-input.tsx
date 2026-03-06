@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import ReactPhoneInput, { type Value } from "react-phone-number-input"
+import flags from "react-phone-number-input/flags"
 import "react-phone-number-input/style.css"
 import { cn } from "@/lib/utils"
 
@@ -38,6 +39,7 @@ export function PhoneInput({ value, onChange, disabled, placeholder, className }
       )}
     >
       <ReactPhoneInput
+        flags={flags}
         international
         defaultCountry="US"
         value={value as Value}
