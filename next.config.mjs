@@ -63,8 +63,10 @@ const nextConfig = {
       )
 
     return [
+      // /refer must be embeddable — no X-Frame-Options, open frame-ancestors
       { source: "/refer", headers: embedHeaders },
-      { source: "/:path*", headers: securityHeaders },
+      // All other routes get full security headers (excludes /refer)
+      { source: "/((?!refer$).*)", headers: securityHeaders },
     ]
   },
 }
