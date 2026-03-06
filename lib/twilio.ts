@@ -20,7 +20,7 @@ export async function sendSMS(
   body: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const from = process.env.TWILIO_PHONE_NUMBER!
+    const from = (process.env.TWILIO_PHONE_NUMBER ?? process.env.TWILIO_PHONE)!
     await getClient().messages.create({ from, to: toE164(to), body })
     return { success: true }
   } catch (err) {
