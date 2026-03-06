@@ -1,33 +1,70 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Check, Copy, ExternalLink } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Check, Copy, ExternalLink, Bell } from "lucide-react"
+import { updateEmbedNotifications } from "@/app/actions/embed-notifications"
+
+type User = {
+  id: string
+  name: string | null
+  email: string
+  notifyOnEmbedReferral: boolean
+}
 
 interface EmbedFormSettingsProps {
   baseUrl: string
+  users: User[]
 }
 
-export default function EmbedFormSettings({ baseUrl }: EmbedFormSettingsProps) {
+export default function EmbedFormSettings({ baseUrl, users }: EmbedFormSettingsProps) {
   const formUrl = `${baseUrl}/refer`
   const [height, setHeight] = useState("750")
   const [copied, setCopied] = useState(false)
 
-  const iframeCode = `<iframe
-  src="${formUrl}"
-  width="100%"
-  height="${height}"
-  frameborder="0"
-  style="border:none; max-width:680px; width:100%;"
-  title="Referral Form"
-></iframe>`
+  // Notification state
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(users.filter((u) => u.notifyOnEmbedReferral).map((u) => u.id))
+  )
+  const [saved, setSaved] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  const iframeCode = `<div style="text-align:center;">
+  <iframe
+    src="${formUrl}"
+    width="100%"
+    height="${height}"
+    frameborder="0"
+    style="border:none; max-width:680px; width:100%; display:block; margin:0 auto;"
+    title="Referral Form"
+  ></iframe>
+</div>`
 
   async function copyCode() {
     await navigator.clipboard.writeText(iframeCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  function toggleUser(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    setSaved(false)
+  }
+
+  function saveNotifications() {
+    startTransition(async () => {
+      await updateEmbedNotifications(Array.from(selected))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    })
   }
 
   return (
@@ -37,11 +74,7 @@ export default function EmbedFormSettings({ baseUrl }: EmbedFormSettingsProps) {
         <h2 className="text-sm font-semibold text-slate-700">Form URL</h2>
         <div className="flex items-center gap-2">
           <Input value={formUrl} readOnly className="font-mono text-sm bg-slate-50" />
-          <a
-            href={formUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={formUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="icon" title="Open form in new tab">
               <ExternalLink className="h-4 w-4" />
             </Button>
@@ -87,6 +120,56 @@ export default function EmbedFormSettings({ baseUrl }: EmbedFormSettingsProps) {
         <pre className="bg-slate-950 text-slate-100 rounded-md p-4 text-xs font-mono whitespace-pre overflow-x-auto leading-relaxed">
           {iframeCode}
         </pre>
+      </div>
+
+      {/* Notification recipients */}
+      <div className="rounded-lg border border-slate-200 p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Bell className="h-4 w-4 text-slate-500" />
+          <h2 className="text-sm font-semibold text-slate-700">Email Notifications</h2>
+        </div>
+        <p className="text-xs text-slate-500">
+          Selected users will receive an email when a referral is submitted through the embedded form.
+        </p>
+        <div className="space-y-2">
+          {users.map((user) => (
+            <div key={user.id} className="flex items-center gap-3 py-1">
+              <Checkbox
+                id={user.id}
+                checked={selected.has(user.id)}
+                onCheckedChange={() => toggleUser(user.id)}
+              />
+              <label htmlFor={user.id} className="flex-1 cursor-pointer">
+                <span className="text-sm font-medium text-slate-800">
+                  {user.name ?? user.email}
+                </span>
+                {user.name && (
+                  <span className="text-xs text-slate-400 ml-2">{user.email}</span>
+                )}
+              </label>
+            </div>
+          ))}
+          {users.length === 0 && (
+            <p className="text-sm text-slate-400">No active users found.</p>
+          )}
+        </div>
+        <Button
+          onClick={saveNotifications}
+          disabled={isPending}
+          size="sm"
+          className="gap-1.5"
+        >
+          {saved ? (
+            <>
+              <Check className="h-3.5 w-3.5" />
+              Saved
+            </>
+          ) : isPending ? (
+            "Saving..."
+          ) : (
+            "Save Notification Settings"
+          )}
+        </Button>
       </div>
 
       {/* WordPress instructions */}

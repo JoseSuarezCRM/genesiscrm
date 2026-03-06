@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { headers } from "next/headers"
+import { getEmbedNotificationUsers } from "@/app/actions/embed-notifications"
 import EmbedFormSettings from "@/components/embed-form-settings"
 
 export default async function EmbedPage() {
@@ -14,6 +15,8 @@ export default async function EmbedPage() {
   const proto = host.includes("localhost") ? "http" : "https"
   const baseUrl = `${proto}://${host}`
 
+  const users = await getEmbedNotificationUsers()
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -22,7 +25,7 @@ export default async function EmbedPage() {
           Embed this form on your website so referring providers can submit referrals directly into the tracker.
         </p>
       </div>
-      <EmbedFormSettings baseUrl={baseUrl} />
+      <EmbedFormSettings baseUrl={baseUrl} users={users} />
     </div>
   )
 }

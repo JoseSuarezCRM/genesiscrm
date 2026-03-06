@@ -8,12 +8,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { CheckCircle2, Loader2 } from "lucide-react"
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label>
         {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
+        <span className="text-red-500 ml-0.5">*</span>
       </Label>
       {children}
     </div>
@@ -44,7 +44,8 @@ export default function PublicReferralForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!providerName || !patientFirstName || !patientLastName || !reason) return
+    if (!providerName || !providerOrg || !providerNpi || !providerEmail ||
+        !patientFirstName || !patientLastName || !patientDob || !patientPhone || !reason) return
 
     setStatus("submitting")
     setErrorMsg("")
@@ -96,7 +97,7 @@ export default function PublicReferralForm() {
       <section>
         <SectionTitle>Referring Provider Information</SectionTitle>
         <div className="space-y-4">
-          <Field label="Full Name" required>
+          <Field label="Full Name">
             <Input
               value={providerName}
               onChange={(e) => setProviderName(e.target.value)}
@@ -109,6 +110,7 @@ export default function PublicReferralForm() {
               value={providerOrg}
               onChange={(e) => setProviderOrg(e.target.value)}
               placeholder="Downtown Family Medicine"
+              required
             />
           </Field>
           <Field label="NPI (National Provider Identifier)">
@@ -117,6 +119,7 @@ export default function PublicReferralForm() {
               onChange={(e) => setProviderNpi(e.target.value.replace(/\D/g, "").slice(0, 10))}
               placeholder="1234567890"
               maxLength={10}
+              required
             />
           </Field>
           <Field label="Email Address">
@@ -125,6 +128,7 @@ export default function PublicReferralForm() {
               value={providerEmail}
               onChange={(e) => setProviderEmail(e.target.value)}
               placeholder="dr.smith@clinic.com"
+              required
             />
           </Field>
         </div>
@@ -135,7 +139,7 @@ export default function PublicReferralForm() {
         <SectionTitle>Patient Information</SectionTitle>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="First Name" required>
+            <Field label="First Name">
               <Input
                 value={patientFirstName}
                 onChange={(e) => setPatientFirstName(e.target.value)}
@@ -143,7 +147,7 @@ export default function PublicReferralForm() {
                 required
               />
             </Field>
-            <Field label="Last Name" required>
+            <Field label="Last Name">
               <Input
                 value={patientLastName}
                 onChange={(e) => setPatientLastName(e.target.value)}
@@ -157,12 +161,13 @@ export default function PublicReferralForm() {
               type="date"
               value={patientDob}
               onChange={(e) => setPatientDob(e.target.value)}
+              required
             />
           </Field>
           <Field label="Phone Number">
             <PhoneInput value={patientPhone} onChange={setPatientPhone} />
           </Field>
-          <Field label="Reason for Referral" required>
+          <Field label="Reason for Referral">
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}

@@ -61,21 +61,23 @@ enum ReferralStatus {
 }
 
 model User {
-  id                  String         @id @default(cuid())
-  email               String         @unique
-  name                String?
-  password            String
-  role                Role           @default(STAFF)
-  createdAt           DateTime       @default(now())
+  id                    String         @id @default(cuid())
+  email                 String         @unique
+  name                  String?
+  password              String
+  role                  Role           @default(STAFF)
+  createdAt             DateTime       @default(now())
   // HIPAA security fields
-  failedLoginAttempts Int            @default(0)
-  lockedUntil         DateTime?
-  lastLoginAt         DateTime?
-  isActive            Boolean        @default(true)
-  referrals           Referral[]
-  providerNotes       ProviderNote[]
-  auditLogs           AuditLog[]
-  outreachMessages    OutreachMessage[]
+  failedLoginAttempts   Int            @default(0)
+  lockedUntil           DateTime?
+  lastLoginAt           DateTime?
+  isActive              Boolean        @default(true)
+  // Notification preferences
+  notifyOnEmbedReferral Boolean        @default(false)
+  referrals             Referral[]
+  providerNotes         ProviderNote[]
+  auditLogs             AuditLog[]
+  outreachMessages      OutreachMessage[]
 }
 
 model ReferringPractice {
