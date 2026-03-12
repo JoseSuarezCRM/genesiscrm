@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma"
-import ReferralForm from "@/components/referral-form"
+import NewReferralPage from "@/components/new-referral-page"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 
-export default async function NewReferralPage() {
+export default async function NewReferralServerPage() {
   const practices = await prisma.referringPractice.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -31,9 +31,7 @@ export default async function NewReferralPage() {
         </p>
       </div>
 
-      <div className="bg-white border rounded-lg p-6">
-        <ReferralForm practices={practices} />
-      </div>
+      <NewReferralPage practices={practices} />
     </div>
   )
 }

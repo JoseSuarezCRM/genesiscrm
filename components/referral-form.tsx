@@ -21,6 +21,7 @@ import {
 import { STATUS_LABELS } from "@/lib/utils"
 import { Loader2, Paperclip, X } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
+import type { ExtractedReferralData } from "@/app/api/fax/extract/route"
 
 // ─── Types passed from server ─────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ interface ReferralFormProps {
   practices: Practice[]
   defaultValues?: Partial<FormValues>
   referralId?: string
+  prefillData?: ExtractedReferralData
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -103,17 +105,35 @@ function Field({
 
 const NONE = "__none__"
 
-export default function ReferralForm({ practices, defaultValues, referralId }: ReferralFormProps) {
+export default function ReferralForm({ practices, defaultValues, referralId, prefillData }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
   const [files, setFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { register, handleSubmit, setValue, watch, control, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, setValue, watch, control, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { status: ReferralStatus.NEW, referralDate: today, ...defaultValues },
   })
+
+  // When fax extraction data arrives, atomically pre-fill all extracted fields
+  useEffect(() => {
+    if (!prefillData) return
+    reset({
+      status: ReferralStatus.NEW,
+      referralDate: today,
+      ...(prefillData.patientFirstName && { patientFirstName: prefillData.patientFirstName }),
+      ...(prefillData.patientLastName && { patientLastName: prefillData.patientLastName }),
+      ...(prefillData.patientDob && { patientDob: prefillData.patientDob }),
+      ...(prefillData.patientPhone && { patientPhone: prefillData.patientPhone }),
+      ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
+      ...(prefillData.referringDoctorName && { referringDoctorName: prefillData.referringDoctorName }),
+      ...(prefillData.insuranceProvider && { insuranceProvider: prefillData.insuranceProvider }),
+      ...(prefillData.insuranceMemberId && { insuranceMemberId: prefillData.insuranceMemberId }),
+      ...(prefillData.notes && { notes: prefillData.notes }),
+    })
+  }, [prefillData, reset, today])
 
   const practiceId = watch("referringPracticeId")
   const locationId = watch("referringLocationId")
