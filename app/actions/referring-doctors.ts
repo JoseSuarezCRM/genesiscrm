@@ -21,6 +21,11 @@ export async function createPractice(data: unknown) {
   const parsed = PracticeSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
+  const existing = await prisma.referringPractice.findFirst({
+    where: { name: { equals: parsed.data.name, mode: "insensitive" } },
+  })
+  if (existing) return { error: `A practice named "${existing.name}" already exists.`, id: existing.id, duplicate: true }
+
   const practice = await prisma.referringPractice.create({
     data: {
       name: parsed.data.name,
@@ -85,6 +90,14 @@ export async function createLocation(data: unknown) {
 
   const parsed = LocationSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+
+  const existing = await prisma.practiceLocation.findFirst({
+    where: {
+      practiceId: parsed.data.practiceId,
+      name: { equals: parsed.data.name, mode: "insensitive" },
+    },
+  })
+  if (existing) return { error: `A location named "${existing.name}" already exists in this practice.`, id: existing.id, duplicate: true }
 
   const location = await prisma.practiceLocation.create({
     data: {
@@ -157,6 +170,14 @@ export async function createDoctor(data: unknown) {
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
   const { locationIds = [], ...rest } = parsed.data
+
+  const existing = await prisma.referringDoctor.findFirst({
+    where: {
+      practiceId: rest.practiceId,
+      name: { equals: rest.name, mode: "insensitive" },
+    },
+  })
+  if (existing) return { error: `A provider named "${existing.name}" already exists in this practice.`, id: existing.id, duplicate: true }
 
   const doctor = await prisma.referringDoctor.create({
     data: {
