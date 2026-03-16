@@ -128,6 +128,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       ...(prefillData.patientDob && { patientDob: prefillData.patientDob }),
       ...(prefillData.patientPhone && { patientPhone: prefillData.patientPhone }),
       ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
+      ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
       ...(prefillData.referringDoctorName && { referringDoctorName: prefillData.referringDoctorName }),
       ...(prefillData.insuranceProvider && { insuranceProvider: prefillData.insuranceProvider }),
       ...(prefillData.insuranceMemberId && { insuranceMemberId: prefillData.insuranceMemberId }),

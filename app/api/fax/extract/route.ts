@@ -15,9 +15,12 @@ Return ONLY a valid JSON object with these exact keys. Use null for any field yo
   "patientDob": "string or null - YYYY-MM-DD format only. Convert any date format to YYYY-MM-DD.",
   "patientPhone": "string or null - digits and common separators, preserve as found",
   "patientEmail": "string or null",
+  "patientMrn": "string or null - patient medical record number (MRN), chart number, or patient ID if present",
   "referringDoctorName": "string or null - include title (Dr., MD, DO, etc.) if present",
   "referringOrg": "string or null - name of the referring practice or organization",
   "referringNpi": "string or null - 10-digit NPI number if present",
+  "referringPhone": "string or null - phone number of the referring provider or practice",
+  "referringAddress": "string or null - address of the referring provider or practice",
   "reason": "string or null - chief complaint or reason for referral",
   "insuranceProvider": "string or null",
   "insuranceMemberId": "string or null"
@@ -26,7 +29,8 @@ Return ONLY a valid JSON object with these exact keys. Use null for any field yo
 Rules:
 - Do not invent or guess data. If a field is not clearly present, use null.
 - patientDob must be YYYY-MM-DD. Convert MM/DD/YYYY, Month DD YYYY, etc.
-- reason should be a concise summary of the referral reason or chief complaint.`
+- reason should be a concise summary of the referral reason or chief complaint.
+- referringAddress should be the full address on one line if possible.`
 
 export interface ExtractedReferralData {
   patientFirstName: string | null
@@ -34,6 +38,7 @@ export interface ExtractedReferralData {
   patientDob: string | null
   patientPhone: string | null
   patientEmail: string | null
+  patientMrn: string | null
   referringDoctorName: string | null
   insuranceProvider: string | null
   insuranceMemberId: string | null
@@ -122,10 +127,12 @@ export async function POST(req: NextRequest) {
     const dobRaw = extracted.patientDob
     const patientDob = dobRaw && /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? dobRaw : null
 
-    // Compose notes from referringOrg, referringNpi, reason
+    // Compose notes from provider details + reason
     const notesParts: string[] = []
     if (extracted.referringOrg) notesParts.push(`Referring organization: ${extracted.referringOrg}`)
     if (extracted.referringNpi) notesParts.push(`NPI: ${extracted.referringNpi}`)
+    if (extracted.referringPhone) notesParts.push(`Referring phone: ${extracted.referringPhone}`)
+    if (extracted.referringAddress) notesParts.push(`Referring address: ${extracted.referringAddress}`)
     if (extracted.reason) notesParts.push(`Reason: ${extracted.reason}`)
 
     const result: ExtractedReferralData = {
@@ -134,6 +141,7 @@ export async function POST(req: NextRequest) {
       patientDob,
       patientPhone: extracted.patientPhone ?? null,
       patientEmail: extracted.patientEmail ?? null,
+      patientMrn: extracted.patientMrn ?? null,
       referringDoctorName: extracted.referringDoctorName ?? null,
       insuranceProvider: extracted.insuranceProvider ?? null,
       insuranceMemberId: extracted.insuranceMemberId ?? null,
