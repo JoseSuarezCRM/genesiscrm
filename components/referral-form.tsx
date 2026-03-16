@@ -162,13 +162,24 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   useEffect(() => {
     if (!prefillData) return
 
-    // Try to match the extracted org name to an existing practice (case-insensitive)
+    // Try to match the extracted org name to an existing practice.
+    // Scoring: exact > one starts with the other > one contains the other.
+    // Picks the highest-scoring match; on a tie, prefers the closest length (most specific).
     let matchedPracticeId: string | undefined
     if (prefillData.referringOrg) {
-      const orgLower = prefillData.referringOrg.toLowerCase()
-      const match = localPractices.find((p) => p.name.toLowerCase() === orgLower)
-      if (match) {
-        matchedPracticeId = match.id
+      const a = prefillData.referringOrg.toLowerCase().trim()
+      const scored = localPractices.map((p) => {
+        const b = p.name.toLowerCase().trim()
+        let score = 0
+        if (a === b) score = 100
+        else if (b.startsWith(a) || a.startsWith(b)) score = 80
+        else if (b.includes(a) || a.includes(b)) score = 60
+        return { p, score }
+      }).filter((x) => x.score > 0)
+
+      if (scored.length > 0) {
+        scored.sort((x, y) => y.score - x.score || Math.abs(x.p.name.length - prefillData.referringOrg!.length) - Math.abs(y.p.name.length - prefillData.referringOrg!.length))
+        matchedPracticeId = scored[0].p.id
       } else {
         // No match — pre-fill the "Add new practice" dialog so staff can create it in one click
         setNewPracticeName(prefillData.referringOrg)
