@@ -150,6 +150,8 @@ model Referral {
   referringDoctorId    String?
   referringDoctor      ReferringDoctor?   @relation(fields: [referringDoctorId], references: [id])
   referringDoctorName  String?            // free-text fallback if doctor not in system
+  referringPhone       String?            // direct contact for the referring source
+  referringAddress     String?            // address of the referring source
   // Status pipeline
   status              ReferralStatus     @default(NEW)
   referralDate        DateTime           @default(now())

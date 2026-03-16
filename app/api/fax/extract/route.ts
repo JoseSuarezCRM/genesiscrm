@@ -40,6 +40,8 @@ export interface ExtractedReferralData {
   patientEmail: string | null
   patientMrn: string | null
   referringDoctorName: string | null
+  referringPhone: string | null
+  referringAddress: string | null
   insuranceProvider: string | null
   insuranceMemberId: string | null
   notes: string | null
@@ -127,12 +129,10 @@ export async function POST(req: NextRequest) {
     const dobRaw = extracted.patientDob
     const patientDob = dobRaw && /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? dobRaw : null
 
-    // Compose notes from provider details + reason
+    // Compose notes from org, NPI, and reason (phone/address now have dedicated fields)
     const notesParts: string[] = []
     if (extracted.referringOrg) notesParts.push(`Referring organization: ${extracted.referringOrg}`)
     if (extracted.referringNpi) notesParts.push(`NPI: ${extracted.referringNpi}`)
-    if (extracted.referringPhone) notesParts.push(`Referring phone: ${extracted.referringPhone}`)
-    if (extracted.referringAddress) notesParts.push(`Referring address: ${extracted.referringAddress}`)
     if (extracted.reason) notesParts.push(`Reason: ${extracted.reason}`)
 
     const result: ExtractedReferralData = {
@@ -143,6 +143,8 @@ export async function POST(req: NextRequest) {
       patientEmail: extracted.patientEmail ?? null,
       patientMrn: extracted.patientMrn ?? null,
       referringDoctorName: extracted.referringDoctorName ?? null,
+      referringPhone: extracted.referringPhone ?? null,
+      referringAddress: extracted.referringAddress ?? null,
       insuranceProvider: extracted.insuranceProvider ?? null,
       insuranceMemberId: extracted.insuranceMemberId ?? null,
       notes: notesParts.length > 0 ? notesParts.join("\n") : null,

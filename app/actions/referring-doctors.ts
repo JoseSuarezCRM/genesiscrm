@@ -21,7 +21,7 @@ export async function createPractice(data: unknown) {
   const parsed = PracticeSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  await prisma.referringPractice.create({
+  const practice = await prisma.referringPractice.create({
     data: {
       name: parsed.data.name,
       phone: parsed.data.phone || null,
@@ -31,7 +31,7 @@ export async function createPractice(data: unknown) {
   })
 
   revalidatePath("/referring-doctors")
-  return { success: true }
+  return { success: true, id: practice.id }
 }
 
 export async function updatePractice(id: string, data: unknown) {
@@ -86,7 +86,7 @@ export async function createLocation(data: unknown) {
   const parsed = LocationSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  await prisma.practiceLocation.create({
+  const location = await prisma.practiceLocation.create({
     data: {
       name: parsed.data.name,
       phone: parsed.data.phone || null,
@@ -97,7 +97,7 @@ export async function createLocation(data: unknown) {
   })
 
   revalidatePath("/referring-doctors")
-  return { success: true }
+  return { success: true, id: location.id }
 }
 
 export async function updateLocation(id: string, data: unknown) {
@@ -158,7 +158,7 @@ export async function createDoctor(data: unknown) {
 
   const { locationIds = [], ...rest } = parsed.data
 
-  await prisma.referringDoctor.create({
+  const doctor = await prisma.referringDoctor.create({
     data: {
       name: rest.name,
       title: rest.title || null,
@@ -174,7 +174,7 @@ export async function createDoctor(data: unknown) {
   })
 
   revalidatePath("/referring-doctors")
-  return { success: true }
+  return { success: true, id: doctor.id }
 }
 
 export async function updateDoctor(id: string, data: unknown) {
