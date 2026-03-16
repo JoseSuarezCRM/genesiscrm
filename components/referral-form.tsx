@@ -65,6 +65,7 @@ const schema = z.object({
   referringLocationId: z.string().optional(),
   referringDoctorId: z.string().optional(),
   referringDoctorName: z.string().optional(),
+  referringNpi: z.string().optional(),
   referringPhone: z.string().optional(),
   referringAddress: z.string().optional(),
   status: z.nativeEnum(ReferralStatus),
@@ -170,6 +171,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
       ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
       ...(prefillData.referringDoctorName && { referringDoctorName: prefillData.referringDoctorName }),
+      ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
       ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
       ...(prefillData.referringAddress && { referringAddress: prefillData.referringAddress }),
       ...(prefillData.insuranceProvider && { insuranceProvider: prefillData.insuranceProvider }),
@@ -420,9 +422,12 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
             </Field>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="Provider name (if not listed above)" error={errors.referringDoctorName?.message}>
               <Input {...register("referringDoctorName")} placeholder="Dr. Johnson" />
+            </Field>
+            <Field label="NPI" error={errors.referringNpi?.message}>
+              <Input {...register("referringNpi")} placeholder="10-digit NPI number" />
             </Field>
             <Field label="Referring Phone" error={errors.referringPhone?.message}>
               <Controller

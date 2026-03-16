@@ -20,6 +20,7 @@ const ReferralSchema = z.object({
   referringLocationId: z.string().optional(),
   referringDoctorId: z.string().optional(),
   referringDoctorName: z.string().optional(), // free-text fallback
+  referringNpi: z.string().optional(),
   referringPhone: z.string().optional(),
   referringAddress: z.string().optional(),
   status: z.nativeEnum(ReferralStatus),
@@ -81,6 +82,7 @@ export async function createReferral(data: unknown) {
       referringLocationId: d.referringLocationId || null,
       referringDoctorId: d.referringDoctorId || null,
       referringDoctorName: d.referringDoctorName || null,
+      referringNpi: d.referringNpi || null,
       referringPhone: d.referringPhone || null,
       referringAddress: d.referringAddress || null,
       status: d.status,
@@ -130,6 +132,7 @@ export async function updateReferral(id: string, data: unknown) {
       referringLocationId: d.referringLocationId || null,
       referringDoctorId: d.referringDoctorId || null,
       referringDoctorName: d.referringDoctorName || null,
+      referringNpi: d.referringNpi || null,
       referringPhone: d.referringPhone || null,
       referringAddress: d.referringAddress || null,
       status: d.status,

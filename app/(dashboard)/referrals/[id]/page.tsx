@@ -151,7 +151,7 @@ export default async function ReferralDetailPage({ params }: Props) {
                   : referral.referringDoctorName
               }
             />
-            <Row label="NPI" value={(referral.referringDoctor as any)?.npi} />
+            <Row label="NPI" value={referral.referringNpi ?? (referral.referringDoctor as any)?.npi} />
             <Row label="Specialty" value={referral.referringDoctor?.specialty} />
             <Row label="Referring Phone" value={referral.referringPhone} />
             <Row label="Referring Address" value={referral.referringAddress} />

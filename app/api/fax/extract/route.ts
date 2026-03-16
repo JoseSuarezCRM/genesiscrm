@@ -40,6 +40,7 @@ export interface ExtractedReferralData {
   patientEmail: string | null
   patientMrn: string | null
   referringDoctorName: string | null
+  referringNpi: string | null
   referringPhone: string | null
   referringAddress: string | null
   insuranceProvider: string | null
@@ -129,10 +130,9 @@ export async function POST(req: NextRequest) {
     const dobRaw = extracted.patientDob
     const patientDob = dobRaw && /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? dobRaw : null
 
-    // Compose notes from org, NPI, and reason (phone/address now have dedicated fields)
+    // Compose notes from org and reason (NPI/phone/address now have dedicated fields)
     const notesParts: string[] = []
     if (extracted.referringOrg) notesParts.push(`Referring organization: ${extracted.referringOrg}`)
-    if (extracted.referringNpi) notesParts.push(`NPI: ${extracted.referringNpi}`)
     if (extracted.reason) notesParts.push(`Reason: ${extracted.reason}`)
 
     const result: ExtractedReferralData = {
@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
       patientEmail: extracted.patientEmail ?? null,
       patientMrn: extracted.patientMrn ?? null,
       referringDoctorName: extracted.referringDoctorName ?? null,
+      referringNpi: extracted.referringNpi ?? null,
       referringPhone: extracted.referringPhone ?? null,
       referringAddress: extracted.referringAddress ?? null,
       insuranceProvider: extracted.insuranceProvider ?? null,
