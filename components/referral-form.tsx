@@ -161,6 +161,20 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   // When fax extraction data arrives, atomically pre-fill all extracted fields
   useEffect(() => {
     if (!prefillData) return
+
+    // Try to match the extracted org name to an existing practice (case-insensitive)
+    let matchedPracticeId: string | undefined
+    if (prefillData.referringOrg) {
+      const orgLower = prefillData.referringOrg.toLowerCase()
+      const match = localPractices.find((p) => p.name.toLowerCase() === orgLower)
+      if (match) {
+        matchedPracticeId = match.id
+      } else {
+        // No match — pre-fill the "Add new practice" dialog so staff can create it in one click
+        setNewPracticeName(prefillData.referringOrg)
+      }
+    }
+
     reset({
       status: ReferralStatus.NEW,
       referralDate: today,
@@ -170,6 +184,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       ...(prefillData.patientPhone && { patientPhone: prefillData.patientPhone }),
       ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
       ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
+      ...(matchedPracticeId && { referringPracticeId: matchedPracticeId }),
       ...(prefillData.referringDoctorName && { referringDoctorName: prefillData.referringDoctorName }),
       ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
       ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
@@ -178,7 +193,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       ...(prefillData.insuranceMemberId && { insuranceMemberId: prefillData.insuranceMemberId }),
       ...(prefillData.notes && { notes: prefillData.notes }),
     })
-  }, [prefillData, reset, today])
+  }, [prefillData, reset, today]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const practiceId = watch("referringPracticeId")
   const locationId = watch("referringLocationId")
