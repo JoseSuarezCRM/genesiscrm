@@ -165,9 +165,6 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const [autoCreatedPractice, setAutoCreatedPractice] = useState<string | null>(null)
   const [autoCreatedProvider, setAutoCreatedProvider] = useState<string | null>(null)
 
-  // Refs to preserve auto-selected IDs through cascade clear effects
-  const prefillLocationIdRef = useRef<string | null>(null)
-  const prefillDoctorIdRef = useRef<string | null>(null)
 
   // New doctor dialog state
   const [newDoctorName, setNewDoctorName] = useState("")
@@ -300,10 +297,6 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         }
       }
 
-      // Store IDs in refs BEFORE reset so cascade effects can restore them
-      if (matchedLocationId) prefillLocationIdRef.current = matchedLocationId
-      if (matchedDoctorId) prefillDoctorIdRef.current = matchedDoctorId
-
       reset({
         status: ReferralStatus.NEW,
         referralDate: today,
@@ -314,15 +307,25 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
         ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
         ...(matchedPracticeId && { referringPracticeId: matchedPracticeId }),
-        // Location and doctor are set via refs to survive cascade clear effects
+        // Don't include location/doctor here — cascade effects will clear them.
+        // We set them after effects settle via setTimeout below.
         ...(prefillData.referringDoctorName && !matchedDoctorId && { referringDoctorName: prefillData.referringDoctorName }),
         ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
         ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
-        ...(prefillData.referringAddress && { referringAddress: prefillData.referringAddress }),
+        // Skip referringAddress if a location record was created — address is stored there
+        ...(!matchedLocationId && prefillData.referringAddress && { referringAddress: prefillData.referringAddress }),
         ...(prefillData.insuranceProvider && { insuranceProvider: prefillData.insuranceProvider }),
         ...(prefillData.insuranceMemberId && { insuranceMemberId: prefillData.insuranceMemberId }),
         ...(prefillData.notes && { notes: prefillData.notes }),
       })
+
+      // Set location and doctor AFTER cascade effects have cleared them
+      if (matchedLocationId || matchedDoctorId) {
+        setTimeout(() => {
+          if (matchedLocationId) setValue("referringLocationId", matchedLocationId)
+          if (matchedDoctorId) setValue("referringDoctorId", matchedDoctorId)
+        }, 0)
+      }
     }
 
     applyPrefill()
@@ -340,32 +343,14 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     return d.locations.some((dl) => dl.locationId === locationId)
   })
 
-  // Reset downstream selections when parent changes.
-  // If a prefill is in progress, restore the pending IDs instead of clearing them.
+  // Reset downstream selections when parent changes
   useEffect(() => {
-    if (prefillLocationIdRef.current) {
-      setValue("referringLocationId", prefillLocationIdRef.current)
-      prefillLocationIdRef.current = null
-      // Doctor will be restored by the locationId effect below
-    } else {
-      setValue("referringLocationId", "")
-      // No location change coming — restore doctor directly if pending
-      if (prefillDoctorIdRef.current) {
-        setValue("referringDoctorId", prefillDoctorIdRef.current)
-        prefillDoctorIdRef.current = null
-      } else {
-        setValue("referringDoctorId", "")
-      }
-    }
+    setValue("referringLocationId", "")
+    setValue("referringDoctorId", "")
   }, [practiceId, setValue])
 
   useEffect(() => {
-    if (prefillDoctorIdRef.current) {
-      setValue("referringDoctorId", prefillDoctorIdRef.current)
-      prefillDoctorIdRef.current = null
-    } else {
-      setValue("referringDoctorId", "")
-    }
+    setValue("referringDoctorId", "")
   }, [locationId, setValue])
 
   function removeFile(index: number) {
