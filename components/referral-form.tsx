@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { STATUS_LABELS } from "@/lib/utils"
-import { CheckCircle2, FileText, Loader2, Paperclip, X } from "lucide-react"
+import { CheckCircle2, FileText, Info, Loader2, Paperclip, X } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import type { ExtractedReferralData, PendingFile } from "@/app/api/fax/extract/route"
 
@@ -147,6 +147,10 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const [newLocationError, setNewLocationError] = useState<string | null>(null)
   const [newLocationPending, startNewLocationTransition] = useTransition()
 
+  // Auto-created records notice
+  const [autoCreatedPractice, setAutoCreatedPractice] = useState<string | null>(null)
+  const [autoCreatedProvider, setAutoCreatedProvider] = useState<string | null>(null)
+
   // New doctor dialog state
   const [newDoctorName, setNewDoctorName] = useState("")
   const [newDoctorTitle, setNewDoctorTitle] = useState("")
@@ -163,48 +167,109 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   useEffect(() => {
     if (!prefillData) return
 
-    // Try to match the extracted org name to an existing practice.
-    // Scoring: exact > one starts with the other > one contains the other.
-    // Picks the highest-scoring match; on a tie, prefers the closest length (most specific).
-    let matchedPracticeId: string | undefined
-    if (prefillData.referringOrg) {
-      const a = prefillData.referringOrg.toLowerCase().trim()
-      const scored = localPractices.map((p) => {
-        const b = p.name.toLowerCase().trim()
-        let score = 0
-        if (a === b) score = 100
-        else if (b.startsWith(a) || a.startsWith(b)) score = 80
-        else if (b.includes(a) || a.includes(b)) score = 60
-        return { p, score }
-      }).filter((x) => x.score > 0)
+    async function applyPrefill() {
+      if (!prefillData) return
 
-      if (scored.length > 0) {
-        scored.sort((x, y) => y.score - x.score || Math.abs(x.p.name.length - prefillData.referringOrg!.length) - Math.abs(y.p.name.length - prefillData.referringOrg!.length))
-        matchedPracticeId = scored[0].p.id
-      } else {
-        // No match — pre-fill the "Add new practice" dialog so staff can create it in one click
-        setNewPracticeName(prefillData.referringOrg)
+      // Try to match the extracted org name to an existing practice.
+      // Scoring: exact > one starts with the other > one contains the other.
+      // Picks the highest-scoring match; on a tie, prefers the closest length (most specific).
+      let matchedPracticeId: string | undefined
+      if (prefillData.referringOrg) {
+        const a = prefillData.referringOrg.toLowerCase().trim()
+        const scored = localPractices.map((p) => {
+          const b = p.name.toLowerCase().trim()
+          let score = 0
+          if (a === b) score = 100
+          else if (b.startsWith(a) || a.startsWith(b)) score = 80
+          else if (b.includes(a) || a.includes(b)) score = 60
+          return { p, score }
+        }).filter((x) => x.score > 0)
+
+        if (scored.length > 0) {
+          scored.sort((x, y) => y.score - x.score || Math.abs(x.p.name.length - prefillData.referringOrg!.length) - Math.abs(y.p.name.length - prefillData.referringOrg!.length))
+          matchedPracticeId = scored[0].p.id
+        } else {
+          // No match — auto-create the practice from fax data
+          const result = await createPractice({
+            name: prefillData.referringOrg,
+            phone: prefillData.referringPhone ?? undefined,
+            address: prefillData.referringAddress ?? undefined,
+          })
+          if (result && (result.id || ("id" in result && result.id))) {
+            const newId = (result as { id: string }).id
+            const newPractice: Practice = {
+              id: newId,
+              name: prefillData.referringOrg,
+              locations: [],
+              doctors: [],
+            }
+            setLocalPractices((prev) => [...prev, newPractice])
+            matchedPracticeId = newId
+            setAutoCreatedPractice(prefillData.referringOrg)
+          }
+        }
       }
+
+      // Auto-create provider if a name was extracted and practice was matched/created
+      let matchedDoctorId: string | undefined
+      if (prefillData.referringDoctorName && matchedPracticeId) {
+        const practiceInList = localPractices.find((p) => p.id === matchedPracticeId)
+          ?? { id: matchedPracticeId, name: "", locations: [], doctors: [] }
+
+        const existingDoctor = practiceInList.doctors.find(
+          (d) => d.name.toLowerCase().trim() === prefillData.referringDoctorName!.toLowerCase().trim()
+        )
+
+        if (existingDoctor) {
+          matchedDoctorId = existingDoctor.id
+        } else {
+          const docResult = await createDoctor({
+            name: prefillData.referringDoctorName,
+            npi: prefillData.referringNpi ?? undefined,
+            practiceId: matchedPracticeId,
+          })
+          if (docResult && (docResult as { id?: string }).id) {
+            matchedDoctorId = (docResult as { id: string }).id
+            setLocalPractices((prev) =>
+              prev.map((p) =>
+                p.id !== matchedPracticeId ? p : {
+                  ...p,
+                  doctors: [...p.doctors, {
+                    id: matchedDoctorId!,
+                    name: prefillData.referringDoctorName!,
+                    specialty: null,
+                    locations: [],
+                  }],
+                }
+              )
+            )
+            setAutoCreatedProvider(prefillData.referringDoctorName)
+          }
+        }
+      }
+
+      reset({
+        status: ReferralStatus.NEW,
+        referralDate: today,
+        ...(prefillData.patientFirstName && { patientFirstName: prefillData.patientFirstName }),
+        ...(prefillData.patientLastName && { patientLastName: prefillData.patientLastName }),
+        ...(prefillData.patientDob && { patientDob: prefillData.patientDob }),
+        ...(prefillData.patientPhone && { patientPhone: prefillData.patientPhone }),
+        ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
+        ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
+        ...(matchedPracticeId && { referringPracticeId: matchedPracticeId }),
+        ...(matchedDoctorId && { referringDoctorId: matchedDoctorId }),
+        ...(prefillData.referringDoctorName && !matchedDoctorId && { referringDoctorName: prefillData.referringDoctorName }),
+        ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
+        ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
+        ...(prefillData.referringAddress && { referringAddress: prefillData.referringAddress }),
+        ...(prefillData.insuranceProvider && { insuranceProvider: prefillData.insuranceProvider }),
+        ...(prefillData.insuranceMemberId && { insuranceMemberId: prefillData.insuranceMemberId }),
+        ...(prefillData.notes && { notes: prefillData.notes }),
+      })
     }
 
-    reset({
-      status: ReferralStatus.NEW,
-      referralDate: today,
-      ...(prefillData.patientFirstName && { patientFirstName: prefillData.patientFirstName }),
-      ...(prefillData.patientLastName && { patientLastName: prefillData.patientLastName }),
-      ...(prefillData.patientDob && { patientDob: prefillData.patientDob }),
-      ...(prefillData.patientPhone && { patientPhone: prefillData.patientPhone }),
-      ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
-      ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
-      ...(matchedPracticeId && { referringPracticeId: matchedPracticeId }),
-      ...(prefillData.referringDoctorName && { referringDoctorName: prefillData.referringDoctorName }),
-      ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
-      ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
-      ...(prefillData.referringAddress && { referringAddress: prefillData.referringAddress }),
-      ...(prefillData.insuranceProvider && { insuranceProvider: prefillData.insuranceProvider }),
-      ...(prefillData.insuranceMemberId && { insuranceMemberId: prefillData.insuranceMemberId }),
-      ...(prefillData.notes && { notes: prefillData.notes }),
-    })
+    applyPrefill()
   }, [prefillData, reset, today]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const practiceId = watch("referringPracticeId")
@@ -335,6 +400,17 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
 
   return (
     <>
+      {(autoCreatedPractice || autoCreatedProvider) && (
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 mb-4">
+          <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+          <span>
+            Automatically created from the fax and selected below:{" "}
+            {autoCreatedPractice && <><strong>&quot;{autoCreatedPractice}&quot;</strong> (practice){autoCreatedProvider ? " and " : ""}</>}
+            {autoCreatedProvider && <><strong>&quot;{autoCreatedProvider}&quot;</strong> (provider)</>}.
+            {" "}You can edit these anytime in <strong>Practice Manager</strong>.
+          </span>
+        </div>
+      )}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
 
         {/* Patient Info */}
