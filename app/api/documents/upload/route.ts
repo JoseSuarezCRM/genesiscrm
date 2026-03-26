@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { writeFile, mkdir } from "fs/promises"
-import path from "path"
+import { put } from "@vercel/blob"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { createAuditLog } from "@/lib/audit"
+import { AuditAction } from "@prisma/client"
 
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -49,29 +50,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Referral not found" }, { status: 404 })
   }
 
-  // Save to local filesystem under public/uploads/
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "referrals", referralId)
-  await mkdir(uploadDir, { recursive: true })
-
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
   const uniqueName = `${Date.now()}-${safeName}`
-  const filePath = path.join(uploadDir, uniqueName)
 
-  const buffer = Buffer.from(await file.arrayBuffer())
-  await writeFile(filePath, buffer)
-
-  const fileUrl = `/uploads/referrals/${referralId}/${uniqueName}`
+  // Upload to Vercel Blob
+  const blob = await put(`referrals/${referralId}/${uniqueName}`, file, {
+    access: "public",
+    contentType: file.type,
+  })
 
   // Save document record
   const doc = await prisma.document.create({
     data: {
       referralId,
       fileName: file.name,
-      fileUrl,
+      fileUrl: blob.url,
       fileSize: file.size,
       contentType: file.type,
       uploadedById: session.user.id,
     },
+  })
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.DOCUMENT_UPLOAD,
+    resourceType: "Document",
+    resourceId: doc.id,
+    metadata: { referralId, fileName: file.name },
   })
 
   return NextResponse.json(doc)

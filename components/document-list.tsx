@@ -61,7 +61,7 @@ export default function DocumentList({
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Button size="icon" variant="ghost" asChild className="h-8 w-8">
-              <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+              <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-4 w-4" />
                 <span className="sr-only">Open</span>
               </a>

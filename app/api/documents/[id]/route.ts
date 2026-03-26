@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { unlink } from "fs/promises"
-import path from "path"
+import { del } from "@vercel/blob"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createAuditLog } from "@/lib/audit"
@@ -30,14 +29,11 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  // Delete from local filesystem
-  if (doc.fileUrl.startsWith("/uploads/")) {
-    try {
-      const filePath = path.join(process.cwd(), "public", doc.fileUrl)
-      await unlink(filePath)
-    } catch {
-      // File may already be gone — still remove the DB record
-    }
+  // Delete from Vercel Blob
+  try {
+    await del(doc.fileUrl)
+  } catch {
+    // Blob may already be gone — still remove the DB record
   }
 
   await prisma.document.delete({ where: { id: params.id } })
