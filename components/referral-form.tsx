@@ -119,6 +119,20 @@ const CREATE_PRACTICE = "__create_practice__"
 const CREATE_LOCATION = "__create_location__"
 const CREATE_DOCTOR = "__create_doctor__"
 
+// Extract title prefix/suffix from a doctor name string
+function parseDoctorTitle(fullName: string): { name: string; title?: string } {
+  let name = fullName.trim()
+  let title: string | undefined
+  if (name.startsWith("Dr.")) { title = "Dr."; name = name.slice(3).trim() }
+  else if (name.toLowerCase().startsWith("dr ")) { title = "Dr."; name = name.slice(3).trim() }
+  else {
+    for (const sfx of [", MD", ", DO", ", NP", ", PA-C", ", DPM", ", APRN", " MD", " DO", " NP", " DPM", " APRN"]) {
+      if (name.endsWith(sfx)) { title = sfx.replace(", ", "").trim(); name = name.slice(0, -sfx.length).trim(); break }
+    }
+  }
+  return { name, title }
+}
+
 export default function ReferralForm({ practices, defaultValues, referralId, prefillData, pendingFile }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
@@ -150,6 +164,10 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   // Auto-created records notice
   const [autoCreatedPractice, setAutoCreatedPractice] = useState<string | null>(null)
   const [autoCreatedProvider, setAutoCreatedProvider] = useState<string | null>(null)
+
+  // Refs to preserve auto-selected IDs through cascade clear effects
+  const prefillLocationIdRef = useRef<string | null>(null)
+  const prefillDoctorIdRef = useRef<string | null>(null)
 
   // New doctor dialog state
   const [newDoctorName, setNewDoctorName] = useState("")
@@ -210,23 +228,57 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         }
       }
 
+      // Auto-create location if address was extracted and practice was matched/created
+      let matchedLocationId: string | undefined
+      if (prefillData.referringAddress && matchedPracticeId) {
+        const locName = prefillData.referringAddress
+        const locResult = await createLocation({
+          name: locName,
+          address: prefillData.referringAddress,
+          phone: prefillData.referringPhone ?? undefined,
+          practiceId: matchedPracticeId,
+        })
+        if (locResult && (locResult as { id?: string }).id) {
+          matchedLocationId = (locResult as { id: string }).id
+          setLocalPractices((prev) =>
+            prev.map((p) =>
+              p.id !== matchedPracticeId ? p : {
+                ...p,
+                locations: [...p.locations, {
+                  id: matchedLocationId!,
+                  name: locName,
+                  address: prefillData.referringAddress,
+                }],
+              }
+            )
+          )
+        } else if ((locResult as { id?: string })?.id && (locResult as { duplicate?: boolean })?.duplicate) {
+          // Location already exists — use it
+          matchedLocationId = (locResult as { id: string }).id
+        }
+      }
+
       // Auto-create provider if a name was extracted and practice was matched/created
       let matchedDoctorId: string | undefined
       if (prefillData.referringDoctorName && matchedPracticeId) {
         const practiceInList = localPractices.find((p) => p.id === matchedPracticeId)
           ?? { id: matchedPracticeId, name: "", locations: [], doctors: [] }
 
+        const { name: parsedName, title: parsedTitle } = parseDoctorTitle(prefillData.referringDoctorName)
+
         const existingDoctor = practiceInList.doctors.find(
-          (d) => d.name.toLowerCase().trim() === prefillData.referringDoctorName!.toLowerCase().trim()
+          (d) => d.name.toLowerCase().trim() === parsedName.toLowerCase().trim()
         )
 
         if (existingDoctor) {
           matchedDoctorId = existingDoctor.id
         } else {
           const docResult = await createDoctor({
-            name: prefillData.referringDoctorName,
+            name: parsedName,
+            title: parsedTitle,
             npi: prefillData.referringNpi ?? undefined,
             practiceId: matchedPracticeId,
+            locationIds: matchedLocationId ? [matchedLocationId] : [],
           })
           if (docResult && (docResult as { id?: string }).id) {
             matchedDoctorId = (docResult as { id: string }).id
@@ -236,9 +288,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                   ...p,
                   doctors: [...p.doctors, {
                     id: matchedDoctorId!,
-                    name: prefillData.referringDoctorName!,
+                    name: parsedName,
                     specialty: null,
-                    locations: [],
+                    locations: matchedLocationId ? [{ locationId: matchedLocationId }] : [],
                   }],
                 }
               )
@@ -247,6 +299,10 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           }
         }
       }
+
+      // Store IDs in refs BEFORE reset so cascade effects can restore them
+      if (matchedLocationId) prefillLocationIdRef.current = matchedLocationId
+      if (matchedDoctorId) prefillDoctorIdRef.current = matchedDoctorId
 
       reset({
         status: ReferralStatus.NEW,
@@ -258,7 +314,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
         ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
         ...(matchedPracticeId && { referringPracticeId: matchedPracticeId }),
-        ...(matchedDoctorId && { referringDoctorId: matchedDoctorId }),
+        // Location and doctor are set via refs to survive cascade clear effects
         ...(prefillData.referringDoctorName && !matchedDoctorId && { referringDoctorName: prefillData.referringDoctorName }),
         ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
         ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
@@ -284,14 +340,32 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     return d.locations.some((dl) => dl.locationId === locationId)
   })
 
-  // Reset downstream selections when parent changes
+  // Reset downstream selections when parent changes.
+  // If a prefill is in progress, restore the pending IDs instead of clearing them.
   useEffect(() => {
-    setValue("referringLocationId", "")
-    setValue("referringDoctorId", "")
+    if (prefillLocationIdRef.current) {
+      setValue("referringLocationId", prefillLocationIdRef.current)
+      prefillLocationIdRef.current = null
+      // Doctor will be restored by the locationId effect below
+    } else {
+      setValue("referringLocationId", "")
+      // No location change coming — restore doctor directly if pending
+      if (prefillDoctorIdRef.current) {
+        setValue("referringDoctorId", prefillDoctorIdRef.current)
+        prefillDoctorIdRef.current = null
+      } else {
+        setValue("referringDoctorId", "")
+      }
+    }
   }, [practiceId, setValue])
 
   useEffect(() => {
-    setValue("referringDoctorId", "")
+    if (prefillDoctorIdRef.current) {
+      setValue("referringDoctorId", prefillDoctorIdRef.current)
+      prefillDoctorIdRef.current = null
+    } else {
+      setValue("referringDoctorId", "")
+    }
   }, [locationId, setValue])
 
   function removeFile(index: number) {
