@@ -26,9 +26,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { STATUS_LABELS } from "@/lib/utils"
-import { Loader2, Paperclip, X } from "lucide-react"
+import { CheckCircle2, FileText, Loader2, Paperclip, X } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
-import type { ExtractedReferralData } from "@/app/api/fax/extract/route"
+import type { ExtractedReferralData, PendingFile } from "@/app/api/fax/extract/route"
 
 // ─── Types passed from server ─────────────────────────────────────────────────
 
@@ -85,6 +85,7 @@ interface ReferralFormProps {
   defaultValues?: Partial<FormValues>
   referralId?: string
   prefillData?: ExtractedReferralData
+  pendingFile?: PendingFile | null
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -118,7 +119,7 @@ const CREATE_PRACTICE = "__create_practice__"
 const CREATE_LOCATION = "__create_location__"
 const CREATE_DOCTOR = "__create_doctor__"
 
-export default function ReferralForm({ practices, defaultValues, referralId, prefillData }: ReferralFormProps) {
+export default function ReferralForm({ practices, defaultValues, referralId, prefillData, pendingFile }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
@@ -316,10 +317,10 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       if (referralId) {
         await updateReferral(referralId, clean)
       } else {
-        const result = await createReferral(clean)
+        const result = await createReferral(clean, pendingFile)
         if (result && "id" in result && result.id) {
           const newId = result.id
-          // Upload any attached files before navigating
+          // Upload any additional files attached manually
           for (const file of files) {
             const fd = new FormData()
             fd.append("file", file)
@@ -545,6 +546,14 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                   e.target.value = ""
                 }}
               />
+              {pendingFile && (
+                <div className="flex items-center gap-2 text-sm bg-green-50 border border-green-200 rounded px-3 py-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                  <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span className="flex-1 truncate text-slate-700">{pendingFile.name}</span>
+                  <span className="text-xs text-green-600 shrink-0">Fax · will attach on save</span>
+                </div>
+              )}
               <Button
                 type="button"
                 variant="outline"

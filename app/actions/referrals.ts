@@ -59,7 +59,14 @@ async function assertReferralAccess(referralId: string) {
   return { session, referral }
 }
 
-export async function createReferral(data: unknown) {
+interface PendingFile {
+  url: string
+  name: string
+  size: number
+  contentType: string
+}
+
+export async function createReferral(data: unknown, pendingFile?: PendingFile | null) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -96,6 +103,20 @@ export async function createReferral(data: unknown) {
       createdById: session.user.id,
     },
   })
+
+  // Attach the scanned fax as a document if one was uploaded during extraction
+  if (pendingFile?.url) {
+    await prisma.document.create({
+      data: {
+        referralId: referral.id,
+        fileName: pendingFile.name,
+        fileUrl: pendingFile.url,
+        fileSize: pendingFile.size,
+        contentType: pendingFile.contentType,
+        uploadedById: session.user.id,
+      },
+    })
+  }
 
   await createAuditLog({
     userId: session.user.id,

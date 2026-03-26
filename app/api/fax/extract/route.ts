@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { put } from "@vercel/blob"
 import { auth } from "@/lib/auth"
 import { getAnthropicClient } from "@/lib/anthropic"
 
@@ -32,6 +33,13 @@ Rules:
 - reason should be a concise summary of the referral reason or chief complaint.
 - referringAddress should be the full address on one line if possible.`
 
+export interface PendingFile {
+  url: string
+  name: string
+  size: number
+  contentType: string
+}
+
 export interface ExtractedReferralData {
   patientFirstName: string | null
   patientLastName: string | null
@@ -47,6 +55,7 @@ export interface ExtractedReferralData {
   insuranceProvider: string | null
   insuranceMemberId: string | null
   notes: string | null
+  pendingFile: PendingFile | null
 }
 
 export async function POST(req: NextRequest) {
@@ -77,6 +86,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
+
+    // Upload to Vercel Blob immediately so it's ready to attach when the referral is saved
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+    const blob = await put(`referrals/pending/${Date.now()}-${safeName}`, buffer, {
+      access: "public",
+      contentType: file.type,
+    })
+    const pendingFile: PendingFile = {
+      url: blob.url,
+      name: file.name,
+      size: file.size,
+      contentType: file.type,
+    }
+
     const base64 = buffer.toString("base64")
 
     // Build the file content block based on type
@@ -150,6 +173,7 @@ export async function POST(req: NextRequest) {
       insuranceProvider: extracted.insuranceProvider ?? null,
       insuranceMemberId: extracted.insuranceMemberId ?? null,
       notes: notesParts.length > 0 ? notesParts.join("\n") : null,
+      pendingFile,
     }
 
     return NextResponse.json(result)
