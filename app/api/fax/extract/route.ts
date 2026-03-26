@@ -87,17 +87,23 @@ export async function POST(req: NextRequest) {
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
 
-    // Upload to Vercel Blob immediately so it's ready to attach when the referral is saved
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const blob = await put(`referrals/pending/${Date.now()}-${safeName}`, buffer, {
-      access: "public",
-      contentType: file.type,
-    })
-    const pendingFile: PendingFile = {
-      url: blob.url,
-      name: file.name,
-      size: file.size,
-      contentType: file.type,
+    // Upload to Vercel Blob immediately so it's ready to attach when the referral is saved.
+    // Non-fatal — if Blob is not configured, extraction still works and the user can attach manually.
+    let pendingFile: PendingFile | null = null
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+      const blob = await put(`referrals/pending/${Date.now()}-${safeName}`, buffer, {
+        access: "public",
+        contentType: file.type,
+      })
+      pendingFile = {
+        url: blob.url,
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      }
+    } catch (blobErr) {
+      console.warn("[FAX EXTRACT] Blob upload failed, extraction will continue without file attachment:", blobErr)
     }
 
     const base64 = buffer.toString("base64")
