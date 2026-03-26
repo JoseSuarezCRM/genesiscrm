@@ -118,6 +118,9 @@ const NONE = "__none__"
 const CREATE_PRACTICE = "__create_practice__"
 const CREATE_LOCATION = "__create_location__"
 const CREATE_DOCTOR = "__create_doctor__"
+const PENDING_PRACTICE_ID = "__pending_practice__"
+const PENDING_LOCATION_ID = "__pending_location__"
+const PENDING_DOCTOR_ID = "__pending_doctor__"
 
 // Extract title prefix/suffix from a doctor name string
 function parseDoctorTitle(fullName: string): { name: string; title?: string } {
@@ -161,7 +164,12 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const [newLocationError, setNewLocationError] = useState<string | null>(null)
   const [newLocationPending, startNewLocationTransition] = useTransition()
 
-  // Auto-created records notice
+  // Pending records to create on submit (from fax extraction — not created until user saves)
+  const [pendingPracticeData, setPendingPracticeData] = useState<{ name: string; phone?: string; address?: string } | null>(null)
+  const [pendingLocationData, setPendingLocationData] = useState<{ name: string; address?: string; phone?: string } | null>(null)
+  const [pendingDoctorData, setPendingDoctorData] = useState<{ name: string; title?: string; npi?: string } | null>(null)
+
+  // Notice banner: names of records that will be created on save
   const [autoCreatedPractice, setAutoCreatedPractice] = useState<string | null>(null)
   const [autoCreatedProvider, setAutoCreatedProvider] = useState<string | null>(null)
 
@@ -204,24 +212,20 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           scored.sort((x, y) => y.score - x.score || Math.abs(x.p.name.length - prefillData.referringOrg!.length) - Math.abs(y.p.name.length - prefillData.referringOrg!.length))
           matchedPracticeId = scored[0].p.id
         } else {
-          // No match — auto-create the practice from fax data
-          const result = await createPractice({
+          // No match — stage for creation on submit (ghost entry in local state only)
+          setPendingPracticeData({
             name: prefillData.referringOrg,
             phone: prefillData.referringPhone ?? undefined,
             address: prefillData.referringAddress ?? undefined,
           })
-          if (result && (result.id || ("id" in result && result.id))) {
-            const newId = (result as { id: string }).id
-            const newPractice: Practice = {
-              id: newId,
-              name: prefillData.referringOrg,
-              locations: [],
-              doctors: [],
-            }
-            setLocalPractices((prev) => [...prev, newPractice])
-            matchedPracticeId = newId
-            setAutoCreatedPractice(prefillData.referringOrg)
-          }
+          setLocalPractices((prev) => [...prev, {
+            id: PENDING_PRACTICE_ID,
+            name: prefillData.referringOrg,
+            locations: [],
+            doctors: [],
+          }])
+          matchedPracticeId = PENDING_PRACTICE_ID
+          setAutoCreatedPractice(prefillData.referringOrg)
         }
       }
 
@@ -229,30 +233,25 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       let matchedLocationId: string | undefined
       if (prefillData.referringAddress && matchedPracticeId) {
         const locName = prefillData.referringAddress
-        const locResult = await createLocation({
+        // Stage location for creation on submit (ghost entry only)
+        setPendingLocationData({
           name: locName,
           address: prefillData.referringAddress,
           phone: prefillData.referringPhone ?? undefined,
-          practiceId: matchedPracticeId,
         })
-        if (locResult && (locResult as { id?: string }).id) {
-          matchedLocationId = (locResult as { id: string }).id
-          setLocalPractices((prev) =>
-            prev.map((p) =>
-              p.id !== matchedPracticeId ? p : {
-                ...p,
-                locations: [...p.locations, {
-                  id: matchedLocationId!,
-                  name: locName,
-                  address: prefillData.referringAddress,
-                }],
-              }
-            )
+        matchedLocationId = PENDING_LOCATION_ID
+        setLocalPractices((prev) =>
+          prev.map((p) =>
+            p.id !== matchedPracticeId ? p : {
+              ...p,
+              locations: [...p.locations, {
+                id: PENDING_LOCATION_ID,
+                name: locName,
+                address: prefillData.referringAddress,
+              }],
+            }
           )
-        } else if ((locResult as { id?: string })?.id && (locResult as { duplicate?: boolean })?.duplicate) {
-          // Location already exists — use it
-          matchedLocationId = (locResult as { id: string }).id
-        }
+        )
       }
 
       // Auto-create provider if a name was extracted and practice was matched/created
@@ -270,30 +269,23 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         if (existingDoctor) {
           matchedDoctorId = existingDoctor.id
         } else {
-          const docResult = await createDoctor({
-            name: parsedName,
-            title: parsedTitle,
-            npi: prefillData.referringNpi ?? undefined,
-            practiceId: matchedPracticeId,
-            locationIds: matchedLocationId ? [matchedLocationId] : [],
-          })
-          if (docResult && (docResult as { id?: string }).id) {
-            matchedDoctorId = (docResult as { id: string }).id
-            setLocalPractices((prev) =>
-              prev.map((p) =>
-                p.id !== matchedPracticeId ? p : {
-                  ...p,
-                  doctors: [...p.doctors, {
-                    id: matchedDoctorId!,
-                    name: parsedName,
-                    specialty: null,
-                    locations: matchedLocationId ? [{ locationId: matchedLocationId }] : [],
-                  }],
-                }
-              )
+          // Stage doctor for creation on submit (ghost entry only)
+          setPendingDoctorData({ name: parsedName, title: parsedTitle, npi: prefillData.referringNpi ?? undefined })
+          matchedDoctorId = PENDING_DOCTOR_ID
+          setLocalPractices((prev) =>
+            prev.map((p) =>
+              p.id !== matchedPracticeId ? p : {
+                ...p,
+                doctors: [...p.doctors, {
+                  id: PENDING_DOCTOR_ID,
+                  name: parsedName,
+                  specialty: null,
+                  locations: matchedLocationId ? [{ locationId: matchedLocationId }] : [],
+                }],
+              }
             )
-            setAutoCreatedProvider(prefillData.referringDoctorName)
-          }
+          )
+          setAutoCreatedProvider(prefillData.referringDoctorName)
         }
       }
 
@@ -431,20 +423,42 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   // ─── Submit ────────────────────────────────────────────────────────────────
 
   function onSubmit(data: FormValues) {
-    const clean = {
-      ...data,
-      referringPracticeId: data.referringPracticeId === NONE ? "" : (data.referringPracticeId ?? ""),
-      referringLocationId: data.referringLocationId === NONE ? "" : (data.referringLocationId ?? ""),
-      referringDoctorId: data.referringDoctorId === NONE ? "" : (data.referringDoctorId ?? ""),
-    }
     startTransition(async () => {
+      // Resolve any pending (fax-extracted) records before saving
+      let resolvedPracticeId = data.referringPracticeId === NONE ? "" : (data.referringPracticeId ?? "")
+      let resolvedLocationId = data.referringLocationId === NONE ? "" : (data.referringLocationId ?? "")
+      let resolvedDoctorId = data.referringDoctorId === NONE ? "" : (data.referringDoctorId ?? "")
+
+      if (resolvedPracticeId === PENDING_PRACTICE_ID && pendingPracticeData) {
+        const r = await createPractice(pendingPracticeData)
+        resolvedPracticeId = (r as { id?: string }).id ?? ""
+      }
+      if (resolvedLocationId === PENDING_LOCATION_ID && pendingLocationData && resolvedPracticeId) {
+        const r = await createLocation({ ...pendingLocationData, practiceId: resolvedPracticeId })
+        resolvedLocationId = (r as { id?: string }).id ?? ""
+      }
+      if (resolvedDoctorId === PENDING_DOCTOR_ID && pendingDoctorData && resolvedPracticeId) {
+        const r = await createDoctor({
+          ...pendingDoctorData,
+          practiceId: resolvedPracticeId,
+          locationIds: resolvedLocationId ? [resolvedLocationId] : [],
+        })
+        resolvedDoctorId = (r as { id?: string }).id ?? ""
+      }
+
+      const clean = {
+        ...data,
+        referringPracticeId: resolvedPracticeId,
+        referringLocationId: resolvedLocationId,
+        referringDoctorId: resolvedDoctorId,
+      }
+
       if (referralId) {
         await updateReferral(referralId, clean)
       } else {
         const result = await createReferral(clean, pendingFile)
         if (result && "id" in result && result.id) {
           const newId = result.id
-          // Upload any additional files attached manually
           for (const file of files) {
             const fd = new FormData()
             fd.append("file", file)
@@ -463,10 +477,10 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 mb-4">
           <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
           <span>
-            Automatically created from the fax and selected below:{" "}
+            Extracted from fax — the following will be created when you save:{" "}
             {autoCreatedPractice && <><strong>&quot;{autoCreatedPractice}&quot;</strong> (practice){autoCreatedProvider ? " and " : ""}</>}
             {autoCreatedProvider && <><strong>&quot;{autoCreatedProvider}&quot;</strong> (provider)</>}.
-            {" "}You can edit these anytime in <strong>Practice Manager</strong>.
+            {" "}You can edit these anytime in <strong>Practice Manager</strong> after saving.
           </span>
         </div>
       )}
