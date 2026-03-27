@@ -311,11 +311,19 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         ...(prefillData.notes && { notes: prefillData.notes }),
       })
 
-      // Set location and doctor AFTER cascade effects have cleared them
+      // Set location and doctor AFTER cascade effects have cleared them.
+      // Nested timeouts: setting locationId triggers locationId effect which clears doctorId,
+      // so doctorId must be set in a second tick after that effect has run.
       if (matchedLocationId || matchedDoctorId) {
         setTimeout(() => {
-          if (matchedLocationId) setValue("referringLocationId", matchedLocationId)
-          if (matchedDoctorId) setValue("referringDoctorId", matchedDoctorId)
+          if (matchedLocationId) {
+            setValue("referringLocationId", matchedLocationId)
+            if (matchedDoctorId) {
+              setTimeout(() => setValue("referringDoctorId", matchedDoctorId), 0)
+            }
+          } else if (matchedDoctorId) {
+            setValue("referringDoctorId", matchedDoctorId)
+          }
         }, 0)
       }
     }
