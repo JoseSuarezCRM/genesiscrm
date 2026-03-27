@@ -22,6 +22,17 @@ export async function getOutreachTemplates() {
   })
 }
 
+// Used by the outreach dialog — available to all authenticated staff
+export async function getEmailTemplates() {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+  return prisma.outreachTemplate.findMany({
+    where: { channel: "EMAIL", isActive: true },
+    orderBy: { trigger: "asc" },
+    select: { id: true, trigger: true, subject: true, body: true },
+  })
+}
+
 export async function updateOutreachTemplate(
   id: string,
   data: { body: string; subject?: string | null; isActive: boolean }

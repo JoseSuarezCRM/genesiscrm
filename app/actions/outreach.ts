@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { sendSMS } from "@/lib/twilio"
-import { sendEmail } from "@/lib/resend-client"
+import { sendEmail } from "@/lib/postmark"
 import {
   AuditAction,
   OutreachChannel,
@@ -25,7 +25,8 @@ type ManualChannel = "SMS" | "EMAIL" | "BOTH"
 export async function sendManualOutreach(
   referralId: string,
   channel: ManualChannel,
-  message: string
+  message: string,
+  subject?: string
 ): Promise<{ success?: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
@@ -49,7 +50,9 @@ export async function sendManualOutreach(
   }
 
   if ((channel === "EMAIL" || channel === "BOTH") && referral.patientEmail) {
-    const result = await sendEmail(referral.patientEmail, "Message from Genesis Ortho", `<p>${message}</p>`)
+    const emailSubject = subject?.trim() || "Message from Genesis Ortho"
+    const html = message.replace(/\n/g, "<br>")
+    const result = await sendEmail(referral.patientEmail, emailSubject, `<p>${html}</p>`)
     results.push({ ...result, channel: OutreachChannel.EMAIL, recipient: referral.patientEmail })
   }
 
