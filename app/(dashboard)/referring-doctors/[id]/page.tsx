@@ -38,7 +38,13 @@ export default async function ProviderDetailPage({ params }: Props) {
 
   if (!provider) notFound()
 
-  const displayName = [provider.title, provider.name].filter(Boolean).join(" ")
+  // Prefix titles (Dr.) go before name; credential suffixes (MD, DO, NP, etc.) go after with comma
+  const isPrefixTitle = provider.title?.startsWith("Dr")
+  const displayName = provider.title
+    ? isPrefixTitle
+      ? `${provider.title} ${provider.name}`
+      : `${provider.name}, ${provider.title}`
+    : provider.name
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
@@ -64,7 +70,8 @@ export default async function ProviderDetailPage({ params }: Props) {
             <CardTitle className="text-base">Provider Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <Row label="Name" value={displayName} />
+            <Row label="Name" value={provider.name} />
+            <Row label="Title" value={provider.title} />
             <Row label="NPI" value={provider.npi} />
             <Row label="Specialty" value={provider.specialty} />
             <Row label="Phone" value={provider.phone} />
