@@ -164,9 +164,6 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const [newLocationError, setNewLocationError] = useState<string | null>(null)
   const [newLocationPending, startNewLocationTransition] = useTransition()
 
-  // Suppresses cascade clear effects during fax prefill
-  const isPrefillingRef = useRef(false)
-
   // Pending referring source IDs to set once localPractices has the ghost entries
   const [pendingPrefillIds, setPendingPrefillIds] = useState<{
     practiceId?: string; locationId?: string; doctorId?: string
@@ -346,25 +343,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     const { practiceId: pid, locationId: lid, doctorId: did } = pendingPrefillIds
     // Wait until the ghost practice entry is actually in localPractices
     if (pid && !localPractices.find((p) => p.id === pid)) return
-    isPrefillingRef.current = true
     if (pid) setValue("referringPracticeId", pid)
     if (lid) setValue("referringLocationId", lid)
     if (did) setValue("referringDoctorId", did)
     setPendingPrefillIds(null)
-    setTimeout(() => { isPrefillingRef.current = false }, 0)
   }, [localPractices, pendingPrefillIds, setValue])
-
-  // Reset downstream selections when parent changes (suppressed during fax prefill)
-  useEffect(() => {
-    if (isPrefillingRef.current) return
-    setValue("referringLocationId", "")
-    setValue("referringDoctorId", "")
-  }, [practiceId, setValue])
-
-  useEffect(() => {
-    if (isPrefillingRef.current) return
-    setValue("referringDoctorId", "")
-  }, [locationId, setValue])
 
   function removeFile(index: number) {
     setFiles((prev) => prev.filter((_, i) => i !== index))
@@ -549,6 +532,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 onValueChange={(v) => {
                   if (v === CREATE_PRACTICE) { setShowNewPractice(true); return }
                   setValue("referringPracticeId", v === NONE ? "" : v)
+                  setValue("referringLocationId", "")
+                  setValue("referringDoctorId", "")
                 }}
               >
                 <SelectTrigger>
@@ -572,6 +557,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 onValueChange={(v) => {
                   if (v === CREATE_LOCATION) { setShowNewLocation(true); return }
                   setValue("referringLocationId", v === NONE ? "" : v)
+                  setValue("referringDoctorId", "")
                 }}
                 disabled={!practiceId}
               >
