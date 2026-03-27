@@ -343,10 +343,14 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     const { practiceId: pid, locationId: lid, doctorId: did } = pendingPrefillIds
     // Wait until the ghost practice entry is actually in localPractices
     if (pid && !localPractices.find((p) => p.id === pid)) return
-    if (pid) setValue("referringPracticeId", pid)
-    if (lid) setValue("referringLocationId", lid)
-    if (did) setValue("referringDoctorId", did)
     setPendingPrefillIds(null)
+    if (pid) setValue("referringPracticeId", pid)
+    // Defer location/doctor by one tick so the practice renders first,
+    // ensuring the location/provider selects are no longer disabled when their values are set
+    setTimeout(() => {
+      if (lid) setValue("referringLocationId", lid)
+      if (did) setValue("referringDoctorId", did)
+    }, 0)
   }, [localPractices, pendingPrefillIds, setValue])
 
   function removeFile(index: number) {
@@ -481,10 +485,10 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 mb-4">
           <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
           <span>
-            Extracted from fax — the following will be created when you save:{" "}
+            Fax data extracted — the following new records were pre-filled in the dropdowns below:{" "}
             {autoCreatedPractice && <><strong>&quot;{autoCreatedPractice}&quot;</strong> (practice){autoCreatedProvider ? " and " : ""}</>}
             {autoCreatedProvider && <><strong>&quot;{autoCreatedProvider}&quot;</strong> (provider)</>}.
-            {" "}You can edit these anytime in <strong>Practice Manager</strong> after saving.
+            {" "}Confirm the selections and click <strong>Save Referral</strong> to create them automatically.
           </span>
         </div>
       )}
