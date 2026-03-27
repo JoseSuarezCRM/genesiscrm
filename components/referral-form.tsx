@@ -164,6 +164,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const [newLocationError, setNewLocationError] = useState<string | null>(null)
   const [newLocationPending, startNewLocationTransition] = useTransition()
 
+  // Suppresses cascade clear effects during fax prefill
+  const isPrefillingRef = useRef(false)
+
   // Pending records to create on submit (from fax extraction — not created until user saves)
   const [pendingPracticeData, setPendingPracticeData] = useState<{ name: string; phone?: string; address?: string } | null>(null)
   const [pendingLocationData, setPendingLocationData] = useState<{ name: string; address?: string; phone?: string } | null>(null)
@@ -289,6 +292,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         }
       }
 
+      // Suppress cascade clear effects while we set all values
+      isPrefillingRef.current = true
+
       reset({
         status: ReferralStatus.NEW,
         referralDate: today,
@@ -299,8 +305,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
         ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
         ...(matchedPracticeId && { referringPracticeId: matchedPracticeId }),
-        // Don't include location/doctor here — cascade effects will clear them.
-        // We set them after effects settle via setTimeout below.
+        ...(matchedLocationId && { referringLocationId: matchedLocationId }),
+        ...(matchedDoctorId && { referringDoctorId: matchedDoctorId }),
         ...(prefillData.referringDoctorName && !matchedDoctorId && { referringDoctorName: prefillData.referringDoctorName }),
         ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
         ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
@@ -311,21 +317,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         ...(prefillData.notes && { notes: prefillData.notes }),
       })
 
-      // Set location and doctor AFTER cascade effects have cleared them.
-      // Nested timeouts: setting locationId triggers locationId effect which clears doctorId,
-      // so doctorId must be set in a second tick after that effect has run.
-      if (matchedLocationId || matchedDoctorId) {
-        setTimeout(() => {
-          if (matchedLocationId) {
-            setValue("referringLocationId", matchedLocationId)
-            if (matchedDoctorId) {
-              setTimeout(() => setValue("referringDoctorId", matchedDoctorId), 0)
-            }
-          } else if (matchedDoctorId) {
-            setValue("referringDoctorId", matchedDoctorId)
-          }
-        }, 0)
-      }
+      // Re-enable cascade effects after React has processed the reset
+      setTimeout(() => { isPrefillingRef.current = false }, 0)
     }
 
     applyPrefill()
@@ -343,13 +336,15 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     return d.locations.some((dl) => dl.locationId === locationId)
   })
 
-  // Reset downstream selections when parent changes
+  // Reset downstream selections when parent changes (suppressed during fax prefill)
   useEffect(() => {
+    if (isPrefillingRef.current) return
     setValue("referringLocationId", "")
     setValue("referringDoctorId", "")
   }, [practiceId, setValue])
 
   useEffect(() => {
+    if (isPrefillingRef.current) return
     setValue("referringDoctorId", "")
   }, [locationId, setValue])
 
