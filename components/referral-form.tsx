@@ -35,6 +35,8 @@ import type { ExtractedReferralData, PendingFile } from "@/app/api/fax/extract/r
 interface Location {
   id: string
   name: string
+  phone: string | null
+  fax: string | null
   address: string | null
 }
 
@@ -160,6 +162,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
 
   // New location dialog state
   const [newLocationName, setNewLocationName] = useState("")
+  const [newLocationPhone, setNewLocationPhone] = useState("")
+  const [newLocationFax, setNewLocationFax] = useState("")
   const [newLocationAddress, setNewLocationAddress] = useState("")
   const [newLocationError, setNewLocationError] = useState<string | null>(null)
   const [newLocationPending, startNewLocationTransition] = useTransition()
@@ -171,7 +175,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
 
   // Pending records to create on submit (from fax extraction — not created until user saves)
   const [pendingPracticeData, setPendingPracticeData] = useState<{ name: string; phone?: string; address?: string } | null>(null)
-  const [pendingLocationData, setPendingLocationData] = useState<{ name: string; address?: string; phone?: string } | null>(null)
+  const [pendingLocationData, setPendingLocationData] = useState<{ name: string; address?: string; phone?: string; fax?: string } | null>(null)
   const [pendingDoctorData, setPendingDoctorData] = useState<{ name: string; title?: string; npi?: string } | null>(null)
 
   // Notice banner: names of records that will be created on save
@@ -243,6 +247,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           name: locName,
           address: prefillData.referringAddress,
           phone: prefillData.referringPhone ?? undefined,
+          fax: prefillData.referringFax ?? undefined,
         })
         matchedLocationId = PENDING_LOCATION_ID
         setLocalPractices((prev) =>
@@ -252,7 +257,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
               locations: [...p.locations, {
                 id: PENDING_LOCATION_ID,
                 name: locName,
-                address: prefillData.referringAddress,
+                phone: prefillData?.referringPhone ?? null,
+                fax: prefillData?.referringFax ?? null,
+                address: prefillData?.referringAddress ?? null,
               }],
             }
           )
@@ -385,21 +392,21 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     if (!practiceId) return
     setNewLocationError(null)
     startNewLocationTransition(async () => {
-      const result = await createLocation({ name: newLocationName.trim(), address: newLocationAddress, practiceId })
+      const result = await createLocation({ name: newLocationName.trim(), phone: newLocationPhone, fax: newLocationFax, address: newLocationAddress, practiceId })
       if (!("id" in result)) { setNewLocationError("Failed to create location"); return }
       const createdId = result.id as string
       if ("duplicate" in result && result.duplicate) {
         setValue("referringLocationId", createdId)
-        setNewLocationName(""); setNewLocationAddress("")
+        setNewLocationName(""); setNewLocationPhone(""); setNewLocationFax(""); setNewLocationAddress("")
         setShowNewLocation(false)
         return
       }
-      const newLoc: Location = { id: createdId, name: newLocationName.trim(), address: newLocationAddress || null }
+      const newLoc: Location = { id: createdId, name: newLocationName.trim(), phone: newLocationPhone || null, fax: newLocationFax || null, address: newLocationAddress || null }
       setLocalPractices((prev) => prev.map((p) =>
         p.id === practiceId ? { ...p, locations: [...p.locations, newLoc] } : p
       ))
       setValue("referringLocationId", createdId)
-      setNewLocationName(""); setNewLocationAddress("")
+      setNewLocationName(""); setNewLocationPhone(""); setNewLocationFax(""); setNewLocationAddress("")
       setShowNewLocation(false)
     })
   }
@@ -801,6 +808,17 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 onChange={(e) => setNewLocationName(e.target.value)}
                 placeholder="Main Office"
                 autoFocus
+              />
+            </Field>
+            <Field label="Phone">
+              <PhoneInput value={newLocationPhone} onChange={setNewLocationPhone} />
+            </Field>
+            <Field label="Fax">
+              <Input
+                value={newLocationFax}
+                onChange={(e) => setNewLocationFax(e.target.value)}
+                placeholder="555-100-2003"
+                type="tel"
               />
             </Field>
             <Field label="Address">

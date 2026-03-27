@@ -9,6 +9,8 @@ import type { PendingFile } from "@/app/api/fax/extract/route"
 interface Location {
   id: string
   name: string
+  phone: string | null
+  fax: string | null
   address: string | null
 }
 

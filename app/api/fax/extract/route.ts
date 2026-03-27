@@ -21,6 +21,7 @@ Return ONLY a valid JSON object with these exact keys. Use null for any field yo
   "referringOrg": "string or null - name of the referring practice or organization",
   "referringNpi": "string or null - 10-digit NPI number if present",
   "referringPhone": "string or null - phone number of the referring provider or practice",
+  "referringFax": "string or null - fax number of the referring provider or practice",
   "referringAddress": "string or null - address of the referring provider or practice",
   "reason": "string or null - chief complaint or reason for referral",
   "insuranceProvider": "string or null",
@@ -51,6 +52,7 @@ export interface ExtractedReferralData {
   referringDoctorName: string | null
   referringNpi: string | null
   referringPhone: string | null
+  referringFax: string | null
   referringAddress: string | null
   insuranceProvider: string | null
   insuranceMemberId: string | null
@@ -175,6 +177,7 @@ export async function POST(req: NextRequest) {
       referringDoctorName: extracted.referringDoctorName ?? null,
       referringNpi: extracted.referringNpi ?? null,
       referringPhone: extracted.referringPhone ?? null,
+      referringFax: extracted.referringFax ?? null,
       referringAddress: extracted.referringAddress ?? null,
       insuranceProvider: extracted.insuranceProvider ?? null,
       insuranceMemberId: extracted.insuranceMemberId ?? null,
