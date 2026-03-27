@@ -295,29 +295,29 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       // Suppress cascade clear effects while we set all values
       isPrefillingRef.current = true
 
-      reset({
-        status: ReferralStatus.NEW,
-        referralDate: today,
-        ...(prefillData.patientFirstName && { patientFirstName: prefillData.patientFirstName }),
-        ...(prefillData.patientLastName && { patientLastName: prefillData.patientLastName }),
-        ...(prefillData.patientDob && { patientDob: prefillData.patientDob }),
-        ...(prefillData.patientPhone && { patientPhone: prefillData.patientPhone }),
-        ...(prefillData.patientEmail && { patientEmail: prefillData.patientEmail }),
-        ...(prefillData.patientMrn && { patientMrn: prefillData.patientMrn }),
-        ...(matchedPracticeId && { referringPracticeId: matchedPracticeId }),
-        ...(matchedLocationId && { referringLocationId: matchedLocationId }),
-        ...(matchedDoctorId && { referringDoctorId: matchedDoctorId }),
-        ...(prefillData.referringDoctorName && !matchedDoctorId && { referringDoctorName: prefillData.referringDoctorName }),
-        ...(prefillData.referringNpi && { referringNpi: prefillData.referringNpi }),
-        ...(prefillData.referringPhone && { referringPhone: prefillData.referringPhone }),
-        // Skip referringAddress if a location record was created — address is stored there
-        ...(!matchedLocationId && prefillData.referringAddress && { referringAddress: prefillData.referringAddress }),
-        ...(prefillData.insuranceProvider && { insuranceProvider: prefillData.insuranceProvider }),
-        ...(prefillData.insuranceMemberId && { insuranceMemberId: prefillData.insuranceMemberId }),
-        ...(prefillData.notes && { notes: prefillData.notes }),
-      })
+      // Use individual setValue calls — avoids react-hook-form reset() batching
+      // misaligning with React's setLocalPractices update for ghost entries
+      setValue("status", ReferralStatus.NEW)
+      setValue("referralDate", today)
+      if (prefillData.patientFirstName) setValue("patientFirstName", prefillData.patientFirstName)
+      if (prefillData.patientLastName) setValue("patientLastName", prefillData.patientLastName)
+      if (prefillData.patientDob) setValue("patientDob", prefillData.patientDob)
+      if (prefillData.patientPhone) setValue("patientPhone", prefillData.patientPhone)
+      if (prefillData.patientEmail) setValue("patientEmail", prefillData.patientEmail)
+      if (prefillData.patientMrn) setValue("patientMrn", prefillData.patientMrn)
+      if (prefillData.referringNpi) setValue("referringNpi", prefillData.referringNpi)
+      if (prefillData.referringPhone) setValue("referringPhone", prefillData.referringPhone)
+      if (!matchedLocationId && prefillData.referringAddress) setValue("referringAddress", prefillData.referringAddress)
+      if (prefillData.insuranceProvider) setValue("insuranceProvider", prefillData.insuranceProvider)
+      if (prefillData.insuranceMemberId) setValue("insuranceMemberId", prefillData.insuranceMemberId)
+      if (prefillData.notes) setValue("notes", prefillData.notes)
+      if (prefillData.referringDoctorName && !matchedDoctorId) setValue("referringDoctorName", prefillData.referringDoctorName)
+      // Referring source IDs last — cascade effects are suppressed via isPrefillingRef
+      if (matchedPracticeId) setValue("referringPracticeId", matchedPracticeId)
+      if (matchedLocationId) setValue("referringLocationId", matchedLocationId)
+      if (matchedDoctorId) setValue("referringDoctorId", matchedDoctorId)
 
-      // Re-enable cascade effects after React has processed the reset
+      // Re-enable cascade effects after React has processed all setValue calls
       setTimeout(() => { isPrefillingRef.current = false }, 0)
     }
 
