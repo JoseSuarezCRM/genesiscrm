@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getDownloadUrl } from "@vercel/blob"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createAuditLog } from "@/lib/audit"
@@ -30,8 +29,10 @@ export async function GET(
     metadata: { referralId: doc.referralId },
   })
 
-  // Fetch from Vercel Blob (private store requires a signed download URL)
-  const blobRes = await fetch(getDownloadUrl(doc.fileUrl))
+  // Fetch from Vercel Blob — private store requires the token in the Authorization header
+  const blobRes = await fetch(doc.fileUrl, {
+    headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+  })
   if (!blobRes.ok) {
     return NextResponse.json({ error: "File not found in storage" }, { status: 404 })
   }
