@@ -15,6 +15,19 @@ enum Role {
   STAFF
 }
 
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+enum BroadcastRecipientType {
+  PATIENT
+  PROVIDER
+}
+
 enum AuditAction {
   LOGIN_SUCCESS
   LOGIN_FAILURE
@@ -78,6 +91,7 @@ model User {
   providerNotes         ProviderNote[]
   auditLogs             AuditLog[]
   outreachMessages      OutreachMessage[]
+  emailBroadcasts       EmailBroadcast[]
 }
 
 model ReferringPractice {
@@ -229,6 +243,42 @@ model OutreachMessage {
 
   @@index([referralId])
   @@index([createdAt])
+}
+
+model EmailBroadcast {
+  id             String                   @id @default(cuid())
+  subject        String
+  body           String
+  status         BroadcastStatus          @default(DRAFT)
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  recipientCount Int                      @default(0)
+  sentCount      Int                      @default(0)
+  failedCount    Int                      @default(0)
+  filters        Json?                    // stored filter criteria
+  createdById    String?
+  createdBy      User?                    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  recipients     EmailBroadcastRecipient[]
+
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model EmailBroadcastRecipient {
+  id          String                 @id @default(cuid())
+  broadcastId String
+  broadcast   EmailBroadcast         @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  email       String
+  name        String
+  type        BroadcastRecipientType
+  status      OutreachStatus         @default(SENT)
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime               @default(now())
+
+  @@index([broadcastId])
 }
 
 model OutreachTemplate {

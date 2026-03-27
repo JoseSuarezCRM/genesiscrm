@@ -13,6 +13,7 @@ import {
   BarChart2,
   MessageSquare,
   Code2,
+  Send,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -37,6 +38,11 @@ const navItems = [
     href: "/reports",
     label: "Reports",
     icon: BarChart2,
+  },
+  {
+    href: "/broadcasts",
+    label: "Broadcasts",
+    icon: Send,
   },
 ]
 
