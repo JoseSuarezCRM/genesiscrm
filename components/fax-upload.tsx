@@ -17,6 +17,7 @@ export default function FaxUpload({ onExtracted }: FaxUploadProps) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
+  const [fileAttached, setFileAttached] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
 
   async function processFile(file: File) {
@@ -48,6 +49,7 @@ export default function FaxUpload({ onExtracted }: FaxUploadProps) {
       }
 
       setStatus("success")
+      setFileAttached(!!(data as ExtractedReferralData).pendingFile)
       onExtracted(data as ExtractedReferralData)
     } catch {
       setStatus("error")
@@ -114,6 +116,9 @@ export default function FaxUpload({ onExtracted }: FaxUploadProps) {
             <CheckCircle2 className="h-8 w-8 text-green-500" />
             <p className="text-sm text-green-700 font-medium">Data extracted — review the form below</p>
             {fileName && <p className="text-xs text-slate-400">{fileName}</p>}
+            {!fileAttached && (
+              <p className="text-xs text-amber-600">PDF could not be stored — attach it manually in Documents after saving.</p>
+            )}
             <Button
               variant="outline"
               size="sm"
