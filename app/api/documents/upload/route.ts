@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   // Upload to Vercel Blob
   const blob = await put(`referrals/${referralId}/${uniqueName}`, file, {
-    access: "public",
+    access: "private",
     contentType: file.type,
   })
 

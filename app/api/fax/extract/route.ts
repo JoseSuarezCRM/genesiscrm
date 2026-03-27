@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     try {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
       const blob = await put(`referrals/pending/${Date.now()}-${safeName}`, buffer, {
-        access: "public",
+        access: "private",
         contentType: file.type,
       })
       pendingFile = {
