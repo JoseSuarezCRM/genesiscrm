@@ -167,6 +167,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   // Suppresses cascade clear effects during fax prefill
   const isPrefillingRef = useRef(false)
 
+  // Pending referring source IDs to set once localPractices has the ghost entries
+  const [pendingPrefillIds, setPendingPrefillIds] = useState<{
+    practiceId?: string; locationId?: string; doctorId?: string
+  } | null>(null)
+
   // Pending records to create on submit (from fax extraction — not created until user saves)
   const [pendingPracticeData, setPendingPracticeData] = useState<{ name: string; phone?: string; address?: string } | null>(null)
   const [pendingLocationData, setPendingLocationData] = useState<{ name: string; address?: string; phone?: string } | null>(null)
@@ -292,11 +297,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         }
       }
 
-      // Suppress cascade clear effects while we set all values
-      isPrefillingRef.current = true
-
-      // Use individual setValue calls — avoids react-hook-form reset() batching
-      // misaligning with React's setLocalPractices update for ghost entries
+      // Set all non-ID fields immediately
       setValue("status", ReferralStatus.NEW)
       setValue("referralDate", today)
       if (prefillData.patientFirstName) setValue("patientFirstName", prefillData.patientFirstName)
@@ -312,13 +313,16 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       if (prefillData.insuranceMemberId) setValue("insuranceMemberId", prefillData.insuranceMemberId)
       if (prefillData.notes) setValue("notes", prefillData.notes)
       if (prefillData.referringDoctorName && !matchedDoctorId) setValue("referringDoctorName", prefillData.referringDoctorName)
-      // Referring source IDs last — cascade effects are suppressed via isPrefillingRef
-      if (matchedPracticeId) setValue("referringPracticeId", matchedPracticeId)
-      if (matchedLocationId) setValue("referringLocationId", matchedLocationId)
-      if (matchedDoctorId) setValue("referringDoctorId", matchedDoctorId)
 
-      // Re-enable cascade effects after React has processed all setValue calls
-      setTimeout(() => { isPrefillingRef.current = false }, 0)
+      // Queue referring source IDs — the useEffect below will set them once
+      // localPractices has been updated with the ghost entries
+      if (matchedPracticeId || matchedLocationId || matchedDoctorId) {
+        setPendingPrefillIds({
+          practiceId: matchedPracticeId,
+          locationId: matchedLocationId,
+          doctorId: matchedDoctorId,
+        })
+      }
     }
 
     applyPrefill()
@@ -335,6 +339,20 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     if (!locationId || locationId === NONE) return true
     return d.locations.some((dl) => dl.locationId === locationId)
   })
+
+  // Once localPractices has been updated with ghost entries, set the form IDs
+  useEffect(() => {
+    if (!pendingPrefillIds) return
+    const { practiceId: pid, locationId: lid, doctorId: did } = pendingPrefillIds
+    // Wait until the ghost practice entry is actually in localPractices
+    if (pid && !localPractices.find((p) => p.id === pid)) return
+    isPrefillingRef.current = true
+    if (pid) setValue("referringPracticeId", pid)
+    if (lid) setValue("referringLocationId", lid)
+    if (did) setValue("referringDoctorId", did)
+    setPendingPrefillIds(null)
+    setTimeout(() => { isPrefillingRef.current = false }, 0)
+  }, [localPractices, pendingPrefillIds, setValue])
 
   // Reset downstream selections when parent changes (suppressed during fax prefill)
   useEffect(() => {
