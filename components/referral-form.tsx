@@ -220,7 +220,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           })
           setLocalPractices((prev) => [...prev, {
             id: PENDING_PRACTICE_ID,
-            name: prefillData.referringOrg,
+            name: prefillData.referringOrg!,
             locations: [],
             doctors: [],
           }])
