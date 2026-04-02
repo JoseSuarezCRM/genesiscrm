@@ -15,6 +15,7 @@ import EditReferralDialog from "@/components/edit-referral-dialog"
 import ReferralNotesEditor from "@/components/referral-notes-editor"
 import OutreachDialog from "@/components/outreach-dialog"
 import TagSelector from "@/components/tag-selector"
+import CallTracker from "@/components/call-tracker"
 
 interface Props {
   params: { id: string }
@@ -30,6 +31,10 @@ export default async function ReferralDetailPage({ params }: Props) {
       createdBy: { select: { name: true, email: true } },
       documents: { orderBy: { createdAt: "desc" } },
       tags: { include: { tag: true } },
+      callAttempts: {
+        orderBy: { createdAt: "asc" },
+        include: { calledBy: { select: { name: true, email: true } } },
+      },
     },
   })
 
@@ -200,6 +205,16 @@ export default async function ReferralDetailPage({ params }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Call Tracker */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Call Attempts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CallTracker referralId={referral.id} attempts={referral.callAttempts} />
+        </CardContent>
+      </Card>
 
       {/* Notes */}
       <Card>

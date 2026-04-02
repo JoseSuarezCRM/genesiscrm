@@ -65,6 +65,12 @@ enum OutreachStatus {
   FAILED
 }
 
+enum CallOutcome {
+  NO_ANSWER
+  VOICEMAIL
+  ANSWERED
+}
+
 enum ReferralStatus {
   NEW
   READY_FOR_CALL
@@ -93,6 +99,7 @@ model User {
   auditLogs             AuditLog[]
   outreachMessages      OutreachMessage[]
   emailBroadcasts       EmailBroadcast[]
+  callAttempts          CallAttempt[]
 }
 
 model ReferringPractice {
@@ -186,6 +193,20 @@ model Referral {
   documents           Document[]
   outreachMessages    OutreachMessage[]
   tags                ReferralTag[]
+  callAttempts        CallAttempt[]
+}
+
+model CallAttempt {
+  id         String      @id @default(cuid())
+  referralId String
+  referral   Referral    @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  outcome    CallOutcome
+  notes      String?
+  calledById String?
+  calledBy   User?       @relation(fields: [calledById], references: [id], onDelete: SetNull)
+  createdAt  DateTime    @default(now())
+
+  @@index([referralId])
 }
 
 model ProviderNote {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/status-badge"
 import { STATUS_LABELS, formatDate } from "@/lib/utils"
-import { Plus, Download, Search } from "lucide-react"
+import { Plus, Download, Search, Phone } from "lucide-react"
 
 interface PageProps {
   searchParams: {
@@ -67,6 +67,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       include: {
         referringPractice: true,
         tags: { include: { tag: true } },
+        _count: { select: { callAttempts: true } },
       },
     }),
     prisma.referral.count({ where }),
@@ -191,6 +192,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
                 <th className="text-left px-6 py-3 font-semibold">Tags</th>
                 <th className="text-left px-6 py-3 font-semibold">Referral Date</th>
                 <th className="text-left px-6 py-3 font-semibold">Appt Date</th>
+                <th className="text-left px-6 py-3 font-semibold">Calls</th>
                 <th className="text-left px-6 py-3 font-semibold">Status</th>
               </tr>
             </thead>
@@ -253,6 +255,16 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
                     </td>
                     <td className="px-6 py-3 text-slate-600">
                       {formatDate(r.appointmentDate)}
+                    </td>
+                    <td className="px-6 py-3">
+                      {r._count.callAttempts > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600">
+                          <Phone className="h-3 w-3" />
+                          {r._count.callAttempts}/3
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-3">
                       <StatusBadge status={r.status} />
