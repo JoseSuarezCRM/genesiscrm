@@ -39,7 +39,7 @@ function parseDate(val: string | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-// Verifies authentication and that the caller owns the referral (or is admin)
+// Verifies authentication — any authenticated staff member can edit any referral
 async function assertReferralAccess(referralId: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
@@ -50,11 +50,6 @@ async function assertReferralAccess(referralId: string) {
   })
 
   if (!referral) throw new Error("Referral not found")
-
-  const isAdmin = (session.user as { role?: string }).role === "ADMIN"
-  const isOwner = referral.createdById === session.user.id
-
-  if (!isAdmin && !isOwner) throw new Error("Forbidden")
 
   return { session, referral }
 }
