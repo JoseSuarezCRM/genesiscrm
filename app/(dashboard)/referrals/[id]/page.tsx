@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft, Pencil, Trash2, FileUp } from "lucide-react"
+import { ChevronLeft, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
@@ -14,6 +14,7 @@ import DocumentList from "@/components/document-list"
 import EditReferralDialog from "@/components/edit-referral-dialog"
 import ReferralNotesEditor from "@/components/referral-notes-editor"
 import OutreachDialog from "@/components/outreach-dialog"
+import TagSelector from "@/components/tag-selector"
 
 interface Props {
   params: { id: string }
@@ -28,10 +29,15 @@ export default async function ReferralDetailPage({ params }: Props) {
       referringDoctor: true,
       createdBy: { select: { name: true, email: true } },
       documents: { orderBy: { createdAt: "desc" } },
+      tags: { include: { tag: true } },
     },
   })
 
   if (!referral) notFound()
+
+  const [allTags] = await Promise.all([
+    prisma.tag.findMany({ orderBy: { name: "asc" } }),
+  ])
 
   const practices = await prisma.referringPractice.findMany({
     orderBy: { name: "asc" },
@@ -184,6 +190,20 @@ export default async function ReferralDetailPage({ params }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Tags */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Tags</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TagSelector
+            referralId={referral.id}
+            allTags={allTags}
+            selectedTagIds={referral.tags.map((t) => t.tagId)}
+          />
+        </CardContent>
+      </Card>
 
       {/* Notes */}
       <Card>

@@ -184,6 +184,7 @@ model Referral {
   updatedAt           DateTime           @updatedAt
   documents           Document[]
   outreachMessages    OutreachMessage[]
+  tags                ReferralTag[]
 }
 
 model ProviderNote {
@@ -243,6 +244,23 @@ model OutreachMessage {
 
   @@index([referralId])
   @@index([createdAt])
+}
+
+model Tag {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  color     String       // hex color e.g. "#3b82f6"
+  createdAt DateTime     @default(now())
+  referrals ReferralTag[]
+}
+
+model ReferralTag {
+  referralId String
+  tagId      String
+  referral   Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([referralId, tagId])
 }
 
 model EmailBroadcast {

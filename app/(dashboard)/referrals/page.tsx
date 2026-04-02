@@ -60,7 +60,11 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       take: PAGE_SIZE,
       skip,
       orderBy: { referralDate: "desc" },
-      include: { referringPractice: true },
+      include: {
+        referringPractice: true,
+        referringDoctor: { select: { name: true, title: true } },
+        tags: { include: { tag: true } },
+      },
     }),
     prisma.referral.count({ where }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" } }),
@@ -168,7 +172,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
                 <th className="text-left px-6 py-3 font-semibold">Patient</th>
                 <th className="text-left px-6 py-3 font-semibold">Phone</th>
                 <th className="text-left px-6 py-3 font-semibold">Referring Practice</th>
-                <th className="text-left px-6 py-3 font-semibold">Insurance</th>
+                <th className="text-left px-6 py-3 font-semibold">Referring Doctor</th>
                 <th className="text-left px-6 py-3 font-semibold">Referral Date</th>
                 <th className="text-left px-6 py-3 font-semibold">Appt Date</th>
                 <th className="text-left px-6 py-3 font-semibold">Status</th>
@@ -178,7 +182,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
               {referrals.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-6 py-12 text-center text-slate-400"
                   >
                     No referrals found.{" "}
@@ -204,6 +208,19 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
                       >
                         {r.patientFirstName} {r.patientLastName}
                       </Link>
+                      {r.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {r.tags.map(({ tag }) => (
+                            <span
+                              key={tag.id}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-white"
+                              style={{ backgroundColor: tag.color }}
+                            >
+                              {tag.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-3 text-slate-600">
                       {r.patientPhone ?? "—"}
@@ -212,7 +229,11 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
                       {r.referringPractice?.name ?? "—"}
                     </td>
                     <td className="px-6 py-3 text-slate-600">
-                      {r.insuranceProvider ?? "—"}
+                      {r.referringDoctor
+                        ? r.referringDoctor.title
+                          ? `${r.referringDoctor.title} ${r.referringDoctor.name}`
+                          : r.referringDoctor.name
+                        : (r.referringDoctorName ?? "—")}
                     </td>
                     <td className="px-6 py-3 text-slate-600">
                       {formatDate(r.referralDate)}
