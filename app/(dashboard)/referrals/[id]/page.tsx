@@ -102,8 +102,8 @@ export default async function ReferralDetailPage({ params }: Props) {
       {/* Status Update + Tags */}
       <Card>
         <CardContent className="pt-4">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Update Status</p>
               <div className="grid grid-cols-3 gap-2">
                 {Object.values(ReferralStatus).map((s) => (
@@ -126,7 +126,7 @@ export default async function ReferralDetailPage({ params }: Props) {
                 ))}
               </div>
             </div>
-            <div className="sm:border-l sm:pl-4">
+            <div className="sm:border-l sm:pl-4 min-w-0">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Tags</p>
               <TagSelector
                 referralId={referral.id}
