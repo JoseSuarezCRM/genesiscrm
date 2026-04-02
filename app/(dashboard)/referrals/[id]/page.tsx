@@ -94,31 +94,41 @@ export default async function ReferralDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Status Update */}
+      {/* Status Update + Tags */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Update Status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {Object.values(ReferralStatus).map((s) => (
-              <form
-                key={s}
-                action={async () => {
-                  "use server"
-                  await updateReferralStatus(referral.id, s)
-                }}
-              >
-                <Button
-                  size="sm"
-                  variant={referral.status === s ? "default" : "outline"}
-                  type="submit"
-                  className={referral.status === s ? "" : "text-slate-600"}
-                >
-                  {STATUS_LABELS[s]}
-                </Button>
-              </form>
-            ))}
+        <CardContent className="pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Update Status</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.values(ReferralStatus).map((s) => (
+                  <form
+                    key={s}
+                    action={async () => {
+                      "use server"
+                      await updateReferralStatus(referral.id, s)
+                    }}
+                  >
+                    <Button
+                      size="sm"
+                      variant={referral.status === s ? "default" : "outline"}
+                      type="submit"
+                      className={referral.status === s ? "" : "text-slate-600"}
+                    >
+                      {STATUS_LABELS[s]}
+                    </Button>
+                  </form>
+                ))}
+              </div>
+            </div>
+            <div className="sm:border-l sm:pl-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Tags</p>
+              <TagSelector
+                referralId={referral.id}
+                allTags={allTags}
+                selectedTagIds={referral.tags.map((t) => t.tagId)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -190,20 +200,6 @@ export default async function ReferralDetailPage({ params }: Props) {
           </CardContent>
         </Card>
       </div>
-
-      {/* Tags */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Tags</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TagSelector
-            referralId={referral.id}
-            allTags={allTags}
-            selectedTagIds={referral.tags.map((t) => t.tagId)}
-          />
-        </CardContent>
-      </Card>
 
       {/* Notes */}
       <Card>

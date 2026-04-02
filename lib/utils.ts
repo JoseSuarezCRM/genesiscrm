@@ -8,6 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export const STATUS_LABELS: Record<ReferralStatus, string> = {
   NEW: "New",
+  READY_FOR_CALL: "Ready for Call",
   CONTACTED: "Contacted",
   SCHEDULED: "Scheduled",
   COMPLETED: "Completed",
@@ -22,6 +23,11 @@ export const STATUS_COLORS: Record<
     bg: "bg-blue-50",
     text: "text-blue-700",
     border: "border-blue-200",
+  },
+  READY_FOR_CALL: {
+    bg: "bg-orange-50",
+    text: "text-orange-700",
+    border: "border-orange-200",
   },
   CONTACTED: {
     bg: "bg-yellow-50",

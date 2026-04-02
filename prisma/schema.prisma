@@ -67,6 +67,7 @@ enum OutreachStatus {
 
 enum ReferralStatus {
   NEW
+  READY_FOR_CALL
   CONTACTED
   SCHEDULED
   COMPLETED
