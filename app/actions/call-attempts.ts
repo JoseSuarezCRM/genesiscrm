@@ -23,18 +23,19 @@ export async function logCallAttempt(data: {
   })
   if (count >= 3) return { error: "Maximum of 3 call attempts reached" }
 
-  await prisma.callAttempt.create({
+  const attempt = await prisma.callAttempt.create({
     data: {
       referralId: data.referralId,
       outcome: data.outcome,
       notes: data.notes?.trim() || null,
       calledById: (session.user as any).id,
     },
+    include: { calledBy: { select: { name: true, email: true } } },
   })
 
   revalidatePath(`/referrals/${data.referralId}`)
   revalidatePath("/referrals")
-  return { success: true }
+  return { success: true, attempt }
 }
 
 export async function deleteCallAttempt(id: string, referralId: string) {

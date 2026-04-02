@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { Phone, PhoneOff, PhoneIncoming, PhoneMissed, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { logCallAttempt, deleteCallAttempt } from "@/app/actions/call-attempts"
@@ -55,6 +55,13 @@ export default function CallTracker({ referralId, attempts: initial }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // Sync state when server re-renders with fresh data (e.g. after revalidatePath)
+  const initialIds = initial.map((a) => a.id).join(",")
+  useEffect(() => {
+    setAttempts(initial)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialIds])
+
   const count = attempts.length
   const canLog = count < MAX_ATTEMPTS
 
@@ -63,7 +70,9 @@ export default function CallTracker({ referralId, attempts: initial }: Props) {
     startTransition(async () => {
       const result = await logCallAttempt({ referralId, outcome, notes })
       if ("error" in result && result.error) { setError(result.error); return }
-      // Optimistic update won't have full data — reload via revalidation, but also close form
+      if ("attempt" in result && result.attempt) {
+        setAttempts((prev) => [...prev, result.attempt as CallAttempt])
+      }
       setNotes("")
       setShowLog(false)
     })
