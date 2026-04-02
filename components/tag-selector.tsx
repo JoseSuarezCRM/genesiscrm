@@ -95,7 +95,7 @@ export default function TagSelector({ referralId, allTags: initialTags, selected
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 min-w-0 w-full">
       {/* Selected tag chips */}
       {selectedTags.map((tag) => (
         <span

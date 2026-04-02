@@ -103,7 +103,7 @@ export default async function ReferralDetailPage({ params }: Props) {
       <Card>
         <CardContent className="pt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Update Status</p>
               <div className="grid grid-cols-3 gap-2">
                 {Object.values(ReferralStatus).map((s) => (
