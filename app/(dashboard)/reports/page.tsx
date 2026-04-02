@@ -6,6 +6,7 @@ import { Users, TrendingUp, Calendar, Clock } from "lucide-react"
 
 const STATUS_COLORS: Record<ReferralStatus, string> = {
   NEW: "bg-blue-500",
+  READY_FOR_CALL: "bg-orange-500",
   CONTACTED: "bg-yellow-500",
   SCHEDULED: "bg-purple-500",
   COMPLETED: "bg-green-500",

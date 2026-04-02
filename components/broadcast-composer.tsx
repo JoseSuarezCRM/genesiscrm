@@ -21,6 +21,7 @@ import { OutreachTrigger, ReferralStatus } from "@prisma/client"
 
 const STATUS_LABELS: Record<ReferralStatus, string> = {
   NEW: "New",
+  READY_FOR_CALL: "Ready for Call",
   CONTACTED: "Contacted",
   SCHEDULED: "Scheduled",
   COMPLETED: "Completed",
