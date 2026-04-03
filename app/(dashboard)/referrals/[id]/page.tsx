@@ -5,7 +5,7 @@ import { ChevronLeft, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
-import { formatDate } from "@/lib/utils"
+import { formatDate, formatPhone } from "@/lib/utils"
 import { ReferralStatus } from "@prisma/client"
 import { STATUS_LABELS } from "@/lib/utils"
 import { updateReferralStatus, deleteReferral } from "@/app/actions/referrals"
@@ -148,7 +148,7 @@ export default async function ReferralDetailPage({ params }: Props) {
             <Row label="Name" value={`${referral.patientFirstName} ${referral.patientLastName}`} />
             <Row label="MRN" value={referral.patientMrn} />
             <Row label="Date of Birth" value={formatDate(referral.patientDob)} />
-            <Row label="Phone" value={referral.patientPhone} />
+            <Row label="Phone" value={formatPhone(referral.patientPhone)} />
             <Row label="Email" value={referral.patientEmail} />
           </CardContent>
         </Card>
@@ -162,7 +162,7 @@ export default async function ReferralDetailPage({ params }: Props) {
             <Row label="Practice" value={referral.referringPractice?.name} />
             <Row label="Location" value={referral.referringLocation?.name} />
             <Row label="Location Address" value={referral.referringLocation?.address ?? referral.referringPractice?.address} />
-            <Row label="Location Phone" value={referral.referringLocation?.phone ?? referral.referringPractice?.phone} />
+            <Row label="Location Phone" value={formatPhone(referral.referringLocation?.phone ?? referral.referringPractice?.phone)} />
             <Row label="Fax" value={referral.referringLocation?.fax ?? referral.referringPractice?.fax} />
             <Row
               label="Provider"
@@ -174,7 +174,7 @@ export default async function ReferralDetailPage({ params }: Props) {
             />
             <Row label="NPI" value={referral.referringNpi ?? (referral.referringDoctor as any)?.npi} />
             <Row label="Specialty" value={referral.referringDoctor?.specialty} />
-            <Row label="Referring Phone" value={referral.referringPhone} />
+            <Row label="Referring Phone" value={formatPhone(referral.referringPhone)} />
             <Row label="Referring Address" value={referral.referringAddress} />
           </CardContent>
         </Card>

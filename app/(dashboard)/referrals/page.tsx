@@ -4,7 +4,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/status-badge"
-import { STATUS_LABELS, formatDate } from "@/lib/utils"
+import { STATUS_LABELS, formatDate, formatPhone } from "@/lib/utils"
 import { Plus, Download, Search, Phone } from "lucide-react"
 
 interface PageProps {
@@ -228,7 +228,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
                       </Link>
                     </td>
                     <td className="px-6 py-3 text-slate-600">
-                      {r.patientPhone ?? "—"}
+                      {formatPhone(r.patientPhone)}
                     </td>
                     <td className="px-6 py-3 text-slate-600">
                       {r.referringPractice?.name ?? "—"}
