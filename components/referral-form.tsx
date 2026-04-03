@@ -131,8 +131,8 @@ function parseDoctorTitle(fullName: string): { name: string; title?: string } {
   if (name.startsWith("Dr.")) { title = "Dr."; name = name.slice(3).trim() }
   else if (name.toLowerCase().startsWith("dr ")) { title = "Dr."; name = name.slice(3).trim() }
   else {
-    for (const sfx of [", MD", ", DO", ", NP", ", PA-C", ", DPM", ", APRN", " MD", " DO", " NP", " DPM", " APRN"]) {
-      if (name.endsWith(sfx)) { title = sfx.replace(", ", "").trim(); name = name.slice(0, -sfx.length).trim(); break }
+    for (const sfx of [", MD", ", DO", ", NP", ", PA-C", ", PA", ", DPM", ", APRN", ", FNP", ", FNP-C", ", DNP", ", DC", " MD", " DO", " NP", " PA-C", " PA", " DPM", " APRN", " FNP", " FNP-C", " DNP", " DC"]) {
+      if (name.endsWith(sfx)) { title = sfx.replace(/^,\s*/, "").trim(); name = name.slice(0, -sfx.length).trim(); break }
     }
   }
   return { name, title }
@@ -273,6 +273,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           ?? { id: matchedPracticeId, name: "", locations: [], doctors: [] }
 
         const { name: parsedName, title: parsedTitle } = parseDoctorTitle(prefillData.referringDoctorName)
+        // Prefer the explicitly extracted title over the one parsed from the name string
+        const resolvedTitle = (prefillData as any).referringDoctorTitle ?? parsedTitle
 
         const existingDoctor = practiceInList.doctors.find(
           (d) => d.name.toLowerCase().trim() === parsedName.toLowerCase().trim()
@@ -282,7 +284,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           matchedDoctorId = existingDoctor.id
         } else {
           // Stage doctor for creation on submit (ghost entry only)
-          setPendingDoctorData({ name: parsedName, title: parsedTitle, npi: prefillData.referringNpi ?? undefined })
+          setPendingDoctorData({ name: parsedName, title: resolvedTitle, npi: prefillData.referringNpi ?? undefined })
           matchedDoctorId = PENDING_DOCTOR_ID
           setLocalPractices((prev) =>
             prev.map((p) =>

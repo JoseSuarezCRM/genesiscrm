@@ -17,7 +17,8 @@ Return ONLY a valid JSON object with these exact keys. Use null for any field yo
   "patientPhone": "string or null - digits and common separators, preserve as found",
   "patientEmail": "string or null",
   "patientMrn": "string or null - patient medical record number (MRN), chart number, or patient ID if present",
-  "referringDoctorName": "string or null - include title (Dr., MD, DO, etc.) if present",
+  "referringDoctorName": "string or null - provider's name ONLY, no title or credentials (e.g. 'Emily Westel', not 'Emily Westel PA-C')",
+  "referringDoctorTitle": "string or null - provider's title or credentials only (e.g. 'Dr.', 'MD', 'DO', 'PA-C', 'NP', 'APRN', 'FNP-C', etc.)",
   "referringOrg": "string or null - name of the referring practice or organization",
   "referringNpi": "string or null - 10-digit NPI number if present",
   "referringPhone": "string or null - phone number of the referring provider or practice",
@@ -50,6 +51,7 @@ export interface ExtractedReferralData {
   patientMrn: string | null
   referringOrg: string | null
   referringDoctorName: string | null
+  referringDoctorTitle: string | null
   referringNpi: string | null
   referringPhone: string | null
   referringFax: string | null
@@ -184,6 +186,7 @@ export async function POST(req: NextRequest) {
       patientMrn: extracted.patientMrn ?? null,
       referringOrg: extracted.referringOrg ?? null,
       referringDoctorName: extracted.referringDoctorName ?? null,
+      referringDoctorTitle: extracted.referringDoctorTitle ?? null,
       referringNpi: extracted.referringNpi ?? null,
       referringPhone: normalizePhone(extracted.referringPhone),
       referringFax: normalizePhone(extracted.referringFax),
