@@ -241,29 +241,54 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       // Auto-create location if address was extracted and practice was matched/created
       let matchedLocationId: string | undefined
       if (prefillData.referringAddress && matchedPracticeId) {
-        const locName = prefillData.referringAddress
-        // Stage location for creation on submit (ghost entry only)
-        setPendingLocationData({
-          name: locName,
-          address: prefillData.referringAddress,
-          phone: prefillData.referringPhone ?? undefined,
-          fax: prefillData.referringFax ?? undefined,
-        })
-        matchedLocationId = PENDING_LOCATION_ID
-        setLocalPractices((prev) =>
-          prev.map((p) =>
-            p.id !== matchedPracticeId ? p : {
-              ...p,
-              locations: [...p.locations, {
-                id: PENDING_LOCATION_ID,
-                name: locName,
-                phone: prefillData?.referringPhone ?? null,
-                fax: prefillData?.referringFax ?? null,
-                address: prefillData?.referringAddress ?? null,
-              }],
-            }
+        const practiceForLoc = localPractices.find((p) => p.id === matchedPracticeId)
+        const extractedAddr = prefillData.referringAddress.toLowerCase().trim()
+
+        // Normalize address for comparison: strip zip+4 extensions and extra whitespace
+        const normalizeAddr = (s: string) => s.toLowerCase().trim().replace(/\b(\d{5})-\d{4}\b/, "$1").replace(/\s+/g, " ")
+        const normExtracted = normalizeAddr(prefillData.referringAddress)
+
+        // Score existing locations by address similarity
+        const scoredLocs = (practiceForLoc?.locations ?? []).map((l) => {
+          const locAddr = normalizeAddr(l.address ?? l.name ?? "")
+          const locName = normalizeAddr(l.name ?? "")
+          let score = 0
+          if (locAddr && locAddr === normExtracted) score = 100
+          else if (locName && locName === normExtracted) score = 100
+          else if (locAddr && (locAddr.startsWith(normExtracted) || normExtracted.startsWith(locAddr))) score = 80
+          else if (locAddr && (locAddr.includes(normExtracted) || normExtracted.includes(locAddr))) score = 60
+          else if (locName && (locName.includes(normExtracted) || normExtracted.includes(locName))) score = 50
+          return { l, score }
+        }).filter((x) => x.score >= 60)
+
+        if (scoredLocs.length > 0) {
+          scoredLocs.sort((a, b) => b.score - a.score)
+          matchedLocationId = scoredLocs[0].l.id
+        } else {
+          const locName = prefillData.referringAddress
+          // Stage location for creation on submit (ghost entry only)
+          setPendingLocationData({
+            name: locName,
+            address: prefillData.referringAddress,
+            phone: prefillData.referringPhone ?? undefined,
+            fax: prefillData.referringFax ?? undefined,
+          })
+          matchedLocationId = PENDING_LOCATION_ID
+          setLocalPractices((prev) =>
+            prev.map((p) =>
+              p.id !== matchedPracticeId ? p : {
+                ...p,
+                locations: [...p.locations, {
+                  id: PENDING_LOCATION_ID,
+                  name: locName,
+                  phone: prefillData?.referringPhone ?? null,
+                  fax: prefillData?.referringFax ?? null,
+                  address: prefillData?.referringAddress ?? null,
+                }],
+              }
+            )
           )
-        )
+        }
       }
 
       // Auto-create provider if a name was extracted and practice was matched/created
