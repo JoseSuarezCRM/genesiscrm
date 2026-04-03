@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { ReferralStatus } from "@prisma/client"
 import Link from "next/link"
+import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/status-badge"
 import { STATUS_LABELS, formatDate, formatPhone } from "@/lib/utils"
-import { Plus, Download, Search, Phone } from "lucide-react"
+import { Plus, Download, Phone } from "lucide-react"
+import ReferralSearch from "@/components/referral-search"
 
 interface PageProps {
   searchParams: {
@@ -50,6 +52,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
             { patientFirstName: { contains: search, mode: "insensitive" as const } },
             { patientLastName: { contains: search, mode: "insensitive" as const } },
             { referringDoctorName: { contains: search, mode: "insensitive" as const } },
+            { referringPractice: { name: { contains: search, mode: "insensitive" as const } } },
           ],
         }
       : {}),
@@ -112,16 +115,11 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Filters */}
-      <form method="GET" className="flex flex-wrap gap-3 bg-white border rounded-lg p-4">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            name="search"
-            defaultValue={searchParams.search}
-            placeholder="Search patient or doctor..."
-            className="pl-9"
-          />
-        </div>
+      <div className="flex flex-wrap gap-3 bg-white border rounded-lg p-4">
+        <Suspense fallback={null}>
+          <ReferralSearch defaultValue={searchParams.search} />
+        </Suspense>
+        <form method="GET" className="contents">
         <select
           name="status"
           defaultValue={searchParams.status ?? ""}
@@ -137,7 +135,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         <select
           name="practice"
           defaultValue={searchParams.practice ?? ""}
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          className="h-10 w-48 rounded-md border border-input bg-background px-3 text-sm"
         >
           <option value="">All Practices</option>
           {practices.map((p) => (
@@ -178,7 +176,8 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         <Button type="reset" variant="ghost" asChild>
           <Link href="/referrals">Clear</Link>
         </Button>
-      </form>
+        </form>
+      </div>
 
       {/* Table */}
       <div className="bg-white border rounded-lg overflow-hidden">
