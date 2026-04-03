@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
   createPractice, updatePractice, deletePractice,
-  createLocation, updateLocation, deleteLocation,
+  createLocation, updateLocation, deleteLocation, mergeLocation,
   createDoctor, updateDoctor, deleteDoctor,
 } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -188,6 +188,8 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
   const [editPractice, setEditPractice] = useState<PracticeWithRelations | null>(null)
   const [addLocationFor, setAddLocationFor] = useState<PracticeWithRelations | null>(null)
   const [editLocation, setEditLocation] = useState<{ loc: LocationWithCount; practice: PracticeWithRelations } | null>(null)
+  const [mergeLocationFor, setMergeLocationFor] = useState<{ loc: LocationWithCount; practice: PracticeWithRelations } | null>(null)
+  const [mergeTargetId, setMergeTargetId] = useState("")
   const [addDoctorFor, setAddDoctorFor] = useState<PracticeWithRelations | null>(null)
   const [editDoctor, setEditDoctor] = useState<{ doc: DoctorWithRelations; practice: PracticeWithRelations } | null>(null)
 
@@ -277,6 +279,11 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
                             <span className="text-xs text-slate-400 shrink-0">{l._count.referrals} ref.</span>
                             {isAdmin && (
                               <div className="flex gap-1 shrink-0">
+                                {p.locations.length > 1 && (
+                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-blue-500 hover:bg-blue-50" title="Merge into another location" onClick={() => { setMergeTargetId(""); setMergeLocationFor({ loc: l, practice: p }) }}>
+                                    <Merge className="h-3 w-3" />
+                                  </Button>
+                                )}
                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditLocation({ loc: l, practice: p })}><Pencil className="h-3 w-3" /></Button>
                                 <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500 hover:bg-red-50" disabled={isPending} onClick={() => run(() => deleteLocation(l.id))}><Trash2 className="h-3 w-3" /></Button>
                               </div>
@@ -356,6 +363,49 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
       <Dialog open={!!editDoctor} onOpenChange={(o) => !o && setEditDoctor(null)}>
         <DialogContent><DialogHeader><DialogTitle>Edit Provider</DialogTitle></DialogHeader>
           {editDoctor && <DoctorForm practiceId={editDoctor.practice.id} locations={editDoctor.practice.locations} defaultValues={{ ...editDoctor.doc, locationIds: editDoctor.doc.locations.map((dl) => dl.locationId) }} onSubmit={async (d) => { run(() => updateDoctor(editDoctor.doc.id, d)); setEditDoctor(null) }} isPending={isPending} onClose={() => setEditDoctor(null)} />}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!mergeLocationFor} onOpenChange={(o) => !o && setMergeLocationFor(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Merge Location</DialogTitle></DialogHeader>
+          {mergeLocationFor && (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-600">
+                Merge <span className="font-semibold">"{mergeLocationFor.loc.name}"</span> into another location.
+                All referrals and provider links will be re-pointed to the target, then this location will be deleted.
+              </p>
+              <div className="space-y-1.5">
+                <Label>Merge into</Label>
+                <select
+                  value={mergeTargetId}
+                  onChange={(e) => setMergeTargetId(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm"
+                >
+                  <option value="">— Select target location —</option>
+                  {mergeLocationFor.practice.locations
+                    .filter((l) => l.id !== mergeLocationFor.loc.id)
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}{l.address ? ` · ${l.address}` : ""}</option>
+                    ))}
+                </select>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMergeLocationFor(null)}>Cancel</Button>
+                <Button
+                  disabled={!mergeTargetId || isPending}
+                  onClick={() => {
+                    if (!mergeTargetId) return
+                    run(() => mergeLocation(mergeLocationFor.loc.id, mergeTargetId))
+                    setMergeLocationFor(null)
+                  }}
+                >
+                  {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Merge &amp; Delete Duplicate
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

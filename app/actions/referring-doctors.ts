@@ -149,6 +149,43 @@ export async function deleteLocation(id: string) {
   return { success: true }
 }
 
+export async function mergeLocation(sourceId: string, targetId: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  if (sourceId === targetId) return { error: "Cannot merge a location into itself." }
+
+  // Re-point all referrals from source → target
+  await prisma.referral.updateMany({
+    where: { referringLocationId: sourceId },
+    data: { referringLocationId: targetId },
+  })
+
+  // Re-point doctor-location links, skipping any that would create a duplicate
+  const sourceDoctorLinks = await prisma.doctorLocation.findMany({ where: { locationId: sourceId } })
+  for (const link of sourceDoctorLinks) {
+    const alreadyLinked = await prisma.doctorLocation.findFirst({
+      where: { doctorId: link.doctorId, locationId: targetId },
+    })
+    if (!alreadyLinked) {
+      await prisma.doctorLocation.update({
+        where: { doctorId_locationId: { doctorId: link.doctorId, locationId: sourceId } },
+        data: { locationId: targetId },
+      })
+    } else {
+      await prisma.doctorLocation.delete({
+        where: { doctorId_locationId: { doctorId: link.doctorId, locationId: sourceId } },
+      })
+    }
+  }
+
+  // Delete the source location
+  await prisma.practiceLocation.delete({ where: { id: sourceId } })
+
+  revalidatePath("/referring-doctors")
+  return { success: true }
+}
+
 // ─── Doctors ──────────────────────────────────────────────────────────────────
 
 const DoctorSchema = z.object({
