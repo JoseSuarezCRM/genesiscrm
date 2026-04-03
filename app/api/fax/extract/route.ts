@@ -162,6 +162,15 @@ export async function POST(req: NextRequest) {
     const dobRaw = extracted.patientDob
     const patientDob = dobRaw && /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? dobRaw : null
 
+    // Normalize phone numbers to (XXX) XXX-XXXX
+    const normalizePhone = (raw: string | null | undefined): string | null => {
+      if (!raw) return null
+      const digits = raw.replace(/\D/g, "")
+      if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+      if (digits.length === 11 && digits[0] === "1") return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+      return raw
+    }
+
     // Compose notes from reason only (org/NPI/phone/address now have dedicated fields)
     const notesParts: string[] = []
     if (extracted.reason) notesParts.push(`Reason: ${extracted.reason}`)
@@ -170,14 +179,14 @@ export async function POST(req: NextRequest) {
       patientFirstName: extracted.patientFirstName ?? null,
       patientLastName: extracted.patientLastName ?? null,
       patientDob,
-      patientPhone: extracted.patientPhone ?? null,
+      patientPhone: normalizePhone(extracted.patientPhone),
       patientEmail: extracted.patientEmail ?? null,
       patientMrn: extracted.patientMrn ?? null,
       referringOrg: extracted.referringOrg ?? null,
       referringDoctorName: extracted.referringDoctorName ?? null,
       referringNpi: extracted.referringNpi ?? null,
-      referringPhone: extracted.referringPhone ?? null,
-      referringFax: extracted.referringFax ?? null,
+      referringPhone: normalizePhone(extracted.referringPhone),
+      referringFax: normalizePhone(extracted.referringFax),
       referringAddress: extracted.referringAddress ?? null,
       insuranceProvider: extracted.insuranceProvider ?? null,
       insuranceMemberId: extracted.insuranceMemberId ?? null,
