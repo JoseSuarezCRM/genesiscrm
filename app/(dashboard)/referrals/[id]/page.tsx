@@ -56,7 +56,7 @@ export default async function ReferralDetailPage({ params }: Props) {
   })
 
   return (
-    <div className="p-6 max-w-5xl space-y-6">
+    <div className="p-6 max-w-5xl space-y-6 min-h-full">
       {/* Breadcrumb */}
       <div>
         <Link

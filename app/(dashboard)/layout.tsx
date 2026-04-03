@@ -17,7 +17,7 @@ export default async function DashboardLayout({
         userEmail={session.user.email}
         userRole={(session.user as { role?: string }).role ?? "STAFF"}
       />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-white">
         {children}
       </main>
     </div>
