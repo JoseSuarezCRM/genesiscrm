@@ -16,6 +16,7 @@ import ReferralNotesEditor from "@/components/referral-notes-editor"
 import OutreachDialog from "@/components/outreach-dialog"
 import TagSelector from "@/components/tag-selector"
 import CallTracker from "@/components/call-tracker"
+import ReferralAssignee from "@/components/referral-assignee"
 
 interface Props {
   params: { id: string }
@@ -29,6 +30,7 @@ export default async function ReferralDetailPage({ params }: Props) {
       referringLocation: true,
       referringDoctor: true,
       createdBy: { select: { name: true, email: true } },
+      assignedTo: { select: { id: true, name: true, email: true } },
       documents: { orderBy: { createdAt: "desc" } },
       tags: { include: { tag: true } },
       callAttempts: {
@@ -40,8 +42,9 @@ export default async function ReferralDetailPage({ params }: Props) {
 
   if (!referral) notFound()
 
-  const [allTags] = await Promise.all([
+  const [allTags, users] = await Promise.all([
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
   ])
 
   const practices = await prisma.referringPractice.findMany({
@@ -77,6 +80,13 @@ export default async function ReferralDetailPage({ params }: Props) {
               <span className="text-sm text-slate-500">
                 Referred {formatDate(referral.referralDate)}
               </span>
+            </div>
+            <div className="mt-2 max-w-xs">
+              <ReferralAssignee
+                referralId={referral.id}
+                assignedTo={referral.assignedTo}
+                users={users}
+              />
             </div>
           </div>
           <div className="flex gap-2 shrink-0">

@@ -17,7 +17,7 @@ export default async function UsersPage() {
       email: true,
       role: true,
       createdAt: true,
-      _count: { select: { referrals: true } },
+      _count: { select: { referralsCreated: true } },
     },
   })
 

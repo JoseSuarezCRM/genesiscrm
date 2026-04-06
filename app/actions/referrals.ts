@@ -238,3 +238,34 @@ export async function deleteReferral(id: string) {
   revalidatePath("/")
   redirect("/referrals")
 }
+
+export async function assignReferral(referralId: string, assignedToId: string | null) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  const referral = await prisma.referral.findUnique({
+    where: { id: referralId },
+    select: { patientFirstName: true, patientLastName: true, assignedToId: true },
+  })
+  if (!referral) return { error: "Referral not found" }
+
+  await prisma.referral.update({
+    where: { id: referralId },
+    data: { assignedToId: assignedToId || null },
+  })
+
+  // Notify the new assignee if different from the person assigning
+  if (assignedToId && assignedToId !== session.user.id && assignedToId !== referral.assignedToId) {
+    await prisma.notification.create({
+      data: {
+        userId: assignedToId,
+        type: "REFERRAL_ASSIGNED",
+        message: `You were assigned the referral for ${referral.patientFirstName} ${referral.patientLastName}`,
+        link: `/referrals/${referralId}`,
+      },
+    })
+  }
+
+  revalidatePath(`/referrals/${referralId}`)
+  return { success: true }
+}

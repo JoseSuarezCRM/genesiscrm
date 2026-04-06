@@ -29,7 +29,7 @@ type UserRow = {
   email: string
   role: Role
   createdAt: Date
-  _count: { referrals: number }
+  _count: { referralsCreated: number }
 }
 
 interface Props {
@@ -252,7 +252,7 @@ export default function UserManager({ users, currentUserId }: Props) {
                     </SelectContent>
                   </Select>
                 </td>
-                <td className="px-6 py-3 text-slate-600">{u._count.referrals}</td>
+                <td className="px-6 py-3 text-slate-600">{u._count.referralsCreated}</td>
                 <td className="px-6 py-3 text-right">
                   <div className="flex justify-end gap-1">
                     <Button
