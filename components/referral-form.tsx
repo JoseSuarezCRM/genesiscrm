@@ -443,7 +443,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
     if (!practiceId) return
     setNewDoctorError(null)
     startNewDoctorTransition(async () => {
-      const result = await createDoctor({ name: newDoctorName.trim(), title: newDoctorTitle, npi: newDoctorNpi, practiceId, locationIds: [] })
+      const currentLocationId = locationId && locationId !== NONE ? locationId : undefined
+      const result = await createDoctor({ name: newDoctorName.trim(), title: newDoctorTitle, npi: newDoctorNpi, practiceId, locationIds: currentLocationId ? [currentLocationId] : [] })
       if (!("id" in result)) { setNewDoctorError("Failed to create provider"); return }
       const createdId = result.id as string
       if ("duplicate" in result && result.duplicate) {
@@ -452,7 +453,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         setShowNewDoctor(false)
         return
       }
-      const newDoc: Doctor = { id: createdId, name: newDoctorName.trim(), specialty: null, locations: [] }
+      const newDoc: Doctor = { id: createdId, name: newDoctorName.trim(), specialty: null, locations: currentLocationId ? [{ locationId: currentLocationId }] : [] }
       setLocalPractices((prev) => prev.map((p) =>
         p.id === practiceId ? { ...p, doctors: [...p.doctors, newDoc] } : p
       ))
