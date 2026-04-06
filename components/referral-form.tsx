@@ -60,6 +60,7 @@ const schema = z.object({
   patientFirstName: z.string().min(1, "Required"),
   patientLastName: z.string().min(1, "Required"),
   patientMrn: z.string().optional(),
+  genesisMrn: z.string().optional(),
   patientPhone: z.string().optional(),
   patientEmail: z.string().email("Invalid email").optional().or(z.literal("")),
   patientDob: z.string().optional(),
@@ -554,8 +555,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
             <Field label="Last Name *" error={errors.patientLastName?.message}>
               <Input {...register("patientLastName")} placeholder="Smith" />
             </Field>
-            <Field label="MRN" error={errors.patientMrn?.message}>
-              <Input {...register("patientMrn")} placeholder="Medical Record Number" />
+            <Field label="Referring MRN" error={errors.patientMrn?.message}>
+              <Input {...register("patientMrn")} placeholder="MRN from referral source" />
+            </Field>
+            <Field label="Genesis MRN" error={errors.genesisMrn?.message}>
+              <Input {...register("genesisMrn")} placeholder="Internal Genesis MRN" />
             </Field>
             <Field label="Date of Birth" error={errors.patientDob?.message}>
               <Input {...register("patientDob")} type="date" />

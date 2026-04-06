@@ -29,6 +29,8 @@ export default function EditReferralDialog({ referral, practices }: Props) {
   const defaultValues = {
     patientFirstName: referral.patientFirstName,
     patientLastName: referral.patientLastName,
+    patientMrn: referral.patientMrn ?? "",
+    genesisMrn: (referral as any).genesisMrn ?? "",
     patientPhone: referral.patientPhone ?? "",
     patientEmail: referral.patientEmail ?? "",
     patientDob: referral.patientDob

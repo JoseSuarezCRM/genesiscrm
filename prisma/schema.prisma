@@ -177,7 +177,8 @@ model Referral {
   // Patient info
   patientFirstName    String
   patientLastName     String
-  patientMrn          String?            // Medical Record Number
+  patientMrn          String?            // Medical Record Number (from referring source/fax)
+  genesisMrn          String?            // Internal Genesis Ortho MRN
   patientPhone        String?
   patientEmail        String?
   patientDob          DateTime?
