@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/status-badge"
 import { STATUS_LABELS, formatDate, formatPhone } from "@/lib/utils"
-import { Plus, Download, Phone } from "lucide-react"
+import { Plus, Download, Phone, AlertCircle } from "lucide-react"
 import ReferralSearch from "@/components/referral-search"
 
 interface PageProps {
@@ -18,6 +18,7 @@ interface PageProps {
     practice?: string
     tag?: string
     page?: string
+    incomplete?: string
   }
 }
 
@@ -28,8 +29,18 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
   const skip = (page - 1) * PAGE_SIZE
   const status = searchParams.status as ReferralStatus | undefined
   const search = searchParams.search?.trim()
+  const incompleteOnly = searchParams.incomplete === "1"
 
   const where = {
+    ...(incompleteOnly
+      ? {
+          OR: [
+            { referringPracticeId: null },
+            { referringLocationId: null },
+            { referringDoctorId: null },
+          ],
+        }
+      : {}),
     ...(status && Object.values(ReferralStatus).includes(status)
       ? { status }
       : {}),
@@ -61,7 +72,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       : {}),
   }
 
-  const [referrals, total, practices, allTags] = await Promise.all([
+  const [referrals, total, practices, allTags, incompleteCount] = await Promise.all([
     prisma.referral.findMany({
       where,
       take: PAGE_SIZE,
@@ -76,13 +87,16 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     prisma.referral.count({ where }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" } }),
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
+    prisma.referral.count({
+      where: { OR: [{ referringPracticeId: null }, { referringLocationId: null }, { referringDoctorId: null }] },
+    }),
   ])
 
-  return { referrals, total, practices, allTags, page }
+  return { referrals, total, practices, allTags, page, incompleteCount, incompleteOnly }
 }
 
 export default async function ReferralsPage({ searchParams }: PageProps) {
-  const { referrals, total, practices, allTags, page } = await getReferrals(searchParams)
+  const { referrals, total, practices, allTags, page, incompleteCount, incompleteOnly } = await getReferrals(searchParams)
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   const exportParams = new URLSearchParams()
@@ -177,6 +191,24 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
           <Link href="/referrals">Clear</Link>
         </Button>
         </form>
+        <Link
+          href={incompleteOnly ? "/referrals" : "/referrals?incomplete=1"}
+          className={`inline-flex items-center gap-1.5 h-10 px-3 rounded-md border text-sm font-medium transition-colors ${
+            incompleteOnly
+              ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
+              : incompleteCount > 0
+              ? "border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100"
+              : "border-input text-slate-500 bg-background hover:bg-slate-50"
+          }`}
+        >
+          <AlertCircle className="h-3.5 w-3.5" />
+          Incomplete source
+          {incompleteCount > 0 && (
+            <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${incompleteOnly ? "bg-white text-amber-600" : "bg-amber-500 text-white"}`}>
+              {incompleteCount}
+            </span>
+          )}
+        </Link>
       </div>
 
       {/* Table */}
