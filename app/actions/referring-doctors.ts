@@ -306,6 +306,18 @@ export async function deleteProviderNote(noteId: string, providerId: string) {
   return { success: true }
 }
 
+export async function linkDoctorToLocation(doctorId: string, locationId: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  const already = await prisma.doctorLocation.findFirst({ where: { doctorId, locationId } })
+  if (already) return { success: true }
+
+  await prisma.doctorLocation.create({ data: { doctorId, locationId } })
+  revalidatePath("/referring-doctors")
+  return { success: true }
+}
+
 export async function deleteDoctor(id: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")

@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { ReferralStatus } from "@prisma/client"
 import { createReferral, updateReferral } from "@/app/actions/referrals"
-import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
+import { createPractice, createLocation, createDoctor, linkDoctorToLocation } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -368,7 +368,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const availableLocations = selectedPractice?.locations ?? []
   const availableDoctors = (selectedPractice?.doctors ?? []).filter((d) => {
     if (!locationId || locationId === NONE) return true
-    return d.locations.some((dl) => dl.locationId === locationId)
+    // Always show doctors with no location assignment + doctors linked to the selected location
+    return d.locations.length === 0 || d.locations.some((dl) => dl.locationId === locationId)
   })
 
   // Once localPractices has been updated with ghost entries, set the form IDs
@@ -494,6 +495,12 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         referringPracticeId: resolvedPracticeId,
         referringLocationId: resolvedLocationId,
         referringDoctorId: resolvedDoctorId,
+      }
+
+      // Auto-link doctor to location if both are real IDs (not NONE/empty/pending)
+      const isRealId = (id: string) => !!id && id !== NONE && !id.startsWith("__")
+      if (isRealId(resolvedDoctorId) && isRealId(resolvedLocationId)) {
+        await linkDoctorToLocation(resolvedDoctorId, resolvedLocationId)
       }
 
       if (referralId) {
