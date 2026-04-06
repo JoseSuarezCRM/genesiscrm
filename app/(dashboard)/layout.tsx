@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import Sidebar from "@/components/sidebar"
+import NotificationBell from "@/components/notification-bell"
 
 export default async function DashboardLayout({
   children,
@@ -24,11 +25,11 @@ export default async function DashboardLayout({
         userName={session.user.name}
         userEmail={session.user.email}
         userRole={(session.user as { role?: string }).role ?? "STAFF"}
-        notifications={notifications}
       />
       <main className="flex-1 overflow-auto bg-white">
         {children}
       </main>
+      <NotificationBell initialNotifications={notifications} />
     </div>
   )
 }

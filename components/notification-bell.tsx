@@ -17,10 +17,9 @@ type Notification = {
 
 interface Props {
   initialNotifications: Notification[]
-  collapsed: boolean
 }
 
-export default function NotificationBell({ initialNotifications, collapsed }: Props) {
+export default function NotificationBell({ initialNotifications }: Props) {
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState(initialNotifications)
   const [isPending, startTransition] = useTransition()
@@ -29,10 +28,8 @@ export default function NotificationBell({ initialNotifications, collapsed }: Pr
 
   const unreadCount = notifications.filter(n => !n.read).length
 
-  // Sync with fresh server data on navigation
   useEffect(() => { setNotifications(initialNotifications) }, [initialNotifications])
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return
     function handle(e: MouseEvent) {
@@ -54,33 +51,25 @@ export default function NotificationBell({ initialNotifications, collapsed }: Pr
   }
 
   return (
-    <div ref={panelRef} className="relative">
+    <div ref={panelRef} className="fixed top-4 right-4 z-50">
       <button
         onClick={() => setOpen(o => !o)}
         title="Notifications"
         className={cn(
-          "relative flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-slate-300 hover:bg-slate-800 hover:text-white",
-          collapsed && "justify-center px-2",
-          open && "bg-slate-800 text-white"
+          "relative flex items-center justify-center w-9 h-9 rounded-full bg-white border shadow-sm hover:shadow-md transition-shadow text-slate-600 hover:text-slate-900",
+          open && "ring-2 ring-blue-400"
         )}
       >
-        <Bell className="h-4 w-4 shrink-0" />
-        {!collapsed && "Notifications"}
+        <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className={cn(
-            "flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold leading-none",
-            collapsed ? "absolute top-1 right-1 w-4 h-4" : "ml-auto w-5 h-5"
-          )}>
+          <span className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className={cn(
-          "absolute z-50 bg-white border rounded-xl shadow-xl w-80 max-h-96 flex flex-col",
-          collapsed ? "left-14 bottom-0" : "left-full ml-2 bottom-0"
-        )}>
+        <div className="absolute top-11 right-0 bg-white border rounded-xl shadow-xl w-80 max-h-[420px] flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <p className="text-sm font-semibold text-slate-800">Notifications</p>
             {unreadCount > 0 && (

@@ -20,8 +20,6 @@ import {
   CheckSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import NotificationBell from "@/components/notification-bell"
-
 const navItems = [
   { href: "/",                  label: "Dashboard",          icon: LayoutDashboard },
   { href: "/referrals",         label: "Referrals",          icon: Users },
@@ -37,16 +35,13 @@ const adminItems = [
   { href: "/settings/embed",    label: "Embed Referral Form", icon: Code2 },
 ]
 
-type SidebarNotification = { id: string; message: string; link: string | null; read: boolean; createdAt: Date }
-
 interface SidebarProps {
   userName: string | null | undefined
   userEmail: string
   userRole: string
-  notifications: SidebarNotification[]
 }
 
-export default function Sidebar({ userName, userEmail, userRole, notifications }: SidebarProps) {
+export default function Sidebar({ userName, userEmail, userRole }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
 
@@ -124,11 +119,6 @@ export default function Sidebar({ userName, userEmail, userRole, notifications }
           </>
         )}
       </nav>
-
-      {/* Notification bell */}
-      <div className={cn("px-2 pb-2", collapsed && "px-2")}>
-        <NotificationBell initialNotifications={notifications} collapsed={collapsed} />
-      </div>
 
       {/* User footer */}
       <div className={cn("py-4 border-t border-slate-700", collapsed ? "px-2" : "px-3")}>
