@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Pencil } from "lucide-react"
 import ReferralForm from "@/components/referral-form"
-import { ReferralStatus } from "@prisma/client"
 
 type PracticeWithRelations = ReferringPractice & {
   locations: PracticeLocation[]
@@ -67,6 +66,7 @@ export default function EditReferralDialog({ referral, practices }: Props) {
           practices={practices}
           defaultValues={defaultValues}
           referralId={referral.id}
+          onSuccess={() => setOpen(false)}
         />
       </DialogContent>
     </Dialog>

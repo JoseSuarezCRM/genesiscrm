@@ -88,6 +88,7 @@ interface ReferralFormProps {
   referralId?: string
   prefillData?: ExtractedReferralData
   pendingFile?: PendingFile | null
+  onSuccess?: () => void
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -138,7 +139,7 @@ function parseDoctorTitle(fullName: string): { name: string; title?: string } {
   return { name, title }
 }
 
-export default function ReferralForm({ practices, defaultValues, referralId, prefillData, pendingFile }: ReferralFormProps) {
+export default function ReferralForm({ practices, defaultValues, referralId, prefillData, pendingFile, onSuccess }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
@@ -181,6 +182,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   // Notice banner: names of records that will be created on save
   const [autoCreatedPractice, setAutoCreatedPractice] = useState<string | null>(null)
   const [autoCreatedProvider, setAutoCreatedProvider] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
 
   // New doctor dialog state
@@ -504,7 +506,13 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       }
 
       if (referralId) {
-        await updateReferral(referralId, clean)
+        const result = await updateReferral(referralId, clean)
+        if (result && "error" in result) {
+          setSaveError(typeof result.error === "string" ? result.error : "Failed to save changes.")
+          return
+        }
+        onSuccess?.()
+        return
       } else {
         const result = await createReferral(clean, pendingFile)
         if (result && "id" in result && result.id) {
@@ -784,9 +792,12 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           </section>
         )}
 
+        {saveError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{saveError}</p>
+        )}
         <div className="flex justify-end gap-3 pt-2 border-t">
-          <Button type="button" variant="outline" onClick={() => history.back()}>Cancel</Button>
-          <Button type="submit" disabled={isPending}>
+          <Button type="button" variant="outline" onClick={() => { setSaveError(null); onSuccess ? onSuccess() : history.back() }}>Cancel</Button>
+          <Button type="submit" disabled={isPending} onClick={() => setSaveError(null)}>
             {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {referralId ? "Save Changes" : "Create Referral"}
           </Button>
