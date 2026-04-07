@@ -15,7 +15,7 @@ export default async function ReferringDoctorsPage() {
         include: { _count: { select: { referrals: true } } },
       },
       doctors: {
-        orderBy: { name: "asc" },
+        orderBy: { referrals: { _count: "desc" } },
         include: {
           _count: { select: { referrals: true } },
           locations: {

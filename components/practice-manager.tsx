@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -183,6 +183,7 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
 
   const [addPracticeOpen, setAddPracticeOpen] = useState(false)
   const [editPractice, setEditPractice] = useState<PracticeWithRelations | null>(null)
@@ -229,11 +230,38 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
         </div>
       </div>
 
-      <div className="space-y-3">
-        {practices.length === 0 && (
-          <div className="bg-white border rounded-lg px-6 py-10 text-center text-slate-400">No referring practices yet. Add one above.</div>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Search by organization or provider name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-9 pr-8 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <X className="h-4 w-4" />
+          </button>
         )}
-        {practices.map((p) => {
+      </div>
+
+      <div className="space-y-3">
+        {(() => {
+          const q = search.toLowerCase().trim()
+          const filtered = q
+            ? practices.filter((p) =>
+                p.name.toLowerCase().includes(q) ||
+                p.doctors.some((d) => d.name.toLowerCase().includes(q))
+              )
+            : practices
+          if (filtered.length === 0) return (
+            <div className="bg-white border rounded-lg px-6 py-10 text-center text-slate-400">
+              {q ? `No results for "${search}"` : "No referring practices yet. Add one above."}
+            </div>
+          )
+          return filtered.map((p) => {
           const isExpanded = expandedPractice === p.id
           return (
             <div key={p.id} className="bg-white border rounded-lg overflow-hidden">
@@ -344,7 +372,8 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
               )}
             </div>
           )
-        })}
+        })
+        })()}
       </div>
 
       {/* Dialogs */}
