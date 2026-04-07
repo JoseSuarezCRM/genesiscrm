@@ -116,7 +116,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
 
   const insuranceData = topInsurance
     .filter((i) => i.insuranceProvider)
-    .map((i) => ({ name: i.insuranceProvider!, count: i._count.insuranceProvider ?? 0 }))
+    .map((i) => ({ name: i.insuranceProvider!, count: typeof i._count === "number" ? i._count : 0 }))
 
   return (
     <ReportsClient
