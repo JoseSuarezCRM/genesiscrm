@@ -22,9 +22,9 @@ export async function createAutomation(data: {
       name: data.name,
       description: data.description || null,
       triggerType: data.triggerType,
-      triggerConfig: data.triggerConfig,
+      triggerConfig: data.triggerConfig as any,
       actionType: data.actionType,
-      actionConfig: data.actionConfig,
+      actionConfig: data.actionConfig as any,
       createdById: session.user.id,
     },
   })
@@ -51,9 +51,9 @@ export async function updateAutomation(id: string, data: {
       name: data.name,
       description: data.description || null,
       triggerType: data.triggerType,
-      triggerConfig: data.triggerConfig,
+      triggerConfig: data.triggerConfig as any,
       actionType: data.actionType,
-      actionConfig: data.actionConfig,
+      actionConfig: data.actionConfig as any,
       isActive: data.isActive,
     },
   })
