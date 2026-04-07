@@ -126,6 +126,17 @@ const PENDING_PRACTICE_ID = "__pending_practice__"
 const PENDING_LOCATION_ID = "__pending_location__"
 const PENDING_DOCTOR_ID = "__pending_doctor__"
 
+// Normalize name to Proper Case (handles ALL CAPS and all lowercase)
+function toProperCase(str: string): string {
+  if (!str) return str
+  return str
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (c) => c.toUpperCase())
+    .replace(/\bMc([a-z])/g, (_, c) => `Mc${c.toUpperCase()}`)
+    .replace(/\bMac([a-z])/g, (_, c) => `Mac${c.toUpperCase()}`)
+    .replace(/\bO'([a-z])/g, (_, c) => `O'${c.toUpperCase()}`)
+}
+
 // Extract title prefix/suffix from a doctor name string
 function parseDoctorTitle(fullName: string): { name: string; title?: string } {
   let name = fullName.trim()
@@ -334,8 +345,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       // Set all non-ID fields immediately
       setValue("status", ReferralStatus.NEW)
       setValue("referralDate", today)
-      if (prefillData.patientFirstName) setValue("patientFirstName", prefillData.patientFirstName)
-      if (prefillData.patientLastName) setValue("patientLastName", prefillData.patientLastName)
+      if (prefillData.patientFirstName) setValue("patientFirstName", toProperCase(prefillData.patientFirstName))
+      if (prefillData.patientLastName) setValue("patientLastName", toProperCase(prefillData.patientLastName))
       if (prefillData.patientDob) setValue("patientDob", prefillData.patientDob)
       if (prefillData.patientPhone) setValue("patientPhone", prefillData.patientPhone)
       if (prefillData.patientEmail) setValue("patientEmail", prefillData.patientEmail)
@@ -555,10 +566,12 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           <SectionTitle>Patient Information</SectionTitle>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="First Name *" error={errors.patientFirstName?.message}>
-              <Input {...register("patientFirstName")} placeholder="Jane" />
+              <Input {...register("patientFirstName")} placeholder="Jane"
+                onBlur={(e) => { const v = toProperCase(e.target.value); if (v !== e.target.value) setValue("patientFirstName", v) }} />
             </Field>
             <Field label="Last Name *" error={errors.patientLastName?.message}>
-              <Input {...register("patientLastName")} placeholder="Smith" />
+              <Input {...register("patientLastName")} placeholder="Smith"
+                onBlur={(e) => { const v = toProperCase(e.target.value); if (v !== e.target.value) setValue("patientLastName", v) }} />
             </Field>
             <Field label="Referring MRN" error={errors.patientMrn?.message}>
               <Input {...register("patientMrn")} placeholder="MRN from referral source" />
