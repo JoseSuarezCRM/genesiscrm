@@ -501,6 +501,7 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
               <p className="text-sm text-slate-600">
                 Merge <span className="font-semibold">"{mergeDoctorFor.doc.name}"</span> into another provider.
                 All referrals and location links will be moved to the target, then this provider will be deleted.
+                You can merge across organizations.
               </p>
               <div className="space-y-1.5">
                 <Label>Merge into</Label>
@@ -510,11 +511,15 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
                   className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm"
                 >
                   <option value="">— Select target provider —</option>
-                  {mergeDoctorFor.practice.doctors
-                    .filter((d) => d.id !== mergeDoctorFor.doc.id)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>{(d as any).title ? `${(d as any).title} ` : ""}{d.name}</option>
-                    ))}
+                  {practices.flatMap((p) =>
+                    p.doctors
+                      .filter((d) => d.id !== mergeDoctorFor.doc.id)
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {(d as any).title ? `${(d as any).title} ` : ""}{d.name} — {p.name}
+                        </option>
+                      ))
+                  )}
                 </select>
               </div>
               <DialogFooter>
