@@ -371,9 +371,14 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const availableLocations = selectedPractice?.locations ?? []
   const availableDoctors = (selectedPractice?.doctors ?? []).filter((d) => {
     if (!locationId || locationId === NONE) return true
-    // Always show doctors with no location assignment + doctors linked to the selected location
     return d.locations.length === 0 || d.locations.some((dl) => dl.locationId === locationId)
   })
+  // Providers from other practices to show as cross-org suggestions
+  const crossOrgDoctors = practiceId
+    ? localPractices
+        .filter((p) => p.id !== practiceId && !p.id.startsWith("__"))
+        .flatMap((p) => p.doctors.map((d) => ({ ...d, _practiceName: p.name })))
+    : []
 
   // Once localPractices has been updated with ghost entries, set the form IDs
   useEffect(() => {
@@ -648,7 +653,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 disabled={!practiceId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableDoctors.length === 0 ? "No providers added" : "Select provider..."} />
+                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NONE}>— None —</SelectItem>
@@ -657,6 +662,18 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                       {d.name}{d.specialty ? ` · ${d.specialty}` : ""}
                     </SelectItem>
                   ))}
+                  {crossOrgDoctors.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t mt-1 pt-2">
+                        Other organizations
+                      </div>
+                      {crossOrgDoctors.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}{d.specialty ? ` · ${d.specialty}` : ""} <span className="text-slate-400">— {d._practiceName}</span>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
                   {practiceId && (
                     <SelectItem value={CREATE_DOCTOR} className="text-blue-600 font-medium">
                       + Add new provider
