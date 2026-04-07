@@ -12,18 +12,48 @@ export default async function ReferringDoctorsPage() {
       _count: { select: { referrals: true } },
       locations: {
         orderBy: { name: "asc" },
-        include: { _count: { select: { referrals: true } } },
+        include: {
+          _count: { select: { referrals: true } },
+          // Include doctors linked to this location (for cross-org merged providers)
+          doctors: {
+            include: {
+              doctor: {
+                include: {
+                  _count: { select: { referrals: true } },
+                  locations: { include: { location: { select: { id: true, name: true } } } },
+                },
+              },
+            },
+          },
+        },
       },
       doctors: {
         orderBy: { referrals: { _count: "desc" } },
         include: {
           _count: { select: { referrals: true } },
-          locations: {
-            include: { location: { select: { id: true, name: true } } },
-          },
+          locations: { include: { location: { select: { id: true, name: true } } } },
         },
       },
     },
+  })
+
+  // Merge direct doctors + cross-org doctors (linked via locations), deduplicated
+  const enriched = practices.map((p) => {
+    const directIds = new Set(p.doctors.map((d) => d.id))
+    // Collect doctors appearing via location links who don't primarily belong here
+    const viaLocations = p.locations
+      .flatMap((l) => l.doctors.map((dl) => dl.doctor))
+      .filter((d) => !directIds.has(d.id))
+    // Deduplicate within the via-locations set
+    const seen = new Set<string>()
+    const uniqueVia = viaLocations.filter((d) => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
+
+    const allDoctors = [...p.doctors, ...uniqueVia].sort((a, b) => b._count.referrals - a._count.referrals)
+
+    // Strip the nested doctors from locations before passing down (avoids type mismatch in manager)
+    const locationsClean = p.locations.map(({ doctors: _d, ...rest }) => rest)
+
+    return { ...p, locations: locationsClean, doctors: allDoctors }
   })
 
   return (
@@ -37,7 +67,7 @@ export default async function ReferringDoctorsPage() {
         </div>
       </div>
 
-      <PracticeManager practices={practices} isAdmin={isAdmin} />
+      <PracticeManager practices={enriched as any} isAdmin={isAdmin} />
     </div>
   )
 }
