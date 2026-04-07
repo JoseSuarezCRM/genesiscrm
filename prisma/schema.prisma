@@ -71,6 +71,25 @@ enum CallOutcome {
   ANSWERED
 }
 
+enum AutomationTrigger {
+  REFERRAL_CREATED
+  REFERRAL_STATUS_CHANGED
+  PROVIDER_REFERRAL_COUNT
+  PRACTICE_REFERRAL_COUNT
+  REFERRAL_NO_ACTIVITY
+  APPOINTMENT_UPCOMING
+  CALL_ATTEMPTS_REACHED
+  REFERRAL_ASSIGNED
+}
+
+enum AutomationAction {
+  CREATE_TASK
+  SEND_NOTIFICATION
+  UPDATE_REFERRAL_STATUS
+  ASSIGN_REFERRAL
+  ADD_TAG
+}
+
 enum TaskPriority {
   LOW
   NORMAL
@@ -117,6 +136,7 @@ model User {
   tasksCreated          Task[]         @relation("TaskCreatedBy")
   tasksAssigned         Task[]         @relation("TaskAssignedTo")
   notifications         Notification[]
+  automations           Automation[]
 }
 
 model ReferringPractice {
@@ -379,6 +399,38 @@ model Notification {
 
   @@index([userId, read])
   @@index([userId])
+}
+
+model Automation {
+  id            String            @id @default(cuid())
+  name          String
+  description   String?
+  isActive      Boolean           @default(true)
+  triggerType   AutomationTrigger
+  triggerConfig Json              @default("{}")
+  actionType    AutomationAction
+  actionConfig  Json              @default("{}")
+  createdById   String
+  createdBy     User              @relation(fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  runs          AutomationRun[]
+
+  @@index([triggerType, isActive])
+}
+
+model AutomationRun {
+  id           String     @id @default(cuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  triggeredAt  DateTime   @default(now())
+  contextType  String
+  contextId    String
+  result       String     // "success" | "skipped" | "error"
+  detail       String?
+
+  @@index([automationId])
+  @@index([contextType, contextId])
 }
 
 model OutreachTemplate {

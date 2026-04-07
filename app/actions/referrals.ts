@@ -8,6 +8,13 @@ import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { triggerAutoOutreach } from "@/app/actions/outreach"
 import { ReferralStatus, AuditAction, OutreachTrigger } from "@prisma/client"
+import {
+  runTrigger_ReferralCreated,
+  runTrigger_StatusChanged,
+  runTrigger_ProviderReferralCount,
+  runTrigger_PracticeReferralCount,
+  runTrigger_ReferralAssigned,
+} from "@/lib/automation-engine"
 
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
@@ -124,6 +131,16 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
 
   revalidatePath("/referrals")
   revalidatePath("/")
+
+  // Run automations (non-blocking)
+  const rid = referral.id
+  const uid = session.user.id
+  Promise.allSettled([
+    runTrigger_ReferralCreated(rid, uid),
+    referral.referringDoctorId ? runTrigger_ProviderReferralCount(referral.referringDoctorId, uid) : Promise.resolve(),
+    referral.referringPracticeId ? runTrigger_PracticeReferralCount(referral.referringPracticeId, uid) : Promise.resolve(),
+  ])
+
   return { id: referral.id }
 }
 
@@ -201,10 +218,8 @@ export async function updateReferralNotes(id: string, notes: string) {
 export async function updateReferralStatus(id: string, status: ReferralStatus) {
   const { session } = await assertReferralAccess(id)
 
-  await prisma.referral.update({
-    where: { id },
-    data: { status },
-  })
+  const prev = await prisma.referral.findUnique({ where: { id }, select: { status: true } })
+  await prisma.referral.update({ where: { id }, data: { status } })
 
   await createAuditLog({
     userId: session.user.id,
@@ -223,6 +238,10 @@ export async function updateReferralStatus(id: string, status: ReferralStatus) {
   revalidatePath(`/referrals/${id}`)
   revalidatePath("/referrals")
   revalidatePath("/")
+
+  if (prev?.status && prev.status !== status) {
+    Promise.allSettled([runTrigger_StatusChanged(id, prev.status, status, session.user.id)])
+  }
 }
 
 export async function deleteReferral(id: string) {
@@ -270,5 +289,10 @@ export async function assignReferral(referralId: string, assignedToId: string | 
   }
 
   revalidatePath(`/referrals/${referralId}`)
+
+  if (assignedToId) {
+    Promise.allSettled([runTrigger_ReferralAssigned(referralId, assignedToId, session.user.id)])
+  }
+
   return { success: true }
 }

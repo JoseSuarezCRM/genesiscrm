@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { CallOutcome } from "@prisma/client"
+import { runTrigger_CallAttemptsReached } from "@/lib/automation-engine"
 
 async function requireAuth() {
   const session = await auth()
@@ -35,6 +36,10 @@ export async function logCallAttempt(data: {
 
   revalidatePath(`/referrals/${data.referralId}`)
   revalidatePath("/referrals")
+
+  const newCount = count + 1
+  Promise.allSettled([runTrigger_CallAttemptsReached(data.referralId, newCount, (session.user as any).id)])
+
   return { success: true, attempt }
 }
 

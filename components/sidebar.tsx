@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckSquare,
+  Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 const navItems = [
@@ -33,6 +34,7 @@ const adminItems = [
   { href: "/settings/users",    label: "User Management",    icon: Settings },
   { href: "/settings/outreach", label: "Outreach Templates", icon: MessageSquare },
   { href: "/settings/embed",    label: "Embed Referral Form", icon: Code2 },
+  { href: "/automations",       label: "Automations",        icon: Zap },
 ]
 
 interface SidebarProps {
