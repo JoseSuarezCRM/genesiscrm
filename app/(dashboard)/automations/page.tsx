@@ -25,7 +25,7 @@ export default async function AutomationsPage() {
         <p className="text-sm text-slate-500">{automations.filter(a => a.isActive).length} active rule{automations.filter(a => a.isActive).length !== 1 ? "s" : ""}</p>
       </div>
       <AutomationManager
-        automations={automations}
+        automations={automations as any}
         users={users}
         tags={tags}
         practices={practices}
