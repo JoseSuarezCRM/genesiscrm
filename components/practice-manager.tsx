@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -174,6 +174,95 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
         <Button type="submit" disabled={isPending}>{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save</Button>
       </DialogFooter>
     </form>
+  )
+}
+
+// ─── Searchable picker ────────────────────────────────────────────────────────
+
+function SearchablePicker({
+  items,
+  value,
+  onChange,
+  placeholder = "Search...",
+  renderItem,
+  renderSelected,
+}: {
+  items: { id: string; label: string; sub?: string }[]
+  value: string
+  onChange: (id: string) => void
+  placeholder?: string
+  renderItem?: (item: { id: string; label: string; sub?: string }) => React.ReactNode
+  renderSelected?: (item: { id: string; label: string; sub?: string }) => React.ReactNode
+}) {
+  const [query, setQuery] = useState("")
+  const [open, setOpen] = useState(false)
+  const selected = items.find((i) => i.id === value)
+  const filtered = query.trim()
+    ? items.filter((i) => i.label.toLowerCase().includes(query.toLowerCase()) || (i.sub ?? "").toLowerCase().includes(query.toLowerCase()))
+    : items
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between border rounded-lg px-3 py-2.5 text-sm bg-white hover:bg-slate-50 transition-colors text-left"
+      >
+        {selected ? (
+          <div className="min-w-0">
+            {renderSelected ? renderSelected(selected) : <span className="font-medium text-slate-800 truncate block">{selected.label}</span>}
+          </div>
+        ) : (
+          <span className="text-slate-400">{placeholder}</span>
+        )}
+        <Search className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg overflow-hidden">
+          <div className="p-2 border-b">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                autoFocus
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Type to search..."
+                className="w-full pl-8 pr-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-slate-400 text-center">No results</p>
+            ) : (
+              filtered.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => { onChange(item.id); setOpen(false); setQuery("") }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-slate-50 transition-colors text-left",
+                    value === item.id && "bg-blue-50"
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    {renderItem ? renderItem(item) : (
+                      <>
+                        <p className="font-medium text-slate-800 truncate">{item.label}</p>
+                        {item.sub && <p className="text-xs text-slate-400 truncate">{item.sub}</p>}
+                      </>
+                    )}
+                  </div>
+                  {value === item.id && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -422,18 +511,14 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
               </p>
               <div className="space-y-1.5">
                 <Label>Merge into</Label>
-                <select
+                <SearchablePicker
+                  placeholder="Search practices..."
                   value={mergePracticeTargetId}
-                  onChange={(e) => setMergePracticeTargetId(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm"
-                >
-                  <option value="">— Select target practice —</option>
-                  {practices
+                  onChange={setMergePracticeTargetId}
+                  items={practices
                     .filter((p) => p.id !== mergePracticeFor.id)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                </select>
+                    .map((p) => ({ id: p.id, label: p.name, sub: `${p.locations.length} loc · ${p._count.referrals} ref` }))}
+                />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setMergePracticeFor(null)}>Cancel</Button>
@@ -465,18 +550,14 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
               </p>
               <div className="space-y-1.5">
                 <Label>Merge into</Label>
-                <select
+                <SearchablePicker
+                  placeholder="Search locations..."
                   value={mergeTargetId}
-                  onChange={(e) => setMergeTargetId(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm"
-                >
-                  <option value="">— Select target location —</option>
-                  {mergeLocationFor.practice.locations
+                  onChange={setMergeTargetId}
+                  items={mergeLocationFor.practice.locations
                     .filter((l) => l.id !== mergeLocationFor.loc.id)
-                    .map((l) => (
-                      <option key={l.id} value={l.id}>{l.name}{l.address ? ` · ${l.address}` : ""}</option>
-                    ))}
-                </select>
+                    .map((l) => ({ id: l.id, label: l.name, sub: l.address ?? undefined }))}
+                />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setMergeLocationFor(null)}>Cancel</Button>
@@ -509,22 +590,20 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
               </p>
               <div className="space-y-1.5">
                 <Label>Merge into</Label>
-                <select
+                <SearchablePicker
+                  placeholder="Search providers..."
                   value={mergeDoctorTargetId}
-                  onChange={(e) => setMergeDoctorTargetId(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm"
-                >
-                  <option value="">— Select target provider —</option>
-                  {practices.flatMap((p) =>
+                  onChange={setMergeDoctorTargetId}
+                  items={practices.flatMap((p) =>
                     p.doctors
                       .filter((d) => d.id !== mergeDoctorFor.doc.id)
-                      .map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {(d as any).title ? `${(d as any).title} ` : ""}{d.name} — {p.name}
-                        </option>
-                      ))
+                      .map((d) => ({
+                        id: d.id,
+                        label: `${(d as any).title ? `${(d as any).title} ` : ""}${d.name}`,
+                        sub: p.name,
+                      }))
                   )}
-                </select>
+                />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setMergeDoctorFor(null)}>Cancel</Button>
