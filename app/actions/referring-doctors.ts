@@ -99,6 +99,19 @@ export async function createLocation(data: unknown) {
   })
   if (existing) return { error: `A location named "${existing.name}" already exists in this practice.`, id: existing.id, duplicate: true }
 
+  // Check for address duplicate (normalize: lowercase, strip extra spaces, strip trailing zip+4, strip commas)
+  if (parsed.data.address) {
+    const normalize = (s: string) =>
+      s.toLowerCase().replace(/,/g, "").replace(/\b(\d{5})-\d{4}\b/, "$1").replace(/\s+/g, " ").trim()
+    const newAddr = normalize(parsed.data.address)
+    const siblings = await prisma.practiceLocation.findMany({
+      where: { practiceId: parsed.data.practiceId, address: { not: null } },
+      select: { id: true, name: true, address: true },
+    })
+    const addrMatch = siblings.find((s) => normalize(s.address!) === newAddr)
+    if (addrMatch) return { error: `A location at this address already exists: "${addrMatch.name}". Consider merging instead.`, id: addrMatch.id, duplicate: true }
+  }
+
   const location = await prisma.practiceLocation.create({
     data: {
       name: parsed.data.name,
