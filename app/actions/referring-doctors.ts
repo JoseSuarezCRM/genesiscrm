@@ -199,6 +199,37 @@ export async function mergeLocation(sourceId: string, targetId: string) {
   return { success: true }
 }
 
+export async function mergePractice(sourceId: string, targetId: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  if (sourceId === targetId) return { error: "Cannot merge a practice into itself." }
+
+  // Re-point referrals
+  await prisma.referral.updateMany({ where: { referringPracticeId: sourceId }, data: { referringPracticeId: targetId } })
+
+  // Re-point locations
+  await prisma.practiceLocation.updateMany({ where: { practiceId: sourceId }, data: { practiceId: targetId } })
+
+  // Re-point doctors (skip duplicates by name)
+  const sourceDoctors = await prisma.referringDoctor.findMany({ where: { practiceId: sourceId }, select: { id: true, name: true } })
+  for (const doc of sourceDoctors) {
+    const existing = await prisma.referringDoctor.findFirst({ where: { practiceId: targetId, name: { equals: doc.name, mode: "insensitive" } } })
+    if (!existing) {
+      await prisma.referringDoctor.update({ where: { id: doc.id }, data: { practiceId: targetId } })
+    }
+    // If duplicate name exists, leave doctor under source (will be deleted with practice cascade) or re-point referrals
+  }
+
+  // Delete source practice
+  await prisma.referringPractice.delete({ where: { id: sourceId } })
+
+  revalidatePath("/referring-doctors")
+  revalidatePath("/referrals")
+  revalidatePath("/")
+  return { success: true }
+}
+
 // ─── Doctors ──────────────────────────────────────────────────────────────────
 
 const DoctorSchema = z.object({
@@ -275,6 +306,37 @@ export async function updateDoctor(id: string, data: unknown) {
   })
 
   revalidatePath("/referring-doctors")
+  return { success: true }
+}
+
+export async function mergeDoctor(sourceId: string, targetId: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  if (sourceId === targetId) return { error: "Cannot merge a provider into itself." }
+
+  // Re-point referrals
+  await prisma.referral.updateMany({ where: { referringDoctorId: sourceId }, data: { referringDoctorId: targetId } })
+
+  // Re-point location links, skipping duplicates
+  const sourceLinks = await prisma.doctorLocation.findMany({ where: { doctorId: sourceId } })
+  for (const link of sourceLinks) {
+    const already = await prisma.doctorLocation.findFirst({ where: { doctorId: targetId, locationId: link.locationId } })
+    if (!already) {
+      await prisma.doctorLocation.update({
+        where: { doctorId_locationId: { doctorId: sourceId, locationId: link.locationId } },
+        data: { doctorId: targetId },
+      })
+    } else {
+      await prisma.doctorLocation.delete({ where: { doctorId_locationId: { doctorId: sourceId, locationId: link.locationId } } })
+    }
+  }
+
+  // Delete source doctor
+  await prisma.referringDoctor.delete({ where: { id: sourceId } })
+
+  revalidatePath("/referring-doctors")
+  revalidatePath("/referrals")
   return { success: true }
 }
 
