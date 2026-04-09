@@ -85,10 +85,14 @@ export async function updateUserRole(id: string, role: Role) {
 }
 
 export async function updateUserPermissions(id: string, permissions: string[]) {
-  await requireAdmin()
-  await prisma.user.update({ where: { id }, data: { permissions: { set: permissions } } })
-  revalidatePath("/settings/users")
-  return { success: true }
+  try {
+    await requireAdmin()
+    await prisma.user.update({ where: { id }, data: { permissions: { set: permissions } } })
+    revalidatePath("/settings/users")
+    return { success: true, error: null }
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? "Failed to update permissions." }
+  }
 }
 
 export async function deleteUser(id: string) {
