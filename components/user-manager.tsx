@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { Role } from "@prisma/client"
-import { createUser, updateUserRole, deleteUser, resetPassword } from "@/app/actions/users"
+import { createUser, updateUserRole, updateUserPermissions, deleteUser, resetPassword } from "@/app/actions/users"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,16 +21,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Trash2, Loader2, KeyRound, ShieldCheck, User } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Plus, Trash2, Loader2, KeyRound, ShieldCheck } from "lucide-react"
 
 type UserRow = {
   id: string
   name: string | null
   email: string
   role: Role
+  permissions: string[]
   createdAt: Date
   _count: { referralsCreated: number }
 }
+
+const ALL_PERMISSIONS: { key: string; label: string; description: string }[] = [
+  { key: "MANAGE_PRACTICES", label: "Manage Practices", description: "Create, edit, merge, and delete practices, locations, and providers" },
+  { key: "MERGE_RECORDS", label: "Merge Records", description: "Merge duplicate practices, locations, and providers" },
+  { key: "VIEW_REPORTS", label: "View Reports", description: "Access the Reports page" },
+  { key: "MANAGE_AUTOMATIONS", label: "Manage Automations", description: "Create and edit automation rules" },
+  { key: "EXPORT_DATA", label: "Export Data", description: "Export referral lists to CSV" },
+  { key: "MANAGE_BROADCASTS", label: "Manage Broadcasts", description: "Create and send patient broadcasts" },
+]
 
 interface Props {
   users: UserRow[]
@@ -53,6 +64,10 @@ export default function UserManager({ users, currentUserId }: Props) {
 
   // Reset password state
   const [newPw, setNewPw] = useState("")
+
+  // Permissions state
+  const [permUserId, setPermUserId] = useState<string | null>(null)
+  const [selectedPerms, setSelectedPerms] = useState<string[]>([])
 
   async function handleAddUser(e: React.FormEvent) {
     e.preventDefault()
@@ -89,6 +104,20 @@ export default function UserManager({ users, currentUserId }: Props) {
     startTransition(async () => {
       const result = await deleteUser(userId)
       if (result?.error) setError(typeof result.error === "string" ? result.error : "Error")
+    })
+  }
+
+  async function handleSavePermissions() {
+    if (!permUserId) return
+    startTransition(async () => {
+      const result = await updateUserPermissions(permUserId, selectedPerms)
+      if (result?.error) {
+        setError(typeof result.error === "string" ? result.error : "Error")
+      } else {
+        setPermUserId(null)
+        setSuccess("Permissions updated.")
+        setTimeout(() => setSuccess(null), 4000)
+      }
     })
   }
 
@@ -259,6 +288,18 @@ export default function UserManager({ users, currentUserId }: Props) {
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8"
+                      title="Manage permissions"
+                      onClick={() => {
+                        setPermUserId(u.id)
+                        setSelectedPerms(u.permissions)
+                      }}
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8"
                       title="Reset password"
                       onClick={() => {
                         setResetUserId(u.id)
@@ -285,6 +326,67 @@ export default function UserManager({ users, currentUserId }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* Permissions Dialog */}
+      {(() => {
+        const permUser = permUserId ? users.find((u) => u.id === permUserId) : null
+        const isAdmin = permUser?.role === "ADMIN"
+        return (
+          <Dialog open={!!permUserId} onOpenChange={(o) => !o && setPermUserId(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  Manage Permissions
+                  {permUser && (
+                    <span className="ml-2 text-sm font-normal text-slate-500">
+                      — {permUser.name ?? permUser.email}
+                    </span>
+                  )}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                {isAdmin ? (
+                  <p className="text-sm text-slate-500 bg-slate-50 rounded-md px-3 py-2">
+                    Admin users have all permissions by default.
+                  </p>
+                ) : (
+                  ALL_PERMISSIONS.map((p) => (
+                    <label
+                      key={p.key}
+                      className="flex items-start gap-3 cursor-pointer group"
+                    >
+                      <Checkbox
+                        checked={selectedPerms.includes(p.key)}
+                        onCheckedChange={(checked) => {
+                          setSelectedPerms((prev) =>
+                            checked ? [...prev, p.key] : prev.filter((x) => x !== p.key)
+                          )
+                        }}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{p.label}</p>
+                        <p className="text-xs text-slate-500">{p.description}</p>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPermUserId(null)}>
+                  Cancel
+                </Button>
+                {!isAdmin && (
+                  <Button onClick={handleSavePermissions} disabled={isPending}>
+                    {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Save
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
 
       {/* Reset Password Dialog */}
       <Dialog

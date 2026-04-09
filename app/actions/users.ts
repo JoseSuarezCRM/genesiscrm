@@ -84,6 +84,13 @@ export async function updateUserRole(id: string, role: Role) {
   return { success: true }
 }
 
+export async function updateUserPermissions(id: string, permissions: string[]) {
+  await requireAdmin()
+  await prisma.user.update({ where: { id }, data: { permissions: { set: permissions } } })
+  revalidatePath("/settings/users")
+  return { success: true }
+}
+
 export async function deleteUser(id: string) {
   const session = await requireAdmin()
 

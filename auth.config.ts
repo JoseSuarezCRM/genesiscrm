@@ -24,15 +24,17 @@ export const authConfig: NextAuthConfig = {
     },
     jwt({ token, user }) {
       if (user) {
-        token.role = (user as { role?: string }).role
+        token.role = (user as any).role
         token.id = user.id
+        token.permissions = (user as any).permissions ?? []
       }
       return token
     },
     session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string
-        ;(session.user as { role?: string }).role = token.role as string
+        ;(session.user as any).role = token.role as string
+        ;(session.user as any).permissions = token.permissions ?? []
       }
       return session
     },

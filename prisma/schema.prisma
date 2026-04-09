@@ -118,6 +118,7 @@ model User {
   name                  String?
   password              String
   role                  Role           @default(STAFF)
+  permissions           String[]       @default([])
   createdAt             DateTime       @default(now())
   // HIPAA security fields
   failedLoginAttempts   Int            @default(0)

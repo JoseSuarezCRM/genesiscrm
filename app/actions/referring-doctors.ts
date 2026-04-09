@@ -168,35 +168,40 @@ export async function mergeLocation(sourceId: string, targetId: string) {
 
   if (sourceId === targetId) return { error: "Cannot merge a location into itself." }
 
-  // Re-point all referrals from source → target
-  await prisma.referral.updateMany({
-    where: { referringLocationId: sourceId },
-    data: { referringLocationId: targetId },
-  })
-
-  // Re-point doctor-location links, skipping any that would create a duplicate
-  const sourceDoctorLinks = await prisma.doctorLocation.findMany({ where: { locationId: sourceId } })
-  for (const link of sourceDoctorLinks) {
-    const alreadyLinked = await prisma.doctorLocation.findFirst({
-      where: { doctorId: link.doctorId, locationId: targetId },
+  try {
+    // Re-point all referrals from source → target
+    await prisma.referral.updateMany({
+      where: { referringLocationId: sourceId },
+      data: { referringLocationId: targetId },
     })
-    if (!alreadyLinked) {
-      await prisma.doctorLocation.update({
-        where: { doctorId_locationId: { doctorId: link.doctorId, locationId: sourceId } },
-        data: { locationId: targetId },
+
+    // Re-point doctor-location links, skipping any that would create a duplicate
+    const sourceDoctorLinks = await prisma.doctorLocation.findMany({ where: { locationId: sourceId } })
+    for (const link of sourceDoctorLinks) {
+      const alreadyLinked = await prisma.doctorLocation.findFirst({
+        where: { doctorId: link.doctorId, locationId: targetId },
       })
-    } else {
-      await prisma.doctorLocation.delete({
-        where: { doctorId_locationId: { doctorId: link.doctorId, locationId: sourceId } },
-      })
+      if (!alreadyLinked) {
+        await prisma.doctorLocation.update({
+          where: { doctorId_locationId: { doctorId: link.doctorId, locationId: sourceId } },
+          data: { locationId: targetId },
+        })
+      } else {
+        await prisma.doctorLocation.delete({
+          where: { doctorId_locationId: { doctorId: link.doctorId, locationId: sourceId } },
+        })
+      }
     }
+
+    // Delete the source location
+    await prisma.practiceLocation.delete({ where: { id: sourceId } })
+
+    revalidatePath("/referring-doctors")
+    return { success: true }
+  } catch (e: any) {
+    console.error("mergeLocation error:", e)
+    return { error: e?.message ?? "Failed to merge locations. Please try again." }
   }
-
-  // Delete the source location
-  await prisma.practiceLocation.delete({ where: { id: sourceId } })
-
-  revalidatePath("/referring-doctors")
-  return { success: true }
 }
 
 export async function mergePractice(sourceId: string, targetId: string) {
@@ -205,29 +210,28 @@ export async function mergePractice(sourceId: string, targetId: string) {
 
   if (sourceId === targetId) return { error: "Cannot merge a practice into itself." }
 
-  // Re-point referrals
-  await prisma.referral.updateMany({ where: { referringPracticeId: sourceId }, data: { referringPracticeId: targetId } })
+  try {
+    await prisma.referral.updateMany({ where: { referringPracticeId: sourceId }, data: { referringPracticeId: targetId } })
+    await prisma.practiceLocation.updateMany({ where: { practiceId: sourceId }, data: { practiceId: targetId } })
 
-  // Re-point locations
-  await prisma.practiceLocation.updateMany({ where: { practiceId: sourceId }, data: { practiceId: targetId } })
-
-  // Re-point doctors (skip duplicates by name)
-  const sourceDoctors = await prisma.referringDoctor.findMany({ where: { practiceId: sourceId }, select: { id: true, name: true } })
-  for (const doc of sourceDoctors) {
-    const existing = await prisma.referringDoctor.findFirst({ where: { practiceId: targetId, name: { equals: doc.name, mode: "insensitive" } } })
-    if (!existing) {
-      await prisma.referringDoctor.update({ where: { id: doc.id }, data: { practiceId: targetId } })
+    const sourceDoctors = await prisma.referringDoctor.findMany({ where: { practiceId: sourceId }, select: { id: true, name: true } })
+    for (const doc of sourceDoctors) {
+      const existing = await prisma.referringDoctor.findFirst({ where: { practiceId: targetId, name: { equals: doc.name, mode: "insensitive" } } })
+      if (!existing) {
+        await prisma.referringDoctor.update({ where: { id: doc.id }, data: { practiceId: targetId } })
+      }
     }
-    // If duplicate name exists, leave doctor under source (will be deleted with practice cascade) or re-point referrals
+
+    await prisma.referringPractice.delete({ where: { id: sourceId } })
+
+    revalidatePath("/referring-doctors")
+    revalidatePath("/referrals")
+    revalidatePath("/")
+    return { success: true }
+  } catch (e: any) {
+    console.error("mergePractice error:", e)
+    return { error: e?.message ?? "Failed to merge practices. Please try again." }
   }
-
-  // Delete source practice
-  await prisma.referringPractice.delete({ where: { id: sourceId } })
-
-  revalidatePath("/referring-doctors")
-  revalidatePath("/referrals")
-  revalidatePath("/")
-  return { success: true }
 }
 
 // ─── Doctors ──────────────────────────────────────────────────────────────────
@@ -315,29 +319,31 @@ export async function mergeDoctor(sourceId: string, targetId: string) {
 
   if (sourceId === targetId) return { error: "Cannot merge a provider into itself." }
 
-  // Re-point referrals
-  await prisma.referral.updateMany({ where: { referringDoctorId: sourceId }, data: { referringDoctorId: targetId } })
+  try {
+    await prisma.referral.updateMany({ where: { referringDoctorId: sourceId }, data: { referringDoctorId: targetId } })
 
-  // Re-point location links, skipping duplicates
-  const sourceLinks = await prisma.doctorLocation.findMany({ where: { doctorId: sourceId } })
-  for (const link of sourceLinks) {
-    const already = await prisma.doctorLocation.findFirst({ where: { doctorId: targetId, locationId: link.locationId } })
-    if (!already) {
-      await prisma.doctorLocation.update({
-        where: { doctorId_locationId: { doctorId: sourceId, locationId: link.locationId } },
-        data: { doctorId: targetId },
-      })
-    } else {
-      await prisma.doctorLocation.delete({ where: { doctorId_locationId: { doctorId: sourceId, locationId: link.locationId } } })
+    const sourceLinks = await prisma.doctorLocation.findMany({ where: { doctorId: sourceId } })
+    for (const link of sourceLinks) {
+      const already = await prisma.doctorLocation.findFirst({ where: { doctorId: targetId, locationId: link.locationId } })
+      if (!already) {
+        await prisma.doctorLocation.update({
+          where: { doctorId_locationId: { doctorId: sourceId, locationId: link.locationId } },
+          data: { doctorId: targetId },
+        })
+      } else {
+        await prisma.doctorLocation.delete({ where: { doctorId_locationId: { doctorId: sourceId, locationId: link.locationId } } })
+      }
     }
+
+    await prisma.referringDoctor.delete({ where: { id: sourceId } })
+
+    revalidatePath("/referring-doctors")
+    revalidatePath("/referrals")
+    return { success: true }
+  } catch (e: any) {
+    console.error("mergeDoctor error:", e)
+    return { error: e?.message ?? "Failed to merge providers. Please try again." }
   }
-
-  // Delete source doctor
-  await prisma.referringDoctor.delete({ where: { id: sourceId } })
-
-  revalidatePath("/referring-doctors")
-  revalidatePath("/referrals")
-  return { success: true }
 }
 
 export async function createProviderNote(providerId: string, content: string) {

@@ -130,8 +130,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
+          permissions: user.permissions,
         }
       },
     }),
   ],
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user }) {
+      if (user) {
+        // Initial login — store from authorize()
+        token.id = user.id
+        token.role = (user as any).role
+        token.permissions = (user as any).permissions ?? []
+      } else if (token.id) {
+        // Token refresh — re-fetch role and permissions from DB so changes take effect immediately
+        const fresh = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, permissions: true, isActive: true },
+        })
+        if (fresh) {
+          token.role = fresh.role
+          token.permissions = fresh.permissions
+        }
+      }
+      return token
+    },
+  },
 })
