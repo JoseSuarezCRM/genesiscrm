@@ -309,37 +309,77 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-3 border-t bg-slate-50 text-sm">
-            <span className="text-slate-500">
-              Page {page} of {totalPages} ({total} results)
-            </span>
-            <div className="flex gap-2">
-              {page > 1 && (
-                <Button size="sm" variant="outline" asChild>
-                  <Link
-                    href={`/referrals?${new URLSearchParams({
-                      ...searchParams,
-                      page: String(page - 1),
-                    })}`}
-                  >
-                    Previous
-                  </Link>
-                </Button>
-              )}
-              {page < totalPages && (
-                <Button size="sm" variant="outline" asChild>
-                  <Link
-                    href={`/referrals?${new URLSearchParams({
-                      ...searchParams,
-                      page: String(page + 1),
-                    })}`}
-                  >
-                    Next
-                  </Link>
-                </Button>
-              )}
-            </div>
-          </div>
+          <Pagination page={page} totalPages={totalPages} total={total} searchParams={searchParams} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Pagination({ page, totalPages, total, searchParams }: {
+  page: number
+  totalPages: number
+  total: number
+  searchParams: Record<string, string | undefined>
+}) {
+  function href(p: number) {
+    return `/referrals?${new URLSearchParams({ ...searchParams, page: String(p) } as Record<string, string>)}`
+  }
+
+  // Build page number list with ellipsis: always show first, last, current ±2
+  const pages: (number | "…")[] = []
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - 2 && i <= page + 2)) {
+      pages.push(i)
+    } else if (pages[pages.length - 1] !== "…") {
+      pages.push("…")
+    }
+  }
+
+  const btnBase = "inline-flex items-center justify-center h-8 min-w-[2rem] px-2 rounded-md text-sm font-medium transition-colors border"
+  const btnActive = "bg-blue-600 text-white border-blue-600"
+  const btnInactive = "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+  const btnDisabled = "bg-white text-slate-300 border-slate-200 cursor-not-allowed"
+
+  return (
+    <div className="flex items-center justify-between px-6 py-3 border-t bg-slate-50 text-sm flex-wrap gap-2">
+      <span className="text-slate-500 shrink-0">
+        Page {page} of {totalPages} &middot; {total} results
+      </span>
+      <div className="flex items-center gap-1 flex-wrap">
+        {/* First */}
+        {page > 1 ? (
+          <Link href={href(1)} className={`${btnBase} ${btnInactive}`}>«</Link>
+        ) : (
+          <span className={`${btnBase} ${btnDisabled}`}>«</span>
+        )}
+        {/* Prev */}
+        {page > 1 ? (
+          <Link href={href(page - 1)} className={`${btnBase} ${btnInactive}`}>‹</Link>
+        ) : (
+          <span className={`${btnBase} ${btnDisabled}`}>‹</span>
+        )}
+        {/* Page numbers */}
+        {pages.map((p, i) =>
+          p === "…" ? (
+            <span key={`ellipsis-${i}`} className="px-1 text-slate-400">…</span>
+          ) : (
+            <Link key={p} href={href(p)} className={`${btnBase} ${p === page ? btnActive : btnInactive}`}>
+              {p}
+            </Link>
+          )
+        )}
+        {/* Next */}
+        {page < totalPages ? (
+          <Link href={href(page + 1)} className={`${btnBase} ${btnInactive}`}>›</Link>
+        ) : (
+          <span className={`${btnBase} ${btnDisabled}`}>›</span>
+        )}
+        {/* Last */}
+        {page < totalPages ? (
+          <Link href={href(totalPages)} className={`${btnBase} ${btnInactive}`}>»</Link>
+        ) : (
+          <span className={`${btnBase} ${btnDisabled}`}>»</span>
         )}
       </div>
     </div>
