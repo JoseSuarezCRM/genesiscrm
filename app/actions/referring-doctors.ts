@@ -218,7 +218,27 @@ export async function mergePractice(sourceId: string, targetId: string) {
     for (const doc of sourceDoctors) {
       const existing = await prisma.referringDoctor.findFirst({ where: { practiceId: targetId, name: { equals: doc.name, mode: "insensitive" } } })
       if (!existing) {
+        // No name collision — just move the doctor to the target practice
         await prisma.referringDoctor.update({ where: { id: doc.id }, data: { practiceId: targetId } })
+      } else {
+        // Same-name doctor already exists in target — fully merge source into target
+        await prisma.referral.updateMany({ where: { referringDoctorId: doc.id }, data: { referringDoctorId: existing.id } })
+        await prisma.providerNote.updateMany({ where: { providerId: doc.id }, data: { providerId: existing.id } })
+
+        const sourceLinks = await prisma.doctorLocation.findMany({ where: { doctorId: doc.id } })
+        for (const link of sourceLinks) {
+          const already = await prisma.doctorLocation.findFirst({ where: { doctorId: existing.id, locationId: link.locationId } })
+          if (!already) {
+            await prisma.doctorLocation.update({
+              where: { doctorId_locationId: { doctorId: doc.id, locationId: link.locationId } },
+              data: { doctorId: existing.id },
+            })
+          } else {
+            await prisma.doctorLocation.delete({ where: { doctorId_locationId: { doctorId: doc.id, locationId: link.locationId } } })
+          }
+        }
+
+        await prisma.referringDoctor.delete({ where: { id: doc.id } })
       }
     }
 
@@ -321,6 +341,7 @@ export async function mergeDoctor(sourceId: string, targetId: string) {
 
   try {
     await prisma.referral.updateMany({ where: { referringDoctorId: sourceId }, data: { referringDoctorId: targetId } })
+    await prisma.providerNote.updateMany({ where: { providerId: sourceId }, data: { providerId: targetId } })
 
     const sourceLinks = await prisma.doctorLocation.findMany({ where: { doctorId: sourceId } })
     for (const link of sourceLinks) {
