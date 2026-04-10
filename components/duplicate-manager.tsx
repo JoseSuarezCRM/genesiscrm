@@ -57,16 +57,16 @@ interface MergeTarget {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function DuplicateManager({ practicePairs, locationPairs, doctorPairs }: Props) {
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const [dismissed, setDismissed] = useState<string[]>([])
   const [mergeTarget, setMergeTarget] = useState<MergeTarget | null>(null)
   const [keepId, setKeepId] = useState<string>("")
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [merged, setMerged] = useState<Set<string>>(new Set())
+  const [merged, setMerged] = useState<string[]>([])
 
   function dismiss(key: string) {
-    setDismissed((prev) => new Set([...prev, key]))
+    setDismissed((prev) => [...prev, key])
   }
 
   function openMerge(target: MergeTarget) {
@@ -91,7 +91,7 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
       if (result?.error) {
         setError(result.error)
       } else {
-        setMerged((prev) => new Set([...prev, pairKey]))
+        setMerged((prev) => [...prev, pairKey])
         setMergeTarget(null)
         setSuccess(`Merged successfully.`)
         setTimeout(() => setSuccess(null), 4000)
@@ -100,13 +100,13 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
   }
 
   const visiblePracticePairs = practicePairs.filter(
-    ({ a, b }) => !dismissed.has(`p-${a.id}-${b.id}`) && !merged.has(`p-${a.id}-${b.id}`)
+    ({ a, b }) => !dismissed.includes(`p-${a.id}-${b.id}`) && !merged.includes(`p-${a.id}-${b.id}`)
   )
   const visibleLocationPairs = locationPairs.filter(
-    ({ a, b }) => !dismissed.has(`l-${a.id}-${b.id}`) && !merged.has(`l-${a.id}-${b.id}`)
+    ({ a, b }) => !dismissed.includes(`l-${a.id}-${b.id}`) && !merged.includes(`l-${a.id}-${b.id}`)
   )
   const visibleDoctorPairs = doctorPairs.filter(
-    ({ a, b }) => !dismissed.has(`d-${a.id}-${b.id}`) && !merged.has(`d-${a.id}-${b.id}`)
+    ({ a, b }) => !dismissed.includes(`d-${a.id}-${b.id}`) && !merged.includes(`d-${a.id}-${b.id}`)
   )
 
   const totalVisible = visiblePracticePairs.length + visibleLocationPairs.length + visibleDoctorPairs.length
