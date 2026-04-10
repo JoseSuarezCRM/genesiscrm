@@ -19,6 +19,7 @@ import {
   ChevronRight,
   CheckSquare,
   Zap,
+  CopyX,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 const navItems = [
@@ -35,6 +36,7 @@ const adminItems = [
   { href: "/settings/outreach", label: "Outreach Templates", icon: MessageSquare },
   { href: "/settings/embed",    label: "Embed Referral Form", icon: Code2 },
   { href: "/automations",       label: "Automations",        icon: Zap },
+  { href: "/settings/duplicates", label: "Duplicate Detection", icon: CopyX },
 ]
 
 interface SidebarProps {
