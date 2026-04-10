@@ -37,10 +37,12 @@ interface DoctorItem {
   _count: { referrals: number }
 }
 
+type MatchReason = "exact" | "similar"
+
 interface Props {
-  practicePairs: { a: PracticeItem; b: PracticeItem }[]
-  locationPairs: { practice: { id: string; name: string }; a: LocationItem; b: LocationItem }[]
-  doctorPairs: { a: DoctorItem; b: DoctorItem }[]
+  practicePairs: { a: PracticeItem; b: PracticeItem; reason: MatchReason }[]
+  locationPairs: { practice: { id: string; name: string }; a: LocationItem; b: LocationItem; reason: MatchReason }[]
+  doctorPairs: { a: DoctorItem; b: DoctorItem; reason: MatchReason }[]
 }
 
 // ─── Merge dialog ─────────────────────────────────────────────────────────────
@@ -132,11 +134,12 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
       {visiblePracticePairs.length > 0 && (
         <section className="space-y-3">
           <SectionHeader icon={Building2} label="Organizations / Practices" count={visiblePracticePairs.length} />
-          {visiblePracticePairs.map(({ a, b }) => {
+          {visiblePracticePairs.map(({ a, b, reason }) => {
             const key = `p-${a.id}-${b.id}`
             return (
               <DuplicateCard
                 key={key}
+                reason={reason}
                 a={{ id: a.id, label: a.name, sub: a.address ?? undefined, referrals: a._count.referrals }}
                 b={{ id: b.id, label: b.name, sub: b.address ?? undefined, referrals: b._count.referrals }}
                 onMerge={() =>
@@ -158,11 +161,12 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
       {visibleLocationPairs.length > 0 && (
         <section className="space-y-3">
           <SectionHeader icon={MapPin} label="Locations (same practice)" count={visibleLocationPairs.length} />
-          {visibleLocationPairs.map(({ practice, a, b }) => {
+          {visibleLocationPairs.map(({ practice, a, b, reason }) => {
             const key = `l-${a.id}-${b.id}`
             return (
               <DuplicateCard
                 key={key}
+                reason={reason}
                 context={`Practice: ${practice.name}`}
                 a={{ id: a.id, label: a.name, sub: a.address ?? undefined, referrals: a._count.referrals }}
                 b={{ id: b.id, label: b.name, sub: b.address ?? undefined, referrals: b._count.referrals }}
@@ -185,11 +189,12 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
       {visibleDoctorPairs.length > 0 && (
         <section className="space-y-3">
           <SectionHeader icon={User} label="Providers" count={visibleDoctorPairs.length} />
-          {visibleDoctorPairs.map(({ a, b }) => {
+          {visibleDoctorPairs.map(({ a, b, reason }) => {
             const key = `d-${a.id}-${b.id}`
             return (
               <DuplicateCard
                 key={key}
+                reason={reason}
                 a={{
                   id: a.id,
                   label: [a.name, a.title].filter(Boolean).join(", "),
@@ -306,20 +311,27 @@ function DuplicateCard({
   a,
   b,
   context,
+  reason,
   onMerge,
   onDismiss,
 }: {
   a: { id: string; label: string; sub?: string; referrals: number }
   b: { id: string; label: string; sub?: string; referrals: number }
   context?: string
+  reason: MatchReason
   onMerge: () => void
   onDismiss: () => void
 }) {
   return (
-    <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-      <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+    <div className={`flex items-start gap-3 p-4 rounded-xl border ${reason === "exact" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+      <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${reason === "exact" ? "text-red-500" : "text-amber-500"}`} />
       <div className="flex-1 min-w-0 space-y-2">
-        {context && <p className="text-xs text-slate-500 font-medium">{context}</p>}
+        <div className="flex items-center gap-2">
+          {context && <p className="text-xs text-slate-500 font-medium">{context}</p>}
+          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${reason === "exact" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+            {reason === "exact" ? "Exact match" : "Similar name"}
+          </span>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <RecordCard item={a} />
           <RecordCard item={b} />
