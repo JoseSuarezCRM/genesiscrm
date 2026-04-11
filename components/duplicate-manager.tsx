@@ -322,45 +322,31 @@ function DuplicateCard({
   onMerge: () => void
   onDismiss: () => void
 }) {
+  const isExact = reason === "exact"
   return (
-    <div className={`flex items-start gap-3 p-4 rounded-xl border ${reason === "exact" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
-      <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${reason === "exact" ? "text-red-500" : "text-amber-500"}`} />
-      <div className="flex-1 min-w-0 space-y-2">
-        <div className="flex items-center gap-2">
-          {context && <p className="text-xs text-slate-500 font-medium">{context}</p>}
-          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${reason === "exact" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-            {reason === "exact" ? "Exact match" : "Similar name"}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <RecordCard item={a} />
-          <RecordCard item={b} />
-        </div>
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${isExact ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+      <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${isExact ? "text-red-400" : "text-amber-400"}`} />
+      <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${isExact ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+        {isExact ? "Exact" : "Similar"}
+      </span>
+      {context && <span className="text-xs text-slate-400 shrink-0">{context} ·</span>}
+      <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+        <span className="font-medium text-slate-800 truncate">{a.label}</span>
+        {a.sub && <span className="text-slate-400 text-xs truncate hidden sm:inline">({a.sub})</span>}
+        <span className="text-xs text-slate-400 shrink-0">{a.referrals}r</span>
+        <span className="text-slate-300 shrink-0">vs</span>
+        <span className="font-medium text-slate-800 truncate">{b.label}</span>
+        {b.sub && <span className="text-slate-400 text-xs truncate hidden sm:inline">({b.sub})</span>}
+        <span className="text-xs text-slate-400 shrink-0">{b.referrals}r</span>
       </div>
-      <div className="flex gap-2 shrink-0">
-        <Button size="sm" variant="outline" className="text-xs h-8 bg-white" onClick={onMerge}>
+      <div className="flex items-center gap-1 shrink-0">
+        <Button size="sm" variant="outline" className="text-xs h-7 px-2 bg-white" onClick={onMerge}>
           Merge
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-xs h-8 text-slate-400 hover:text-slate-600"
-          title="Dismiss"
-          onClick={onDismiss}
-        >
-          <X className="h-3.5 w-3.5" />
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-slate-300 hover:text-slate-500" title="Dismiss" onClick={onDismiss}>
+          <X className="h-3 w-3" />
         </Button>
       </div>
-    </div>
-  )
-}
-
-function RecordCard({ item }: { item: { id: string; label: string; sub?: string; referrals: number } }) {
-  return (
-    <div className="bg-white border border-amber-100 rounded-lg px-3 py-2 min-w-0">
-      <p className="font-medium text-sm text-slate-800 truncate">{item.label}</p>
-      {item.sub && <p className="text-xs text-slate-500 truncate mt-0.5">{item.sub}</p>}
-      <p className="text-xs text-slate-400 mt-1">{item.referrals} referral{item.referrals !== 1 ? "s" : ""}</p>
     </div>
   )
 }
