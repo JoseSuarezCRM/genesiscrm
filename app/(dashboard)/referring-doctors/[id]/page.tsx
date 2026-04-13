@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Building2, MapPin, CalendarDays } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
 import ProviderNotesSection from "@/components/provider-notes-section"
+import { format } from "date-fns"
 
 interface Props {
   params: { id: string }
@@ -21,20 +23,29 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 }
 
 export default async function ProviderDetailPage({ params }: Props) {
-  const provider = await prisma.referringDoctor.findUnique({
-    where: { id: params.id },
-    include: {
-      practice: true,
-      locations: { include: { location: true } },
-      referrals: {
-        orderBy: { referralDate: "desc" },
+  const [provider, activities] = await Promise.all([
+    prisma.referringDoctor.findUnique({
+      where: { id: params.id },
+      include: {
+        practice: true,
+        locations: { include: { location: true } },
+        referrals: { orderBy: { referralDate: "desc" } },
+        providerNotes: {
+          orderBy: { createdAt: "desc" },
+          include: { createdBy: { select: { name: true, email: true } } },
+        },
       },
-      providerNotes: {
-        orderBy: { createdAt: "desc" },
-        include: { createdBy: { select: { name: true, email: true } } },
+    }),
+    prisma.activity.findMany({
+      where: { providers: { some: { doctorId: params.id } } },
+      orderBy: { date: "desc" },
+      include: {
+        practice: { select: { id: true, name: true } },
+        location: { select: { id: true, name: true } },
+        createdBy: { select: { name: true, email: true } },
       },
-    },
-  })
+    }),
+  ])
 
   if (!provider) notFound()
 
@@ -148,6 +159,52 @@ export default async function ProviderDetailPage({ params }: Props) {
                     {formatDate(r.referralDate)}
                   </span>
                 </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Activities */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Activities ({activities.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {activities.length === 0 ? (
+            <p className="text-sm text-slate-400">No activities logged for this provider yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {activities.map((a) => (
+                <div key={a.id} className="flex items-start gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <div className="shrink-0 w-12 text-center">
+                    <p className="text-xs font-semibold text-blue-600 uppercase">{format(a.date, "MMM")}</p>
+                    <p className="text-xl font-bold text-slate-800 leading-none">{format(a.date, "d")}</p>
+                    <p className="text-xs text-slate-400">{format(a.date, "yyyy")}</p>
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {a.practice && (
+                        <span className="flex items-center gap-1 text-sm font-medium text-slate-800">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                          {a.practice.name}
+                        </span>
+                      )}
+                      {a.location && (
+                        <span className="flex items-center gap-1 text-xs text-slate-500">
+                          <MapPin className="h-3 w-3" />
+                          {a.location.name}
+                        </span>
+                      )}
+                    </div>
+                    {a.notes && <p className="text-sm text-slate-600">{a.notes}</p>}
+                    <p className="text-xs text-slate-400">
+                      Logged by {a.createdBy.name ?? a.createdBy.email}
+                    </p>
+                  </div>
+                </div>
               ))}
             </div>
           )}
