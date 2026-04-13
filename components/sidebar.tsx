@@ -22,9 +22,12 @@ import {
   CopyX,
   CalendarDays,
   RefreshCw,
+  ClipboardList,
+  Building2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-const navItems = [
+
+const referralItems = [
   { href: "/",                  label: "Dashboard",           icon: LayoutDashboard },
   { href: "/referrals",         label: "Referrals",           icon: Users },
   { href: "/referring-doctors", label: "Referring Providers", icon: UserCheck },
@@ -34,13 +37,18 @@ const navItems = [
   { href: "/broadcasts",        label: "Broadcasts",          icon: Send },
 ]
 
+const appointmentItems = [
+  { href: "/appointments",           label: "Completed Appts",       icon: ClipboardList },
+  { href: "/appointments/providers", label: "Referring Providers",   icon: Building2 },
+]
+
 const adminItems = [
-  { href: "/settings/users",    label: "User Management",    icon: Settings },
-  { href: "/settings/outreach", label: "Outreach Templates", icon: MessageSquare },
-  { href: "/settings/embed",    label: "Embed Referral Form", icon: Code2 },
-  { href: "/automations",       label: "Automations",        icon: Zap },
-  { href: "/settings/duplicates",   label: "Duplicate Detection",      icon: CopyX },
-  { href: "/settings/reconcile",   label: "Appt Reconciliation",      icon: RefreshCw },
+  { href: "/settings/users",         label: "User Management",       icon: Settings },
+  { href: "/settings/outreach",      label: "Outreach Templates",    icon: MessageSquare },
+  { href: "/settings/embed",         label: "Embed Referral Form",   icon: Code2 },
+  { href: "/automations",            label: "Automations",           icon: Zap },
+  { href: "/settings/duplicates",    label: "Duplicate Detection",   icon: CopyX },
+  { href: "/settings/reconcile",     label: "Appt Reconciliation",   icon: RefreshCw },
 ]
 
 interface SidebarProps {
@@ -81,8 +89,14 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1">
-        {navItems.map(({ href, label, icon: Icon }) => {
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {/* Referrals section */}
+        {!collapsed && (
+          <div className="pb-1 px-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Referrals</p>
+          </div>
+        )}
+        {referralItems.map(({ href, label, icon: Icon }) => {
           const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href)
           return (
             <Link
@@ -101,6 +115,33 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
           )
         })}
 
+        {/* Appointments section */}
+        {!collapsed && (
+          <div className="pt-3 pb-1 px-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Appointments</p>
+          </div>
+        )}
+        {collapsed && <div className="pt-2 border-t border-slate-700 mt-2" />}
+        {appointmentItems.map(({ href, label, icon: Icon }) => {
+          const isActive = pathname === href || pathname.startsWith(href + "/")
+          return (
+            <Link
+              key={href}
+              href={href}
+              title={collapsed ? label : undefined}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                collapsed && "justify-center px-2",
+                isActive ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {!collapsed && label}
+            </Link>
+          )
+        })}
+
+        {/* Admin section */}
         {userRole === "ADMIN" && (
           <>
             {!collapsed && (
