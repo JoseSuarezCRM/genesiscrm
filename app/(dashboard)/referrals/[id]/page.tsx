@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import Link from "next/link"
-import { ChevronLeft, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
+import BackButton from "@/components/back-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
@@ -62,13 +62,7 @@ export default async function ReferralDetailPage({ params }: Props) {
     <div className="p-6 max-w-5xl space-y-6">
       {/* Breadcrumb */}
       <div>
-        <Link
-          href="/referrals"
-          className="inline-flex items-center text-sm text-slate-500 hover:text-slate-800 mb-3"
-        >
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Referrals
-        </Link>
+        <BackButton label="Back to Referrals" fallback="/referrals" />
 
         <div className="flex items-start justify-between gap-4">
           <div>
