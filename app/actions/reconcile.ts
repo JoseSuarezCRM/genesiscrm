@@ -4,11 +4,6 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
-function normalizePhone(s: string | null | undefined): string {
-  if (!s) return ""
-  return s.replace(/\D/g, "").slice(-10)
-}
-
 function normalizeMrn(s: string | null | undefined): string {
   if (!s) return ""
   return s.replace(/\D/g, "")
@@ -16,23 +11,30 @@ function normalizeMrn(s: string | null | undefined): string {
 
 export interface CsvRow {
   mrn: string
-  phone1: string
-  phone2: string
   patientName: string
   visitDate: string
-  apptStatus: string
 }
 
 export interface MatchResult {
   csvRow: CsvRow
   referralId: string
-  patientName: string
+  appPatientName: string
+  appGenesisMrn: string | null
+  appScheduledDate: string | null
   currentStatus: string
-  matchedBy: "mrn" | "phone"
-  matchedValue: string
 }
 
-/** Clean existing genesisMrn values — strips "MRN: " prefix and non-digit chars */
+export interface AppliedRecord {
+  id: string
+  appPatientName: string
+  appGenesisMrn: string | null
+  appScheduledDate: string | null
+  reportMrn: string
+  reportVisitDate: string
+  previousStatus: string
+}
+
+/** Strip "MRN: " prefix and non-digit chars from all existing genesisMrn values */
 export async function cleanupGenesisMrn() {
   const session = await auth()
   if ((session?.user as any)?.role !== "ADMIN") return { error: "Unauthorized" }
@@ -55,74 +57,46 @@ export async function cleanupGenesisMrn() {
   return { success: true, fixed }
 }
 
-/** Match CSV rows against referrals. Returns preview of what would be updated. */
+/** Match CSV rows to referrals by Genesis MRN only */
 export async function matchAppointments(rows: CsvRow[]): Promise<{ matches: MatchResult[]; unmatched: number }> {
   const session = await auth()
   if (!session?.user) return { matches: [], unmatched: rows.length }
 
-  // Only try to complete referrals that aren't already done
   const referrals = await prisma.referral.findMany({
-    where: { status: { notIn: ["COMPLETED", "NO_SHOW"] } },
+    where: {
+      genesisMrn: { not: null },
+      status: { notIn: ["COMPLETED", "NO_SHOW"] },
+    },
     select: {
       id: true,
       patientFirstName: true,
       patientLastName: true,
-      patientPhone: true,
-      patientMrn: true,
       genesisMrn: true,
+      appointmentDate: true,
       status: true,
     },
   })
 
   const matches: MatchResult[] = []
-  const matchedReferralIds = new Set<string>()
+  const matchedIds = new Set<string>()
 
   for (const row of rows) {
     const rowMrn = normalizeMrn(row.mrn)
-    const rowPhone1 = normalizePhone(row.phone1)
-    const rowPhone2 = normalizePhone(row.phone2)
+    if (!rowMrn) continue
 
-    let match: (typeof referrals)[number] | undefined
-    let matchedBy: "mrn" | "phone" = "mrn"
-    let matchedValue = ""
-
-    // 1. Try Genesis MRN first
-    if (rowMrn) {
-      match = referrals.find(
-        (r) => !matchedReferralIds.has(r.id) && normalizeMrn(r.genesisMrn) === rowMrn
-      )
-      if (match) { matchedBy = "mrn"; matchedValue = rowMrn }
-    }
-
-    // 2. Try patient MRN
-    if (!match && rowMrn) {
-      match = referrals.find(
-        (r) => !matchedReferralIds.has(r.id) && normalizeMrn(r.patientMrn) === rowMrn
-      )
-      if (match) { matchedBy = "mrn"; matchedValue = rowMrn }
-    }
-
-    // 3. Try phone number
-    if (!match) {
-      for (const phone of [rowPhone1, rowPhone2].filter(Boolean)) {
-        match = referrals.find(
-          (r) =>
-            !matchedReferralIds.has(r.id) &&
-            normalizePhone(r.patientPhone) === phone
-        )
-        if (match) { matchedBy = "phone"; matchedValue = phone; break }
-      }
-    }
+    const match = referrals.find(
+      (r) => !matchedIds.has(r.id) && normalizeMrn(r.genesisMrn) === rowMrn
+    )
 
     if (match) {
-      matchedReferralIds.add(match.id)
+      matchedIds.add(match.id)
       matches.push({
         csvRow: row,
         referralId: match.id,
-        patientName: `${match.patientFirstName} ${match.patientLastName}`,
+        appPatientName: `${match.patientFirstName} ${match.patientLastName}`,
+        appGenesisMrn: match.genesisMrn,
+        appScheduledDate: match.appointmentDate ? match.appointmentDate.toISOString() : null,
         currentStatus: match.status,
-        matchedBy,
-        matchedValue,
       })
     }
   }
@@ -130,25 +104,13 @@ export async function matchAppointments(rows: CsvRow[]): Promise<{ matches: Matc
   return { matches, unmatched: rows.length - matches.length }
 }
 
-export interface AppliedRecord {
-  id: string
-  patientFirstName: string
-  patientLastName: string
-  genesisMrn: string | null
-  patientMrn: string | null
-  patientPhone: string | null
-  referralDate: string
-  previousStatus: string
-}
-
-/** Apply reconciliation — mark matched referrals as COMPLETED, return full report */
-export async function applyReconciliation(referralIds: string[]) {
+/** Mark matched referrals as COMPLETED and return full report */
+export async function applyReconciliation(referralIds: string[], matchMap: Record<string, { reportMrn: string; reportVisitDate: string }>) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
   if (!referralIds.length) return { error: "No referrals selected." }
 
   try {
-    // Fetch current state before updating (for the report)
     const before = await prisma.referral.findMany({
       where: { id: { in: referralIds } },
       select: {
@@ -156,9 +118,7 @@ export async function applyReconciliation(referralIds: string[]) {
         patientFirstName: true,
         patientLastName: true,
         genesisMrn: true,
-        patientMrn: true,
-        patientPhone: true,
-        referralDate: true,
+        appointmentDate: true,
         status: true,
       },
     })
@@ -172,26 +132,23 @@ export async function applyReconciliation(referralIds: string[]) {
       .filter((r) => r.status !== "COMPLETED" && r.status !== "NO_SHOW")
       .map((r) => ({
         id: r.id,
-        patientFirstName: r.patientFirstName,
-        patientLastName: r.patientLastName,
-        genesisMrn: r.genesisMrn,
-        patientMrn: r.patientMrn,
-        patientPhone: r.patientPhone,
-        referralDate: r.referralDate.toISOString(),
+        appPatientName: `${r.patientFirstName} ${r.patientLastName}`,
+        appGenesisMrn: r.genesisMrn,
+        appScheduledDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
+        reportMrn: matchMap[r.id]?.reportMrn ?? "",
+        reportVisitDate: matchMap[r.id]?.reportVisitDate ?? "",
         previousStatus: r.status,
       }))
 
-    // Referrals that were already completed/no-show and skipped
-    const skipped = before
+    const skipped: AppliedRecord[] = before
       .filter((r) => r.status === "COMPLETED" || r.status === "NO_SHOW")
       .map((r) => ({
         id: r.id,
-        patientFirstName: r.patientFirstName,
-        patientLastName: r.patientLastName,
-        genesisMrn: r.genesisMrn,
-        patientMrn: r.patientMrn,
-        patientPhone: r.patientPhone,
-        referralDate: r.referralDate.toISOString(),
+        appPatientName: `${r.patientFirstName} ${r.patientLastName}`,
+        appGenesisMrn: r.genesisMrn,
+        appScheduledDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
+        reportMrn: matchMap[r.id]?.reportMrn ?? "",
+        reportVisitDate: matchMap[r.id]?.reportVisitDate ?? "",
         previousStatus: r.status,
       }))
 
