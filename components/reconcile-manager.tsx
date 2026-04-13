@@ -2,7 +2,8 @@
 
 import { useState, useTransition, useRef } from "react"
 import { matchAppointments, applyReconciliation, cleanupGenesisMrn } from "@/app/actions/reconcile"
-import type { CsvRow, MatchResult } from "@/app/actions/reconcile"
+import type { CsvRow, MatchResult, AppliedRecord } from "@/app/actions/reconcile"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -89,6 +90,8 @@ export default function ReconcileManager() {
   const [unmatched, setUnmatched] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [appliedCount, setAppliedCount] = useState(0)
+  const [appliedRecords, setAppliedRecords] = useState<AppliedRecord[]>([])
+  const [skippedRecords, setSkippedRecords] = useState<AppliedRecord[]>([])
   const [error, setError] = useState<string | null>(null)
   const [cleanupMsg, setCleanupMsg] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -140,6 +143,8 @@ export default function ReconcileManager() {
         setError(result.error)
       } else {
         setAppliedCount(result.count ?? 0)
+        setAppliedRecords(result.applied ?? [])
+        setSkippedRecords(result.skipped ?? [])
         setStep("done")
       }
     })
@@ -307,17 +312,109 @@ export default function ReconcileManager() {
 
       {/* ── Step: Done ───────────────────────────────── */}
       {step === "done" && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
-          <p className="text-xl font-bold text-slate-800">
-            {appliedCount} referral{appliedCount !== 1 ? "s" : ""} marked as Completed
-          </p>
-          <p className="text-sm text-slate-500 mt-2">
-            The referral list has been updated.
-          </p>
-          <Button className="mt-6" onClick={() => { setStep("upload"); setFileName(""); setMatches([]) }}>
-            Reconcile another file
-          </Button>
+        <div className="space-y-6">
+          {/* Summary banner */}
+          <div className="flex items-center gap-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+            <CheckCircle className="h-8 w-8 text-green-500 shrink-0" />
+            <div>
+              <p className="font-semibold text-green-800">
+                {appliedCount} referral{appliedCount !== 1 ? "s" : ""} marked as Completed
+              </p>
+              <p className="text-sm text-green-600">
+                {fileName} · {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                {skippedRecords.length > 0 && ` · ${skippedRecords.length} skipped (already Completed / No Show)`}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={() => { setStep("upload"); setFileName(""); setMatches([]) }}>
+              Reconcile another file
+            </Button>
+          </div>
+
+          {/* Applied records table */}
+          {appliedRecords.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-700">Moved to Completed ({appliedRecords.length})</h2>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Patient</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Genesis MRN</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Patient MRN</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Phone</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Referral Date</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Was</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Now</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {appliedRecords.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-medium text-slate-800">{r.patientFirstName} {r.patientLastName}</td>
+                        <td className="px-3 py-2 text-slate-500">{r.genesisMrn ?? "—"}</td>
+                        <td className="px-3 py-2 text-slate-500">{r.patientMrn ?? "—"}</td>
+                        <td className="px-3 py-2 text-slate-500">{r.patientPhone ?? "—"}</td>
+                        <td className="px-3 py-2 text-slate-500">{new Date(r.referralDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                        <td className="px-3 py-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[r.previousStatus] ?? ""}`}>
+                            {r.previousStatus}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">COMPLETED</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Link href={`/referrals/${r.id}`} className="text-xs text-blue-600 hover:underline">
+                            View →
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Skipped records */}
+          {skippedRecords.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-500">Skipped — already Completed or No Show ({skippedRecords.length})</h2>
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-slate-500">Patient</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-500">Genesis MRN</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-500">Referral Date</th>
+                      <th className="px-3 py-2 text-left font-medium text-slate-500">Status</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {skippedRecords.map((r) => (
+                      <tr key={r.id} className="opacity-60">
+                        <td className="px-3 py-2 text-slate-700">{r.patientFirstName} {r.patientLastName}</td>
+                        <td className="px-3 py-2 text-slate-400">{r.genesisMrn ?? "—"}</td>
+                        <td className="px-3 py-2 text-slate-400">{new Date(r.referralDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                        <td className="px-3 py-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[r.previousStatus] ?? ""}`}>
+                            {r.previousStatus}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Link href={`/referrals/${r.id}`} className="text-xs text-blue-600 hover:underline">
+                            View →
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

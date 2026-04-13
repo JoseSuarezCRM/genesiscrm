@@ -130,21 +130,74 @@ export async function matchAppointments(rows: CsvRow[]): Promise<{ matches: Matc
   return { matches, unmatched: rows.length - matches.length }
 }
 
-/** Apply reconciliation — mark matched referrals as COMPLETED */
+export interface AppliedRecord {
+  id: string
+  patientFirstName: string
+  patientLastName: string
+  genesisMrn: string | null
+  patientMrn: string | null
+  patientPhone: string | null
+  referralDate: string
+  previousStatus: string
+}
+
+/** Apply reconciliation — mark matched referrals as COMPLETED, return full report */
 export async function applyReconciliation(referralIds: string[]) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
   if (!referralIds.length) return { error: "No referrals selected." }
 
   try {
+    // Fetch current state before updating (for the report)
+    const before = await prisma.referral.findMany({
+      where: { id: { in: referralIds } },
+      select: {
+        id: true,
+        patientFirstName: true,
+        patientLastName: true,
+        genesisMrn: true,
+        patientMrn: true,
+        patientPhone: true,
+        referralDate: true,
+        status: true,
+      },
+    })
+
     const { count } = await prisma.referral.updateMany({
       where: { id: { in: referralIds }, status: { notIn: ["COMPLETED", "NO_SHOW"] } },
       data: { status: "COMPLETED" },
     })
 
+    const applied: AppliedRecord[] = before
+      .filter((r) => r.status !== "COMPLETED" && r.status !== "NO_SHOW")
+      .map((r) => ({
+        id: r.id,
+        patientFirstName: r.patientFirstName,
+        patientLastName: r.patientLastName,
+        genesisMrn: r.genesisMrn,
+        patientMrn: r.patientMrn,
+        patientPhone: r.patientPhone,
+        referralDate: r.referralDate.toISOString(),
+        previousStatus: r.status,
+      }))
+
+    // Referrals that were already completed/no-show and skipped
+    const skipped = before
+      .filter((r) => r.status === "COMPLETED" || r.status === "NO_SHOW")
+      .map((r) => ({
+        id: r.id,
+        patientFirstName: r.patientFirstName,
+        patientLastName: r.patientLastName,
+        genesisMrn: r.genesisMrn,
+        patientMrn: r.patientMrn,
+        patientPhone: r.patientPhone,
+        referralDate: r.referralDate.toISOString(),
+        previousStatus: r.status,
+      }))
+
     revalidatePath("/referrals")
     revalidatePath("/")
-    return { success: true, count }
+    return { success: true, count, applied, skipped }
   } catch (e: any) {
     return { error: e?.message ?? "Failed to apply reconciliation." }
   }
