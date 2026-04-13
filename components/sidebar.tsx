@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Users,
   UserCheck,
@@ -17,6 +17,7 @@ import {
   Send,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   CheckSquare,
   Zap,
   CopyX,
@@ -38,23 +39,143 @@ const referralItems = [
 ]
 
 const appointmentItems = [
-  { href: "/appointments",           label: "Completed Appts",       icon: ClipboardList },
-  { href: "/appointments/providers", label: "Referring Providers",   icon: Building2 },
+  { href: "/appointments",           label: "Completed Appts",     icon: ClipboardList },
+  { href: "/appointments/providers", label: "Referring Providers", icon: Building2 },
 ]
 
 const adminItems = [
-  { href: "/settings/users",         label: "User Management",       icon: Settings },
-  { href: "/settings/outreach",      label: "Outreach Templates",    icon: MessageSquare },
-  { href: "/settings/embed",         label: "Embed Referral Form",   icon: Code2 },
-  { href: "/automations",            label: "Automations",           icon: Zap },
-  { href: "/settings/duplicates",    label: "Duplicate Detection",   icon: CopyX },
-  { href: "/settings/reconcile",     label: "Appt Reconciliation",   icon: RefreshCw },
+  { href: "/settings/users",      label: "User Management",    icon: Settings },
+  { href: "/settings/outreach",   label: "Outreach Templates", icon: MessageSquare },
+  { href: "/settings/embed",      label: "Embed Referral Form",icon: Code2 },
+  { href: "/automations",         label: "Automations",        icon: Zap },
+  { href: "/settings/duplicates", label: "Duplicate Detection",icon: CopyX },
+  { href: "/settings/reconcile",  label: "Appt Reconciliation",icon: RefreshCw },
 ]
 
 interface SidebarProps {
   userName: string | null | undefined
   userEmail: string
   userRole: string
+}
+
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  isActive,
+  collapsed,
+}: {
+  href: string
+  label: string
+  icon: React.ElementType
+  isActive: boolean
+  collapsed: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      title={collapsed ? label : undefined}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+        collapsed && "justify-center px-2",
+        isActive
+          ? "bg-blue-600 text-white"
+          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      {!collapsed && label}
+    </Link>
+  )
+}
+
+interface SectionProps {
+  title: string
+  items: { href: string; label: string; icon: React.ElementType }[]
+  pathname: string
+  collapsed: boolean
+  defaultOpen?: boolean
+}
+
+function NavSection({ title, items, pathname, collapsed, defaultOpen = true }: SectionProps) {
+  const hasActive = items.some((item) =>
+    item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")
+  )
+  const [open, setOpen] = useState(defaultOpen || hasActive)
+
+  // Auto-open if a child becomes active (e.g. on navigation)
+  useEffect(() => {
+    if (hasActive) setOpen(true)
+  }, [hasActive])
+
+  if (collapsed) {
+    return (
+      <>
+        <div className="pt-2 border-t border-slate-700 mt-1 mb-1" />
+        {items.map((item) => {
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname === item.href || pathname.startsWith(item.href + "/")
+          return (
+            <NavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              isActive={isActive}
+              collapsed
+            />
+          )
+        })}
+      </>
+    )
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-1.5 mt-2 rounded-md group hover:bg-slate-800 transition-colors"
+      >
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors">
+          {title}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-3 w-3 text-slate-600 group-hover:text-slate-400 transition-all duration-200",
+            open ? "rotate-0" : "-rotate-90"
+          )}
+        />
+      </button>
+
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-200",
+          open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        )}
+      >
+        <div className="pt-0.5 space-y-0.5">
+          {items.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname === item.href || pathname.startsWith(item.href + "/")
+            return (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                isActive={isActive}
+                collapsed={false}
+              />
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function Sidebar({ userName, userEmail, userRole }: SidebarProps) {
@@ -78,7 +199,12 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
       </button>
 
       {/* Brand */}
-      <div className={cn("flex items-center gap-3 border-b border-slate-700 overflow-hidden", collapsed ? "px-4 py-5 justify-center" : "px-6 py-5")}>
+      <div
+        className={cn(
+          "flex items-center gap-3 border-b border-slate-700 overflow-hidden shrink-0",
+          collapsed ? "px-4 py-5 justify-center" : "px-6 py-5"
+        )}
+      >
         <Image src="/logo.png" alt="Genesis Ortho" width={40} height={40} className="rounded-lg shrink-0" />
         {!collapsed && (
           <div>
@@ -89,88 +215,36 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        {/* Referrals section */}
-        {!collapsed && (
-          <div className="pb-1 px-3">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Referrals</p>
-          </div>
-        )}
-        {referralItems.map(({ href, label, icon: Icon }) => {
-          const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href)
-          return (
-            <Link
-              key={href}
-              href={href}
-              title={collapsed ? label : undefined}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                collapsed && "justify-center px-2",
-                isActive ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && label}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto sidebar-scroll">
+        <NavSection
+          title="Referrals"
+          items={referralItems}
+          pathname={pathname}
+          collapsed={collapsed}
+          defaultOpen
+        />
 
-        {/* Appointments section */}
-        {!collapsed && (
-          <div className="pt-3 pb-1 px-3">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Appointments</p>
-          </div>
-        )}
-        {collapsed && <div className="pt-2 border-t border-slate-700 mt-2" />}
-        {appointmentItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || pathname.startsWith(href + "/")
-          return (
-            <Link
-              key={href}
-              href={href}
-              title={collapsed ? label : undefined}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                collapsed && "justify-center px-2",
-                isActive ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && label}
-            </Link>
-          )
-        })}
+        <NavSection
+          title="Appointments"
+          items={appointmentItems}
+          pathname={pathname}
+          collapsed={collapsed}
+          defaultOpen
+        />
 
-        {/* Admin section */}
         {userRole === "ADMIN" && (
-          <>
-            {!collapsed && (
-              <div className="pt-3 pb-1 px-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Admin</p>
-              </div>
-            )}
-            {collapsed && <div className="pt-2 border-t border-slate-700 mt-2" />}
-            {adminItems.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                title={collapsed ? label : undefined}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  collapsed && "justify-center px-2",
-                  pathname === href ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed && label}
-              </Link>
-            ))}
-          </>
+          <NavSection
+            title="Admin"
+            items={adminItems}
+            pathname={pathname}
+            collapsed={collapsed}
+            defaultOpen={false}
+          />
         )}
       </nav>
 
       {/* User footer */}
-      <div className={cn("py-4 border-t border-slate-700", collapsed ? "px-2" : "px-3")}>
+      <div className={cn("py-4 border-t border-slate-700 shrink-0", collapsed ? "px-2" : "px-3")}>
         {!collapsed && (
           <div className="flex items-center gap-3 px-3 py-2 mb-2">
             <div className="flex items-center justify-center w-8 h-8 bg-blue-500 rounded-full text-xs font-bold shrink-0">
