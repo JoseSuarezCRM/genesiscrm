@@ -24,6 +24,14 @@ export interface MatchResult {
   currentStatus: string
 }
 
+export interface NoShowCandidate {
+  referralId: string
+  appPatientName: string
+  appGenesisMrn: string | null
+  appScheduledDate: string
+  currentStatus: string
+}
+
 export interface AppliedRecord {
   id: string
   appPatientName: string
@@ -32,6 +40,7 @@ export interface AppliedRecord {
   reportMrn: string
   reportVisitDate: string
   previousStatus: string
+  newStatus: "COMPLETED" | "NO_SHOW"
 }
 
 /** Strip "MRN: " prefix and non-digit chars from all existing genesisMrn values */
@@ -57,14 +66,27 @@ export async function cleanupGenesisMrn() {
   return { success: true, fixed }
 }
 
-/** Match CSV rows to referrals by Genesis MRN only */
-export async function matchAppointments(rows: CsvRow[]): Promise<{ matches: MatchResult[]; unmatched: number }> {
+/**
+ * Match CSV rows to referrals by Genesis MRN.
+ * Also returns referrals with appointmentDate in [dateFrom, dateTo] that were NOT matched
+ * — these are no-show candidates.
+ */
+export async function matchAppointments(
+  rows: CsvRow[],
+  dateFrom: string,
+  dateTo: string
+): Promise<{ matches: MatchResult[]; noShowCandidates: NoShowCandidate[]; unmatchedCsvRows: number }> {
   const session = await auth()
-  if (!session?.user) return { matches: [], unmatched: rows.length }
+  if (!session?.user) return { matches: [], noShowCandidates: [], unmatchedCsvRows: rows.length }
 
-  const referrals = await prisma.referral.findMany({
+  const from = new Date(dateFrom)
+  const to = new Date(dateTo)
+  to.setHours(23, 59, 59, 999) // inclusive end of day
+
+  // Referrals scheduled in the date range that haven't been resolved yet
+  const scheduledInRange = await prisma.referral.findMany({
     where: {
-      genesisMrn: { not: null },
+      appointmentDate: { gte: from, lte: to },
       status: { notIn: ["COMPLETED", "NO_SHOW"] },
     },
     select: {
@@ -79,12 +101,13 @@ export async function matchAppointments(rows: CsvRow[]): Promise<{ matches: Matc
 
   const matches: MatchResult[] = []
   const matchedIds = new Set<string>()
+  let unmatchedCsvRows = 0
 
   for (const row of rows) {
     const rowMrn = normalizeMrn(row.mrn)
     if (!rowMrn) continue
 
-    const match = referrals.find(
+    const match = scheduledInRange.find(
       (r) => !matchedIds.has(r.id) && normalizeMrn(r.genesisMrn) === rowMrn
     )
 
@@ -95,24 +118,42 @@ export async function matchAppointments(rows: CsvRow[]): Promise<{ matches: Matc
         referralId: match.id,
         appPatientName: `${match.patientFirstName} ${match.patientLastName}`,
         appGenesisMrn: match.genesisMrn,
-        appScheduledDate: match.appointmentDate ? match.appointmentDate.toISOString() : null,
+        appScheduledDate: match.appointmentDate!.toISOString(),
         currentStatus: match.status,
       })
+    } else {
+      unmatchedCsvRows++
     }
   }
 
-  return { matches, unmatched: rows.length - matches.length }
+  // Referrals in range with no match in the CSV → no-show candidates
+  const noShowCandidates: NoShowCandidate[] = scheduledInRange
+    .filter((r) => !matchedIds.has(r.id))
+    .map((r) => ({
+      referralId: r.id,
+      appPatientName: `${r.patientFirstName} ${r.patientLastName}`,
+      appGenesisMrn: r.genesisMrn,
+      appScheduledDate: r.appointmentDate!.toISOString(),
+      currentStatus: r.status,
+    }))
+
+  return { matches, noShowCandidates, unmatchedCsvRows }
 }
 
-/** Mark matched referrals as COMPLETED and return full report */
-export async function applyReconciliation(referralIds: string[], matchMap: Record<string, { reportMrn: string; reportVisitDate: string }>) {
+/** Apply: mark completedIds as COMPLETED and noShowIds as NO_SHOW */
+export async function applyReconciliation(
+  completedIds: string[],
+  noShowIds: string[],
+  matchMap: Record<string, { reportMrn: string; reportVisitDate: string }>
+) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
-  if (!referralIds.length) return { error: "No referrals selected." }
+  if (!completedIds.length && !noShowIds.length) return { error: "Nothing selected." }
 
   try {
+    const allIds = [...completedIds, ...noShowIds]
     const before = await prisma.referral.findMany({
-      where: { id: { in: referralIds } },
+      where: { id: { in: allIds } },
       select: {
         id: true,
         patientFirstName: true,
@@ -123,10 +164,16 @@ export async function applyReconciliation(referralIds: string[], matchMap: Recor
       },
     })
 
-    const { count } = await prisma.referral.updateMany({
-      where: { id: { in: referralIds }, status: { notIn: ["COMPLETED", "NO_SHOW"] } },
-      data: { status: "COMPLETED" },
-    })
+    await prisma.$transaction([
+      prisma.referral.updateMany({
+        where: { id: { in: completedIds }, status: { notIn: ["COMPLETED", "NO_SHOW"] } },
+        data: { status: "COMPLETED" },
+      }),
+      prisma.referral.updateMany({
+        where: { id: { in: noShowIds }, status: { notIn: ["COMPLETED", "NO_SHOW"] } },
+        data: { status: "NO_SHOW" },
+      }),
+    ])
 
     const applied: AppliedRecord[] = before
       .filter((r) => r.status !== "COMPLETED" && r.status !== "NO_SHOW")
@@ -138,23 +185,12 @@ export async function applyReconciliation(referralIds: string[], matchMap: Recor
         reportMrn: matchMap[r.id]?.reportMrn ?? "",
         reportVisitDate: matchMap[r.id]?.reportVisitDate ?? "",
         previousStatus: r.status,
-      }))
-
-    const skipped: AppliedRecord[] = before
-      .filter((r) => r.status === "COMPLETED" || r.status === "NO_SHOW")
-      .map((r) => ({
-        id: r.id,
-        appPatientName: `${r.patientFirstName} ${r.patientLastName}`,
-        appGenesisMrn: r.genesisMrn,
-        appScheduledDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
-        reportMrn: matchMap[r.id]?.reportMrn ?? "",
-        reportVisitDate: matchMap[r.id]?.reportVisitDate ?? "",
-        previousStatus: r.status,
+        newStatus: noShowIds.includes(r.id) ? "NO_SHOW" : "COMPLETED",
       }))
 
     revalidatePath("/referrals")
     revalidatePath("/")
-    return { success: true, count, applied, skipped }
+    return { success: true, applied }
   } catch (e: any) {
     return { error: e?.message ?? "Failed to apply reconciliation." }
   }
