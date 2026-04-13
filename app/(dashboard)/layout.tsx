@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import Sidebar from "@/components/sidebar"
 import NotificationBell from "@/components/notification-bell"
+import SessionWatcher from "@/components/session-watcher"
 
 export default async function DashboardLayout({
   children,
@@ -30,6 +31,7 @@ export default async function DashboardLayout({
         {children}
       </main>
       <NotificationBell initialNotifications={notifications} />
+      <SessionWatcher />
     </div>
   )
 }
