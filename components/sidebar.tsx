@@ -20,15 +20,17 @@ import {
   CheckSquare,
   Zap,
   CopyX,
+  CalendarDays,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 const navItems = [
-  { href: "/",                  label: "Dashboard",          icon: LayoutDashboard },
-  { href: "/referrals",         label: "Referrals",          icon: Users },
+  { href: "/",                  label: "Dashboard",           icon: LayoutDashboard },
+  { href: "/referrals",         label: "Referrals",           icon: Users },
   { href: "/referring-doctors", label: "Referring Providers", icon: UserCheck },
-  { href: "/tasks",             label: "Tasks",              icon: CheckSquare },
-  { href: "/reports",           label: "Reports",            icon: BarChart2 },
-  { href: "/broadcasts",        label: "Broadcasts",         icon: Send },
+  { href: "/activities",        label: "Activities",          icon: CalendarDays },
+  { href: "/tasks",             label: "Tasks",               icon: CheckSquare },
+  { href: "/reports",           label: "Reports",             icon: BarChart2 },
+  { href: "/broadcasts",        label: "Broadcasts",          icon: Send },
 ]
 
 const adminItems = [

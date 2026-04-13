@@ -138,18 +138,20 @@ model User {
   tasksAssigned         Task[]         @relation("TaskAssignedTo")
   notifications         Notification[]
   automations           Automation[]
+  activities            Activity[]
 }
 
 model ReferringPractice {
-  id        String             @id @default(cuid())
-  name      String
-  phone     String?
-  fax       String?
-  address   String?
-  createdAt DateTime           @default(now())
-  locations PracticeLocation[]
-  doctors   ReferringDoctor[]
-  referrals Referral[]
+  id         String             @id @default(cuid())
+  name       String
+  phone      String?
+  fax        String?
+  address    String?
+  createdAt  DateTime           @default(now())
+  locations  PracticeLocation[]
+  doctors    ReferringDoctor[]
+  referrals  Referral[]
+  activities Activity[]
 }
 
 // A specific office/campus of a practice
@@ -163,24 +165,26 @@ model PracticeLocation {
   practice   ReferringPractice @relation(fields: [practiceId], references: [id])
   doctors    DoctorLocation[]
   referrals  Referral[]
+  activities Activity[]
   createdAt  DateTime          @default(now())
 }
 
 // A provider — belongs to one practice, can work at multiple locations
 model ReferringDoctor {
-  id         String            @id @default(cuid())
-  name       String
-  title      String?           // MD, DO, NP, PA-C, DPM, etc.
-  npi        String?           // National Provider Identifier (10 digits)
-  specialty  String?
-  phone      String?
+  id            String             @id @default(cuid())
+  name          String
+  title         String?            // MD, DO, NP, PA-C, DPM, etc.
+  npi           String?            // National Provider Identifier (10 digits)
+  specialty     String?
+  phone         String?
   email         String?
   practiceId    String
-  practice      ReferringPractice @relation(fields: [practiceId], references: [id])
+  practice      ReferringPractice  @relation(fields: [practiceId], references: [id])
   locations     DoctorLocation[]
   referrals     Referral[]
   providerNotes ProviderNote[]
-  createdAt     DateTime          @default(now())
+  activities    ActivityProvider[]
+  createdAt     DateTime           @default(now())
 }
 
 // Join table: doctor <-> location (many-to-many)
@@ -432,6 +436,36 @@ model AutomationRun {
 
   @@index([automationId])
   @@index([contextType, contextId])
+}
+
+model Activity {
+  id          String             @id @default(cuid())
+  practiceId  String?
+  practice    ReferringPractice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+  locationId  String?
+  location    PracticeLocation?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  nextStep    String?
+  date        DateTime           @default(now())
+  frontDesk   String?
+  flyer       String?
+  notes       String?
+  createdById String
+  createdBy   User               @relation(fields: [createdById], references: [id])
+  createdAt   DateTime           @default(now())
+  providers   ActivityProvider[]
+
+  @@index([practiceId])
+  @@index([locationId])
+  @@index([createdAt])
+}
+
+model ActivityProvider {
+  activityId String
+  doctorId   String
+  activity   Activity        @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  doctor     ReferringDoctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, doctorId])
 }
 
 model OutreachTemplate {
