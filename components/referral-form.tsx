@@ -577,7 +577,14 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
               <Input {...register("patientMrn")} placeholder="MRN from referral source" />
             </Field>
             <Field label="Genesis MRN" error={errors.genesisMrn?.message}>
-              <Input {...register("genesisMrn")} placeholder="Internal Genesis MRN" />
+              <Input
+                {...register("genesisMrn")}
+                placeholder="Internal Genesis MRN"
+                onBlur={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "")
+                  setValue("genesisMrn", digits)
+                }}
+              />
             </Field>
             <Field label="Date of Birth" error={errors.patientDob?.message}>
               <Input {...register("patientDob")} type="date" />

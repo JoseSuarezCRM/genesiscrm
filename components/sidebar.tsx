@@ -21,6 +21,7 @@ import {
   Zap,
   CopyX,
   CalendarDays,
+  RefreshCw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 const navItems = [
@@ -38,7 +39,8 @@ const adminItems = [
   { href: "/settings/outreach", label: "Outreach Templates", icon: MessageSquare },
   { href: "/settings/embed",    label: "Embed Referral Form", icon: Code2 },
   { href: "/automations",       label: "Automations",        icon: Zap },
-  { href: "/settings/duplicates", label: "Duplicate Detection", icon: CopyX },
+  { href: "/settings/duplicates",   label: "Duplicate Detection",      icon: CopyX },
+  { href: "/settings/reconcile",   label: "Appt Reconciliation",      icon: RefreshCw },
 ]
 
 interface SidebarProps {
