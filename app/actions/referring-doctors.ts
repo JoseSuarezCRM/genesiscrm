@@ -398,15 +398,33 @@ export async function createProviderNote(providerId: string, content: string) {
   if (!session?.user) throw new Error("Unauthorized")
   if (!content.trim()) return { error: "Note cannot be empty" }
 
-  await prisma.providerNote.create({
-    data: {
-      content: content.trim(),
-      providerId,
-      createdById: session.user.id,
-    },
+  // Look up the provider's practice so the activity is linked to it too
+  const provider = await prisma.referringDoctor.findUnique({
+    where: { id: providerId },
+    select: { practiceId: true },
   })
 
+  await prisma.$transaction([
+    prisma.providerNote.create({
+      data: {
+        content: content.trim(),
+        providerId,
+        createdById: session.user.id,
+      },
+    }),
+    prisma.activity.create({
+      data: {
+        notes: content.trim(),
+        practiceId: provider?.practiceId ?? null,
+        date: new Date(),
+        createdById: session.user.id,
+        providers: { create: [{ doctorId: providerId }] },
+      },
+    }),
+  ])
+
   revalidatePath(`/referring-doctors/${providerId}`)
+  revalidatePath("/activities")
   return { success: true }
 }
 
