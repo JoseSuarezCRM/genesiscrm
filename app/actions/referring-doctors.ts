@@ -64,14 +64,28 @@ export async function deletePractice(id: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
-  const count = await prisma.referral.count({ where: { referringPracticeId: id } })
-  if (count > 0) {
-    return { error: `Cannot delete — this practice has ${count} referral(s) linked to it.` }
+  const [referralCount, locationCount, doctorCount] = await Promise.all([
+    prisma.referral.count({ where: { referringPracticeId: id } }),
+    prisma.practiceLocation.count({ where: { practiceId: id } }),
+    prisma.referringDoctor.count({ where: { practiceId: id } }),
+  ])
+
+  const reasons: string[] = []
+  if (referralCount > 0) reasons.push(`${referralCount} referral${referralCount !== 1 ? "s" : ""}`)
+  if (locationCount > 0) reasons.push(`${locationCount} location${locationCount !== 1 ? "s" : ""}`)
+  if (doctorCount > 0) reasons.push(`${doctorCount} provider${doctorCount !== 1 ? "s" : ""}`)
+
+  if (reasons.length > 0) {
+    return { error: `Cannot delete — this practice has ${reasons.join(", ")} linked to it. Remove or reassign them first, or use Merge instead.` }
   }
 
-  await prisma.referringPractice.delete({ where: { id } })
-  revalidatePath("/referring-doctors")
-  return { success: true }
+  try {
+    await prisma.referringPractice.delete({ where: { id } })
+    revalidatePath("/referring-doctors")
+    return { success: true }
+  } catch (e: any) {
+    return { error: e?.message ?? "Failed to delete practice." }
+  }
 }
 
 // ─── Locations ────────────────────────────────────────────────────────────────
@@ -152,14 +166,26 @@ export async function deleteLocation(id: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
-  const count = await prisma.referral.count({ where: { referringLocationId: id } })
-  if (count > 0) {
-    return { error: `Cannot delete — this location has ${count} referral(s) linked to it.` }
+  const [referralCount, doctorCount] = await Promise.all([
+    prisma.referral.count({ where: { referringLocationId: id } }),
+    prisma.doctorLocation.count({ where: { locationId: id } }),
+  ])
+
+  const reasons: string[] = []
+  if (referralCount > 0) reasons.push(`${referralCount} referral${referralCount !== 1 ? "s" : ""}`)
+  if (doctorCount > 0) reasons.push(`${doctorCount} provider${doctorCount !== 1 ? "s" : ""} linked to it`)
+
+  if (reasons.length > 0) {
+    return { error: `Cannot delete — this location has ${reasons.join(" and ")}. Remove them first, or use Merge instead.` }
   }
 
-  await prisma.practiceLocation.delete({ where: { id } })
-  revalidatePath("/referring-doctors")
-  return { success: true }
+  try {
+    await prisma.practiceLocation.delete({ where: { id } })
+    revalidatePath("/referring-doctors")
+    return { success: true }
+  } catch (e: any) {
+    return { error: e?.message ?? "Failed to delete location." }
+  }
 }
 
 export async function mergeLocation(sourceId: string, targetId: string) {
@@ -429,7 +455,11 @@ export async function deleteDoctor(id: string) {
     return { error: `Cannot delete — this provider has ${count} referral(s) linked to them.` }
   }
 
-  await prisma.referringDoctor.delete({ where: { id } })
+  try {
+    await prisma.referringDoctor.delete({ where: { id } })
+  } catch (e: any) {
+    return { error: e?.message ?? "Failed to delete provider." }
+  }
   revalidatePath("/referring-doctors")
   return { success: true }
 }
