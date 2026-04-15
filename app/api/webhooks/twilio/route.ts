@@ -15,21 +15,25 @@ function matchesRule(body: string, trigger: string, matchType: string): boolean 
 
 export async function POST(req: NextRequest) {
   try {
-    // ── Validate Twilio signature ──────────────────────────────────────────
-    const signature = req.headers.get("x-twilio-signature") ?? ""
-    const url = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/api/webhooks/twilio`
-
-    const body = await req.text()
+    const body   = await req.text()
     const params = Object.fromEntries(new URLSearchParams(body))
+
+    // ── Signature validation ───────────────────────────────────────────────
+    // Use the actual host the request arrived on — VERCEL_URL is the
+    // deployment-specific subdomain and won't match a custom domain.
+    const signature = req.headers.get("x-twilio-signature") ?? ""
+    const host      = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? ""
+    const webhookUrl = `https://${host}/api/webhooks/twilio`
 
     const isValid = twilio.validateRequest(
       process.env.TWILIO_AUTH_TOKEN!,
       signature,
-      url,
+      webhookUrl,
       params
     )
 
     if (!isValid && process.env.NODE_ENV === "production") {
+      console.error("[twilio webhook] Invalid signature. URL used:", webhookUrl)
       return new NextResponse("Forbidden", { status: 403 })
     }
 
@@ -73,15 +77,13 @@ export async function POST(req: NextRequest) {
     const matched = rules.find((r) => matchesRule(messageBody, r.trigger, r.matchType))
 
     if (matched) {
-      // Send auto-reply via Twilio
       const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!)
-      const sent = await client.messages.create({
+      const sent   = await client.messages.create({
         body: matched.response,
         from: process.env.TWILIO_PHONE!,
         to:   from,
       })
 
-      // Save auto-reply as outbound message in thread
       await prisma.$transaction([
         prisma.smsMessage.create({
           data: {
