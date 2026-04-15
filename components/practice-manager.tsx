@@ -109,13 +109,14 @@ function LocationForm({ practiceId, defaultValues, onSubmit, isPending, onClose 
 
 const PROVIDER_TITLES = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Other"]
 
-function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending, onClose }: {
+function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending, onClose, practices }: {
   practiceId: string
   locations: LocationWithCount[]
   defaultValues?: Partial<ReferringDoctor> & { locationIds?: string[] }
   onSubmit: (d: { name: string; title: string; npi: string; specialty: string; phone: string; email: string; practiceId: string; locationIds: string[] }) => Promise<void>
   isPending: boolean
   onClose: () => void
+  practices?: PracticeWithRelations[]  // when provided, shows a practice selector
 }) {
   const [name, setName] = useState(defaultValues?.name ?? "")
   const [title, setTitle] = useState((defaultValues as any)?.title ?? "")
@@ -125,13 +126,29 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
   const [email, setEmail] = useState(defaultValues?.email ?? "")
   const [selectedLocs, setSelectedLocs] = useState<string[]>(defaultValues?.locationIds ?? [])
   const [err, setErr] = useState("")
+  const [selectedPracticeId, setSelectedPracticeId] = useState(practiceId)
+
+  const activePractice = practices?.find((p) => p.id === selectedPracticeId)
+  const activeLocations = activePractice ? activePractice.locations : locations
 
   function toggleLoc(id: string) {
     setSelectedLocs((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
   }
 
   return (
-    <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, title, npi, specialty, phone, email, practiceId, locationIds: selectedLocs }) }} className="space-y-4">
+    <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, title, npi, specialty, phone, email, practiceId: selectedPracticeId, locationIds: selectedLocs }) }} className="space-y-4">
+      {practices && (
+        <Field label="Practice *">
+          <select
+            value={selectedPracticeId}
+            onChange={(e) => { setSelectedPracticeId(e.target.value); setSelectedLocs([]) }}
+            className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="">— Select practice —</option>
+            {practices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </Field>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Provider Name *" error={err}>
           <Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Sarah Johnson" />
@@ -155,11 +172,11 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
       <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="dr.johnson@clinic.com" /></Field>
       <div className="space-y-1.5">
         <Label>Locations (check all that apply)</Label>
-        {locations.length === 0 ? (
-          <p className="text-sm text-slate-400 italic">Add locations to this practice first.</p>
+        {activeLocations.length === 0 ? (
+          <p className="text-sm text-slate-400 italic">No locations for this practice yet.</p>
         ) : (
           <div className="space-y-2 border rounded-md p-3">
-            {locations.map((l) => (
+            {activeLocations.map((l) => (
               <label key={l.id} className="flex items-center gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={selectedLocs.includes(l.id)} onChange={() => toggleLoc(l.id)} className="rounded border-slate-300 h-4 w-4" />
                 <span className="text-sm font-medium">{l.name}</span>
@@ -274,6 +291,8 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [tab, setTab] = useState<"practices" | "providers">("practices")
+  const [providerSort, setProviderSort] = useState<"name" | "referrals">("name")
+  const [addProviderOpen, setAddProviderOpen] = useState(false)
 
   const [addPracticeOpen, setAddPracticeOpen] = useState(false)
   const [editPractice, setEditPractice] = useState<PracticeWithRelations | null>(null)
@@ -295,10 +314,14 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
     })
   }
 
-  // Flat sorted list of all providers across all practices
+  // Flat list of all providers across all practices
   const allProviders = practices
     .flatMap((p) => p.doctors.map((d) => ({ ...d, practiceName: p.name, practice: p })))
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) =>
+      providerSort === "referrals"
+        ? b._count.referrals - a._count.referrals
+        : a.name.localeCompare(b.name)
+    )
 
   return (
     <div className="space-y-4">
@@ -343,6 +366,48 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
               />
             </DialogContent>
           </Dialog>
+        )}
+
+        {tab === "providers" && (
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Sort toggle */}
+            <div className="flex gap-0.5 bg-slate-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setProviderSort("name")}
+                className={cn("px-2.5 py-1 text-xs font-medium rounded-md transition-colors", providerSort === "name" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+              >
+                A–Z
+              </button>
+              <button
+                onClick={() => setProviderSort("referrals")}
+                className={cn("px-2.5 py-1 text-xs font-medium rounded-md transition-colors", providerSort === "referrals" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+              >
+                Top refs
+              </button>
+            </div>
+            {isAdmin && (
+              <Dialog open={addProviderOpen} onOpenChange={setAddProviderOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Provider</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Add Provider</DialogTitle></DialogHeader>
+                  {practices.length === 0 ? (
+                    <p className="text-sm text-slate-500">Create a practice first before adding a provider.</p>
+                  ) : (
+                    <DoctorForm
+                      practiceId={practices[0].id}
+                      locations={[]}
+                      onSubmit={async (d) => { run(() => createDoctor(d)); setAddProviderOpen(false) }}
+                      isPending={isPending}
+                      onClose={() => setAddProviderOpen(false)}
+                      practices={practices}
+                    />
+                  )}
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         )}
       </div>
 
