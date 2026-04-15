@@ -86,6 +86,7 @@ const STATUS_OPTIONS: { value: ReferralStatus; label: string }[] = [
   { value: "SCHEDULED", label: "Scheduled" },
   { value: "COMPLETED", label: "Completed" },
   { value: "NO_SHOW", label: "No Show" },
+  { value: "LOST", label: "Lost" },
 ]
 
 const PERIOD_OPTIONS = [

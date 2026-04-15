@@ -14,6 +14,7 @@ const STATUS_COLORS: Record<ReferralStatus, string> = {
   SCHEDULED: "bg-purple-500",
   COMPLETED: "bg-green-500",
   NO_SHOW: "bg-red-400",
+  LOST: "bg-slate-400",
 }
 
 function resolveRange(range?: string, from?: string, to?: string): { start: Date; end: Date } {

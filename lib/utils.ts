@@ -13,6 +13,7 @@ export const STATUS_LABELS: Record<ReferralStatus, string> = {
   SCHEDULED: "Scheduled",
   COMPLETED: "Completed",
   NO_SHOW: "No Show",
+  LOST: "Lost",
 }
 
 export const STATUS_COLORS: Record<
@@ -48,6 +49,11 @@ export const STATUS_COLORS: Record<
     bg: "bg-red-50",
     text: "text-red-700",
     border: "border-red-200",
+  },
+  LOST: {
+    bg: "bg-slate-100",
+    text: "text-slate-600",
+    border: "border-slate-300",
   },
 }
 

@@ -26,6 +26,7 @@ const STATUS_LABELS: Record<ReferralStatus, string> = {
   SCHEDULED: "Scheduled",
   COMPLETED: "Completed",
   NO_SHOW: "No Show",
+  LOST: "Lost",
 }
 
 const TRIGGER_LABELS: Record<OutreachTrigger, string> = {

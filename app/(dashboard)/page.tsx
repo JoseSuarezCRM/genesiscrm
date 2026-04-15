@@ -139,6 +139,7 @@ export default async function DashboardPage() {
                 SCHEDULED: "bg-purple-500",
                 COMPLETED: "bg-green-500",
                 NO_SHOW: "bg-red-500",
+                LOST: "bg-slate-400",
               }
               return (
                 <div key={status} className="flex items-center gap-3">

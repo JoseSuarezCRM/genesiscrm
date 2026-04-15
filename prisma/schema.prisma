@@ -110,6 +110,7 @@ enum ReferralStatus {
   SCHEDULED
   COMPLETED
   NO_SHOW
+  LOST
 }
 
 model User {
