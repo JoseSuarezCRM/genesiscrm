@@ -471,6 +471,12 @@ model ActivityProvider {
   @@id([activityId, doctorId])
 }
 
+enum IvrAction {
+  PLAY_MESSAGE
+  FORWARD_CALL
+  HANG_UP
+}
+
 enum SmsDirection {
   INBOUND
   OUTBOUND
@@ -524,6 +530,42 @@ model CompletedAppointment {
   @@index([referringProvider])
   @@index([importedAt])
   @@index([importBatchId])
+}
+
+model IvrConfig {
+  id             String      @id @default(cuid())
+  isActive       Boolean     @default(false)
+  greeting       String      @default("Thank you for calling. Please listen to the following options.")
+  noInputMessage String      @default("We did not receive your input. Goodbye.")
+  invalidMessage String      @default("That is not a valid option. Please try again.")
+  gatherTimeout  Int         @default(5)
+  options        IvrOption[]
+  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime    @default(now())
+}
+
+model IvrOption {
+  id        String    @id @default(cuid())
+  configId  String
+  config    IvrConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  digit     String    // "1"–"9", "0"
+  label     String
+  action    IvrAction
+  message   String?   // for PLAY_MESSAGE
+  forwardTo String?   // for FORWARD_CALL
+  order     Int       @default(0)
+}
+
+model SmsAutoResponse {
+  id          String   @id @default(cuid())
+  isActive    Boolean  @default(true)
+  trigger     String   // keyword e.g. "YES", "1", "CANCEL"
+  matchType   String   @default("exact") // exact | contains | starts_with
+  response    String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model OutreachTemplate {
