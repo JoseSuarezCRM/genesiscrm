@@ -244,6 +244,7 @@ model Referral {
   callAttempts        CallAttempt[]
   tasks               Task[]
   smsThreads          SmsThread[]
+  sequenceEnrollments SequenceEnrollment[]
 }
 
 model CallAttempt {
@@ -578,6 +579,84 @@ model SmsAutoResponse {
   order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ── Sequences (drip campaigns) ───────────────────────────────────────────────
+
+enum StepChannel {
+  SMS
+  EMAIL
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum StepRunStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model Sequence {
+  id            String               @id @default(cuid())
+  name          String
+  description   String?
+  isActive      Boolean              @default(true)
+  trigger       String               @default("ON_STATUS_CHANGE") // ON_STATUS_CHANGE | ON_CREATE | MANUAL
+  triggerStatus ReferralStatus?
+  filters       Json                 @default("{}")               // { referringPracticeId?, insuranceProvider? }
+  steps         SequenceStep[]
+  enrollments   SequenceEnrollment[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model SequenceStep {
+  id         String            @id @default(cuid())
+  sequenceId String
+  sequence   Sequence          @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  order      Int
+  delayDays  Int               @default(0)
+  channel    StepChannel
+  subject    String?
+  body       String
+  runs       SequenceStepRun[]
+  createdAt  DateTime          @default(now())
+
+  @@index([sequenceId, order])
+}
+
+model SequenceEnrollment {
+  id         String           @id @default(cuid())
+  sequenceId String
+  sequence   Sequence         @relation(fields: [sequenceId], references: [id])
+  referralId String
+  referral   Referral         @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  enrolledAt DateTime         @default(now())
+  status     EnrollmentStatus @default(ACTIVE)
+  stepRuns   SequenceStepRun[]
+
+  @@unique([sequenceId, referralId])
+  @@index([referralId])
+}
+
+model SequenceStepRun {
+  id           String             @id @default(cuid())
+  enrollmentId String
+  enrollment   SequenceEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  stepId       String
+  step         SequenceStep       @relation(fields: [stepId], references: [id])
+  scheduledAt  DateTime
+  sentAt       DateTime?
+  status       StepRunStatus      @default(PENDING)
+  error        String?
+  createdAt    DateTime           @default(now())
+
+  @@index([status, scheduledAt])
 }
 
 model OutreachTemplate {

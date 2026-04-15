@@ -2,13 +2,16 @@ import Link from "next/link"
 import { listBroadcasts } from "@/app/actions/broadcasts"
 import { getIvrConfig } from "@/app/actions/ivr"
 import { getSmsAutoResponses } from "@/app/actions/sms-auto"
+import { getSequences } from "@/app/actions/sequences"
+import { prisma } from "@/lib/prisma"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Send, Clock, CheckCircle2, XCircle, Loader2, Phone, MessageSquare } from "lucide-react"
+import { Plus, Send, Clock, CheckCircle2, XCircle, Loader2, Phone, MessageSquare, GitBranch } from "lucide-react"
 import { format } from "date-fns"
 import { BroadcastStatus } from "@prisma/client"
 import IvrBuilder from "@/components/ivr-builder"
 import SmsAutoReplyManager from "@/components/sms-auto-reply-manager"
+import SequenceManager from "@/components/sequence-manager"
 
 const STATUS_CONFIG: Record<BroadcastStatus, { label: string; icon: React.ReactNode; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   DRAFT:     { label: "Draft",     icon: <Clock className="h-3 w-3" />,        variant: "secondary" },
@@ -19,9 +22,10 @@ const STATUS_CONFIG: Record<BroadcastStatus, { label: string; icon: React.ReactN
 }
 
 const TABS = [
-  { key: "email", label: "Email Broadcasts", icon: Send },
-  { key: "ivr",   label: "Voice IVR",        icon: Phone },
-  { key: "sms",   label: "SMS Auto-Reply",   icon: MessageSquare },
+  { key: "email",     label: "Email Broadcasts", icon: Send },
+  { key: "sequences", label: "Sequences",         icon: GitBranch },
+  { key: "ivr",       label: "Voice IVR",         icon: Phone },
+  { key: "sms",       label: "SMS Auto-Reply",    icon: MessageSquare },
 ]
 
 interface Props {
@@ -31,10 +35,12 @@ interface Props {
 export default async function BroadcastsPage({ searchParams }: Props) {
   const tab = searchParams.tab ?? "email"
 
-  const [broadcasts, ivrConfig, smsRules] = await Promise.all([
-    tab === "email" ? listBroadcasts() : Promise.resolve([]),
-    tab === "ivr"   ? getIvrConfig()   : Promise.resolve(null),
-    tab === "sms"   ? getSmsAutoResponses() : Promise.resolve([]),
+  const [broadcasts, ivrConfig, smsRules, sequences, practices] = await Promise.all([
+    tab === "email"     ? listBroadcasts()        : Promise.resolve([]),
+    tab === "ivr"       ? getIvrConfig()           : Promise.resolve(null),
+    tab === "sms"       ? getSmsAutoResponses()    : Promise.resolve([]),
+    tab === "sequences" ? getSequences()           : Promise.resolve([]),
+    tab === "sequences" ? prisma.referringPractice.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : Promise.resolve([]),
   ])
 
   return (
@@ -151,6 +157,11 @@ export default async function BroadcastsPage({ searchParams }: Props) {
               : null
           }
         />
+      )}
+
+      {/* Sequences tab */}
+      {tab === "sequences" && (
+        <SequenceManager sequences={sequences as any} practices={practices} />
       )}
 
       {/* SMS auto-reply tab */}

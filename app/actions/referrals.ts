@@ -16,6 +16,7 @@ import {
   runTrigger_ReferralAssigned,
 } from "@/lib/automation-engine"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
+import { enrollInMatchingSequences } from "@/app/actions/sequences"
 
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
@@ -147,13 +148,14 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
   revalidatePath("/referrals")
   revalidatePath("/")
 
-  // Run automations (non-blocking)
+  // Run automations + sequence enrollment (non-blocking)
   const rid = referral.id
   const uid = session.user.id
   Promise.allSettled([
     runTrigger_ReferralCreated(rid, uid),
     referral.referringDoctorId ? runTrigger_ProviderReferralCount(referral.referringDoctorId, uid) : Promise.resolve(),
     referral.referringPracticeId ? runTrigger_PracticeReferralCount(referral.referringPracticeId, uid) : Promise.resolve(),
+    enrollInMatchingSequences(rid, "ON_CREATE"),
   ])
 
   return { id: referral.id }

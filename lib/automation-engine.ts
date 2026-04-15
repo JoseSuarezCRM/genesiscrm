@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
+import { enrollInMatchingSequences } from "@/app/actions/sequences"
 
 // ─── Template variable resolution ─────────────────────────────────────────────
 
@@ -219,6 +220,9 @@ export async function runTrigger_StatusChanged(referralId: string, fromStatus: R
       data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Status changed ${fromStatus} → ${toStatus}` },
     })
   }
+
+  // Enroll in any matching sequences
+  await enrollInMatchingSequences(referralId, "ON_STATUS_CHANGE", toStatus).catch(() => {})
 }
 
 export async function runTrigger_CallAttemptsReached(referralId: string, callCount: number, triggeredByUserId?: string) {
