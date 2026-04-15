@@ -140,6 +140,7 @@ model User {
   automations           Automation[]
   activities            Activity[]
   completedAppointments CompletedAppointment[]
+  smsMessages           SmsMessage[]
 }
 
 model ReferringPractice {
@@ -241,6 +242,7 @@ model Referral {
   tags                ReferralTag[]
   callAttempts        CallAttempt[]
   tasks               Task[]
+  smsThreads          SmsThread[]
 }
 
 model CallAttempt {
@@ -467,6 +469,41 @@ model ActivityProvider {
   doctor     ReferringDoctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
   @@id([activityId, doctorId])
+}
+
+enum SmsDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model SmsThread {
+  id            String       @id @default(cuid())
+  phone         String       // E.164 format e.g. +15551234567
+  contactName   String?
+  referralId    String?
+  referral      Referral?    @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  lastMessageAt DateTime     @default(now())
+  unreadCount   Int          @default(0)
+  messages      SmsMessage[]
+  createdAt     DateTime     @default(now())
+
+  @@index([phone])
+  @@index([lastMessageAt])
+}
+
+model SmsMessage {
+  id         String        @id @default(cuid())
+  threadId   String
+  thread     SmsThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  body       String
+  direction  SmsDirection
+  status     String?       // sent | delivered | failed | received
+  twilioSid  String?       @unique
+  sentById   String?
+  sentBy     User?         @relation(fields: [sentById], references: [id], onDelete: SetNull)
+  createdAt  DateTime      @default(now())
+
+  @@index([threadId, createdAt])
 }
 
 model CompletedAppointment {

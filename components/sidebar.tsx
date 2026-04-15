@@ -25,6 +25,7 @@ import {
   RefreshCw,
   ClipboardList,
   Building2,
+  MessageCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +35,7 @@ const referralItems = [
   { href: "/referring-doctors", label: "Referring Providers", icon: UserCheck },
   { href: "/activities",        label: "Activities",          icon: CalendarDays },
   { href: "/tasks",             label: "Tasks",               icon: CheckSquare },
+  { href: "/messages",          label: "SMS Inbox",           icon: MessageCircle },
   { href: "/reports",           label: "Reports",             icon: BarChart2 },
   { href: "/broadcasts",        label: "Broadcasts",          icon: Send },
 ]
