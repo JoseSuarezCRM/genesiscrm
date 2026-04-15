@@ -52,6 +52,7 @@ const adminItems = [
   { href: "/automations",         label: "Automations",        icon: Zap },
   { href: "/settings/duplicates", label: "Duplicate Detection",icon: CopyX },
   { href: "/settings/reconcile",  label: "Appt Reconciliation",icon: RefreshCw },
+  { href: "/settings/org-rules",  label: "Org Name Rules",     icon: Building2 },
 ]
 
 interface SidebarProps {

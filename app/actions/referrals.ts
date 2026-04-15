@@ -15,6 +15,7 @@ import {
   runTrigger_PracticeReferralCount,
   runTrigger_ReferralAssigned,
 } from "@/lib/automation-engine"
+import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
@@ -80,6 +81,20 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
 
   const d = parsed.data
 
+  // If no practice is explicitly linked but there's a free-text org/doctor name,
+  // apply org-name rules to auto-resolve or create the practice.
+  let resolvedPracticeId = d.referringPracticeId || null
+  let resolvedLocationId = d.referringLocationId || null
+  if (!resolvedPracticeId && d.referringDoctorName?.trim()) {
+    const resolved = await resolveOrCreatePractice(
+      d.referringDoctorName,
+      d.referringAddress || null,
+      d.referringPhone || null,
+    )
+    resolvedPracticeId = resolved.practiceId
+    resolvedLocationId = resolved.locationId ?? resolvedLocationId
+  }
+
   const referral = await prisma.referral.create({
     data: {
       patientFirstName: d.patientFirstName,
@@ -89,8 +104,8 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
       patientPhone: d.patientPhone || null,
       patientEmail: d.patientEmail || null,
       patientDob: parseDate(d.patientDob),
-      referringPracticeId: d.referringPracticeId || null,
-      referringLocationId: d.referringLocationId || null,
+      referringPracticeId: resolvedPracticeId,
+      referringLocationId: resolvedLocationId,
       referringDoctorId: d.referringDoctorId || null,
       referringDoctorName: d.referringDoctorName || null,
       referringNpi: d.referringNpi || null,

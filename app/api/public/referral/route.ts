@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { sendEmail } from "@/lib/resend-client"
+import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 
 const schema = z.object({
   // Provider (all required)
@@ -40,6 +41,9 @@ export async function POST(req: NextRequest) {
 
   const { providerName, providerOrg, providerNpi, providerEmail, patientFirstName, patientLastName, patientDob, patientPhone, reason } = parsed.data
 
+  // Resolve org name via rules → find or create practice
+  const { practiceId, locationId } = await resolveOrCreatePractice(providerOrg)
+
   // Build structured notes combining reason + provider details
   const notesParts = [
     `Reason for Referral: ${reason}`,
@@ -56,6 +60,9 @@ export async function POST(req: NextRequest) {
       patientDob: new Date(patientDob),
       patientPhone,
       referringDoctorName: providerName,
+      referringNpi: providerNpi || null,
+      referringPracticeId: practiceId,
+      referringLocationId: locationId,
       notes: notesParts.join("\n"),
       // createdById is null — web submission, no logged-in user
     },
