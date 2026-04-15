@@ -84,13 +84,13 @@ export default function SessionWatcher() {
       className={cn(
         "fixed bottom-5 left-1/2 -translate-x-1/2 z-50",
         "w-full max-w-sm mx-4",
-        "bg-slate-900 text-white rounded-2xl shadow-2xl shadow-black/40",
+        "bg-slate-900 text-white rounded-2xl shadow-2xl shadow-black/40 overflow-hidden",
         "border border-slate-700",
         "animate-in slide-in-from-bottom-4 duration-300"
       )}
     >
       {/* Progress bar */}
-      <div className="h-1 rounded-t-2xl overflow-hidden bg-slate-700">
+      <div className="h-1 bg-slate-700">
         <div
           className={cn(
             "h-full transition-all duration-1000 ease-linear",
