@@ -13,10 +13,23 @@ function matchesRule(body: string, trigger: string, matchType: string): boolean 
   }
 }
 
+export async function GET() {
+  // Health check — confirms the route is reachable
+  return new NextResponse("Twilio webhook OK", { status: 200 })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body   = await req.text()
     const params = Object.fromEntries(new URLSearchParams(body))
+
+    // Log every inbound hit so we can confirm Twilio is reaching this route
+    console.log("[twilio webhook] HIT", {
+      from:    params.From,
+      body:    params.Body,
+      sid:     params.MessageSid,
+      host:    req.headers.get("x-forwarded-host") ?? req.headers.get("host"),
+    })
 
     // ── Signature validation ───────────────────────────────────────────────
     // TWILIO_WEBHOOK_URL must be set in Vercel env vars to the exact URL
