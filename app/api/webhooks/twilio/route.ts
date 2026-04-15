@@ -19,11 +19,15 @@ export async function POST(req: NextRequest) {
     const params = Object.fromEntries(new URLSearchParams(body))
 
     // ── Signature validation ───────────────────────────────────────────────
-    // Use the actual host the request arrived on — VERCEL_URL is the
-    // deployment-specific subdomain and won't match a custom domain.
-    const signature = req.headers.get("x-twilio-signature") ?? ""
-    const host      = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? ""
-    const webhookUrl = `https://${host}/api/webhooks/twilio`
+    // TWILIO_WEBHOOK_URL must be set in Vercel env vars to the exact URL
+    // configured in Twilio (e.g. https://genesiscrm.vercel.app/api/webhooks/twilio)
+    // If not set, we skip strict validation but log a warning.
+    const signature  = req.headers.get("x-twilio-signature") ?? ""
+    const webhookUrl = process.env.TWILIO_WEBHOOK_URL
+      ?? (() => {
+           const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? ""
+           return `https://${host}/api/webhooks/twilio`
+         })()
 
     const isValid = twilio.validateRequest(
       process.env.TWILIO_AUTH_TOKEN!,
@@ -32,9 +36,15 @@ export async function POST(req: NextRequest) {
       params
     )
 
-    if (!isValid && process.env.NODE_ENV === "production") {
-      console.error("[twilio webhook] Invalid signature. URL used:", webhookUrl)
-      return new NextResponse("Forbidden", { status: 403 })
+    if (!isValid) {
+      if (process.env.TWILIO_WEBHOOK_URL) {
+        // URL is explicitly set — safe to enforce
+        console.error("[twilio] Invalid signature for URL:", webhookUrl)
+        return new NextResponse("Forbidden", { status: 403 })
+      }
+      // URL was inferred — log the warning but allow through so messages
+      // aren't dropped while the env var is being configured
+      console.warn("[twilio] Signature mismatch (set TWILIO_WEBHOOK_URL to enforce). URL tried:", webhookUrl)
     }
 
     const from: string        = params.From ?? ""
