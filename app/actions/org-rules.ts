@@ -5,8 +5,6 @@ import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { applyRules } from "@/lib/org-rules-utils"
 
-export { applyRules }
-
 export interface OrgRuleInput {
   contains: string
   normalizedName: string
