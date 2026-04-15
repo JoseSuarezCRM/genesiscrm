@@ -532,6 +532,17 @@ model CompletedAppointment {
   @@index([importBatchId])
 }
 
+model OrgNameRule {
+  id             String   @id @default(cuid())
+  contains       String   // case-insensitive substring to match
+  normalizedName String   // canonical practice name to resolve to
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([order])
+}
+
 model IvrConfig {
   id             String      @id @default(cuid())
   isActive       Boolean     @default(false)
