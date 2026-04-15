@@ -3,6 +3,9 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { applyRules } from "@/lib/org-rules-utils"
+
+export { applyRules }
 
 export interface OrgRuleInput {
   contains: string
@@ -16,19 +19,6 @@ export async function resolveOrgName(raw: string): Promise<string> {
   return applyRules(raw, rules)
 }
 
-/** Pure function — apply an already-fetched rule list to a string. */
-export function applyRules(
-  raw: string,
-  rules: { contains: string; normalizedName: string }[]
-): string {
-  const lower = raw.toLowerCase().trim()
-  for (const rule of rules) {
-    if (lower.includes(rule.contains.toLowerCase().trim())) {
-      return rule.normalizedName
-    }
-  }
-  return raw.trim()
-}
 
 /**
  * Resolve org name → find or create ReferringPractice.
