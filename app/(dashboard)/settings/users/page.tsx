@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import UserManager from "@/components/user-manager"
+import { getTeams } from "@/app/actions/teams"
 
 export default async function UsersPage() {
   const session = await auth()
@@ -9,18 +10,21 @@ export default async function UsersPage() {
     redirect("/")
   }
 
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      permissions: true,
-      createdAt: true,
-      _count: { select: { referralsCreated: true } },
-    },
-  })
+  const [users, teams] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        permissions: true,
+        createdAt: true,
+        _count: { select: { referralsCreated: true } },
+      },
+    }),
+    getTeams(),
+  ])
 
   return (
     <div className="p-6 space-y-6">
@@ -31,7 +35,7 @@ export default async function UsersPage() {
         </p>
       </div>
 
-      <UserManager users={users} currentUserId={session!.user.id} />
+      <UserManager users={users} teams={teams} currentUserId={session!.user.id} />
     </div>
   )
 }
