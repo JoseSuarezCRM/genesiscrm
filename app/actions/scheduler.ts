@@ -175,6 +175,17 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
       day: SchedDay
     }[] = []
 
+    type StaffPool = typeof allStaff
+
+    const pickOne = (
+      candidates: StaffPool,
+      exclude: Set<string>
+    ) => {
+      // Prefer staff who are not last-resort first
+      const avail = candidates.filter((s) => !exclude.has(s.id) && !s.isLastResort)
+      return avail[0] ?? candidates.find((s) => !exclude.has(s.id)) ?? null
+    }
+
     for (const day of days) {
       // Staff available this day (not UNAVAILABLE)
       const available = allStaff.filter((s) => {
@@ -189,18 +200,6 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
       const assignedAsXR = new Set<string>()
       const assignedAsMA = new Set<string>()
       const assignedAsFD = new Set<string>()
-
-      function pickOne(
-        candidates: typeof regular,
-        exclude: Set<string>
-      ) {
-        // Prefer staff who are AVAILABLE over LAST_RESORT
-        const avail = candidates.filter(
-          (s) => !exclude.has(s.id) && !s.isLastResort &&
-            (available.find((a) => a.id === s.id)?.availability.find((av) => av.day === day)?.type ?? "AVAILABLE") === "AVAILABLE"
-        )
-        return avail[0] ?? candidates.find((s) => !exclude.has(s.id)) ?? null
-      }
 
       for (const loc of locations) {
         // ── XR slot ──
