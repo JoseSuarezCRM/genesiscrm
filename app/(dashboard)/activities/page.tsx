@@ -41,6 +41,9 @@ export default async function ActivitiesPage() {
     p.doctors.map((d) => ({ ...d, practiceName: p.name }))
   )
 
+  // All unique tags for filter suggestions
+  const allTags = Array.from(new Set(activities.flatMap((a) => (a as any).tags ?? []))) as string[]
+
   // Serialize dates
   const serialized = activities.map((a) => ({
     ...a,
@@ -61,6 +64,7 @@ export default async function ActivitiesPage() {
         activities={serialized as any}
         practices={practices as any}
         allDoctors={allDoctors}
+        allTags={allTags}
         currentUserId={session!.user.id}
       />
     </div>

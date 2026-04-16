@@ -14,6 +14,7 @@ const ActivitySchema = z.object({
   frontDesk: z.string().optional(),
   flyer: z.string().optional(),
   notes: z.string().optional(),
+  tags: z.array(z.string()).optional(),
 })
 
 export async function createActivity(data: unknown) {
@@ -23,12 +24,13 @@ export async function createActivity(data: unknown) {
   const parsed = ActivitySchema.safeParse(data)
   if (!parsed.success) return { error: "Invalid data" }
 
-  const { providerIds = [], date, ...rest } = parsed.data
+  const { providerIds = [], tags = [], date, ...rest } = parsed.data
 
   try {
     const activity = await prisma.activity.create({
       data: {
         ...rest,
+        tags,
         date: date ? new Date(date) : new Date(),
         createdById: session.user.id,
         providers: providerIds.length
@@ -51,13 +53,14 @@ export async function updateActivity(id: string, data: unknown) {
   const parsed = ActivitySchema.safeParse(data)
   if (!parsed.success) return { error: "Invalid data" }
 
-  const { providerIds = [], date, ...rest } = parsed.data
+  const { providerIds = [], tags = [], date, ...rest } = parsed.data
 
   try {
     await prisma.activity.update({
       where: { id },
       data: {
         ...rest,
+        tags,
         date: date ? new Date(date) : undefined,
         providers: {
           deleteMany: {},

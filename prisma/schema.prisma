@@ -475,6 +475,7 @@ model Activity {
   frontDesk   String?
   flyer       String?
   notes       String?
+  tags        String[]           @default([])
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])
   createdAt   DateTime           @default(now())
