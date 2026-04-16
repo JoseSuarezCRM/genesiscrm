@@ -2,66 +2,38 @@
 
 import { useState, useTransition, useMemo } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
+import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import {
-  Plus,
-  Loader2,
-  Trash2,
-  Pencil,
-  Search,
-  X,
-  CalendarDays,
-  Building2,
-  MapPin,
-  User,
-  ChevronDown,
+  Plus, Loader2, Trash2, Pencil, Search, X, CalendarDays,
+  Building2, MapPin, User, ChevronDown, Tag, Check,
 } from "lucide-react"
 import { format } from "date-fns"
+import { cn } from "@/lib/utils"
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TagObj { id: string; name: string; color: string }
 
 interface Practice {
-  id: string
-  name: string
-  locations: Location[]
-  doctors: Doctor[]
+  id: string; name: string
+  locations: Location[]; doctors: Doctor[]
 }
-
-interface Location {
-  id: string
-  name: string
-  address: string | null
-  practiceId: string
-}
-
-interface Doctor {
-  id: string
-  name: string
-  title: string | null
-  practiceId: string
-  practiceName: string
-}
+interface Location { id: string; name: string; address: string | null; practiceId: string }
+interface Doctor { id: string; name: string; title: string | null; practiceId: string; practiceName: string }
 
 interface ActivityRow {
-  id: string
-  date: string
+  id: string; date: string; tags: TagObj[]
   practice: { id: string; name: string } | null
   location: { id: string; name: string; address: string | null } | null
   providers: { doctor: { id: string; name: string; title: string | null } }[]
-  nextStep: string | null
-  frontDesk: string | null
-  flyer: string | null
-  notes: string | null
+  nextStep: string | null; frontDesk: string | null; flyer: string | null; notes: string | null
   createdBy: { name: string | null; email: string }
 }
 
@@ -69,80 +41,269 @@ interface Props {
   activities: ActivityRow[]
   practices: Practice[]
   allDoctors: Doctor[]
+  allTags: TagObj[]
   currentUserId: string
+}
+
+// ─── Color palette ────────────────────────────────────────────────────────────
+
+const COLOR_OPTIONS = [
+  { label: "Blue",   hex: "#3b82f6" },
+  { label: "Indigo", hex: "#6366f1" },
+  { label: "Purple", hex: "#a855f7" },
+  { label: "Pink",   hex: "#ec4899" },
+  { label: "Red",    hex: "#ef4444" },
+  { label: "Orange", hex: "#f97316" },
+  { label: "Yellow", hex: "#eab308" },
+  { label: "Green",  hex: "#22c55e" },
+  { label: "Teal",   hex: "#14b8a6" },
+  { label: "Slate",  hex: "#64748b" },
+]
+
+function hexToChipStyle(hex: string) {
+  return {
+    backgroundColor: hex + "20",
+    color: hex,
+    borderColor: hex + "50",
+  }
+}
+
+// ─── Color picker ─────────────────────────────────────────────────────────────
+
+function ColorPicker({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-200 rounded-lg shadow-sm">
+      {COLOR_OPTIONS.map(c => (
+        <button
+          key={c.hex}
+          type="button"
+          title={c.label}
+          onClick={() => onChange(c.hex)}
+          className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 flex items-center justify-center"
+          style={{ backgroundColor: c.hex, borderColor: value === c.hex ? "#1e293b" : "transparent" }}
+        >
+          {value === c.hex && <Check className="w-3 h-3 text-white" />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Tag chip ─────────────────────────────────────────────────────────────────
+
+function TagChip({ tag, onRemove, onClick, active, onColorChange }: {
+  tag: TagObj
+  onRemove?: () => void
+  onClick?: () => void
+  active?: boolean
+  onColorChange?: (hex: string) => void
+}) {
+  const [colorOpen, setColorOpen] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  function handleColorChange(hex: string) {
+    setColorOpen(false)
+    startTransition(async () => {
+      await updateTagColor(tag.id, hex)
+    })
+  }
+
+  return (
+    <span className="relative inline-flex items-center">
+      <span
+        onClick={onClick}
+        className={cn(
+          "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border transition-all",
+          onClick && "cursor-pointer hover:opacity-80",
+          active && "ring-2 ring-offset-1 ring-slate-400",
+          pending && "opacity-50"
+        )}
+        style={hexToChipStyle(tag.color)}
+      >
+        {onColorChange && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setColorOpen(v => !v) }}
+            className="w-2.5 h-2.5 rounded-full border border-current opacity-60 hover:opacity-100 shrink-0"
+            style={{ backgroundColor: tag.color }}
+            title="Change color"
+          />
+        )}
+        {tag.name}
+        {onRemove && (
+          <button type="button" onClick={e => { e.stopPropagation(); onRemove() }} className="hover:opacity-70 -mr-0.5">
+            <X className="h-2.5 w-2.5" />
+          </button>
+        )}
+      </span>
+      {colorOpen && (
+        <div className="absolute z-50 top-full left-0 mt-1">
+          <ColorPicker value={tag.color} onChange={handleColorChange} />
+        </div>
+      )}
+    </span>
+  )
+}
+
+// ─── Tag input (form) ─────────────────────────────────────────────────────────
+
+function TagInput({ selected, onChange, allTags }: {
+  selected: TagObj[]
+  onChange: (tags: TagObj[]) => void
+  allTags: TagObj[]
+}) {
+  const [input, setInput] = useState("")
+  const [focused, setFocused] = useState(false)
+  const [newColor, setNewColor] = useState(COLOR_OPTIONS[0].hex)
+  const [creating, startTransition] = useTransition()
+
+  const selectedIds = new Set(selected.map(t => t.id))
+  const filtered = allTags.filter(
+    t => t.name.toLowerCase().includes(input.toLowerCase()) && !selectedIds.has(t.id)
+  )
+  const isNew = input.trim() && !allTags.some(t => t.name.toLowerCase() === input.trim().toLowerCase())
+
+  function addExisting(tag: TagObj) {
+    onChange([...selected, tag])
+    setInput("")
+  }
+
+  function createAndAdd() {
+    const name = input.trim().toLowerCase()
+    if (!name) return
+    startTransition(async () => {
+      const tag = await upsertActivityTag(name, newColor)
+      onChange([...selected, tag])
+      setInput("")
+      setNewColor(COLOR_OPTIONS[0].hex)
+    })
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      if (filtered.length === 1 && !isNew) { addExisting(filtered[0]); return }
+      if (isNew) createAndAdd()
+    }
+    if (e.key === "Backspace" && !input && selected.length) {
+      onChange(selected.slice(0, -1))
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className={cn(
+        "min-h-[38px] flex flex-wrap gap-1 px-2 py-1.5 border border-slate-200 rounded-md bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent"
+      )}>
+        {selected.map(t => (
+          <TagChip
+            key={t.id} tag={t}
+            onRemove={() => onChange(selected.filter(x => x.id !== t.id))}
+            onColorChange={() => {}}
+          />
+        ))}
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 200)}
+          placeholder={selected.length === 0 ? "Type a tag name…" : ""}
+          className="flex-1 min-w-24 text-sm outline-none bg-transparent placeholder:text-slate-400"
+        />
+      </div>
+
+      {focused && (
+        <div className="border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden">
+          {/* Existing matches */}
+          {filtered.length > 0 && (
+            <div className="py-1">
+              {filtered.slice(0, 6).map(t => (
+                <button
+                  key={t.id} type="button" onMouseDown={() => addExisting(t)}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-slate-50 text-sm"
+                >
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Create new */}
+          {isNew && (
+            <div className="border-t border-slate-100 p-2 space-y-2">
+              <p className="text-xs text-slate-500 px-1">
+                Create <strong>"{input.trim().toLowerCase()}"</strong> — pick a color:
+              </p>
+              <ColorPicker value={newColor} onChange={setNewColor} />
+              <button
+                type="button" onMouseDown={createAndAdd}
+                disabled={creating}
+                className="w-full text-xs bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
+              >
+                {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Add tag
+              </button>
+            </div>
+          )}
+
+          {!isNew && filtered.length === 0 && input && (
+            <p className="text-xs text-slate-400 px-3 py-2 italic">No tags found.</p>
+          )}
+          {!input && filtered.length === 0 && selected.length === allTags.length && (
+            <p className="text-xs text-slate-400 px-3 py-2 italic">All tags selected.</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Searchable single-select picker ─────────────────────────────────────────
 
-function Picker({
-  placeholder,
-  value,
-  options,
-  onSelect,
-  onClear,
-}: {
-  placeholder: string
-  value: string
+function Picker({ placeholder, value, options, onSelect, onClear }: {
+  placeholder: string; value: string
   options: { id: string; label: string; sub?: string }[]
-  onSelect: (id: string) => void
-  onClear: () => void
+  onSelect: (id: string) => void; onClear: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
-  const filtered = options.filter(
-    (o) =>
-      o.label.toLowerCase().includes(q.toLowerCase()) ||
-      (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
+  const filtered = options.filter(o =>
+    o.label.toLowerCase().includes(q.toLowerCase()) ||
+    (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
   )
-  const selected = options.find((o) => o.id === value)
+  const selected = options.find(o => o.id === value)
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-md bg-white text-sm text-left hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
+      <button type="button" onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-md bg-white text-sm text-left hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
         <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
         <span className={`flex-1 truncate ${selected ? "text-slate-800" : "text-slate-400"}`}>
           {selected ? selected.label : placeholder}
         </span>
-        {selected ? (
-          <X
-            className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0"
-            onClick={(e) => { e.stopPropagation(); onClear(); setOpen(false) }}
-          />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-        )}
+        {selected
+          ? <X className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0" onClick={e => { e.stopPropagation(); onClear(); setOpen(false) }} />
+          : <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+        }
       </button>
-
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg">
           <div className="p-2 border-b border-slate-100">
-            <Input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search..."
-              className="h-8 text-sm"
-            />
+            <Input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search..." className="h-8 text-sm" />
           </div>
           <ul className="max-h-52 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-xs text-slate-400">No results</li>
-            ) : (
-              filtered.map((o) => (
-                <li
-                  key={o.id}
-                  onClick={() => { onSelect(o.id); setOpen(false); setQ("") }}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-50 text-sm"
-                >
+            {filtered.length === 0
+              ? <li className="px-3 py-2 text-xs text-slate-400">No results</li>
+              : filtered.map(o => (
+                <li key={o.id} onClick={() => { onSelect(o.id); setOpen(false); setQ("") }}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-50 text-sm">
                   <p className="font-medium text-slate-800">{o.label}</p>
                   {o.sub && <p className="text-xs text-slate-400">{o.sub}</p>}
                 </li>
               ))
-            )}
+            }
           </ul>
         </div>
       )}
@@ -152,47 +313,33 @@ function Picker({
 
 // ─── Multi-select provider picker ────────────────────────────────────────────
 
-function ProviderPicker({
-  options,
-  selected,
-  onToggle,
-}: {
+function ProviderPicker({ options, selected, onToggle }: {
   options: { id: string; label: string; sub?: string }[]
-  selected: string[]
-  onToggle: (id: string) => void
+  selected: string[]; onToggle: (id: string) => void
 }) {
   const [q, setQ] = useState("")
-  const filtered = options.filter(
-    (o) =>
-      o.label.toLowerCase().includes(q.toLowerCase()) ||
-      (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
+  const filtered = options.filter(o =>
+    o.label.toLowerCase().includes(q.toLowerCase()) ||
+    (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
   )
 
   return (
     <div className="border border-slate-200 rounded-md bg-white overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
         <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search providers..."
-          className="flex-1 text-sm outline-none bg-transparent placeholder:text-slate-400"
-        />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search providers..."
+          className="flex-1 text-sm outline-none bg-transparent placeholder:text-slate-400" />
       </div>
       <ul className="max-h-40 overflow-y-auto py-1">
-        {filtered.length === 0 ? (
-          <li className="px-3 py-2 text-xs text-slate-400">No providers found</li>
-        ) : (
-          filtered.map((o) => {
-            const isSelected = selected.includes(o.id)
+        {filtered.length === 0
+          ? <li className="px-3 py-2 text-xs text-slate-400">No providers found</li>
+          : filtered.map(o => {
+            const isSel = selected.includes(o.id)
             return (
-              <li
-                key={o.id}
-                onClick={() => onToggle(o.id)}
-                className={`px-3 py-2 cursor-pointer text-sm flex items-center gap-2 hover:bg-slate-50 ${isSelected ? "bg-blue-50" : ""}`}
-              >
-                <div className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${isSelected ? "bg-blue-600 border-blue-600" : "border-slate-300"}`}>
-                  {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              <li key={o.id} onClick={() => onToggle(o.id)}
+                className={`px-3 py-2 cursor-pointer text-sm flex items-center gap-2 hover:bg-slate-50 ${isSel ? "bg-blue-50" : ""}`}>
+                <div className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${isSel ? "bg-blue-600 border-blue-600" : "border-slate-300"}`}>
+                  {isSel && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 8"><path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium text-slate-800 truncate">{o.label}</p>
@@ -201,41 +348,31 @@ function ProviderPicker({
               </li>
             )
           })
-        )}
+        }
       </ul>
     </div>
   )
 }
 
-// ─── Form state ───────────────────────────────────────────────────────────────
+// ─── Form helpers ─────────────────────────────────────────────────────────────
 
 function emptyForm() {
   return {
-    practiceId: "",
-    locationId: "",
-    providerIds: [] as string[],
-    nextStep: "",
-    date: format(new Date(), "yyyy-MM-dd"),
-    frontDesk: "",
-    flyer: "",
-    notes: "",
+    practiceId: "", locationId: "", providerIds: [] as string[],
+    tagIds: [] as string[], selectedTags: [] as TagObj[],
+    nextStep: "", date: format(new Date(), "yyyy-MM-dd"),
+    frontDesk: "", flyer: "", notes: "",
   }
 }
 
 const FLYER_OPTIONS = [
-  "Genesis Ortho General",
-  "Hip & Knee Replacement",
-  "Sports Medicine",
-  "Spine Care",
-  "Foot & Ankle",
-  "Hand & Wrist",
-  "Physical Therapy",
-  "Other",
+  "Genesis Ortho General", "Hip & Knee Replacement", "Sports Medicine",
+  "Spine Care", "Foot & Ankle", "Hand & Wrist", "Physical Therapy", "Other",
 ]
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, currentUserId }: Props) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags }: Props) {
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
@@ -244,67 +381,76 @@ export default function ActivityManager({ activities, practices, allDoctors, cur
   const [search, setSearch] = useState("")
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
-  // Filter locations by selected practice
+  // Filters
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [activeTagIds, setActiveTagIds] = useState<string[]>([])
+
+  // Merged tag registry (allTags + any newly created during this session)
+  const [tagRegistry, setTagRegistry] = useState<TagObj[]>(allTags)
+
   const locationOptions = useMemo(() => {
-    if (!form.practiceId) {
-      return practices.flatMap((p) =>
-        p.locations.map((l) => ({ id: l.id, label: l.name, sub: p.name + (l.address ? ` · ${l.address}` : "") }))
-      )
-    }
-    const p = practices.find((p) => p.id === form.practiceId)
-    return (p?.locations ?? []).map((l) => ({
-      id: l.id,
-      label: l.name,
-      sub: l.address ?? undefined,
-    }))
+    if (!form.practiceId) return practices.flatMap(p => p.locations.map(l => ({ id: l.id, label: l.name, sub: p.name + (l.address ? ` · ${l.address}` : "") })))
+    const p = practices.find(p => p.id === form.practiceId)
+    return (p?.locations ?? []).map(l => ({ id: l.id, label: l.name, sub: l.address ?? undefined }))
   }, [form.practiceId, practices])
 
   const doctorOptions = useMemo(() => {
-    if (!form.practiceId) return allDoctors.map((d) => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
-    const p = practices.find((p) => p.id === form.practiceId)
-    return (p?.doctors ?? []).map((d) => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
+    if (!form.practiceId) return allDoctors.map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
+    const p = practices.find(p => p.id === form.practiceId)
+    return (p?.doctors ?? []).map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
   }, [form.practiceId, practices, allDoctors])
 
-  const practiceOptions = practices.map((p) => ({ id: p.id, label: p.name }))
+  const practiceOptions = practices.map(p => ({ id: p.id, label: p.name }))
 
   function openNew() {
-    setForm(emptyForm())
-    setEditId(null)
-    setError(null)
-    setOpen(true)
+    setForm(emptyForm()); setEditId(null); setError(null); setOpen(true)
   }
 
   function openEdit(a: ActivityRow) {
     setForm({
-      practiceId: a.practice?.id ?? "",
-      locationId: a.location?.id ?? "",
-      providerIds: a.providers.map((p) => p.doctor.id),
-      nextStep: a.nextStep ?? "",
-      date: format(new Date(a.date), "yyyy-MM-dd"),
-      frontDesk: a.frontDesk ?? "",
-      flyer: a.flyer ?? "",
-      notes: a.notes ?? "",
+      practiceId: a.practice?.id ?? "", locationId: a.location?.id ?? "",
+      providerIds: a.providers.map(p => p.doctor.id),
+      tagIds: a.tags.map(t => t.id), selectedTags: a.tags,
+      nextStep: a.nextStep ?? "", date: format(new Date(a.date), "yyyy-MM-dd"),
+      frontDesk: a.frontDesk ?? "", flyer: a.flyer ?? "", notes: a.notes ?? "",
     })
-    setEditId(a.id)
-    setError(null)
-    setOpen(true)
+    setEditId(a.id); setError(null); setOpen(true)
   }
 
   function set(field: string, value: string | string[]) {
-    setForm((prev) => {
+    setForm(prev => {
       const next = { ...prev, [field]: value }
-      // Clear location if practice changes
       if (field === "practiceId") next.locationId = ""
       return next
     })
   }
 
+  function setSelectedTags(tags: TagObj[]) {
+    // Merge any new tags into registry
+    setTagRegistry(prev => {
+      const ids = new Set(prev.map(t => t.id))
+      const newOnes = tags.filter(t => !ids.has(t.id))
+      return newOnes.length ? [...prev, ...newOnes] : prev
+    })
+    setForm(prev => ({ ...prev, selectedTags: tags, tagIds: tags.map(t => t.id) }))
+  }
+
   function handleSubmit() {
     setError(null)
     startTransition(async () => {
-      const result = editId
-        ? await updateActivity(editId, form)
-        : await createActivity(form)
+      const payload = {
+        practiceId: form.practiceId || undefined,
+        locationId: form.locationId || undefined,
+        providerIds: form.providerIds,
+        tagIds: form.tagIds,
+        nextStep: form.nextStep || undefined,
+        date: form.date,
+        frontDesk: form.frontDesk || undefined,
+        flyer: form.flyer || undefined,
+        notes: form.notes || undefined,
+      }
+      const result = editId ? await updateActivity(editId, payload) : await createActivity(payload)
       if (result.error) {
         setError(typeof result.error === "string" ? result.error : "Error saving activity.")
       } else {
@@ -313,79 +459,116 @@ export default function ActivityManager({ activities, practices, allDoctors, cur
     })
   }
 
-  const filtered = activities.filter((a) => {
-    const q = search.toLowerCase()
-    return (
-      !q ||
-      a.practice?.name.toLowerCase().includes(q) ||
-      a.location?.name.toLowerCase().includes(q) ||
-      a.providers.some((p) => p.doctor.name.toLowerCase().includes(q)) ||
-      a.notes?.toLowerCase().includes(q) ||
-      a.nextStep?.toLowerCase().includes(q)
-    )
-  })
+  function toggleTagFilter(id: string) {
+    setActiveTagIds(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
+  }
+
+  const filtered = useMemo(() => {
+    return activities.filter(a => {
+      const q = search.toLowerCase()
+      if (q && !(
+        a.practice?.name.toLowerCase().includes(q) ||
+        a.location?.name.toLowerCase().includes(q) ||
+        a.providers.some(p => p.doctor.name.toLowerCase().includes(q)) ||
+        a.notes?.toLowerCase().includes(q) ||
+        a.nextStep?.toLowerCase().includes(q) ||
+        a.tags.some(t => t.name.toLowerCase().includes(q))
+      )) return false
+      if (dateFrom && new Date(a.date) < new Date(dateFrom + "T00:00:00")) return false
+      if (dateTo && new Date(a.date) > new Date(dateTo + "T23:59:59")) return false
+      if (activeTagIds.length > 0 && !activeTagIds.every(id => a.tags.some(t => t.id === id))) return false
+      return true
+    })
+  }, [activities, search, dateFrom, dateTo, activeTagIds])
+
+  const hasFilters = search || dateFrom || dateTo || activeTagIds.length > 0
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search activities..."
-            className="pl-9"
-          />
+      {/* ── Filter bar ── */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-48 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search activities..." className="pl-9" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-500 whitespace-nowrap">From</label>
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36 text-sm" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-500 whitespace-nowrap">To</label>
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36 text-sm" />
+          </div>
+          {hasFilters && (
+            <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setActiveTagIds([]) }}
+              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-slate-100">
+              <X className="h-3.5 w-3.5" /> Clear
+            </button>
+          )}
+          <Button onClick={openNew} className="ml-auto">
+            <Plus className="h-4 w-4 mr-2" />New Activity
+          </Button>
         </div>
-        <Button onClick={openNew}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Activity
-        </Button>
+
+        {/* Tag filter chips */}
+        {tagRegistry.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1 shrink-0">
+              <Tag className="h-3 w-3" /> Filter:
+            </span>
+            {tagRegistry.map(tag => (
+              <TagChip
+                key={tag.id} tag={tag}
+                onClick={() => toggleTagFilter(tag.id)}
+                active={activeTagIds.includes(tag.id)}
+                onColorChange={() => {}}
+              />
+            ))}
+          </div>
+        )}
+
+        {hasFilters && (
+          <p className="text-xs text-slate-500">
+            Showing {filtered.length} of {activities.length} activities
+          </p>
+        )}
       </div>
 
-      {/* List */}
+      {/* ── List ── */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 border border-dashed border-slate-200 rounded-xl bg-slate-50 text-center">
           <CalendarDays className="h-10 w-10 text-slate-300 mb-3" />
-          <p className="font-medium text-slate-600">No activities yet</p>
-          <p className="text-sm text-slate-400 mt-1">Log a visit or call to a referring practice.</p>
+          <p className="font-medium text-slate-600">{hasFilters ? "No activities match your filters" : "No activities yet"}</p>
+          <p className="text-sm text-slate-400 mt-1">{hasFilters ? "Try adjusting the date range or tags." : "Log a visit or call to a referring practice."}</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((a) => (
+          {filtered.map(a => (
             <div key={a.id} className="flex items-start gap-4 p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
-              {/* Date column */}
               <div className="shrink-0 w-16 text-center">
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-                  {format(new Date(a.date), "MMM")}
-                </p>
-                <p className="text-2xl font-bold text-slate-800 leading-none">
-                  {format(new Date(a.date), "d")}
-                </p>
+                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{format(new Date(a.date), "MMM")}</p>
+                <p className="text-2xl font-bold text-slate-800 leading-none">{format(new Date(a.date), "d")}</p>
                 <p className="text-xs text-slate-400">{format(new Date(a.date), "yyyy")}</p>
               </div>
 
-              {/* Content */}
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   {a.practice && (
                     <span className="flex items-center gap-1 text-sm font-semibold text-slate-800">
-                      <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      {a.practice.name}
+                      <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />{a.practice.name}
                     </span>
                   )}
                   {a.location && (
                     <span className="flex items-center gap-1 text-xs text-slate-500">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      {a.location.name}
+                      <MapPin className="h-3 w-3 shrink-0" />{a.location.name}
                     </span>
                   )}
                 </div>
 
                 {a.providers.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {a.providers.map((p) => (
+                    {a.providers.map(p => (
                       <Badge key={p.doctor.id} variant="secondary" className="text-xs">
                         <User className="h-3 w-3 mr-1" />
                         {p.doctor.name}{p.doctor.title ? `, ${p.doctor.title}` : ""}
@@ -400,14 +583,23 @@ export default function ActivityManager({ activities, practices, allDoctors, cur
                   {a.flyer && <span><span className="font-medium text-slate-600">Flyer:</span> {a.flyer}</span>}
                 </div>
 
-                {a.notes && (
-                  <p className="text-sm text-slate-600 line-clamp-2">{a.notes}</p>
+                {a.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {a.tags.map(tag => (
+                      <TagChip
+                        key={tag.id} tag={tag}
+                        onClick={() => toggleTagFilter(tag.id)}
+                        active={activeTagIds.includes(tag.id)}
+                        onColorChange={() => {}}
+                      />
+                    ))}
+                  </div>
                 )}
 
+                {a.notes && <p className="text-sm text-slate-600 line-clamp-2">{a.notes}</p>}
                 <p className="text-xs text-slate-400">Logged by {a.createdBy.name ?? a.createdBy.email}</p>
               </div>
 
-              {/* Actions */}
               <div className="flex gap-1 shrink-0">
                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(a)}>
                   <Pencil className="h-3.5 w-3.5" />
@@ -421,142 +613,92 @@ export default function ActivityManager({ activities, practices, allDoctors, cur
         </div>
       )}
 
-      {/* New / Edit Dialog */}
-      <Dialog open={open} onOpenChange={(v) => !isPending && setOpen(v)}>
+      {/* ── New / Edit Dialog ── */}
+      <Dialog open={open} onOpenChange={v => !isPending && setOpen(v)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editId ? "Edit Activity" : "New Activity"}</DialogTitle>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-4 py-2">
-            {/* Account */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">
-                Account <span className="text-slate-400 font-normal">(Organization)</span>
-              </label>
-              <Picker
-                placeholder="Search Account..."
-                value={form.practiceId}
-                options={practiceOptions}
-                onSelect={(id) => set("practiceId", id)}
-                onClear={() => set("practiceId", "")}
-              />
+              <label className="text-sm font-medium text-slate-700">Account <span className="text-slate-400 font-normal">(Organization)</span></label>
+              <Picker placeholder="Search Account..." value={form.practiceId} options={practiceOptions}
+                onSelect={id => set("practiceId", id)} onClear={() => set("practiceId", "")} />
             </div>
-
-            {/* Clinic Location */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Clinic Location</label>
-              <Picker
-                placeholder="Search Locations..."
-                value={form.locationId}
-                options={locationOptions}
-                onSelect={(id) => set("locationId", id)}
-                onClear={() => set("locationId", "")}
-              />
+              <Picker placeholder="Search Locations..." value={form.locationId} options={locationOptions}
+                onSelect={id => set("locationId", id)} onClear={() => set("locationId", "")} />
             </div>
-
-            {/* Providers */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Providers</label>
-              <ProviderPicker
-                options={doctorOptions}
-                selected={form.providerIds}
-                onToggle={(id) =>
-                  set(
-                    "providerIds",
-                    form.providerIds.includes(id)
-                      ? form.providerIds.filter((x) => x !== id)
-                      : [...form.providerIds, id]
-                  )
-                }
-              />
+              <ProviderPicker options={doctorOptions} selected={form.providerIds}
+                onToggle={id => set("providerIds", form.providerIds.includes(id)
+                  ? form.providerIds.filter(x => x !== id) : [...form.providerIds, id]
+                )} />
             </div>
-
-            {/* Selected Providers */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Selected Providers</label>
               <div className="min-h-[60px] border border-slate-200 rounded-md bg-slate-50 px-3 py-2 flex flex-wrap gap-1.5 content-start">
-                {form.providerIds.length === 0 ? (
-                  <p className="text-xs text-slate-400 self-center">None selected</p>
-                ) : (
-                  form.providerIds.map((id) => {
-                    const d = allDoctors.find((x) => x.id === id)
+                {form.providerIds.length === 0
+                  ? <p className="text-xs text-slate-400 self-center">None selected</p>
+                  : form.providerIds.map(id => {
+                    const d = allDoctors.find(x => x.id === id)
                     return d ? (
                       <Badge key={id} variant="secondary" className="text-xs flex items-center gap-1">
                         {d.name}{d.title ? `, ${d.title}` : ""}
-                        <button onClick={() => set("providerIds", form.providerIds.filter((x) => x !== id))}>
+                        <button onClick={() => set("providerIds", form.providerIds.filter(x => x !== id))}>
                           <X className="h-2.5 w-2.5 ml-0.5 hover:text-red-500" />
                         </button>
                       </Badge>
                     ) : null
                   })
-                )}
+                }
               </div>
             </div>
-
-            {/* Next Step */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Next Step</label>
-              <Input
-                value={form.nextStep}
-                onChange={(e) => set("nextStep", e.target.value)}
-                placeholder="e.g. Follow up in 2 weeks"
-              />
+              <Input value={form.nextStep} onChange={e => set("nextStep", e.target.value)} placeholder="e.g. Follow up in 2 weeks" />
             </div>
-
-            {/* Date */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Date</label>
-              <Input
-                type="date"
-                value={form.date}
-                onChange={(e) => set("date", e.target.value)}
-              />
+              <Input type="date" value={form.date} onChange={e => set("date", e.target.value)} />
             </div>
-
-            {/* Front Desk Staff */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">
-                Front Desk Staff
-                <span className="ml-1 text-slate-400 text-xs font-normal" title="Name of the front desk contact you spoke with">ⓘ</span>
+                Front Desk Staff <span className="ml-1 text-slate-400 text-xs font-normal">ⓘ</span>
               </label>
-              <Input
-                value={form.frontDesk}
-                onChange={(e) => set("frontDesk", e.target.value)}
-                placeholder="e.g. Maria"
-              />
+              <Input value={form.frontDesk} onChange={e => set("frontDesk", e.target.value)} placeholder="e.g. Maria" />
             </div>
-
-            {/* Flyer */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Flyer</label>
-              <select
-                value={form.flyer}
-                onChange={(e) => set("flyer", e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={form.flyer} onChange={e => set("flyer", e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">— Select Flyer —</option>
-                {FLYER_OPTIONS.map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
+                {FLYER_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
             </div>
 
-            {/* Notes */}
+            {/* Tags */}
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5 text-slate-400" /> Tags
+              </label>
+              <TagInput
+                selected={form.selectedTags}
+                onChange={setSelectedTags}
+                allTags={tagRegistry}
+              />
+            </div>
+
             <div className="col-span-2 space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Notes</label>
-              <Textarea
-                value={form.notes}
-                onChange={(e) => set("notes", e.target.value)}
-                placeholder="Enter notes here..."
-                rows={4}
-              />
+              <Textarea value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Enter notes here..." rows={4} />
             </div>
           </div>
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>Cancel</Button>
@@ -568,23 +710,15 @@ export default function ActivityManager({ activities, practices, allDoctors, cur
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm */}
-      <Dialog open={!!deleteId} onOpenChange={(v) => !v && setDeleteId(null)}>
+      {/* ── Delete confirm ── */}
+      <Dialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Delete Activity</DialogTitle></DialogHeader>
           <p className="text-sm text-slate-500">This activity log will be permanently deleted.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                startTransition(async () => {
-                  if (deleteId) await deleteActivity(deleteId)
-                  setDeleteId(null)
-                })
-              }}
-              disabled={isPending}
-            >
+            <Button variant="destructive" disabled={isPending}
+              onClick={() => startTransition(async () => { if (deleteId) await deleteActivity(deleteId); setDeleteId(null) })}>
               {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </Button>

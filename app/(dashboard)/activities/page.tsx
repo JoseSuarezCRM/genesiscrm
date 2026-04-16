@@ -5,7 +5,7 @@ import ActivityManager from "@/components/activity-manager"
 export default async function ActivitiesPage() {
   const session = await auth()
 
-  const [activities, practices] = await Promise.all([
+  const [activities, practices, allTags] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { date: "desc" },
       include: {
@@ -15,6 +15,9 @@ export default async function ActivitiesPage() {
           include: {
             doctor: { select: { id: true, name: true, title: true } },
           },
+        },
+        tags: {
+          include: { tag: true },
         },
         createdBy: { select: { name: true, email: true } },
       },
@@ -34,18 +37,18 @@ export default async function ActivitiesPage() {
         },
       },
     }),
+    prisma.tag.findMany({ orderBy: { name: "asc" } }),
   ])
 
-  // Flat list of all doctors with their practice name for cross-practice search
   const allDoctors = practices.flatMap((p) =>
     p.doctors.map((d) => ({ ...d, practiceName: p.name }))
   )
 
-  // Serialize dates
   const serialized = activities.map((a) => ({
     ...a,
     date: a.date.toISOString(),
     createdAt: a.createdAt.toISOString(),
+    tags: a.tags.map((t) => ({ id: t.tag.id, name: t.tag.name, color: t.tag.color })),
   }))
 
   return (
@@ -61,6 +64,7 @@ export default async function ActivitiesPage() {
         activities={serialized as any}
         practices={practices as any}
         allDoctors={allDoctors}
+        allTags={allTags}
         currentUserId={session!.user.id}
       />
     </div>

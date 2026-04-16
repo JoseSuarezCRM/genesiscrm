@@ -9,6 +9,7 @@ const ActivitySchema = z.object({
   practiceId: z.string().optional(),
   locationId: z.string().optional(),
   providerIds: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
   nextStep: z.string().optional(),
   date: z.string().optional(),
   frontDesk: z.string().optional(),
@@ -23,7 +24,7 @@ export async function createActivity(data: unknown) {
   const parsed = ActivitySchema.safeParse(data)
   if (!parsed.success) return { error: "Invalid data" }
 
-  const { providerIds = [], date, ...rest } = parsed.data
+  const { providerIds = [], tagIds = [], date, ...rest } = parsed.data
 
   try {
     const activity = await prisma.activity.create({
@@ -33,6 +34,9 @@ export async function createActivity(data: unknown) {
         createdById: session.user.id,
         providers: providerIds.length
           ? { create: providerIds.map((doctorId) => ({ doctorId })) }
+          : undefined,
+        tags: tagIds.length
+          ? { create: tagIds.map((tagId) => ({ tagId })) }
           : undefined,
       },
     })
@@ -51,7 +55,7 @@ export async function updateActivity(id: string, data: unknown) {
   const parsed = ActivitySchema.safeParse(data)
   if (!parsed.success) return { error: "Invalid data" }
 
-  const { providerIds = [], date, ...rest } = parsed.data
+  const { providerIds = [], tagIds = [], date, ...rest } = parsed.data
 
   try {
     await prisma.activity.update({
@@ -62,6 +66,10 @@ export async function updateActivity(id: string, data: unknown) {
         providers: {
           deleteMany: {},
           create: providerIds.map((doctorId) => ({ doctorId })),
+        },
+        tags: {
+          deleteMany: {},
+          create: tagIds.map((tagId) => ({ tagId })),
         },
       },
     })

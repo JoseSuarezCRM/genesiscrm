@@ -26,6 +26,8 @@ import {
   ClipboardList,
   Building2,
   MessageCircle,
+  CalendarRange,
+  UsersRound,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -43,6 +45,11 @@ const referralItems = [
 const appointmentItems = [
   { href: "/appointments",           label: "Completed Appts",     icon: ClipboardList },
   { href: "/appointments/providers", label: "Referring Providers", icon: Building2 },
+]
+
+const schedulingItems = [
+  { href: "/scheduler",       label: "Weekly Schedule", icon: CalendarRange },
+  { href: "/scheduler/staff", label: "Staff Roster",    icon: UsersRound },
 ]
 
 const adminItems = [
@@ -233,6 +240,14 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
           pathname={pathname}
           collapsed={collapsed}
           defaultOpen
+        />
+
+        <NavSection
+          title="Scheduling"
+          items={schedulingItems}
+          pathname={pathname}
+          collapsed={collapsed}
+          defaultOpen={false}
         />
 
         {userRole === "ADMIN" && (

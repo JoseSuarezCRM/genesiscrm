@@ -142,6 +142,27 @@ model User {
   activities            Activity[]
   completedAppointments CompletedAppointment[]
   smsMessages           SmsMessage[]
+  teamMemberships       TeamMember[]
+}
+
+model Team {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  permissions String[]     @default([])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  members     TeamMember[]
+}
+
+model TeamMember {
+  id     String @id @default(cuid())
+  teamId String
+  userId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
 }
 
 model ReferringPractice {
@@ -320,11 +341,12 @@ model OutreachMessage {
 }
 
 model Tag {
-  id        String       @id @default(cuid())
-  name      String       @unique
-  color     String       // hex color e.g. "#3b82f6"
-  createdAt DateTime     @default(now())
-  referrals ReferralTag[]
+  id         String        @id @default(cuid())
+  name       String        @unique
+  color      String        // hex color e.g. "#3b82f6"
+  createdAt  DateTime      @default(now())
+  referrals  ReferralTag[]
+  activities ActivityTag[]
 }
 
 model ReferralTag {
@@ -458,10 +480,20 @@ model Activity {
   createdBy   User               @relation(fields: [createdById], references: [id])
   createdAt   DateTime           @default(now())
   providers   ActivityProvider[]
+  tags        ActivityTag[]
 
   @@index([practiceId])
   @@index([locationId])
   @@index([createdAt])
+}
+
+model ActivityTag {
+  activityId String
+  tagId      String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, tagId])
 }
 
 model ActivityProvider {
@@ -657,6 +689,89 @@ model SequenceStepRun {
   createdAt    DateTime           @default(now())
 
   @@index([status, scheduledAt])
+}
+
+// ── Staff Scheduler ───────────────────────────────────────────────────────────
+
+enum StaffRole {
+  XR_TECH
+  MA
+  FD
+}
+
+enum SchedDay {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+}
+
+enum AvailabilityType {
+  AVAILABLE
+  LAST_RESORT
+  UNAVAILABLE
+}
+
+model ScheduleLocation {
+  id      String          @id @default(cuid())
+  code    String          @unique  // STC, OB, LV, etc.
+  name    String
+  hasXray Boolean         @default(true)
+  order   Int
+  entries ScheduleEntry[]
+
+  @@index([order])
+}
+
+model StaffMember {
+  id           String              @id @default(cuid())
+  name         String
+  primaryRole  StaffRole
+  isLastResort Boolean             @default(false)
+  isActive     Boolean             @default(true)
+  availability StaffAvailability[]
+  entries      ScheduleEntry[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model StaffAvailability {
+  id      String           @id @default(cuid())
+  staffId String
+  staff   StaffMember      @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  day     SchedDay
+  type    AvailabilityType @default(AVAILABLE)
+
+  @@unique([staffId, day])
+}
+
+model WeeklySchedule {
+  id          String          @id @default(cuid())
+  weekOf      DateTime        @db.Date
+  notes       String?
+  isPublished Boolean         @default(false)
+  entries     ScheduleEntry[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([weekOf])
+}
+
+model ScheduleEntry {
+  id           String           @id @default(cuid())
+  scheduleId   String
+  schedule     WeeklySchedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     ScheduleLocation @relation(fields: [locationId], references: [id])
+  staffId      String
+  staff        StaffMember      @relation(fields: [staffId], references: [id])
+  assignedRole StaffRole
+  day          SchedDay
+  createdAt    DateTime         @default(now())
+
+  @@unique([scheduleId, locationId, staffId, day])
+  @@index([scheduleId, day])
 }
 
 model OutreachTemplate {
