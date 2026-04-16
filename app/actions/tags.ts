@@ -25,10 +25,40 @@ export async function createTag(data: { name: string; color: string }) {
   return { success: true, tag }
 }
 
+export async function upsertActivityTag(name: string, color: string) {
+  await requireAuth()
+  const tag = await prisma.tag.upsert({
+    where: { name: name.trim().toLowerCase() },
+    update: { color },
+    create: { name: name.trim().toLowerCase(), color },
+  })
+  revalidatePath("/activities")
+  return tag
+}
+
+export async function updateTagColor(id: string, color: string) {
+  await requireAuth()
+  await prisma.tag.update({ where: { id }, data: { color } })
+  revalidatePath("/activities")
+  revalidatePath("/referrals")
+}
+
+export async function setActivityTags(activityId: string, tagIds: string[]) {
+  await requireAuth()
+  await prisma.activityTag.deleteMany({ where: { activityId } })
+  if (tagIds.length > 0) {
+    await prisma.activityTag.createMany({
+      data: tagIds.map((tagId) => ({ activityId, tagId })),
+    })
+  }
+  revalidatePath("/activities")
+}
+
 export async function deleteTag(id: string) {
   await requireAuth()
   await prisma.tag.delete({ where: { id } })
   revalidatePath("/referrals")
+  revalidatePath("/activities")
 }
 
 export async function setReferralTags(referralId: string, tagIds: string[]) {

@@ -341,11 +341,12 @@ model OutreachMessage {
 }
 
 model Tag {
-  id        String       @id @default(cuid())
-  name      String       @unique
-  color     String       // hex color e.g. "#3b82f6"
-  createdAt DateTime     @default(now())
-  referrals ReferralTag[]
+  id         String        @id @default(cuid())
+  name       String        @unique
+  color      String        // hex color e.g. "#3b82f6"
+  createdAt  DateTime      @default(now())
+  referrals  ReferralTag[]
+  activities ActivityTag[]
 }
 
 model ReferralTag {
@@ -475,15 +476,24 @@ model Activity {
   frontDesk   String?
   flyer       String?
   notes       String?
-  tags        String[]           @default([])
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])
   createdAt   DateTime           @default(now())
   providers   ActivityProvider[]
+  tags        ActivityTag[]
 
   @@index([practiceId])
   @@index([locationId])
   @@index([createdAt])
+}
+
+model ActivityTag {
+  activityId String
+  tagId      String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, tagId])
 }
 
 model ActivityProvider {
