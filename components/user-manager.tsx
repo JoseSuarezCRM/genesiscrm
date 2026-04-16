@@ -57,6 +57,7 @@ const ALL_PERMISSIONS: { key: string; label: string; description: string }[] = [
   { key: "MANAGE_AUTOMATIONS",label: "Manage Automations", description: "Create and edit automation rules" },
   { key: "EXPORT_DATA",       label: "Export Data",        description: "Export referral lists to CSV" },
   { key: "MANAGE_BROADCASTS", label: "Manage Broadcasts",  description: "Create and send patient broadcasts" },
+  { key: "MANAGE_SCHEDULING", label: "Manage Scheduling",  description: "Access the staff scheduler, assign staff, and auto-generate schedules" },
 ]
 
 function PermissionChecklist({
