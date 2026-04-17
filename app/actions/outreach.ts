@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { sendSMS } from "@/lib/twilio"
-import { sendEmail } from "@/lib/postmark"
+import { sendEmail } from "@/lib/graph-mailer"
 import {
   AuditAction,
   OutreachChannel,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import twilio from "twilio"
-import { sendEmail } from "@/lib/resend-client"
+import { sendEmail } from "@/lib/graph-mailer"
 
 function getTwilio() {
   return twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!)

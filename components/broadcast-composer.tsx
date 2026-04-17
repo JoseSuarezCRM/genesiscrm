@@ -140,6 +140,14 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
       if (result.error) {
         setError(result.error)
       } else {
+        // Trigger actual sending via API route so it runs outside the server action lifecycle
+        if (result.sendNow && result.id) {
+          await fetch("/api/broadcasts/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ broadcastId: result.id }),
+          })
+        }
         setSuccess(true)
         setTimeout(() => router.push("/broadcasts"), 1500)
       }

@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { sendEmail } from "@/lib/postmark"
+import { sendEmail } from "@/lib/graph-mailer"
 import { BroadcastStatus, OutreachStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 
@@ -121,13 +121,9 @@ export async function createBroadcast(data: {
     },
   })
 
-  if (!data.scheduledAt) {
-    // Fire and return — actual sending happens async via the cron endpoint
-    sendBroadcastEmails(broadcast.id).catch(console.error)
-  }
-
   revalidatePath("/broadcasts")
-  return { success: true, id: broadcast.id }
+  // Return the id so the client can call /api/broadcasts/send to trigger actual sending
+  return { success: true, id: broadcast.id, sendNow: !data.scheduledAt }
 }
 
 // Send all pending recipients for a broadcast
