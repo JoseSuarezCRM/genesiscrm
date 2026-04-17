@@ -143,6 +143,7 @@ model User {
   completedAppointments CompletedAppointment[]
   smsMessages           SmsMessage[]
   teamMemberships       TeamMember[]
+  directEmails          DirectEmail[]
 }
 
 model Team {
@@ -485,6 +486,22 @@ model Activity {
   @@index([practiceId])
   @@index([locationId])
   @@index([createdAt])
+}
+
+model DirectEmail {
+  id       String   @id @default(cuid())
+  to       String[]
+  cc       String[]
+  bcc      String[]
+  subject  String
+  body     String
+  sentAt   DateTime @default(now())
+  success  Boolean  @default(true)
+  error    String?
+  sentById String
+  sentBy   User     @relation(fields: [sentById], references: [id])
+
+  @@index([sentAt])
 }
 
 model ActivityTag {

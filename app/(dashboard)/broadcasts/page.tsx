@@ -3,15 +3,17 @@ import { listBroadcasts } from "@/app/actions/broadcasts"
 import { getIvrConfig } from "@/app/actions/ivr"
 import { getSmsAutoResponses } from "@/app/actions/sms-auto"
 import { getSequences } from "@/app/actions/sequences"
+import { listDirectEmails } from "@/app/actions/direct-email"
 import { prisma } from "@/lib/prisma"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Send, Clock, CheckCircle2, XCircle, Loader2, Phone, MessageSquare, GitBranch } from "lucide-react"
+import { Plus, Send, Clock, CheckCircle2, XCircle, Loader2, Phone, MessageSquare, GitBranch, Mail } from "lucide-react"
 import { format } from "date-fns"
 import { BroadcastStatus } from "@prisma/client"
 import IvrBuilder from "@/components/ivr-builder"
 import SmsAutoReplyManager from "@/components/sms-auto-reply-manager"
 import SequenceManager from "@/components/sequence-manager"
+import DirectEmailComposer from "@/components/direct-email-composer"
 
 const STATUS_CONFIG: Record<BroadcastStatus, { label: string; icon: React.ReactNode; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   DRAFT:     { label: "Draft",     icon: <Clock className="h-3 w-3" />,        variant: "secondary" },
@@ -23,6 +25,7 @@ const STATUS_CONFIG: Record<BroadcastStatus, { label: string; icon: React.ReactN
 
 const TABS = [
   { key: "email",     label: "Email Broadcasts", icon: Send },
+  { key: "compose",   label: "Compose",           icon: Mail },
   { key: "sequences", label: "Sequences",         icon: GitBranch },
   { key: "ivr",       label: "Voice IVR",         icon: Phone },
   { key: "sms",       label: "SMS Auto-Reply",    icon: MessageSquare },
@@ -35,13 +38,31 @@ interface Props {
 export default async function BroadcastsPage({ searchParams }: Props) {
   const tab = searchParams.tab ?? "email"
 
-  const [broadcasts, ivrConfig, smsRules, sequences, practices] = await Promise.all([
+  const [broadcasts, ivrConfig, smsRules, sequences, practices, composeContacts, sentEmails] = await Promise.all([
     tab === "email"     ? listBroadcasts()        : Promise.resolve([]),
     tab === "ivr"       ? getIvrConfig()           : Promise.resolve(null),
     tab === "sms"       ? getSmsAutoResponses()    : Promise.resolve([]),
     tab === "sequences" ? getSequences()           : Promise.resolve([]),
     tab === "sequences" ? prisma.referringPractice.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : Promise.resolve([]),
+    tab === "compose"   ? prisma.referral.findMany({
+      where: { patientEmail: { not: null } },
+      select: { patientFirstName: true, patientLastName: true, patientEmail: true },
+      distinct: ["patientEmail"],
+      orderBy: { patientFirstName: "asc" },
+    }).then(rows =>
+      rows.map(r => ({ name: `${r.patientFirstName} ${r.patientLastName}`.trim(), email: r.patientEmail!, type: "patient" as const }))
+    ) : Promise.resolve([]),
+    tab === "compose"   ? listDirectEmails() : Promise.resolve([]),
   ])
+
+  // Merge referring doctors into contacts
+  const doctorContacts = tab === "compose" ? await prisma.referringDoctor.findMany({
+    where: { email: { not: null } },
+    select: { name: true, email: true },
+    orderBy: { name: "asc" },
+  }).then(rows => rows.map(r => ({ name: r.name, email: r.email!, type: "provider" as const }))) : []
+
+  const contacts = [...composeContacts, ...doctorContacts]
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
@@ -162,6 +183,11 @@ export default async function BroadcastsPage({ searchParams }: Props) {
       {/* Sequences tab */}
       {tab === "sequences" && (
         <SequenceManager sequences={sequences as any} practices={practices} />
+      )}
+
+      {/* Compose tab */}
+      {tab === "compose" && (
+        <DirectEmailComposer contacts={contacts} sentEmails={sentEmails as any} />
       )}
 
       {/* SMS auto-reply tab */}
