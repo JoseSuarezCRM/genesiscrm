@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { sendEmail } from "@/lib/postmark"
+import { sendEmail } from "@/lib/graph-mailer"
 import { BroadcastStatus, OutreachStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { checkRateLimit } from "@/lib/rate-limit"
-import { sendEmail } from "@/lib/resend-client"
+import { sendEmail } from "@/lib/graph-mailer"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 
 const schema = z.object({
