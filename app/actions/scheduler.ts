@@ -24,8 +24,29 @@ export async function getStaff() {
   return prisma.staffMember.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
-    include: { availability: true },
+    include: { availability: true, locationAssignments: true },
   })
+}
+
+export async function setStaffLocations(
+  staffId: string,
+  locationIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await prisma.$transaction([
+      prisma.staffLocationAssignment.deleteMany({ where: { staffId } }),
+      ...(locationIds.length > 0
+        ? [prisma.staffLocationAssignment.createMany({
+            data: locationIds.map(locationId => ({ staffId, locationId })),
+          })]
+        : []),
+    ])
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
 }
 
 export async function createStaffMember(input: {
@@ -159,7 +180,7 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
       prisma.scheduleLocation.findMany({ orderBy: { order: "asc" } }),
       prisma.staffMember.findMany({
         where: { isActive: true },
-        include: { availability: true },
+        include: { availability: true, locationAssignments: true },
       }),
     ])
 
@@ -202,9 +223,17 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
       const assignedAsFD = new Set<string>()
 
       for (const loc of locations) {
+        // Staff eligible for this location: no assignments = float (any location)
+        const locAvailable = [...regular, ...lastResort].filter((s) => {
+          if (s.locationAssignments.length === 0) return true
+          return s.locationAssignments.some((a) => a.locationId === loc.id)
+        })
+        const locRegular   = locAvailable.filter((s) => !s.isLastResort)
+        const locLastResort = locAvailable.filter((s) => s.isLastResort)
+
         // ── XR slot ──
         if (loc.hasXray) {
-          const xrPool = [...regular, ...lastResort].filter(
+          const xrPool = [...locRegular, ...locLastResort].filter(
             (s) => s.primaryRole === "XR_TECH" && !assignedAsXR.has(s.id)
           )
           const pick = pickOne(xrPool, assignedAsXR)
@@ -214,22 +243,22 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
           }
         }
 
-        // ── MA slot ──
-        // Eligible: MA or XR_TECH (who isn't doing XR at this location today)
-        const maPool = [...regular, ...lastResort].filter(
-          (s) =>
-            (s.primaryRole === "MA" || s.primaryRole === "XR_TECH") &&
-            !assignedAsMA.has(s.id)
-        )
-        const maPick = pickOne(maPool, assignedAsMA)
-        if (maPick) {
-          entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: maPick.id, assignedRole: "MA", day })
-          assignedAsMA.add(maPick.id)
+        // ── MA slot (only for locations that need one) ──
+        // XR techs are NOT eligible for MA roles
+        if (loc.hasMA) {
+          const maPool = [...locRegular, ...locLastResort].filter(
+            (s) => s.primaryRole === "MA" && !assignedAsMA.has(s.id)
+          )
+          const maPick = pickOne(maPool, assignedAsMA)
+          if (maPick) {
+            entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: maPick.id, assignedRole: "MA", day })
+            assignedAsMA.add(maPick.id)
+          }
         }
 
         // ── FD slot ──
-        // Eligible: FD or MA (who isn't doing MA at this location today)
-        const fdPool = [...regular, ...lastResort].filter(
+        // Eligible: FD or MA not already used as MA today
+        const fdPool = [...locRegular, ...locLastResort].filter(
           (s) =>
             (s.primaryRole === "FD" || s.primaryRole === "MA") &&
             !assignedAsFD.has(s.id)

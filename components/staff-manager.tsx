@@ -1,18 +1,24 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { StaffRole, SchedDay } from "@prisma/client"
 import { cn } from "@/lib/utils"
+
+type StaffRole = "XR_TECH" | "MA" | "FD"
+type SchedDay  = "MON" | "TUE" | "WED" | "THU" | "FRI"
 import {
-  createStaffMember, updateStaffMember, deleteStaffMember, setAvailability,
+  createStaffMember, updateStaffMember, deleteStaffMember, setAvailability, setStaffLocations,
 } from "@/app/actions/scheduler"
-import { Plus, Pencil, Trash2, X, Check } from "lucide-react"
+import { Plus, Pencil, Trash2, X, Check, MapPin } from "lucide-react"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface StaffAvailability {
   day: SchedDay
   type: string
+}
+
+interface StaffLocationAssignment {
+  locationId: string
 }
 
 interface StaffMember {
@@ -22,6 +28,14 @@ interface StaffMember {
   isLastResort: boolean
   isActive: boolean
   availability: StaffAvailability[]
+  locationAssignments: StaffLocationAssignment[]
+}
+
+interface Location {
+  id: string
+  code: string
+  name: string
+  order: number
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -207,9 +221,51 @@ function AvailabilityRow({ member }: { member: StaffMember }) {
   )
 }
 
+// ── Location picker row ────────────────────────────────────────────────────────
+
+function LocationRow({ member, locations }: { member: StaffMember; locations: Location[] }) {
+  const [pending, startTransition] = useTransition()
+  const assigned = new Set(member.locationAssignments.map(a => a.locationId))
+
+  function toggle(locationId: string) {
+    const next = new Set(assigned)
+    next.has(locationId) ? next.delete(locationId) : next.add(locationId)
+    startTransition(async () => {
+      await setStaffLocations(member.id, [...next])
+    })
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {locations.map(loc => {
+        const active = assigned.has(loc.id)
+        return (
+          <button
+            key={loc.id}
+            onClick={() => toggle(loc.id)}
+            disabled={pending}
+            title={active ? `Remove ${loc.code}` : `Add ${loc.code}`}
+            className={cn(
+              "text-xs px-2 py-0.5 rounded border font-medium transition-colors disabled:opacity-50",
+              active
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-slate-500 border-slate-200 hover:border-blue-400 hover:text-blue-600"
+            )}
+          >
+            {loc.code}
+          </button>
+        )
+      })}
+      {assigned.size === 0 && (
+        <span className="text-xs text-slate-400 italic">All locations (float)</span>
+      )}
+    </div>
+  )
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function StaffManager({ staff }: { staff: StaffMember[] }) {
+export default function StaffManager({ staff, locations }: { staff: StaffMember[]; locations: Location[] }) {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -284,13 +340,20 @@ export default function StaffManager({ staff }: { staff: StaffMember[] }) {
                   </span>
                 </div>
               </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-600">
+                <div className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Locations
+                  <span className="text-xs font-normal text-slate-400 ml-1">(toggle to assign)</span>
+                </div>
+              </th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="text-center text-slate-400 text-xs py-8 italic">
+                <td colSpan={5} className="text-center text-slate-400 text-xs py-8 italic">
                   No staff members found.
                 </td>
               </tr>
@@ -321,6 +384,9 @@ export default function StaffManager({ staff }: { staff: StaffMember[] }) {
                   </td>
                   <td className="px-4 py-3">
                     <AvailabilityRow member={member} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <LocationRow member={member} locations={locations} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
