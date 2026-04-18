@@ -18,6 +18,50 @@ export async function getLocations() {
   return prisma.scheduleLocation.findMany({ orderBy: { order: "asc" } })
 }
 
+export async function createLocation(input: {
+  code: string
+  name: string
+  hasXray: boolean
+  hasMA: boolean
+}): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    const max = await prisma.scheduleLocation.aggregate({ _max: { order: true } })
+    await prisma.scheduleLocation.create({
+      data: { ...input, order: (max._max.order ?? 0) + 1 },
+    })
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
+}
+
+export async function updateLocation(
+  id: string,
+  input: { code: string; name: string; hasXray: boolean; hasMA: boolean }
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await prisma.scheduleLocation.update({ where: { id }, data: input })
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
+}
+
+export async function deleteLocation(id: string): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await prisma.scheduleLocation.delete({ where: { id } })
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
+}
+
 // ── Staff ─────────────────────────────────────────────────────────────────────
 
 export async function getStaff() {

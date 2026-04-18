@@ -7,8 +7,9 @@ type StaffRole = "XR_TECH" | "MA" | "FD"
 type SchedDay  = "MON" | "TUE" | "WED" | "THU" | "FRI"
 import {
   createStaffMember, updateStaffMember, deleteStaffMember, setAvailability, setStaffLocations,
+  createLocation, updateLocation, deleteLocation,
 } from "@/app/actions/scheduler"
-import { Plus, Pencil, Trash2, X, Check, MapPin } from "lucide-react"
+import { Plus, Pencil, Trash2, X, Check, MapPin, Zap, UserCheck } from "lucide-react"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,8 @@ interface Location {
   id: string
   code: string
   name: string
+  hasXray: boolean
+  hasMA: boolean
   order: number
 }
 
@@ -221,12 +224,193 @@ function AvailabilityRow({ member }: { member: StaffMember }) {
   )
 }
 
+// ── Location form (add / edit) ─────────────────────────────────────────────────
+
+function LocationForm({
+  initial, onSave, onCancel,
+}: {
+  initial?: Location
+  onSave: () => void
+  onCancel: () => void
+}) {
+  const [code, setCode] = useState(initial?.code ?? "")
+  const [name, setName] = useState(initial?.name ?? "")
+  const [hasXray, setHasXray] = useState(initial?.hasXray ?? true)
+  const [hasMA, setHasMA] = useState(initial?.hasMA ?? true)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState("")
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!code.trim()) { setError("Code is required."); return }
+    setError("")
+    startTransition(async () => {
+      const input = { code: code.trim().toUpperCase(), name: name.trim() || code.trim().toUpperCase(), hasXray, hasMA }
+      const res = initial
+        ? await updateLocation(initial.id, input)
+        : await createLocation(input)
+      if (!res.success) { setError(res.error ?? "Failed."); return }
+      onSave()
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">{initial ? "Edit Location" : "Add Location"}</h3>
+        <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+      </div>
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{error}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Code</label>
+          <input
+            value={code} onChange={e => setCode(e.target.value)}
+            placeholder="e.g. STC"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Display Name <span className="text-slate-400">(optional)</span></label>
+          <input
+            value={name} onChange={e => setName(e.target.value)}
+            placeholder="Defaults to code"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-5">
+        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={hasXray} onChange={e => setHasXray(e.target.checked)} className="rounded" />
+          Has XR Tech slot
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={hasMA} onChange={e => setHasMA(e.target.checked)} className="rounded" />
+          Has MA slot
+        </label>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button type="submit" disabled={isPending} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1">
+          <Check className="h-3.5 w-3.5" />{initial ? "Save" : "Add"}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// ── Location card ──────────────────────────────────────────────────────────────
+
+function LocationCard({
+  loc, staff, assignmentMap, onDelete,
+}: {
+  loc: Location
+  staff: StaffMember[]
+  assignmentMap: Map<string, Set<string>>
+  onDelete: (id: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [pending, startTransition] = useTransition()
+  const assigned = assignmentMap.get(loc.id) ?? new Set()
+  const ROLE_ORDER: StaffRole[] = ["XR_TECH", "MA", "FD"]
+
+  function toggle(staffId: string) {
+    const next = new Set(assigned)
+    next.has(staffId) ? next.delete(staffId) : next.add(staffId)
+    startTransition(async () => {
+      await setStaffLocations(staffId,
+        Array.from(assignmentMap.entries())
+          .filter(([locId, members]) => {
+            const s = locId === loc.id ? next : members
+            return s.has(staffId)
+          })
+          .map(([locId]) => locId)
+      )
+    })
+  }
+
+  if (editing) {
+    return <LocationForm initial={loc} onSave={() => setEditing(false)} onCancel={() => setEditing(false)} />
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+      {/* Card header */}
+      <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2">
+        <div>
+          <p className="font-bold text-slate-800 text-base leading-tight">{loc.code}</p>
+          {loc.name !== loc.code && <p className="text-xs text-slate-400 mt-0.5">{loc.name}</p>}
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium",
+              loc.hasXray ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-400 line-through")}>
+              <Zap className="h-2.5 w-2.5" />XR
+            </span>
+            <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium",
+              loc.hasMA ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400 line-through")}>
+              <UserCheck className="h-2.5 w-2.5" />MA
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => setEditing(true)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => onDelete(loc.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Staff chips */}
+      <div className="px-4 py-3 flex flex-wrap gap-1.5 flex-1">
+        {staff.length === 0 && (
+          <span className="text-xs text-slate-400 italic">No staff yet</span>
+        )}
+        {staff
+          .slice()
+          .sort((a, b) => ROLE_ORDER.indexOf(a.primaryRole) - ROLE_ORDER.indexOf(b.primaryRole) || a.name.localeCompare(b.name))
+          .map(member => {
+            const isAssigned = assigned.has(member.id)
+            const isFloat = member.locationAssignments.length === 0
+            return (
+              <button
+                key={member.id}
+                onClick={() => toggle(member.id)}
+                disabled={pending || isFloat}
+                title={isFloat ? `${member.name} is a float — works all locations` : undefined}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors",
+                  isFloat
+                    ? "border-dashed border-slate-200 text-slate-400 bg-slate-50 cursor-default"
+                    : isAssigned
+                      ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                )}
+              >
+                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0",
+                  member.primaryRole === "XR_TECH" ? "bg-blue-400" :
+                  member.primaryRole === "MA" ? "bg-green-400" : "bg-orange-400"
+                )} />
+                {member.name}
+              </button>
+            )
+          })}
+      </div>
+
+      <div className="px-4 py-2 border-t border-slate-50 text-xs text-slate-400">
+        {assigned.size} assigned · {staff.filter(s => s.locationAssignments.length === 0).length} float
+      </div>
+    </div>
+  )
+}
+
 // ── Locations tab ──────────────────────────────────────────────────────────────
 
 function LocationsTab({ locations, staff }: { locations: Location[]; staff: StaffMember[] }) {
-  const [pending, startTransition] = useTransition()
+  const [adding, setAdding] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
-  // Build a map: locationId → Set of staffIds
+  // locationId → Set<staffId>
   const assignmentMap = new Map<string, Set<string>>()
   for (const loc of locations) assignmentMap.set(loc.id, new Set())
   for (const member of staff) {
@@ -235,78 +419,42 @@ function LocationsTab({ locations, staff }: { locations: Location[]; staff: Staf
     }
   }
 
-  function toggle(locationId: string, staffId: string) {
-    const current = assignmentMap.get(locationId) ?? new Set()
-    const next = new Set(current)
-    next.has(staffId) ? next.delete(staffId) : next.add(staffId)
-    startTransition(async () => {
-      await setStaffLocations(staffId,
-        locations
-          .filter(loc => {
-            const s = loc.id === locationId ? next : assignmentMap.get(loc.id) ?? new Set()
-            return s.has(staffId)
-          })
-          .map(loc => loc.id)
-      )
-    })
+  function handleDelete(id: string) {
+    if (!confirm("Delete this location? All schedule entries for it will also be removed.")) return
+    startTransition(async () => { await deleteLocation(id) })
   }
 
-  const ROLE_ORDER: StaffRole[] = ["XR_TECH", "MA", "FD"]
-
   return (
-    <div className="space-y-3">
-      {locations.map(loc => {
-        const assigned = assignmentMap.get(loc.id) ?? new Set()
-        const floaters = staff.filter(s => s.locationAssignments.length === 0)
-        return (
-          <div key={loc.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
-              <span className="font-semibold text-slate-800 text-sm w-12">{loc.code}</span>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                <span>{assigned.size} assigned</span>
-                {floaters.length > 0 && (
-                  <span>· {floaters.length} float</span>
-                )}
-              </div>
-            </div>
-            <div className="px-4 py-3 flex flex-wrap gap-2">
-              {staff
-                .slice()
-                .sort((a, b) => ROLE_ORDER.indexOf(a.primaryRole) - ROLE_ORDER.indexOf(b.primaryRole) || a.name.localeCompare(b.name))
-                .map(member => {
-                  const isAssigned = assigned.has(member.id)
-                  const isFloat = member.locationAssignments.length === 0
-                  return (
-                    <button
-                      key={member.id}
-                      onClick={() => toggle(loc.id, member.id)}
-                      disabled={pending}
-                      title={isFloat ? `${member.name} is a float (works all locations)` : undefined}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-50",
-                        isFloat
-                          ? "border-dashed border-slate-300 text-slate-400 bg-white hover:border-blue-300 hover:text-blue-500"
-                          : isAssigned
-                            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
-                            : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
-                      )}
-                    >
-                      <span className={cn(
-                        "w-1.5 h-1.5 rounded-full shrink-0",
-                        member.primaryRole === "XR_TECH" ? "bg-blue-400" :
-                        member.primaryRole === "MA" ? "bg-green-400" : "bg-orange-400"
-                      )} />
-                      {member.name}
-                      {isFloat && <span className="text-slate-300">~</span>}
-                    </button>
-                  )
-                })}
-            </div>
-          </div>
-        )
-      })}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{locations.length} locations</p>
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Location
+        </button>
+      </div>
+
+      {adding && (
+        <LocationForm onSave={() => setAdding(false)} onCancel={() => setAdding(false)} />
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {locations.map(loc => (
+          <LocationCard
+            key={loc.id}
+            loc={loc}
+            staff={staff}
+            assignmentMap={assignmentMap}
+            onDelete={handleDelete}
+          />
+        ))}
+      </div>
+
       <p className="text-xs text-slate-400 text-center pt-1">
-        Blue = assigned · Dashed = float (assigned to all locations) · changes save instantly
+        Blue chip = assigned · Dashed = float (works all locations) · changes save instantly
       </p>
     </div>
   )
