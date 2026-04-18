@@ -19,7 +19,7 @@ interface Location {
 }
 
 interface Staff {
-  id: string; name: string; primaryRole: StaffRole; isLastResort: boolean
+  id: string; name: string; primaryRole: StaffRole; roles: StaffRole[]; isLastResort: boolean
   availability: { day: SchedDay; type: string }[]
 }
 
@@ -69,9 +69,7 @@ function getRoles(loc: Location): StaffRole[] {
 
 // Staff eligible for a given role slot
 function eligibleStaff(role: StaffRole, staff: Staff[]): Staff[] {
-  if (role === "XR_TECH") return staff.filter(s => s.primaryRole === "XR_TECH")
-  if (role === "MA") return staff.filter(s => s.primaryRole === "MA" || s.primaryRole === "XR_TECH")
-  return staff.filter(s => s.primaryRole === "FD" || s.primaryRole === "MA")
+  return staff.filter(s => (s.roles?.length ? s.roles : [s.primaryRole]).includes(role))
 }
 
 function isAvailable(staff: Staff, day: SchedDay): boolean {

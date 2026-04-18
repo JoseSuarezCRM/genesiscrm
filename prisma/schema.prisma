@@ -758,6 +758,7 @@ model StaffMember {
   id                String                   @id @default(cuid())
   name              String
   primaryRole       StaffRole
+  roles             StaffRole[]              @default([])
   isLastResort      Boolean                  @default(false)
   isActive          Boolean                  @default(true)
   availability      StaffAvailability[]

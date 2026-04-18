@@ -26,6 +26,7 @@ interface StaffMember {
   id: string
   name: string
   primaryRole: StaffRole
+  roles: StaffRole[]
   isLastResort: boolean
   isActive: boolean
   availability: StaffAvailability[]
@@ -88,21 +89,38 @@ function StaffForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "")
   const [role, setRole] = useState<StaffRole>(initial?.primaryRole ?? "MA")
+  const [roles, setRoles] = useState<StaffRole[]>(
+    initial?.roles?.length ? initial.roles : [initial?.primaryRole ?? "MA"]
+  )
   const [lastResort, setLastResort] = useState(initial?.isLastResort ?? false)
   const [isActive, setIsActive] = useState(initial?.isActive ?? true)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState("")
 
+  function toggleRole(r: StaffRole) {
+    setRoles(prev =>
+      prev.includes(r)
+        ? prev.length > 1 ? prev.filter(x => x !== r) : prev
+        : [...prev, r]
+    )
+  }
+
+  function handleRoleChange(newRole: StaffRole) {
+    setRole(newRole)
+    setRoles(prev => prev.includes(newRole) ? prev : [...prev, newRole])
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) { setError("Name is required."); return }
     setError("")
+    const finalRoles = roles.includes(role) ? roles : [role, ...roles]
     startTransition(async () => {
       if (initial) {
-        const res = await updateStaffMember(initial.id, { name: name.trim(), primaryRole: role, isLastResort: lastResort, isActive })
+        const res = await updateStaffMember(initial.id, { name: name.trim(), primaryRole: role, roles: finalRoles, isLastResort: lastResort, isActive })
         if (!res.success) { setError(res.error ?? "Failed."); return }
       } else {
-        const res = await createStaffMember({ name: name.trim(), primaryRole: role, isLastResort: lastResort })
+        const res = await createStaffMember({ name: name.trim(), primaryRole: role, roles: finalRoles, isLastResort: lastResort })
         if (!res.success) { setError(res.error ?? "Failed."); return }
       }
       onSave()
@@ -134,7 +152,7 @@ function StaffForm({
           <label className="block text-xs font-medium text-slate-600 mb-1">Primary Role</label>
           <select
             value={role}
-            onChange={e => setRole(e.target.value as StaffRole)}
+            onChange={e => handleRoleChange(e.target.value as StaffRole)}
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
             {ROLE_OPTIONS.map(o => (
@@ -142,6 +160,30 @@ function StaffForm({
             ))}
           </select>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1.5">Can also fill</label>
+        <div className="flex gap-2">
+          {ROLE_OPTIONS.map(o => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => toggleRole(o.value)}
+              className={cn(
+                "px-3 py-1 rounded-lg text-xs font-semibold border transition-colors",
+                roles.includes(o.value)
+                  ? o.value === "XR_TECH" ? "bg-blue-600 text-white border-blue-600"
+                    : o.value === "MA" ? "bg-green-600 text-white border-green-600"
+                    : "bg-orange-500 text-white border-orange-500"
+                  : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400 mt-1">Primary role is always included. At least one required.</p>
       </div>
 
       <div className="flex items-center gap-4">

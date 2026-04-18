@@ -121,6 +121,7 @@ export async function setStaffLocations(
 export async function createStaffMember(input: {
   name: string
   primaryRole: StaffRole
+  roles: StaffRole[]
   isLastResort: boolean
 }): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
@@ -135,7 +136,7 @@ export async function createStaffMember(input: {
 
 export async function updateStaffMember(
   id: string,
-  input: { name: string; primaryRole: StaffRole; isLastResort: boolean; isActive: boolean }
+  input: { name: string; primaryRole: StaffRole; roles: StaffRole[]; isLastResort: boolean; isActive: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
   try {
@@ -270,13 +271,9 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
       return avail[0] ?? candidates.find((s) => !exclude.has(s.id)) ?? null
     }
 
-    // Role eligibility: only assign the exact role (no cross-filling except FD can use MA)
-    const eligible = (role: StaffRole, memberRole: StaffRole) => {
-      if (role === "XR_TECH") return memberRole === "XR_TECH"
-      if (role === "MA")      return memberRole === "MA"
-      if (role === "FD")      return memberRole === "FD" || memberRole === "MA"
-      return false
-    }
+    // Role eligibility: check staff's roles array
+    const eligible = (role: StaffRole, memberRoles: StaffRole[]) =>
+      memberRoles.includes(role)
 
     for (const day of ALL_DAYS) {
       const available = allStaff.filter((s) => {
@@ -293,11 +290,10 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
         // Skip location if today is not one of its open days (empty = all days)
         if (loc.openDays.length > 0 && !loc.openDays.includes(day)) continue
 
-        // Staff eligible for this location (assignments or float)
-        const locAvailable = available.filter((s) => {
-          if (s.locationAssignments.length === 0) return true
-          return s.locationAssignments.some((a) => a.locationId === loc.id)
-        })
+        // Only use staff explicitly assigned to this location
+        const locAvailable = available.filter((s) =>
+          s.locationAssignments.some((a) => a.locationId === loc.id)
+        )
         const locRegular    = locAvailable.filter((s) => !s.isLastResort)
         const locLastResort = locAvailable.filter((s) => s.isLastResort)
 
@@ -305,7 +301,7 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
           const role = req.role as StaffRole
           for (let i = 0; i < req.count; i++) {
             const pool = [...locRegular, ...locLastResort].filter(
-              (s) => eligible(role, s.primaryRole) && !assignedPerRole[role].has(s.id)
+              (s) => eligible(role, s.roles) && !assignedPerRole[role].has(s.id)
             )
             const pick = pickOne(pool, assignedPerRole[role])
             if (pick) {
