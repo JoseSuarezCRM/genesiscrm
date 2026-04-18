@@ -231,7 +231,7 @@ function LocationRow({ member, locations }: { member: StaffMember; locations: Lo
     const next = new Set(assigned)
     next.has(locationId) ? next.delete(locationId) : next.add(locationId)
     startTransition(async () => {
-      await setStaffLocations(member.id, [...next])
+      await setStaffLocations(member.id, Array.from(next))
     })
   }
 
