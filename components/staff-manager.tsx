@@ -221,44 +221,93 @@ function AvailabilityRow({ member }: { member: StaffMember }) {
   )
 }
 
-// ── Location picker row ────────────────────────────────────────────────────────
+// ── Locations tab ──────────────────────────────────────────────────────────────
 
-function LocationRow({ member, locations }: { member: StaffMember; locations: Location[] }) {
+function LocationsTab({ locations, staff }: { locations: Location[]; staff: StaffMember[] }) {
   const [pending, startTransition] = useTransition()
-  const assigned = new Set(member.locationAssignments.map(a => a.locationId))
 
-  function toggle(locationId: string) {
-    const next = new Set(assigned)
-    next.has(locationId) ? next.delete(locationId) : next.add(locationId)
+  // Build a map: locationId → Set of staffIds
+  const assignmentMap = new Map<string, Set<string>>()
+  for (const loc of locations) assignmentMap.set(loc.id, new Set())
+  for (const member of staff) {
+    for (const a of member.locationAssignments) {
+      assignmentMap.get(a.locationId)?.add(member.id)
+    }
+  }
+
+  function toggle(locationId: string, staffId: string) {
+    const current = assignmentMap.get(locationId) ?? new Set()
+    const next = new Set(current)
+    next.has(staffId) ? next.delete(staffId) : next.add(staffId)
     startTransition(async () => {
-      await setStaffLocations(member.id, Array.from(next))
+      await setStaffLocations(staffId,
+        locations
+          .filter(loc => {
+            const s = loc.id === locationId ? next : assignmentMap.get(loc.id) ?? new Set()
+            return s.has(staffId)
+          })
+          .map(loc => loc.id)
+      )
     })
   }
 
+  const ROLE_ORDER: StaffRole[] = ["XR_TECH", "MA", "FD"]
+
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="space-y-3">
       {locations.map(loc => {
-        const active = assigned.has(loc.id)
+        const assigned = assignmentMap.get(loc.id) ?? new Set()
+        const floaters = staff.filter(s => s.locationAssignments.length === 0)
         return (
-          <button
-            key={loc.id}
-            onClick={() => toggle(loc.id)}
-            disabled={pending}
-            title={active ? `Remove ${loc.code}` : `Add ${loc.code}`}
-            className={cn(
-              "text-xs px-2 py-0.5 rounded border font-medium transition-colors disabled:opacity-50",
-              active
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-500 border-slate-200 hover:border-blue-400 hover:text-blue-600"
-            )}
-          >
-            {loc.code}
-          </button>
+          <div key={loc.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
+              <span className="font-semibold text-slate-800 text-sm w-12">{loc.code}</span>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <span>{assigned.size} assigned</span>
+                {floaters.length > 0 && (
+                  <span>· {floaters.length} float</span>
+                )}
+              </div>
+            </div>
+            <div className="px-4 py-3 flex flex-wrap gap-2">
+              {staff
+                .slice()
+                .sort((a, b) => ROLE_ORDER.indexOf(a.primaryRole) - ROLE_ORDER.indexOf(b.primaryRole) || a.name.localeCompare(b.name))
+                .map(member => {
+                  const isAssigned = assigned.has(member.id)
+                  const isFloat = member.locationAssignments.length === 0
+                  return (
+                    <button
+                      key={member.id}
+                      onClick={() => toggle(loc.id, member.id)}
+                      disabled={pending}
+                      title={isFloat ? `${member.name} is a float (works all locations)` : undefined}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-50",
+                        isFloat
+                          ? "border-dashed border-slate-300 text-slate-400 bg-white hover:border-blue-300 hover:text-blue-500"
+                          : isAssigned
+                            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                      )}
+                    >
+                      <span className={cn(
+                        "w-1.5 h-1.5 rounded-full shrink-0",
+                        member.primaryRole === "XR_TECH" ? "bg-blue-400" :
+                        member.primaryRole === "MA" ? "bg-green-400" : "bg-orange-400"
+                      )} />
+                      {member.name}
+                      {isFloat && <span className="text-slate-300">~</span>}
+                    </button>
+                  )
+                })}
+            </div>
+          </div>
         )
       })}
-      {assigned.size === 0 && (
-        <span className="text-xs text-slate-400 italic">All locations (float)</span>
-      )}
+      <p className="text-xs text-slate-400 text-center pt-1">
+        Blue = assigned · Dashed = float (assigned to all locations) · changes save instantly
+      </p>
     </div>
   )
 }
@@ -266,6 +315,7 @@ function LocationRow({ member, locations }: { member: StaffMember; locations: Lo
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function StaffManager({ staff, locations }: { staff: StaffMember[]; locations: Location[] }) {
+  const [tab, setTab] = useState<"staff" | "locations">("staff")
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -288,135 +338,153 @@ export default function StaffManager({ staff, locations }: { staff: StaffMember[
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">{staff.length} active staff</span>
-          <div className="flex items-center gap-1 ml-2">
-            {(["ALL", "XR_TECH", "MA", "FD"] as const).map(r => (
-              <button
-                key={r}
-                onClick={() => setFilterRole(r)}
-                className={cn(
-                  "text-xs px-2.5 py-1 rounded-lg border transition-colors",
-                  filterRole === r
-                    ? "bg-slate-800 text-white border-slate-800"
-                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                {r === "ALL" ? "All" : r === "XR_TECH" ? "XR Tech" : r}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         <button
-          onClick={() => { setAdding(true); setEditingId(null) }}
-          className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg"
+          onClick={() => setTab("staff")}
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            tab === "staff" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          )}
         >
-          <Plus className="h-3.5 w-3.5" />
-          Add Staff
+          Staff Roster
+        </button>
+        <button
+          onClick={() => setTab("locations")}
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            tab === "locations" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          )}
+        >
+          <MapPin className="h-4 w-4" />
+          Locations
         </button>
       </div>
 
-      {adding && (
-        <StaffForm
-          onSave={() => setAdding(false)}
-          onCancel={() => setAdding(false)}
-        />
+      {/* ── Staff tab ── */}
+      {tab === "staff" && (
+        <>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">{staff.length} active staff</span>
+              <div className="flex items-center gap-1 ml-2">
+                {(["ALL", "XR_TECH", "MA", "FD"] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setFilterRole(r)}
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-lg border transition-colors",
+                      filterRole === r
+                        ? "bg-slate-800 text-white border-slate-800"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    )}
+                  >
+                    {r === "ALL" ? "All" : r === "XR_TECH" ? "XR Tech" : r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => { setAdding(true); setEditingId(null) }}
+              className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Staff
+            </button>
+          </div>
+
+          {adding && (
+            <StaffForm onSave={() => setAdding(false)} onCancel={() => setAdding(false)} />
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Name</th>
+                  <th className="text-left px-4 py-3 font-semibold text-slate-600">Role</th>
+                  <th className="text-left px-4 py-3 font-semibold text-slate-600">
+                    <div className="flex items-center gap-1">
+                      Availability
+                      <span className="text-xs font-normal text-slate-400 ml-1">
+                        (click to cycle: ✓ available · ⚑ last resort · ✕ unavailable)
+                      </span>
+                    </div>
+                  </th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="text-center text-slate-400 text-xs py-8 italic">
+                      No staff members found.
+                    </td>
+                  </tr>
+                )}
+                {filtered.map(member => (
+                  editingId === member.id ? (
+                    <tr key={member.id}>
+                      <td colSpan={4} className="px-4 py-3">
+                        <StaffForm
+                          initial={member}
+                          onSave={() => setEditingId(null)}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={member.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-800">
+                        {member.name}
+                        {member.isLastResort && (
+                          <span className="ml-1.5 text-xs text-slate-400" title="Last resort">⚑</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn("inline-flex px-2 py-0.5 rounded text-xs font-semibold", ROLE_COLORS[member.primaryRole])}>
+                          {ROLE_OPTIONS.find(r => r.value === member.primaryRole)?.label ?? member.primaryRole}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <AvailabilityRow member={member} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => { setEditingId(member.id); setAdding(false) }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(member.id, member.name)}
+                            disabled={isPending}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                            title="Deactivate"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-xs text-slate-400 text-center">
+            ⚑ = last resort · ✕ = unavailable · changes save instantly
+          </p>
+        </>
       )}
 
-      {/* Table */}
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="text-left px-4 py-3 font-semibold text-slate-600">Name</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600">Role</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600">
-                <div className="flex items-center gap-1">
-                  Availability
-                  <span className="text-xs font-normal text-slate-400 ml-1">
-                    (click to cycle: ✓ available · ⚑ last resort · ✕ unavailable)
-                  </span>
-                </div>
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-600">
-                <div className="flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Locations
-                  <span className="text-xs font-normal text-slate-400 ml-1">(toggle to assign)</span>
-                </div>
-              </th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={5} className="text-center text-slate-400 text-xs py-8 italic">
-                  No staff members found.
-                </td>
-              </tr>
-            )}
-            {filtered.map(member => (
-              editingId === member.id ? (
-                <tr key={member.id}>
-                  <td colSpan={4} className="px-4 py-3">
-                    <StaffForm
-                      initial={member}
-                      onSave={() => setEditingId(null)}
-                      onCancel={() => setEditingId(null)}
-                    />
-                  </td>
-                </tr>
-              ) : (
-                <tr key={member.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-800">
-                    {member.name}
-                    {member.isLastResort && (
-                      <span className="ml-1.5 text-xs text-slate-400" title="Last resort">⚑</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn("inline-flex px-2 py-0.5 rounded text-xs font-semibold", ROLE_COLORS[member.primaryRole])}>
-                      {ROLE_OPTIONS.find(r => r.value === member.primaryRole)?.label ?? member.primaryRole}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <AvailabilityRow member={member} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <LocationRow member={member} locations={locations} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => { setEditingId(member.id); setAdding(false) }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(member.id, member.name)}
-                        disabled={isPending}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                        title="Deactivate"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <p className="text-xs text-slate-400 text-center">
-        ⚑ = last resort · ✕ = unavailable · changes save instantly
-      </p>
+      {/* ── Locations tab ── */}
+      {tab === "locations" && (
+        <LocationsTab locations={locations} staff={staff} />
+      )}
     </div>
   )
 }
