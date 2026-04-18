@@ -9,7 +9,7 @@ import {
   createStaffMember, updateStaffMember, deleteStaffMember, setAvailability, setStaffLocations,
   createLocation, updateLocation, deleteLocation,
 } from "@/app/actions/scheduler"
-import { Plus, Pencil, Trash2, X, Check, MapPin, Zap, UserCheck } from "lucide-react"
+import { Plus, Pencil, Trash2, X, Check, MapPin } from "lucide-react"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -432,20 +432,16 @@ function LocationCard({
                 .sort((a, b) => ROLE_ORDER_LOC.indexOf(a.primaryRole) - ROLE_ORDER_LOC.indexOf(b.primaryRole) || a.name.localeCompare(b.name))
                 .map(member => {
                   const isAssigned = assigned.has(member.id)
-                  const isFloat = member.locationAssignments.length === 0
                   return (
                     <button
                       key={member.id}
-                      onClick={() => !isFloat && toggleStaff(member.id)}
-                      disabled={staffPending || isFloat}
-                      title={isFloat ? `${member.name} is a float` : undefined}
+                      onClick={() => toggleStaff(member.id)}
+                      disabled={staffPending}
                       className={cn(
                         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors",
-                        isFloat
-                          ? "border-dashed border-slate-200 text-slate-400 bg-slate-50 cursor-default"
-                          : isAssigned
-                            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
-                            : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                        isAssigned
+                          ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
                       )}
                     >
                       <span className={cn("w-1.5 h-1.5 rounded-full shrink-0",
@@ -589,7 +585,7 @@ function AddLocationForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
 
 function LocationsTab({ locations, staff }: { locations: Location[]; staff: StaffMember[] }) {
   const [adding, setAdding] = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
 
   const assignmentMap = new Map<string, Set<string>>()
   for (const loc of locations) assignmentMap.set(loc.id, new Set())
