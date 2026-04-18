@@ -15,20 +15,31 @@ async function requireAdmin() {
 // ── Locations ─────────────────────────────────────────────────────────────────
 
 export async function getLocations() {
-  return prisma.scheduleLocation.findMany({ orderBy: { order: "asc" } })
+  return prisma.scheduleLocation.findMany({
+    orderBy: { order: "asc" },
+    include: { requirements: true },
+  })
 }
 
 export async function createLocation(input: {
   code: string
   name: string
-  hasXray: boolean
-  hasMA: boolean
+  openDays: string[]
+  requirements: { role: string; count: number }[]
 }): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
   try {
     const max = await prisma.scheduleLocation.aggregate({ _max: { order: true } })
     await prisma.scheduleLocation.create({
-      data: { ...input, order: (max._max.order ?? 0) + 1 },
+      data: {
+        code: input.code,
+        name: input.name,
+        openDays: input.openDays,
+        order: (max._max.order ?? 0) + 1,
+        requirements: {
+          create: input.requirements.map(r => ({ role: r.role as any, count: r.count })),
+        },
+      },
     })
     revalidatePath("/scheduler")
     return { success: true }
@@ -39,11 +50,25 @@ export async function createLocation(input: {
 
 export async function updateLocation(
   id: string,
-  input: { code: string; name: string; hasXray: boolean; hasMA: boolean }
+  input: {
+    code: string
+    name: string
+    openDays: string[]
+    requirements: { role: string; count: number }[]
+  }
 ): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
   try {
-    await prisma.scheduleLocation.update({ where: { id }, data: input })
+    await prisma.$transaction([
+      prisma.scheduleLocation.update({
+        where: { id },
+        data: { code: input.code, name: input.name, openDays: input.openDays },
+      }),
+      prisma.locationRoleRequirement.deleteMany({ where: { locationId: id } }),
+      prisma.locationRoleRequirement.createMany({
+        data: input.requirements.map(r => ({ locationId: id, role: r.role as any, count: r.count })),
+      }),
+    ])
     revalidatePath("/scheduler")
     return { success: true }
   } catch (e: any) {
@@ -221,96 +246,73 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
   await requireAdmin()
   try {
     const [locations, allStaff] = await Promise.all([
-      prisma.scheduleLocation.findMany({ orderBy: { order: "asc" } }),
+      prisma.scheduleLocation.findMany({
+        orderBy: { order: "asc" },
+        include: { requirements: true },
+      }),
       prisma.staffMember.findMany({
         where: { isActive: true },
         include: { availability: true, locationAssignments: true },
       }),
     ])
 
-    // Clear existing entries
     await prisma.scheduleEntry.deleteMany({ where: { scheduleId } })
 
-    const days: SchedDay[] = ["MON", "TUE", "WED", "THU", "FRI"]
+    const ALL_DAYS: SchedDay[] = ["MON", "TUE", "WED", "THU", "FRI"]
     const entriesToCreate: {
-      scheduleId: string
-      locationId: string
-      staffId: string
-      assignedRole: StaffRole
-      day: SchedDay
+      scheduleId: string; locationId: string; staffId: string; assignedRole: StaffRole; day: SchedDay
     }[] = []
 
     type StaffPool = typeof allStaff
 
-    const pickOne = (
-      candidates: StaffPool,
-      exclude: Set<string>
-    ) => {
-      // Prefer staff who are not last-resort first
+    const pickOne = (candidates: StaffPool, exclude: Set<string>) => {
       const avail = candidates.filter((s) => !exclude.has(s.id) && !s.isLastResort)
       return avail[0] ?? candidates.find((s) => !exclude.has(s.id)) ?? null
     }
 
-    for (const day of days) {
-      // Staff available this day (not UNAVAILABLE)
+    // Role eligibility: only assign the exact role (no cross-filling except FD can use MA)
+    const eligible = (role: StaffRole, memberRole: StaffRole) => {
+      if (role === "XR_TECH") return memberRole === "XR_TECH"
+      if (role === "MA")      return memberRole === "MA"
+      if (role === "FD")      return memberRole === "FD" || memberRole === "MA"
+      return false
+    }
+
+    for (const day of ALL_DAYS) {
       const available = allStaff.filter((s) => {
         const a = s.availability.find((av) => av.day === day)
         return !a || a.type !== "UNAVAILABLE"
       })
 
-      const regular = available.filter((s) => !s.isLastResort)
-      const lastResort = available.filter((s) => s.isLastResort)
-
-      // Track assigned staff this day to avoid double-booking in same role
-      const assignedAsXR = new Set<string>()
-      const assignedAsMA = new Set<string>()
-      const assignedAsFD = new Set<string>()
+      // Per-role tracker to avoid double-booking the same person in the same role on the same day
+      const assignedPerRole: Record<StaffRole, Set<string>> = {
+        XR_TECH: new Set(), MA: new Set(), FD: new Set(),
+      }
 
       for (const loc of locations) {
-        // Staff eligible for this location: no assignments = float (any location)
-        const locAvailable = [...regular, ...lastResort].filter((s) => {
+        // Skip location if today is not one of its open days (empty = all days)
+        if (loc.openDays.length > 0 && !loc.openDays.includes(day)) continue
+
+        // Staff eligible for this location (assignments or float)
+        const locAvailable = available.filter((s) => {
           if (s.locationAssignments.length === 0) return true
           return s.locationAssignments.some((a) => a.locationId === loc.id)
         })
-        const locRegular   = locAvailable.filter((s) => !s.isLastResort)
+        const locRegular    = locAvailable.filter((s) => !s.isLastResort)
         const locLastResort = locAvailable.filter((s) => s.isLastResort)
 
-        // ── XR slot ──
-        if (loc.hasXray) {
-          const xrPool = [...locRegular, ...locLastResort].filter(
-            (s) => s.primaryRole === "XR_TECH" && !assignedAsXR.has(s.id)
-          )
-          const pick = pickOne(xrPool, assignedAsXR)
-          if (pick) {
-            entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: pick.id, assignedRole: "XR_TECH", day })
-            assignedAsXR.add(pick.id)
+        for (const req of loc.requirements) {
+          const role = req.role as StaffRole
+          for (let i = 0; i < req.count; i++) {
+            const pool = [...locRegular, ...locLastResort].filter(
+              (s) => eligible(role, s.primaryRole) && !assignedPerRole[role].has(s.id)
+            )
+            const pick = pickOne(pool, assignedPerRole[role])
+            if (pick) {
+              entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: pick.id, assignedRole: role, day })
+              assignedPerRole[role].add(pick.id)
+            }
           }
-        }
-
-        // ── MA slot (only for locations that need one) ──
-        // XR techs are NOT eligible for MA roles
-        if (loc.hasMA) {
-          const maPool = [...locRegular, ...locLastResort].filter(
-            (s) => s.primaryRole === "MA" && !assignedAsMA.has(s.id)
-          )
-          const maPick = pickOne(maPool, assignedAsMA)
-          if (maPick) {
-            entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: maPick.id, assignedRole: "MA", day })
-            assignedAsMA.add(maPick.id)
-          }
-        }
-
-        // ── FD slot ──
-        // Eligible: FD or MA not already used as MA today
-        const fdPool = [...locRegular, ...locLastResort].filter(
-          (s) =>
-            (s.primaryRole === "FD" || s.primaryRole === "MA") &&
-            !assignedAsFD.has(s.id)
-        )
-        const fdPick = pickOne(fdPool, assignedAsFD)
-        if (fdPick) {
-          entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: fdPick.id, assignedRole: "FD", day })
-          assignedAsFD.add(fdPick.id)
         }
       }
     }

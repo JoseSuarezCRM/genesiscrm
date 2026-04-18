@@ -32,13 +32,18 @@ interface StaffMember {
   locationAssignments: StaffLocationAssignment[]
 }
 
+interface RoleRequirement {
+  role: StaffRole
+  count: number
+}
+
 interface Location {
   id: string
   code: string
   name: string
-  hasXray: boolean
-  hasMA: boolean
+  openDays: string[]
   order: number
+  requirements: RoleRequirement[]
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -224,82 +229,17 @@ function AvailabilityRow({ member }: { member: StaffMember }) {
   )
 }
 
-// ── Location form (add / edit) ─────────────────────────────────────────────────
+// ── Location card (collapsed + expanded) ──────────────────────────────────────
 
-function LocationForm({
-  initial, onSave, onCancel,
-}: {
-  initial?: Location
-  onSave: () => void
-  onCancel: () => void
-}) {
-  const [code, setCode] = useState(initial?.code ?? "")
-  const [name, setName] = useState(initial?.name ?? "")
-  const [hasXray, setHasXray] = useState(initial?.hasXray ?? true)
-  const [hasMA, setHasMA] = useState(initial?.hasMA ?? true)
-  const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState("")
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!code.trim()) { setError("Code is required."); return }
-    setError("")
-    startTransition(async () => {
-      const input = { code: code.trim().toUpperCase(), name: name.trim() || code.trim().toUpperCase(), hasXray, hasMA }
-      const res = initial
-        ? await updateLocation(initial.id, input)
-        : await createLocation(input)
-      if (!res.success) { setError(res.error ?? "Failed."); return }
-      onSave()
-    })
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-800">{initial ? "Edit Location" : "Add Location"}</h3>
-        <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
-      </div>
-      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{error}</p>}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Code</label>
-          <input
-            value={code} onChange={e => setCode(e.target.value)}
-            placeholder="e.g. STC"
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Display Name <span className="text-slate-400">(optional)</span></label>
-          <input
-            value={name} onChange={e => setName(e.target.value)}
-            placeholder="Defaults to code"
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-5">
-        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={hasXray} onChange={e => setHasXray(e.target.checked)} className="rounded" />
-          Has XR Tech slot
-        </label>
-        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={hasMA} onChange={e => setHasMA(e.target.checked)} className="rounded" />
-          Has MA slot
-        </label>
-      </div>
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">Cancel</button>
-        <button type="submit" disabled={isPending} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1">
-          <Check className="h-3.5 w-3.5" />{initial ? "Save" : "Add"}
-        </button>
-      </div>
-    </form>
-  )
+const ALL_DAYS: SchedDay[] = ["MON", "TUE", "WED", "THU", "FRI"]
+const DAY_SHORT: Record<SchedDay, string> = { MON: "Mon", TUE: "Tue", WED: "Wed", THU: "Thu", FRI: "Fri" }
+const ROLE_COLORS_LOC: Record<StaffRole, { bg: string; text: string; dot: string }> = {
+  XR_TECH: { bg: "bg-blue-600",   text: "text-white", dot: "bg-blue-300"   },
+  MA:      { bg: "bg-green-600",  text: "text-white", dot: "bg-green-300"  },
+  FD:      { bg: "bg-orange-500", text: "text-white", dot: "bg-orange-300" },
 }
-
-// ── Location card ──────────────────────────────────────────────────────────────
+const ROLE_LABEL: Record<StaffRole, string> = { XR_TECH: "XR Tech", MA: "MA", FD: "FD" }
+const ROLE_ORDER_LOC: StaffRole[] = ["XR_TECH", "MA", "FD"]
 
 function LocationCard({
   loc, staff, assignmentMap, onDelete,
@@ -309,98 +249,339 @@ function LocationCard({
   assignmentMap: Map<string, Set<string>>
   onDelete: (id: string) => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [pending, startTransition] = useTransition()
-  const assigned = assignmentMap.get(loc.id) ?? new Set()
-  const ROLE_ORDER: StaffRole[] = ["XR_TECH", "MA", "FD"]
+  const [open, setOpen] = useState(false)
 
-  function toggle(staffId: string) {
+  // ── local editable state (mirrors DB, saved on change) ──
+  const [code, setCode] = useState(loc.code)
+  const [name, setName] = useState(loc.name)
+  const [openDays, setOpenDays] = useState<string[]>(
+    loc.openDays.length > 0 ? loc.openDays : ALL_DAYS
+  )
+  const [reqs, setReqs] = useState<{ role: StaffRole; count: number }[]>(() => {
+    const existing = new Map(loc.requirements.map(r => [r.role as StaffRole, r.count]))
+    return ROLE_ORDER_LOC.map(role => ({ role, count: existing.get(role) ?? 0 }))
+  })
+
+  const [staffPending, startStaffTransition] = useTransition()
+  const [savePending, startSaveTransition] = useTransition()
+  const [error, setError] = useState("")
+
+  const assigned = assignmentMap.get(loc.id) ?? new Set()
+
+  function toggleDay(day: string) {
+    setOpenDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
+  }
+
+  function setCount(role: StaffRole, delta: number) {
+    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: Math.max(0, r.count + delta) } : r))
+  }
+
+  function toggleRole(role: StaffRole) {
+    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: r.count > 0 ? 0 : 1 } : r))
+  }
+
+  function save() {
+    setError("")
+    startSaveTransition(async () => {
+      const days = openDays.length === ALL_DAYS.length ? [] : openDays
+      const res = await updateLocation(loc.id, {
+        code: code.trim().toUpperCase(),
+        name: name.trim() || code.trim().toUpperCase(),
+        openDays: days,
+        requirements: reqs.filter(r => r.count > 0),
+      })
+      if (!res.success) setError(res.error ?? "Failed.")
+    })
+  }
+
+  function toggleStaff(staffId: string) {
     const next = new Set(assigned)
     next.has(staffId) ? next.delete(staffId) : next.add(staffId)
-    startTransition(async () => {
+    startStaffTransition(async () => {
       await setStaffLocations(staffId,
         Array.from(assignmentMap.entries())
-          .filter(([locId, members]) => {
-            const s = locId === loc.id ? next : members
-            return s.has(staffId)
-          })
+          .filter(([locId, members]) => (locId === loc.id ? next : members).has(staffId))
           .map(([locId]) => locId)
       )
     })
   }
 
-  if (editing) {
-    return <LocationForm initial={loc} onSave={() => setEditing(false)} onCancel={() => setEditing(false)} />
-  }
+  const displayDays = loc.openDays.length === 0 ? "All days" : loc.openDays.map(d => DAY_SHORT[d as SchedDay]).join(", ")
+  const displayReqs = loc.requirements.filter(r => r.count > 0)
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
-      {/* Card header */}
-      <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2">
-        <div>
-          <p className="font-bold text-slate-800 text-base leading-tight">{loc.code}</p>
-          {loc.name !== loc.code && <p className="text-xs text-slate-400 mt-0.5">{loc.name}</p>}
-          <div className="flex items-center gap-2 mt-1.5">
-            <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium",
-              loc.hasXray ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-400 line-through")}>
-              <Zap className="h-2.5 w-2.5" />XR
-            </span>
-            <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium",
-              loc.hasMA ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400 line-through")}>
-              <UserCheck className="h-2.5 w-2.5" />MA
-            </span>
+    <div className={cn("bg-white border rounded-xl overflow-hidden transition-shadow", open ? "border-blue-300 shadow-md col-span-full" : "border-slate-200 hover:border-slate-300 cursor-pointer")}>
+
+      {/* ── Collapsed header (always visible) ── */}
+      <div
+        className="px-4 py-3 flex items-center gap-3"
+        onClick={() => setOpen(v => !v)}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-800 text-sm">{loc.code}</span>
+            {loc.name !== loc.code && <span className="text-xs text-slate-400">{loc.name}</span>}
+          </div>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-xs text-slate-400">{displayDays}</span>
+            {displayReqs.map(r => (
+              <span key={r.role} className={cn("inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded font-medium",
+                r.role === "XR_TECH" ? "bg-blue-50 text-blue-700" :
+                r.role === "MA"      ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"
+              )}>
+                {r.count}× {ROLE_LABEL[r.role as StaffRole]}
+              </span>
+            ))}
+            <span className="text-xs text-slate-400">· {assigned.size} staff</span>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button onClick={() => setEditing(true)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Edit">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={() => onDelete(loc.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete">
+        <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+          <button onClick={() => onDelete(loc.id)} className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      {/* Staff chips */}
-      <div className="px-4 py-3 flex flex-wrap gap-1.5 flex-1">
-        {staff.length === 0 && (
-          <span className="text-xs text-slate-400 italic">No staff yet</span>
-        )}
-        {staff
-          .slice()
-          .sort((a, b) => ROLE_ORDER.indexOf(a.primaryRole) - ROLE_ORDER.indexOf(b.primaryRole) || a.name.localeCompare(b.name))
-          .map(member => {
-            const isAssigned = assigned.has(member.id)
-            const isFloat = member.locationAssignments.length === 0
+      {/* ── Expanded editor ── */}
+      {open && (
+        <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-5">
+          {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{error}</p>}
+
+          {/* Name / code */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Code</label>
+              <input value={code} onChange={e => setCode(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Display name</label>
+              <input value={name} onChange={e => setName(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Days open */}
+          <div>
+            <p className="text-xs font-medium text-slate-500 mb-2">Days open</p>
+            <div className="flex gap-1.5">
+              {ALL_DAYS.map(day => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleDay(day)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                    openDays.includes(day)
+                      ? "bg-slate-800 text-white border-slate-800"
+                      : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
+                  )}
+                >
+                  {DAY_SHORT[day]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Role requirements */}
+          <div>
+            <p className="text-xs font-medium text-slate-500 mb-2">Staff needed per day</p>
+            <div className="flex gap-3 flex-wrap">
+              {reqs.map(({ role, count }) => {
+                const active = count > 0
+                const colors = ROLE_COLORS_LOC[role]
+                return (
+                  <div key={role} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
+                    active ? "border-transparent " + colors.bg : "border-slate-200 bg-white"
+                  )}>
+                    <button
+                      type="button"
+                      onClick={() => toggleRole(role)}
+                      className={cn("text-xs font-semibold", active ? colors.text : "text-slate-500")}
+                    >
+                      {ROLE_LABEL[role]}
+                    </button>
+                    {active && (
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => setCount(role, -1)}
+                          className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">−</button>
+                        <span className={cn("text-sm font-bold w-4 text-center", colors.text)}>{count}</span>
+                        <button type="button" onClick={() => setCount(role, +1)}
+                          className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">+</button>
+                      </div>
+                    )}
+                    {!active && (
+                      <button type="button" onClick={() => toggleRole(role)}
+                        className="text-xs text-slate-400 hover:text-slate-600">+ Add</button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Staff assignment */}
+          <div>
+            <p className="text-xs font-medium text-slate-500 mb-2">Assigned staff <span className="text-slate-400 font-normal">(click to toggle · dashed = float)</span></p>
+            <div className="flex flex-wrap gap-1.5">
+              {staff.length === 0 && <span className="text-xs text-slate-400 italic">No staff yet</span>}
+              {staff
+                .slice()
+                .sort((a, b) => ROLE_ORDER_LOC.indexOf(a.primaryRole) - ROLE_ORDER_LOC.indexOf(b.primaryRole) || a.name.localeCompare(b.name))
+                .map(member => {
+                  const isAssigned = assigned.has(member.id)
+                  const isFloat = member.locationAssignments.length === 0
+                  return (
+                    <button
+                      key={member.id}
+                      onClick={() => !isFloat && toggleStaff(member.id)}
+                      disabled={staffPending || isFloat}
+                      title={isFloat ? `${member.name} is a float` : undefined}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors",
+                        isFloat
+                          ? "border-dashed border-slate-200 text-slate-400 bg-slate-50 cursor-default"
+                          : isAssigned
+                            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                      )}
+                    >
+                      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0",
+                        member.primaryRole === "XR_TECH" ? "bg-blue-400" :
+                        member.primaryRole === "MA" ? "bg-green-400" : "bg-orange-400"
+                      )} />
+                      {member.name}
+                    </button>
+                  )
+                })}
+            </div>
+          </div>
+
+          {/* Save */}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={() => setOpen(false)}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+              Close
+            </button>
+            <button type="button" onClick={save} disabled={savePending}
+              className="text-xs px-4 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" />Save changes
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Add location form ──────────────────────────────────────────────────────────
+
+function AddLocationForm({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) {
+  const [code, setCode] = useState("")
+  const [name, setName] = useState("")
+  const [openDays, setOpenDays] = useState<string[]>(ALL_DAYS)
+  const [reqs, setReqs] = useState<{ role: StaffRole; count: number }[]>([
+    { role: "XR_TECH", count: 1 }, { role: "MA", count: 1 }, { role: "FD", count: 1 },
+  ])
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState("")
+
+  function toggleDay(day: string) {
+    setOpenDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
+  }
+  function setCount(role: StaffRole, delta: number) {
+    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: Math.max(0, r.count + delta) } : r))
+  }
+  function toggleRole(role: StaffRole) {
+    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: r.count > 0 ? 0 : 1 } : r))
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!code.trim()) { setError("Code is required."); return }
+    setError("")
+    startTransition(async () => {
+      const days = openDays.length === ALL_DAYS.length ? [] : openDays
+      const res = await createLocation({
+        code: code.trim().toUpperCase(),
+        name: name.trim() || code.trim().toUpperCase(),
+        openDays: days,
+        requirements: reqs.filter(r => r.count > 0),
+      })
+      if (!res.success) { setError(res.error ?? "Failed."); return }
+      onSave()
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4 col-span-full">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Add Location</h3>
+        <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+      </div>
+      {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{error}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Code</label>
+          <input value={code} onChange={e => setCode(e.target.value)} placeholder="e.g. STC"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Display name <span className="text-slate-400">(optional)</span></label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Defaults to code"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-slate-600 mb-2">Days open</p>
+        <div className="flex gap-1.5">
+          {ALL_DAYS.map(day => (
+            <button key={day} type="button" onClick={() => toggleDay(day)}
+              className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                openDays.includes(day) ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
+              )}>
+              {DAY_SHORT[day]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-slate-600 mb-2">Staff needed per day</p>
+        <div className="flex gap-3 flex-wrap">
+          {reqs.map(({ role, count }) => {
+            const active = count > 0
+            const colors = ROLE_COLORS_LOC[role]
             return (
-              <button
-                key={member.id}
-                onClick={() => toggle(member.id)}
-                disabled={pending || isFloat}
-                title={isFloat ? `${member.name} is a float — works all locations` : undefined}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors",
-                  isFloat
-                    ? "border-dashed border-slate-200 text-slate-400 bg-slate-50 cursor-default"
-                    : isAssigned
-                      ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+              <div key={role} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
+                active ? "border-transparent " + colors.bg : "border-slate-200 bg-white"
+              )}>
+                <button type="button" onClick={() => toggleRole(role)}
+                  className={cn("text-xs font-semibold", active ? colors.text : "text-slate-500")}>
+                  {ROLE_LABEL[role]}
+                </button>
+                {active && (
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => setCount(role, -1)}
+                      className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">−</button>
+                    <span className={cn("text-sm font-bold w-4 text-center", colors.text)}>{count}</span>
+                    <button type="button" onClick={() => setCount(role, +1)}
+                      className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">+</button>
+                  </div>
                 )}
-              >
-                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0",
-                  member.primaryRole === "XR_TECH" ? "bg-blue-400" :
-                  member.primaryRole === "MA" ? "bg-green-400" : "bg-orange-400"
-                )} />
-                {member.name}
-              </button>
+              </div>
             )
           })}
+        </div>
       </div>
-
-      <div className="px-4 py-2 border-t border-slate-50 text-xs text-slate-400">
-        {assigned.size} assigned · {staff.filter(s => s.locationAssignments.length === 0).length} float
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button type="submit" disabled={isPending} className="text-xs px-4 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1">
+          <Check className="h-3.5 w-3.5" />Add
+        </button>
       </div>
-    </div>
+    </form>
   )
 }
 
@@ -410,7 +591,6 @@ function LocationsTab({ locations, staff }: { locations: Location[]; staff: Staf
   const [adding, setAdding] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  // locationId → Set<staffId>
   const assignmentMap = new Map<string, Set<string>>()
   for (const loc of locations) assignmentMap.set(loc.id, new Set())
   for (const member of staff) {
@@ -427,35 +607,21 @@ function LocationsTab({ locations, staff }: { locations: Location[]; staff: Staf
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{locations.length} locations</p>
-        <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add Location
+        <p className="text-sm text-slate-500">{locations.length} locations · click a card to edit</p>
+        <button onClick={() => setAdding(v => !v)}
+          className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg">
+          <Plus className="h-3.5 w-3.5" />Add Location
         </button>
       </div>
 
-      {adding && (
-        <LocationForm onSave={() => setAdding(false)} onCancel={() => setAdding(false)} />
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {adding && (
+          <AddLocationForm onSave={() => setAdding(false)} onCancel={() => setAdding(false)} />
+        )}
         {locations.map(loc => (
-          <LocationCard
-            key={loc.id}
-            loc={loc}
-            staff={staff}
-            assignmentMap={assignmentMap}
-            onDelete={handleDelete}
-          />
+          <LocationCard key={loc.id} loc={loc} staff={staff} assignmentMap={assignmentMap} onDelete={handleDelete} />
         ))}
       </div>
-
-      <p className="text-xs text-slate-400 text-center pt-1">
-        Blue chip = assigned · Dashed = float (works all locations) · changes save instantly
-      </p>
     </div>
   )
 }
