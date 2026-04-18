@@ -15,7 +15,76 @@ async function requireAdmin() {
 // ── Locations ─────────────────────────────────────────────────────────────────
 
 export async function getLocations() {
-  return prisma.scheduleLocation.findMany({ orderBy: { order: "asc" } })
+  return prisma.scheduleLocation.findMany({
+    orderBy: { order: "asc" },
+    include: { requirements: true },
+  })
+}
+
+export async function createLocation(input: {
+  code: string
+  name: string
+  openDays: string[]
+  requirements: { role: string; count: number }[]
+}): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    const max = await prisma.scheduleLocation.aggregate({ _max: { order: true } })
+    await prisma.scheduleLocation.create({
+      data: {
+        code: input.code,
+        name: input.name,
+        openDays: input.openDays,
+        order: (max._max.order ?? 0) + 1,
+        requirements: {
+          create: input.requirements.map(r => ({ role: r.role as any, count: r.count })),
+        },
+      },
+    })
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
+}
+
+export async function updateLocation(
+  id: string,
+  input: {
+    code: string
+    name: string
+    openDays: string[]
+    requirements: { role: string; count: number }[]
+  }
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await prisma.$transaction([
+      prisma.scheduleLocation.update({
+        where: { id },
+        data: { code: input.code, name: input.name, openDays: input.openDays },
+      }),
+      prisma.locationRoleRequirement.deleteMany({ where: { locationId: id } }),
+      prisma.locationRoleRequirement.createMany({
+        data: input.requirements.map(r => ({ locationId: id, role: r.role as any, count: r.count })),
+      }),
+    ])
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
+}
+
+export async function deleteLocation(id: string): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await prisma.scheduleLocation.delete({ where: { id } })
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
 }
 
 // ── Staff ─────────────────────────────────────────────────────────────────────
@@ -24,8 +93,29 @@ export async function getStaff() {
   return prisma.staffMember.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
-    include: { availability: true },
+    include: { availability: true, locationAssignments: true },
   })
+}
+
+export async function setStaffLocations(
+  staffId: string,
+  locationIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await prisma.$transaction([
+      prisma.staffLocationAssignment.deleteMany({ where: { staffId } }),
+      ...(locationIds.length > 0
+        ? [prisma.staffLocationAssignment.createMany({
+            data: locationIds.map(locationId => ({ staffId, locationId })),
+          })]
+        : []),
+    ])
+    revalidatePath("/scheduler")
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e?.message }
+  }
 }
 
 export async function createStaffMember(input: {
@@ -156,88 +246,73 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
   await requireAdmin()
   try {
     const [locations, allStaff] = await Promise.all([
-      prisma.scheduleLocation.findMany({ orderBy: { order: "asc" } }),
+      prisma.scheduleLocation.findMany({
+        orderBy: { order: "asc" },
+        include: { requirements: true },
+      }),
       prisma.staffMember.findMany({
         where: { isActive: true },
-        include: { availability: true },
+        include: { availability: true, locationAssignments: true },
       }),
     ])
 
-    // Clear existing entries
     await prisma.scheduleEntry.deleteMany({ where: { scheduleId } })
 
-    const days: SchedDay[] = ["MON", "TUE", "WED", "THU", "FRI"]
+    const ALL_DAYS: SchedDay[] = ["MON", "TUE", "WED", "THU", "FRI"]
     const entriesToCreate: {
-      scheduleId: string
-      locationId: string
-      staffId: string
-      assignedRole: StaffRole
-      day: SchedDay
+      scheduleId: string; locationId: string; staffId: string; assignedRole: StaffRole; day: SchedDay
     }[] = []
 
     type StaffPool = typeof allStaff
 
-    const pickOne = (
-      candidates: StaffPool,
-      exclude: Set<string>
-    ) => {
-      // Prefer staff who are not last-resort first
+    const pickOne = (candidates: StaffPool, exclude: Set<string>) => {
       const avail = candidates.filter((s) => !exclude.has(s.id) && !s.isLastResort)
       return avail[0] ?? candidates.find((s) => !exclude.has(s.id)) ?? null
     }
 
-    for (const day of days) {
-      // Staff available this day (not UNAVAILABLE)
+    // Role eligibility: only assign the exact role (no cross-filling except FD can use MA)
+    const eligible = (role: StaffRole, memberRole: StaffRole) => {
+      if (role === "XR_TECH") return memberRole === "XR_TECH"
+      if (role === "MA")      return memberRole === "MA"
+      if (role === "FD")      return memberRole === "FD" || memberRole === "MA"
+      return false
+    }
+
+    for (const day of ALL_DAYS) {
       const available = allStaff.filter((s) => {
         const a = s.availability.find((av) => av.day === day)
         return !a || a.type !== "UNAVAILABLE"
       })
 
-      const regular = available.filter((s) => !s.isLastResort)
-      const lastResort = available.filter((s) => s.isLastResort)
-
-      // Track assigned staff this day to avoid double-booking in same role
-      const assignedAsXR = new Set<string>()
-      const assignedAsMA = new Set<string>()
-      const assignedAsFD = new Set<string>()
+      // Per-role tracker to avoid double-booking the same person in the same role on the same day
+      const assignedPerRole: Record<StaffRole, Set<string>> = {
+        XR_TECH: new Set(), MA: new Set(), FD: new Set(),
+      }
 
       for (const loc of locations) {
-        // ── XR slot ──
-        if (loc.hasXray) {
-          const xrPool = [...regular, ...lastResort].filter(
-            (s) => s.primaryRole === "XR_TECH" && !assignedAsXR.has(s.id)
-          )
-          const pick = pickOne(xrPool, assignedAsXR)
-          if (pick) {
-            entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: pick.id, assignedRole: "XR_TECH", day })
-            assignedAsXR.add(pick.id)
+        // Skip location if today is not one of its open days (empty = all days)
+        if (loc.openDays.length > 0 && !loc.openDays.includes(day)) continue
+
+        // Staff eligible for this location (assignments or float)
+        const locAvailable = available.filter((s) => {
+          if (s.locationAssignments.length === 0) return true
+          return s.locationAssignments.some((a) => a.locationId === loc.id)
+        })
+        const locRegular    = locAvailable.filter((s) => !s.isLastResort)
+        const locLastResort = locAvailable.filter((s) => s.isLastResort)
+
+        for (const req of loc.requirements) {
+          const role = req.role as StaffRole
+          for (let i = 0; i < req.count; i++) {
+            const pool = [...locRegular, ...locLastResort].filter(
+              (s) => eligible(role, s.primaryRole) && !assignedPerRole[role].has(s.id)
+            )
+            const pick = pickOne(pool, assignedPerRole[role])
+            if (pick) {
+              entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: pick.id, assignedRole: role, day })
+              assignedPerRole[role].add(pick.id)
+            }
           }
-        }
-
-        // ── MA slot ──
-        // Eligible: MA or XR_TECH (who isn't doing XR at this location today)
-        const maPool = [...regular, ...lastResort].filter(
-          (s) =>
-            (s.primaryRole === "MA" || s.primaryRole === "XR_TECH") &&
-            !assignedAsMA.has(s.id)
-        )
-        const maPick = pickOne(maPool, assignedAsMA)
-        if (maPick) {
-          entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: maPick.id, assignedRole: "MA", day })
-          assignedAsMA.add(maPick.id)
-        }
-
-        // ── FD slot ──
-        // Eligible: FD or MA (who isn't doing MA at this location today)
-        const fdPool = [...regular, ...lastResort].filter(
-          (s) =>
-            (s.primaryRole === "FD" || s.primaryRole === "MA") &&
-            !assignedAsFD.has(s.id)
-        )
-        const fdPick = pickOne(fdPool, assignedAsFD)
-        if (fdPick) {
-          entriesToCreate.push({ scheduleId, locationId: loc.id, staffId: fdPick.id, assignedRole: "FD", day })
-          assignedAsFD.add(fdPick.id)
         }
       }
     }

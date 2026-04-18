@@ -1,10 +1,10 @@
-import { getStaff } from "@/app/actions/scheduler"
+import { getStaff, getLocations } from "@/app/actions/scheduler"
 import StaffManager from "@/components/staff-manager"
 import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 
 export default async function SchedulerStaffPage() {
-  const staff = await getStaff()
+  const [staff, locations] = await Promise.all([getStaff(), getLocations()])
 
   return (
     <div className="p-6 space-y-2">
@@ -22,7 +22,7 @@ export default async function SchedulerStaffPage() {
         </p>
       </div>
 
-      <StaffManager staff={staff} />
+      <StaffManager staff={staff} locations={locations} />
     </div>
   )
 }

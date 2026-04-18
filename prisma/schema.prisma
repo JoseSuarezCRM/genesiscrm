@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 enum Role {
@@ -731,26 +732,48 @@ enum AvailabilityType {
 }
 
 model ScheduleLocation {
-  id      String          @id @default(cuid())
-  code    String          @unique  // STC, OB, LV, etc.
-  name    String
-  hasXray Boolean         @default(true)
-  order   Int
-  entries ScheduleEntry[]
+  id               String                    @id @default(cuid())
+  code             String                    @unique
+  name             String
+  openDays         String[]                  @default([])
+  order            Int
+  entries          ScheduleEntry[]
+  staffAssignments StaffLocationAssignment[]
+  requirements     LocationRoleRequirement[]
 
   @@index([order])
 }
 
+model LocationRoleRequirement {
+  id         String           @id @default(cuid())
+  locationId String
+  location   ScheduleLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  role       StaffRole
+  count      Int              @default(1)
+
+  @@unique([locationId, role])
+}
+
 model StaffMember {
-  id           String              @id @default(cuid())
-  name         String
-  primaryRole  StaffRole
-  isLastResort Boolean             @default(false)
-  isActive     Boolean             @default(true)
-  availability StaffAvailability[]
-  entries      ScheduleEntry[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  id                String                   @id @default(cuid())
+  name              String
+  primaryRole       StaffRole
+  isLastResort      Boolean                  @default(false)
+  isActive          Boolean                  @default(true)
+  availability      StaffAvailability[]
+  entries           ScheduleEntry[]
+  locationAssignments StaffLocationAssignment[]
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+}
+
+model StaffLocationAssignment {
+  staffId    String
+  locationId String
+  staff      StaffMember      @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  location   ScheduleLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, locationId])
 }
 
 model StaffAvailability {

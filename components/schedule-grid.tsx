@@ -12,7 +12,10 @@ import { ChevronLeft, ChevronRight, Zap, Trash2, X, Plus, AlertCircle, CheckCirc
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Location {
-  id: string; code: string; hasXray: boolean; order: number
+  id: string
+  code: string
+  order: number
+  requirements: { role: StaffRole; count: number }[]
 }
 
 interface Staff {
@@ -57,9 +60,11 @@ const ROLE_CHIP: Record<StaffRole, string> = {
   FD:      "bg-orange-100 text-orange-800",
 }
 
-// Roles applicable to a location (XR locations get XR+MA+FD, others MA+FD)
-function getRoles(hasXray: boolean): StaffRole[] {
-  return hasXray ? ["XR_TECH", "MA", "FD"] : ["MA", "FD"]
+const ROLE_ORDER: StaffRole[] = ["XR_TECH", "MA", "FD"]
+
+function getRoles(loc: Location): StaffRole[] {
+  const active = new Set(loc.requirements.filter(r => r.count > 0).map(r => r.role))
+  return ROLE_ORDER.filter(r => active.has(r))
 }
 
 // Staff eligible for a given role slot
@@ -300,14 +305,14 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
           </thead>
           <tbody>
             {locations.map((loc) => {
-              const roles = getRoles(loc.hasXray)
+              const roles = getRoles(loc)
               return roles.map((role, ri) => (
                 <tr
                   key={`${loc.id}-${role}`}
                   className={cn(
                     "border-b border-slate-100",
                     ri === roles.length - 1 && "border-b-2 border-slate-200",
-                    ri === 0 && loc.hasXray && "border-t border-slate-200"
+                    ri === 0 && "border-t border-slate-200"
                   )}
                 >
                   {/* Location label — only on first role row */}
