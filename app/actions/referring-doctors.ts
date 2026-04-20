@@ -5,6 +5,22 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 
+// Words that should stay lowercase in title case (unless first word)
+const LOWER_WORDS = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "so", "the", "to", "up", "yet"])
+
+function toProperCase(str: string): string {
+  return str
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .map((word, i) => {
+      const lower = word.toLowerCase()
+      if (i !== 0 && LOWER_WORDS.has(lower)) return lower
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    })
+    .join(" ")
+}
+
 // ─── Practices ────────────────────────────────────────────────────────────────
 
 const PracticeSchema = z.object({
@@ -28,7 +44,7 @@ export async function createPractice(data: unknown) {
 
   const practice = await prisma.referringPractice.create({
     data: {
-      name: parsed.data.name,
+      name: toProperCase(parsed.data.name),
       phone: parsed.data.phone || null,
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
@@ -49,7 +65,7 @@ export async function updatePractice(id: string, data: unknown) {
   await prisma.referringPractice.update({
     where: { id },
     data: {
-      name: parsed.data.name,
+      name: toProperCase(parsed.data.name),
       phone: parsed.data.phone || null,
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
@@ -128,7 +144,7 @@ export async function createLocation(data: unknown) {
 
   const location = await prisma.practiceLocation.create({
     data: {
-      name: parsed.data.name,
+      name: toProperCase(parsed.data.name),
       phone: parsed.data.phone || null,
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
@@ -150,7 +166,7 @@ export async function updateLocation(id: string, data: unknown) {
   await prisma.practiceLocation.update({
     where: { id },
     data: {
-      name: parsed.data.name,
+      name: toProperCase(parsed.data.name),
       phone: parsed.data.phone || null,
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
@@ -312,7 +328,7 @@ export async function createDoctor(data: unknown) {
 
   const doctor = await prisma.referringDoctor.create({
     data: {
-      name: rest.name,
+      name: toProperCase(rest.name),
       title: rest.title || null,
       npi: rest.npi || null,
       specialty: rest.specialty || null,
@@ -341,7 +357,7 @@ export async function updateDoctor(id: string, data: unknown) {
   await prisma.referringDoctor.update({
     where: { id },
     data: {
-      name: rest.name,
+      name: toProperCase(rest.name),
       title: rest.title || null,
       npi: rest.npi || null,
       specialty: rest.specialty || null,
