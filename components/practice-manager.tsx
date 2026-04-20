@@ -175,7 +175,7 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
         {activeLocations.length === 0 ? (
           <p className="text-sm text-slate-400 italic">No locations for this practice yet.</p>
         ) : (
-          <div className="space-y-2 border rounded-md p-3">
+          <div className="space-y-2 border rounded-md p-3 max-h-48 overflow-y-auto">
             {activeLocations.map((l) => (
               <label key={l.id} className="flex items-center gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={selectedLocs.includes(l.id)} onChange={() => toggleLoc(l.id)} className="rounded border-slate-300 h-4 w-4" />
@@ -628,13 +628,13 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
       </Dialog>
 
       <Dialog open={!!addDoctorFor} onOpenChange={(o) => !o && setAddDoctorFor(null)}>
-        <DialogContent><DialogHeader><DialogTitle>Add Provider — {addDoctorFor?.name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Add Provider — {addDoctorFor?.name}</DialogTitle></DialogHeader>
           {addDoctorFor && <DoctorForm practiceId={addDoctorFor.id} locations={addDoctorFor.locations} onSubmit={async (d) => { run(() => createDoctor(d)); setAddDoctorFor(null) }} isPending={isPending} onClose={() => setAddDoctorFor(null)} />}
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editDoctor} onOpenChange={(o) => !o && setEditDoctor(null)}>
-        <DialogContent><DialogHeader><DialogTitle>Edit Provider</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Edit Provider</DialogTitle></DialogHeader>
           {editDoctor && <DoctorForm practiceId={editDoctor.practice.id} locations={editDoctor.practice.locations} defaultValues={{ ...editDoctor.doc, locationIds: editDoctor.doc.locations.map((dl) => dl.locationId) }} onSubmit={async (d) => { run(() => updateDoctor(editDoctor.doc.id, d)); setEditDoctor(null) }} isPending={isPending} onClose={() => setEditDoctor(null)} />}
         </DialogContent>
       </Dialog>
