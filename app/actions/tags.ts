@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { runTrigger_TagAdded } from "@/lib/automation-engine"
 
 async function requireAuth() {
   const session = await auth()
@@ -62,13 +63,24 @@ export async function deleteTag(id: string) {
 }
 
 export async function setReferralTags(referralId: string, tagIds: string[]) {
-  await requireAuth()
+  const session = await requireAuth()
+
+  const existing = await prisma.referralTag.findMany({ where: { referralId }, select: { tagId: true } })
+  const existingIds = new Set(existing.map(t => t.tagId))
+  const addedIds = tagIds.filter(id => !existingIds.has(id))
+
   await prisma.referralTag.deleteMany({ where: { referralId } })
   if (tagIds.length > 0) {
     await prisma.referralTag.createMany({
       data: tagIds.map((tagId) => ({ referralId, tagId })),
     })
   }
+
+  if (addedIds.length > 0) {
+    const addedTags = await prisma.tag.findMany({ where: { id: { in: addedIds } }, select: { id: true, name: true } })
+    Promise.allSettled(addedTags.map(tag => runTrigger_TagAdded(referralId, tag.id, tag.name, session.user.id)))
+  }
+
   revalidatePath(`/referrals/${referralId}`)
   revalidatePath("/referrals")
 }

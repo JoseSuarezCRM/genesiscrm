@@ -14,6 +14,8 @@ interface TemplateVars {
   days?: number
   status?: string
   call_count?: number
+  auth_status?: string
+  tag_name?: string
 }
 
 function resolveTemplate(template: string, vars: TemplateVars): string {
@@ -27,6 +29,8 @@ function resolveTemplate(template: string, vars: TemplateVars): string {
     .replace(/\{days\}/g, String(vars.days ?? ""))
     .replace(/\{status\}/g, vars.status ?? "")
     .replace(/\{call_count\}/g, String(vars.call_count ?? ""))
+    .replace(/\{auth_status\}/g, vars.auth_status ?? "")
+    .replace(/\{tag_name\}/g, vars.tag_name ?? "")
 }
 
 // ─── Period helpers ────────────────────────────────────────────────────────────
@@ -36,7 +40,7 @@ function periodStart(period: string): Date {
   if (period === "week") return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
   if (period === "month") return new Date(now.getFullYear(), now.getMonth(), 1)
   if (period === "quarter") return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
-  return new Date(0) // all_time
+  return new Date(0)
 }
 
 function periodLabel(period: string): string {
@@ -46,14 +50,96 @@ function periodLabel(period: string): string {
   return "overall"
 }
 
-// ─── Deduplication key ─────────────────────────────────────────────────────────
-
 function dedupeKey(period: string): string {
   const now = new Date()
   if (period === "week") return `${now.getFullYear()}-W${Math.ceil(now.getDate() / 7)}`
   if (period === "month") return `${now.getFullYear()}-${now.getMonth() + 1}`
   if (period === "quarter") return `${now.getFullYear()}-Q${Math.floor(now.getMonth() / 3) + 1}`
   return "all"
+}
+
+// ─── Multi-criteria condition checker ─────────────────────────────────────────
+
+interface ReferralForConditions {
+  id: string
+  referringPracticeId: string | null
+  referringLocationId: string | null
+  assignedToId: string | null
+  status: ReferralStatus
+  insuranceProvider: string | null
+  tags: { tagId: string }[]
+}
+
+interface Condition {
+  field: string
+  op: string
+  value: string
+}
+
+function checkConditions(referral: ReferralForConditions, cfg: Record<string, unknown>): boolean {
+  // Legacy top-level filters (backward compat)
+  if (cfg.practiceId && referral.referringPracticeId !== cfg.practiceId) return false
+  if (cfg.locationId && referral.referringLocationId !== cfg.locationId) return false
+  if (cfg.statusFilter && referral.status !== cfg.statusFilter) return false
+  if (cfg.insuranceProvider) {
+    const ip = (referral.insuranceProvider ?? "").toLowerCase()
+    if (!ip.includes((cfg.insuranceProvider as string).toLowerCase())) return false
+  }
+  if (cfg.tagId) {
+    if (!referral.tags.some(t => t.tagId === cfg.tagId)) return false
+  }
+
+  // Conditions array (AND logic)
+  const conditions = (cfg.conditions as Condition[]) ?? []
+  for (const cond of conditions) {
+    const condVal = cond.value ?? ""
+    const condValLower = condVal.toLowerCase()
+
+    if (cond.field === "practiceId") {
+      if (cond.op === "eq" && referral.referringPracticeId !== condVal) return false
+      if (cond.op === "ne" && referral.referringPracticeId === condVal) return false
+      if (cond.op === "empty" && referral.referringPracticeId !== null) return false
+    }
+    if (cond.field === "locationId") {
+      if (cond.op === "eq" && referral.referringLocationId !== condVal) return false
+      if (cond.op === "ne" && referral.referringLocationId === condVal) return false
+      if (cond.op === "empty" && referral.referringLocationId !== null) return false
+    }
+    if (cond.field === "assignedToId") {
+      if (cond.op === "eq" && referral.assignedToId !== condVal) return false
+      if (cond.op === "ne" && referral.assignedToId === condVal) return false
+      if (cond.op === "unassigned" && referral.assignedToId !== null) return false
+    }
+    if (cond.field === "status") {
+      if (cond.op === "eq" && referral.status !== condVal) return false
+      if (cond.op === "ne" && referral.status === condVal) return false
+    }
+    if (cond.field === "insuranceProvider") {
+      const ip = (referral.insuranceProvider ?? "").toLowerCase()
+      if (cond.op === "contains" && !ip.includes(condValLower)) return false
+      if (cond.op === "eq" && ip !== condValLower) return false
+      if (cond.op === "empty" && !!referral.insuranceProvider) return false
+    }
+    if (cond.field === "tagId") {
+      const hasTag = referral.tags.some(t => t.tagId === condVal)
+      if (cond.op === "has" && !hasTag) return false
+      if (cond.op === "not_has" && hasTag) return false
+    }
+  }
+  return true
+}
+
+// ─── Referral fetcher with all condition fields ────────────────────────────────
+
+async function fetchReferralForEngine(referralId: string) {
+  return prisma.referral.findUnique({
+    where: { id: referralId },
+    include: {
+      referringDoctor: true,
+      referringPractice: true,
+      tags: { select: { tagId: true } },
+    },
+  })
 }
 
 // ─── Action executor ──────────────────────────────────────────────────────────
@@ -157,7 +243,7 @@ async function executeAction(
   }
 }
 
-// ─── Public trigger functions ─────────────────────────────────────────────────
+// ─── Event triggers ───────────────────────────────────────────────────────────
 
 export async function runTrigger_ReferralCreated(referralId: string, triggeredByUserId?: string) {
   const automations = await prisma.automation.findMany({
@@ -165,10 +251,7 @@ export async function runTrigger_ReferralCreated(referralId: string, triggeredBy
   })
   if (!automations.length) return
 
-  const referral = await prisma.referral.findUnique({
-    where: { id: referralId },
-    include: { referringDoctor: true, referringPractice: true },
-  })
+  const referral = await fetchReferralForEngine(referralId)
   if (!referral) return
 
   const vars: TemplateVars = {
@@ -180,8 +263,7 @@ export async function runTrigger_ReferralCreated(referralId: string, triggeredBy
 
   for (const auto of automations) {
     const cfg = auto.triggerConfig as Record<string, unknown>
-    // Optional filters
-    if (cfg.practiceId && referral.referringPracticeId !== cfg.practiceId) continue
+    if (!checkConditions(referral, cfg)) continue
 
     await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
@@ -196,10 +278,7 @@ export async function runTrigger_StatusChanged(referralId: string, fromStatus: R
   })
   if (!automations.length) return
 
-  const referral = await prisma.referral.findUnique({
-    where: { id: referralId },
-    include: { referringDoctor: true, referringPractice: true },
-  })
+  const referral = await fetchReferralForEngine(referralId)
   if (!referral) return
 
   const vars: TemplateVars = {
@@ -214,6 +293,7 @@ export async function runTrigger_StatusChanged(referralId: string, fromStatus: R
     const cfg = auto.triggerConfig as Record<string, unknown>
     if (cfg.toStatus && cfg.toStatus !== toStatus) continue
     if (cfg.fromStatus && cfg.fromStatus !== fromStatus) continue
+    if (!checkConditions(referral, cfg)) continue
 
     await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
@@ -221,7 +301,6 @@ export async function runTrigger_StatusChanged(referralId: string, fromStatus: R
     })
   }
 
-  // Enroll in any matching sequences
   await enrollInMatchingSequences(referralId, "ON_STATUS_CHANGE", toStatus).catch(() => {})
 }
 
@@ -231,10 +310,7 @@ export async function runTrigger_CallAttemptsReached(referralId: string, callCou
   })
   if (!automations.length) return
 
-  const referral = await prisma.referral.findUnique({
-    where: { id: referralId },
-    include: { referringDoctor: true, referringPractice: true },
-  })
+  const referral = await fetchReferralForEngine(referralId)
   if (!referral) return
 
   const vars: TemplateVars = {
@@ -248,8 +324,8 @@ export async function runTrigger_CallAttemptsReached(referralId: string, callCou
   for (const auto of automations) {
     const cfg = auto.triggerConfig as Record<string, unknown>
     if (cfg.count && Number(cfg.count) !== callCount) continue
+    if (!checkConditions(referral, cfg)) continue
 
-    // Dedup: only fire once per referral at this call count
     const already = await prisma.automationRun.findFirst({
       where: { automationId: auto.id, contextType: "referral", contextId: referralId, detail: { contains: `calls:${callCount}` } },
     })
@@ -268,10 +344,7 @@ export async function runTrigger_ReferralAssigned(referralId: string, assignedTo
   })
   if (!automations.length) return
 
-  const referral = await prisma.referral.findUnique({
-    where: { id: referralId },
-    include: { referringDoctor: true, referringPractice: true },
-  })
+  const referral = await fetchReferralForEngine(referralId)
   if (!referral) return
 
   const vars: TemplateVars = {
@@ -284,6 +357,7 @@ export async function runTrigger_ReferralAssigned(referralId: string, assignedTo
   for (const auto of automations) {
     const cfg = auto.triggerConfig as Record<string, unknown>
     if (cfg.assignedToId && cfg.assignedToId !== assignedToId) continue
+    if (!checkConditions(referral, cfg)) continue
 
     await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
@@ -291,6 +365,99 @@ export async function runTrigger_ReferralAssigned(referralId: string, assignedTo
     })
   }
 }
+
+export async function runTrigger_TagAdded(referralId: string, tagId: string, tagName: string, triggeredByUserId?: string) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "TAG_ADDED" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const referral = await fetchReferralForEngine(referralId)
+  if (!referral) return
+
+  const vars: TemplateVars = {
+    provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
+    practice_name: referral.referringPractice?.name ?? undefined,
+    patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
+    patient_first_name: referral.patientFirstName,
+    tag_name: tagName,
+  }
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    if (cfg.tagId && cfg.tagId !== tagId) continue
+    if (!checkConditions(referral, cfg)) continue
+
+    const key = `${referralId}:tag:${tagId}`
+    const already = await prisma.automationRun.findFirst({
+      where: { automationId: auto.id, contextType: "referral", contextId: key },
+    })
+    if (already) continue
+
+    await executeAction(auto, referralId, vars, triggeredByUserId)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: `Tag "${tagName}" added` },
+    })
+  }
+}
+
+export async function runTrigger_DocumentUploaded(referralId: string, triggeredByUserId?: string) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "DOCUMENT_UPLOADED" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const referral = await fetchReferralForEngine(referralId)
+  if (!referral) return
+
+  const vars: TemplateVars = {
+    provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
+    practice_name: referral.referringPractice?.name ?? undefined,
+    patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
+    patient_first_name: referral.patientFirstName,
+  }
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    if (!checkConditions(referral, cfg)) continue
+
+    await executeAction(auto, referralId, vars, triggeredByUserId)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: "Document uploaded" },
+    })
+  }
+}
+
+export async function runTrigger_AuthStatusChanged(referralId: string, _fromAuthStatus: string | null, toAuthStatus: string, triggeredByUserId?: string) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "AUTH_STATUS_CHANGED" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const referral = await fetchReferralForEngine(referralId)
+  if (!referral) return
+
+  const vars: TemplateVars = {
+    provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
+    practice_name: referral.referringPractice?.name ?? undefined,
+    patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
+    patient_first_name: referral.patientFirstName,
+    auth_status: toAuthStatus,
+  }
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    if (cfg.toAuthStatus && cfg.toAuthStatus !== toAuthStatus) continue
+    if (!checkConditions(referral, cfg)) continue
+
+    await executeAction(auto, referralId, vars, triggeredByUserId)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Auth status → "${toAuthStatus}"` },
+    })
+  }
+}
+
+// ─── Count triggers ───────────────────────────────────────────────────────────
 
 export async function runTrigger_ProviderReferralCount(providerId: string, triggeredByUserId?: string) {
   const automations = await prisma.automation.findMany({
@@ -314,10 +481,8 @@ export async function runTrigger_ProviderReferralCount(providerId: string, trigg
     const count = await prisma.referral.count({
       where: { referringDoctorId: providerId, referralDate: { gte: start } },
     })
-
     if (count !== threshold) continue
 
-    // Dedup: only fire once per provider per period
     const key = `${providerId}:${dedupeKey(period)}`
     const already = await prisma.automationRun.findFirst({
       where: { automationId: auto.id, contextType: "provider", contextId: key },
@@ -357,7 +522,6 @@ export async function runTrigger_PracticeReferralCount(practiceId: string, trigg
     const count = await prisma.referral.count({
       where: { referringPracticeId: practiceId, referralDate: { gte: start } },
     })
-
     if (count !== threshold) continue
 
     const key = `${practiceId}:${dedupeKey(period)}`
@@ -374,11 +538,49 @@ export async function runTrigger_PracticeReferralCount(practiceId: string, trigg
   }
 }
 
-// ─── Scheduled triggers (called from cron API route) ─────────────────────────
+export async function runTrigger_LocationReferralCount(locationId: string, triggeredByUserId?: string) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "LOCATION_REFERRAL_COUNT" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const location = await prisma.practiceLocation.findUnique({ where: { id: locationId } })
+  if (!location) return
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    const threshold = Number(cfg.count ?? 0)
+    const period = (cfg.period as string) ?? "month"
+    if (!threshold) continue
+    if (cfg.locationId && cfg.locationId !== locationId) continue
+
+    const start = periodStart(period)
+    const count = await prisma.referral.count({
+      where: { referringLocationId: locationId, referralDate: { gte: start } },
+    })
+    if (count !== threshold) continue
+
+    const key = `${locationId}:${dedupeKey(period)}`
+    const already = await prisma.automationRun.findFirst({
+      where: { automationId: auto.id, contextType: "location", contextId: key },
+    })
+    if (already) continue
+
+    const vars: TemplateVars = { count, period: periodLabel(period) }
+    await executeAction(auto, null, vars, triggeredByUserId)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "location", contextId: key, result: "success", detail: `${location.name} reached ${count} referrals ${periodLabel(period)}` },
+    })
+  }
+}
+
+// ─── Scheduled triggers ───────────────────────────────────────────────────────
 
 export async function runScheduledTriggers() {
   await runTrigger_NoActivity()
   await runTrigger_AppointmentUpcoming()
+  await runTrigger_AppointmentOverdue()
+  await runTrigger_ReferralStale()
 }
 
 async function runTrigger_NoActivity() {
@@ -391,17 +593,23 @@ async function runTrigger_NoActivity() {
     const cfg = auto.triggerConfig as Record<string, unknown>
     const days = Number(cfg.days ?? 7)
     const cutoff = new Date(Date.now() - days * 86400000)
+    const statusFilter = cfg.statusFilter as ReferralStatus | undefined
 
     const staleReferrals = await prisma.referral.findMany({
       where: {
-        status: { notIn: [ReferralStatus.COMPLETED, ReferralStatus.NO_SHOW] },
+        status: statusFilter
+          ? { equals: statusFilter }
+          : { notIn: [ReferralStatus.COMPLETED, ReferralStatus.NO_SHOW] },
         updatedAt: { lte: cutoff },
+        ...(cfg.assignedToId ? { assignedToId: cfg.assignedToId as string } : {}),
       },
-      include: { referringDoctor: true, referringPractice: true },
+      include: { referringDoctor: true, referringPractice: true, tags: { select: { tagId: true } } },
       take: 50,
     })
 
     for (const referral of staleReferrals) {
+      if (!checkConditions(referral, cfg)) continue
+
       const key = `${referral.id}:noactivity:${days}`
       const already = await prisma.automationRun.findFirst({
         where: { automationId: auto.id, contextType: "referral", contextId: key },
@@ -440,11 +648,13 @@ async function runTrigger_AppointmentUpcoming() {
 
     const upcoming = await prisma.referral.findMany({
       where: { appointmentDate: { gte: dayStart, lt: dayEnd } },
-      include: { referringDoctor: true, referringPractice: true },
+      include: { referringDoctor: true, referringPractice: true, tags: { select: { tagId: true } } },
       take: 50,
     })
 
     for (const referral of upcoming) {
+      if (!checkConditions(referral, cfg)) continue
+
       const key = `${referral.id}:appt:${daysAhead}`
       const already = await prisma.automationRun.findFirst({
         where: { automationId: auto.id, contextType: "referral", contextId: key },
@@ -460,6 +670,99 @@ async function runTrigger_AppointmentUpcoming() {
       await executeAction(auto, referral.id, vars)
       await prisma.automationRun.create({
         data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: `Appointment in ${daysAhead} day(s)` },
+      })
+    }
+  }
+}
+
+async function runTrigger_AppointmentOverdue() {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "APPOINTMENT_OVERDUE" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    const daysOverdue = Number(cfg.daysOverdue ?? 0)
+    const cutoffDate = new Date(today.getTime() - daysOverdue * 86400000)
+
+    const overdue = await prisma.referral.findMany({
+      where: {
+        appointmentDate: { lt: cutoffDate },
+        status: ReferralStatus.SCHEDULED,
+      },
+      include: { referringDoctor: true, referringPractice: true, tags: { select: { tagId: true } } },
+      take: 50,
+    })
+
+    for (const referral of overdue) {
+      if (!checkConditions(referral, cfg)) continue
+
+      const key = `${referral.id}:overdue`
+      const already = await prisma.automationRun.findFirst({
+        where: { automationId: auto.id, contextType: "referral", contextId: key },
+      })
+      if (already) continue
+
+      const vars: TemplateVars = {
+        patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
+        patient_first_name: referral.patientFirstName,
+        provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
+        practice_name: referral.referringPractice?.name ?? undefined,
+      }
+
+      await executeAction(auto, referral.id, vars)
+      await prisma.automationRun.create({
+        data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: "Appointment date passed, still Scheduled" },
+      })
+    }
+  }
+}
+
+async function runTrigger_ReferralStale() {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "REFERRAL_STALE" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    const days = Number(cfg.days ?? 14)
+    const cutoff = new Date(Date.now() - days * 86400000)
+
+    const stale = await prisma.referral.findMany({
+      where: {
+        appointmentDate: null,
+        createdAt: { lte: cutoff },
+        status: { notIn: [ReferralStatus.COMPLETED, ReferralStatus.NO_SHOW, "LOST" as ReferralStatus] },
+      },
+      include: { referringDoctor: true, referringPractice: true, tags: { select: { tagId: true } } },
+      take: 50,
+    })
+
+    for (const referral of stale) {
+      if (!checkConditions(referral, cfg)) continue
+
+      const key = `${referral.id}:stale:${days}`
+      const already = await prisma.automationRun.findFirst({
+        where: { automationId: auto.id, contextType: "referral", contextId: key },
+      })
+      if (already) continue
+
+      const vars: TemplateVars = {
+        patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
+        patient_first_name: referral.patientFirstName,
+        provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
+        practice_name: referral.referringPractice?.name ?? undefined,
+        days,
+      }
+
+      await executeAction(auto, referral.id, vars)
+      await prisma.automationRun.create({
+        data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: `No appointment set after ${days} days` },
       })
     }
   }

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createAuditLog } from "@/lib/audit"
 import { AuditAction } from "@prisma/client"
+import { runTrigger_DocumentUploaded } from "@/lib/automation-engine"
 
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -78,6 +79,8 @@ export async function POST(req: NextRequest) {
     resourceId: doc.id,
     metadata: { referralId, fileName: file.name },
   })
+
+  Promise.allSettled([runTrigger_DocumentUploaded(referralId, session.user.id)])
 
   return NextResponse.json(doc)
 }

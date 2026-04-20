@@ -14,6 +14,8 @@ import {
   runTrigger_ProviderReferralCount,
   runTrigger_PracticeReferralCount,
   runTrigger_ReferralAssigned,
+  runTrigger_AuthStatusChanged,
+  runTrigger_LocationReferralCount,
 } from "@/lib/automation-engine"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
@@ -155,6 +157,7 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
     runTrigger_ReferralCreated(rid, uid),
     referral.referringDoctorId ? runTrigger_ProviderReferralCount(referral.referringDoctorId, uid) : Promise.resolve(),
     referral.referringPracticeId ? runTrigger_PracticeReferralCount(referral.referringPracticeId, uid) : Promise.resolve(),
+    referral.referringLocationId ? runTrigger_LocationReferralCount(referral.referringLocationId, uid) : Promise.resolve(),
     enrollInMatchingSequences(rid, "ON_CREATE"),
   ])
 
@@ -170,6 +173,8 @@ export async function updateReferral(id: string, data: unknown) {
   }
 
   const d = parsed.data
+
+  const prev = await prisma.referral.findUnique({ where: { id }, select: { authStatus: true } })
 
   await prisma.referral.update({
     where: { id },
@@ -205,6 +210,10 @@ export async function updateReferral(id: string, data: unknown) {
     resourceType: "Referral",
     resourceId: id,
   })
+
+  if (d.authStatus && d.authStatus !== (prev?.authStatus ?? "")) {
+    Promise.allSettled([runTrigger_AuthStatusChanged(id, prev?.authStatus ?? null, d.authStatus, session.user.id)])
+  }
 
   revalidatePath(`/referrals/${id}`)
   revalidatePath("/referrals")
