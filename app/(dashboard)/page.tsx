@@ -201,11 +201,13 @@ export default async function DashboardPage() {
                         </Link>
                       </td>
                       <td className="px-6 py-3 text-slate-600">
-                        {r.referringPractice?.name ?? "—"}
+                        {r.referringPractice
+                          ? <Link href={`/referring-doctors?practice=${r.referringPractice.id}`} className="hover:text-blue-600 hover:underline">{r.referringPractice.name}</Link>
+                          : "—"}
                       </td>
                       <td className="px-6 py-3 text-slate-600">
                         {r.referringDoctor
-                          ? [(r.referringDoctor as any).title, r.referringDoctor.name].filter(Boolean).join(" ")
+                          ? <Link href={`/referring-doctors/${r.referringDoctor.id}`} className="hover:text-blue-600 hover:underline">{[(r.referringDoctor as any).title, r.referringDoctor.name].filter(Boolean).join(" ")}</Link>
                           : r.referringDoctorName ?? "—"}
                       </td>
                       <td className="px-6 py-3 text-slate-600">
