@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Trash2, Pencil, GripVertical, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react"
+import { Plus, Trash2, Pencil, GripVertical, CheckCircle2, AlertCircle, ArrowRight, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { createOrgRule, updateOrgRule, deleteOrgRule, reorderOrgRules, OrgRuleInput } from "@/app/actions/org-rules"
+import { createOrgRule, updateOrgRule, deleteOrgRule, reorderOrgRules, applyRulesToExistingPractices, OrgRuleInput } from "@/app/actions/org-rules"
 
 interface Rule {
   id: string
@@ -145,12 +145,30 @@ export default function OrgRulesManager({ initialRules }: Props) {
             Rules are checked <span className="font-medium">top to bottom</span> — first match wins.
           </p>
         </div>
-        <button
-          onClick={() => { setShowForm(true); setEditingId(null) }}
-          className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-colors shrink-0"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add rule
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {rules.length > 0 && (
+            <button
+              disabled={isPending}
+              onClick={() => {
+                if (!confirm("This will merge all existing practices that match a rule into their canonical name. Continue?")) return
+                startTransition(async () => {
+                  const res = await applyRulesToExistingPractices()
+                  if (!res.success) { flash(res.error ?? "Failed.", true); return }
+                  flash(res.merged > 0 ? `Merged ${res.merged} practice${res.merged !== 1 ? "s" : ""}.` : "No practices needed merging.")
+                })
+              }}
+              className="flex items-center gap-1.5 text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Re-apply to existing
+            </button>
+          )}
+          <button
+            onClick={() => { setShowForm(true); setEditingId(null) }}
+            className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add rule
+          </button>
+        </div>
       </div>
 
       {success && (
