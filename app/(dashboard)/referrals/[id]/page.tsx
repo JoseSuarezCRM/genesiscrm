@@ -20,9 +20,10 @@ import ReferralAssignee from "@/components/referral-assignee"
 
 interface Props {
   params: { id: string }
+  searchParams: { from?: string }
 }
 
-export default async function ReferralDetailPage({ params }: Props) {
+export default async function ReferralDetailPage({ params, searchParams }: Props) {
   const referral = await prisma.referral.findUnique({
     where: { id: params.id },
     include: {
@@ -62,7 +63,7 @@ export default async function ReferralDetailPage({ params }: Props) {
     <div className="p-6 max-w-5xl space-y-6">
       {/* Breadcrumb */}
       <div>
-        <BackButton label="Back to Referrals" fallback="/referrals" />
+        <BackButton label="Back to Referrals" href={searchParams.from ?? "/referrals"} />
 
         <div className="flex items-start justify-between gap-4">
           <div>

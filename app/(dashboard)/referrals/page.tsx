@@ -97,6 +97,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
 
 export default async function ReferralsPage({ searchParams }: PageProps) {
   const { referrals, total, practices, allTags, page, incompleteCount, incompleteOnly } = await getReferrals(searchParams)
+  const listUrl = `/referrals?${new URLSearchParams(Object.fromEntries(Object.entries(searchParams).filter(([,v]) => v != null)) as Record<string, string>)}`
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   const exportParams = new URLSearchParams()
@@ -252,7 +253,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
                   >
                     <td className="px-6 py-3">
                       <Link
-                        href={`/referrals/${r.id}`}
+                        href={`/referrals/${r.id}?from=${encodeURIComponent(listUrl)}`}
                         className="font-medium text-slate-900 hover:text-blue-600"
                       >
                         {r.patientFirstName} {r.patientLastName}
