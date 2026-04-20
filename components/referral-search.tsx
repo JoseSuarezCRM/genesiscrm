@@ -11,8 +11,10 @@ export default function ReferralSearch({ defaultValue }: { defaultValue?: string
   const searchParams = useSearchParams()
   const [value, setValue] = useState(defaultValue ?? "")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMounted = useRef(false)
 
   useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return }
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
