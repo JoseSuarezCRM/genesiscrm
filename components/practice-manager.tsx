@@ -581,7 +581,7 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
                               {(() => {
                                 const practiceLocationIds = new Set(p.locations.map((l) => l.id))
                                 const here = d.locations.filter((dl) => practiceLocationIds.has(dl.location.id))
-                                return here.length > 0 ? here.map((dl) => dl.location.name).join(", ") : "No locations"
+                                return here.length > 0 ? here[0].location.name + (here.length > 1 ? ` +${here.length - 1}` : "") : "No locations"
                               })()}
                             </span>
                             <span className="text-xs text-slate-400 shrink-0">{d._count.referrals} ref.</span>
