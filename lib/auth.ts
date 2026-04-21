@@ -157,7 +157,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (fresh) {
           const teamPerms = fresh.teamMemberships.flatMap((m: any) => m.team.permissions as string[])
           token.role = fresh.role
-          token.permissions = [...new Set([...fresh.permissions, ...teamPerms])]
+          const merged = [...fresh.permissions, ...teamPerms]
+          token.permissions = merged.filter((p, i) => merged.indexOf(p) === i)
         }
       }
       return token
