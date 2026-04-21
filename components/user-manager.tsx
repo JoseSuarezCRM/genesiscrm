@@ -14,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Trash2, Loader2, KeyRound, ShieldCheck, Users, Pencil, X, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Trash2, Loader2, KeyRound, ShieldCheck, Users, Pencil, X, ChevronDown, ChevronUp, Crown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -27,6 +27,7 @@ type UserRow = {
   permissions: string[]
   createdAt: Date
   _count: { referralsCreated: number }
+  teamMemberships: { team: { id: string; name: string } }[]
 }
 
 type TeamRow = {
@@ -48,24 +49,35 @@ interface Props {
   currentUserId: string
 }
 
-// ── Permissions list ──────────────────────────────────────────────────────────
+// ── Permission definitions ────────────────────────────────────────────────────
 
-const ALL_PERMISSIONS: { key: string; label: string; description: string }[] = [
-  { key: "MANAGE_PRACTICES",  label: "Manage Practices",   description: "Create, edit, merge, and delete practices, locations, and providers" },
-  { key: "MERGE_RECORDS",     label: "Merge Records",      description: "Merge duplicate practices, locations, and providers" },
-  { key: "VIEW_REPORTS",      label: "View Reports",       description: "Access the Reports page" },
-  { key: "MANAGE_AUTOMATIONS",label: "Manage Automations", description: "Create and edit automation rules" },
-  { key: "EXPORT_DATA",       label: "Export Data",        description: "Export referral lists to CSV" },
-  { key: "MANAGE_BROADCASTS", label: "Manage Broadcasts",  description: "Create and send patient broadcasts" },
-  { key: "MANAGE_SCHEDULING", label: "Manage Scheduling",  description: "Access the staff scheduler, assign staff, and auto-generate schedules" },
+const NAV_PERMISSIONS: { key: string; label: string; description: string }[] = [
+  { key: "NAV_REFERRALS",    label: "Referrals",    description: "Dashboard, Referrals, Providers, Activities, Tasks, SMS, Reports, Broadcasts" },
+  { key: "NAV_APPOINTMENTS", label: "Appointments", description: "Completed appointments and referring providers" },
+  { key: "NAV_SCHEDULING",   label: "Scheduling",   description: "Weekly schedule and staff roster" },
+  { key: "NAV_ADMIN",        label: "Admin",        description: "User management, automations, templates, and settings" },
 ]
 
+const FEATURE_PERMISSIONS: { key: string; label: string; description: string }[] = [
+  { key: "MANAGE_PRACTICES",   label: "Manage Practices",   description: "Create, edit, merge, and delete practices, locations, and providers" },
+  { key: "MERGE_RECORDS",      label: "Merge Records",      description: "Merge duplicate practices, locations, and providers" },
+  { key: "VIEW_REPORTS",       label: "View Reports",       description: "Access the Reports page" },
+  { key: "MANAGE_AUTOMATIONS", label: "Manage Automations", description: "Create and edit automation rules" },
+  { key: "EXPORT_DATA",        label: "Export Data",        description: "Export referral lists to CSV" },
+  { key: "MANAGE_BROADCASTS",  label: "Manage Broadcasts",  description: "Create and send patient broadcasts" },
+  { key: "MANAGE_SCHEDULING",  label: "Manage Scheduling",  description: "Access the staff scheduler, assign staff, and auto-generate schedules" },
+]
+
+const ALL_PERMISSIONS = [...NAV_PERMISSIONS, ...FEATURE_PERMISSIONS]
+
+// ── Permission checklist ───────────────────────────────────────────────────────
+
 function PermissionChecklist({
-  selected, onChange, disabled,
-}: { selected: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  selected, onChange, disabled, items,
+}: { selected: string[]; onChange: (v: string[]) => void; disabled?: boolean; items: typeof ALL_PERMISSIONS }) {
   return (
     <div className="space-y-3">
-      {ALL_PERMISSIONS.map((p) => (
+      {items.map((p) => (
         <label key={p.key} className={cn("flex items-start gap-3 cursor-pointer group", disabled && "opacity-40 pointer-events-none")}>
           <Checkbox
             checked={selected.includes(p.key)}
@@ -109,7 +121,7 @@ function TeamForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5 max-h-[80vh] overflow-y-auto pr-1">
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{error}</p>}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -121,11 +133,21 @@ function TeamForm({
           <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Optional" />
         </div>
       </div>
+
+      {/* Menu access */}
       <div>
-        <Label className="mb-2 block">Default Permissions</Label>
-        <p className="text-xs text-slate-500 mb-3">All members of this team inherit these permissions.</p>
-        <PermissionChecklist selected={perms} onChange={setPerms} />
+        <Label className="mb-1 block">Menu Access</Label>
+        <p className="text-xs text-slate-500 mb-3">Which sections of the navigation this team can see.</p>
+        <PermissionChecklist selected={perms} onChange={setPerms} items={NAV_PERMISSIONS} />
       </div>
+
+      {/* Feature permissions */}
+      <div>
+        <Label className="mb-1 block">Feature Permissions</Label>
+        <p className="text-xs text-slate-500 mb-3">Additional capabilities available to team members.</p>
+        <PermissionChecklist selected={perms} onChange={setPerms} items={FEATURE_PERMISSIONS} />
+      </div>
+
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
         <Button type="submit" disabled={isPending}>
@@ -147,6 +169,9 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
 
   const memberIds = new Set(team.members.map(m => m.userId))
   const nonMembers = users.filter(u => !memberIds.has(u.id))
+
+  const navPerms = team.permissions.filter(p => p.startsWith("NAV_"))
+  const featurePerms = team.permissions.filter(p => !p.startsWith("NAV_"))
 
   function handleAddMember() {
     if (!addUserId) return
@@ -184,13 +209,18 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0 flex-wrap">
-            {team.permissions.slice(0, 3).map(p => (
-              <span key={p} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                {ALL_PERMISSIONS.find(x => x.key === p)?.label ?? p}
+            {navPerms.map(p => (
+              <span key={p} className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                {NAV_PERMISSIONS.find(x => x.key === p)?.label ?? p}
               </span>
             ))}
-            {team.permissions.length > 3 && (
-              <span className="text-xs text-slate-400">+{team.permissions.length - 3} more</span>
+            {featurePerms.slice(0, 2).map(p => (
+              <span key={p} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                {FEATURE_PERMISSIONS.find(x => x.key === p)?.label ?? p}
+              </span>
+            ))}
+            {featurePerms.length > 2 && (
+              <span className="text-xs text-slate-400">+{featurePerms.length - 2} more</span>
             )}
           </div>
           {expanded ? <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />}
@@ -221,7 +251,6 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
       {/* Expanded: members */}
       {expanded && (
         <div className="border-t border-slate-100 px-4 py-3 space-y-3 bg-slate-50/50">
-          {/* Member list */}
           <div className="space-y-1">
             {team.members.length === 0 && (
               <p className="text-xs text-slate-400 italic">No members yet.</p>
@@ -247,7 +276,6 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
             ))}
           </div>
 
-          {/* Add member */}
           {nonMembers.length > 0 && (
             <div className="flex items-center gap-2 pt-1">
               <select
@@ -286,13 +314,14 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
   const [newName, setNewName] = useState("")
   const [newEmail, setNewEmail] = useState("")
   const [newPassword, setNewPassword] = useState("")
-  const [newRole, setNewRole] = useState<Role>(Role.STAFF)
+  const [newIsSuperAdmin, setNewIsSuperAdmin] = useState(false)
+  const [newTeamId, setNewTeamId] = useState("")
   const [addErrors, setAddErrors] = useState<Record<string, string[]>>({})
 
   // Reset password
   const [newPw, setNewPw] = useState("")
 
-  // Permissions
+  // Permissions dialog
   const [permUserId, setPermUserId] = useState<string | null>(null)
   const [selectedPerms, setSelectedPerms] = useState<string[]>([])
 
@@ -300,26 +329,32 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
     e.preventDefault()
     setAddErrors({})
     startTransition(async () => {
-      const result = await createUser({ name: newName, email: newEmail, password: newPassword, role: newRole })
+      const role = newIsSuperAdmin ? Role.ADMIN : Role.STAFF
+      const result = await createUser({ name: newName, email: newEmail, password: newPassword, role })
       if (result?.error) {
         setAddErrors(result.error as Record<string, string[]>)
       } else {
+        if (newTeamId && !newIsSuperAdmin && result.userId) {
+          await addTeamMember(newTeamId, result.userId)
+        }
         setAddOpen(false)
-        setNewName(""); setNewEmail(""); setNewPassword(""); setNewRole(Role.STAFF)
+        setNewName(""); setNewEmail(""); setNewPassword("")
+        setNewIsSuperAdmin(false); setNewTeamId("")
         setSuccess("User created successfully.")
         setTimeout(() => setSuccess(null), 4000)
       }
     })
   }
 
-  async function handleRoleChange(userId: string, role: Role) {
+  async function handleToggleSuperAdmin(userId: string, makeAdmin: boolean) {
     startTransition(async () => {
-      const result = await updateUserRole(userId, role)
+      const result = await updateUserRole(userId, makeAdmin ? Role.ADMIN : Role.STAFF)
       if (result?.error) setError(typeof result.error === "string" ? result.error : "Error")
     })
   }
 
   async function handleDelete(userId: string) {
+    if (!confirm("Delete this user? This cannot be undone.")) return
     startTransition(async () => {
       const result = await deleteUser(userId)
       if (result?.error) setError(typeof result.error === "string" ? result.error : "Error")
@@ -406,16 +441,34 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
                     <Input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" placeholder="Min. 6 characters" required />
                     {addErrors.password && <p className="text-xs text-red-600">{addErrors.password[0]}</p>}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Role</Label>
-                    <Select value={newRole} onValueChange={v => setNewRole(v as Role)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={Role.STAFF}>Staff</SelectItem>
-                        <SelectItem value={Role.ADMIN}>Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+
+                  <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-slate-200 px-3 py-2.5 hover:bg-slate-50">
+                    <Checkbox
+                      checked={newIsSuperAdmin}
+                      onCheckedChange={v => { setNewIsSuperAdmin(!!v); if (v) setNewTeamId("") }}
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">Super Admin</p>
+                      <p className="text-xs text-slate-500">Full access to all sections and features</p>
+                    </div>
+                    <Crown className="h-4 w-4 text-amber-500 ml-auto" />
+                  </label>
+
+                  {!newIsSuperAdmin && (
+                    <div className="space-y-1.5">
+                      <Label>Assign to Team</Label>
+                      <Select value={newTeamId} onValueChange={setNewTeamId}>
+                        <SelectTrigger><SelectValue placeholder="No team (assign later)" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No team</SelectItem>
+                          {teams.map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
                     <Button type="submit" disabled={isPending}>
@@ -450,70 +503,88 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
               <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
                 <th className="text-left px-6 py-3 font-semibold">Name</th>
                 <th className="text-left px-6 py-3 font-semibold">Email</th>
-                <th className="text-left px-6 py-3 font-semibold">Role</th>
+                <th className="text-left px-6 py-3 font-semibold">Team</th>
                 <th className="text-left px-6 py-3 font-semibold">Referrals</th>
                 <th className="text-right px-6 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-b hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full text-xs font-semibold text-blue-700">
-                        {(u.name || u.email).charAt(0).toUpperCase()}
+              {users.map((u) => {
+                const isSuperAdmin = u.role === "ADMIN"
+                return (
+                  <tr key={u.id} className="border-b hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center w-7 h-7 bg-blue-100 rounded-full text-xs font-semibold text-blue-700">
+                          {(u.name || u.email).charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-medium text-slate-900">
+                          {u.name ?? "—"}
+                          {u.id === currentUserId && <span className="ml-1 text-xs text-slate-400">(you)</span>}
+                        </span>
                       </div>
-                      <span className="font-medium text-slate-900">
-                        {u.name ?? "—"}
-                        {u.id === currentUserId && <span className="ml-1 text-xs text-slate-400">(you)</span>}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3 text-slate-600">{u.email}</td>
-                  <td className="px-6 py-3">
-                    <Select
-                      value={u.role}
-                      onValueChange={v => handleRoleChange(u.id, v as Role)}
-                      disabled={u.id === currentUserId || isPending}
-                    >
-                      <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={Role.STAFF}>Staff</SelectItem>
-                        <SelectItem value={Role.ADMIN}>Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="px-6 py-3 text-slate-600">{u._count.referralsCreated}</td>
-                  <td className="px-6 py-3 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        size="icon" variant="ghost" className="h-8 w-8"
-                        title="Manage permissions"
-                        onClick={() => { setPermUserId(u.id); setSelectedPerms(u.permissions) }}
-                      >
-                        <ShieldCheck className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon" variant="ghost" className="h-8 w-8"
-                        title="Reset password"
-                        onClick={() => { setResetUserId(u.id); setNewPw("") }}
-                      >
-                        <KeyRound className="h-4 w-4" />
-                      </Button>
-                      {u.id !== currentUserId && (
-                        <Button
-                          size="icon" variant="ghost"
-                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          disabled={isPending}
-                          onClick={() => handleDelete(u.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                    </td>
+                    <td className="px-6 py-3 text-slate-600">{u.email}</td>
+                    <td className="px-6 py-3">
+                      {isSuperAdmin ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+                          <Crown className="h-3 w-3" /> Super Admin
+                        </span>
+                      ) : u.teamMemberships.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {u.teamMemberships.map(m => (
+                            <span key={m.team.id} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                              {m.team.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No team</span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-3 text-slate-600">{u._count.referralsCreated}</td>
+                    <td className="px-6 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        {u.id !== currentUserId && (
+                          <Button
+                            size="icon" variant="ghost"
+                            className={cn("h-8 w-8", isSuperAdmin ? "text-amber-500 hover:text-amber-700 hover:bg-amber-50" : "text-slate-400 hover:text-amber-500 hover:bg-amber-50")}
+                            title={isSuperAdmin ? "Revoke Super Admin" : "Make Super Admin"}
+                            onClick={() => handleToggleSuperAdmin(u.id, !isSuperAdmin)}
+                            disabled={isPending}
+                          >
+                            <Crown className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon" variant="ghost" className="h-8 w-8"
+                          title="Manage individual permissions"
+                          onClick={() => { setPermUserId(u.id); setSelectedPerms(u.permissions) }}
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon" variant="ghost" className="h-8 w-8"
+                          title="Reset password"
+                          onClick={() => { setResetUserId(u.id); setNewPw("") }}
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </Button>
+                        {u.id !== currentUserId && (
+                          <Button
+                            size="icon" variant="ghost"
+                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            disabled={isPending}
+                            onClick={() => handleDelete(u.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -524,7 +595,7 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
         <div className="space-y-3">
           {teams.length === 0 && (
             <div className="text-center py-12 text-slate-400 text-sm border border-dashed border-slate-200 rounded-xl">
-              No teams yet. Create one to group users and assign shared permissions.
+              No teams yet. Create one to group users and control which sections they can access.
             </div>
           )}
           {teams.map(team => (
@@ -533,31 +604,37 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
         </div>
       )}
 
-      {/* Permissions Dialog */}
+      {/* Individual Permissions Dialog */}
       {(() => {
         const permUser = permUserId ? users.find(u => u.id === permUserId) : null
-        const isAdmin = permUser?.role === "ADMIN"
+        const isSuperAdmin = permUser?.role === "ADMIN"
         return (
           <Dialog open={!!permUserId} onOpenChange={o => !o && setPermUserId(null)}>
-            <DialogContent>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
-                  Manage Permissions
+                  Individual Permissions
                   {permUser && <span className="ml-2 text-sm font-normal text-slate-500">— {permUser.name ?? permUser.email}</span>}
                 </DialogTitle>
               </DialogHeader>
               <div className="py-2">
-                {isAdmin ? (
-                  <p className="text-sm text-slate-500 bg-slate-50 rounded-md px-3 py-2">
-                    Admin users have all permissions by default.
+                {isSuperAdmin ? (
+                  <p className="text-sm text-slate-500 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 flex items-center gap-2">
+                    <Crown className="h-4 w-4 text-amber-500 shrink-0" />
+                    Super Admin users have full access to everything.
                   </p>
                 ) : (
-                  <PermissionChecklist selected={selectedPerms} onChange={setSelectedPerms} />
+                  <div className="space-y-5">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Individual overrides (in addition to team permissions)</p>
+                      <PermissionChecklist selected={selectedPerms} onChange={setSelectedPerms} items={ALL_PERMISSIONS} />
+                    </div>
+                  </div>
                 )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setPermUserId(null)}>Cancel</Button>
-                {!isAdmin && (
+                {!isSuperAdmin && (
                   <Button onClick={handleSavePermissions} disabled={isPending}>
                     {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     Save

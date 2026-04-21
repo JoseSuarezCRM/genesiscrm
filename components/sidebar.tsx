@@ -66,6 +66,7 @@ interface SidebarProps {
   userName: string | null | undefined
   userEmail: string
   userRole: string
+  userPermissions: string[]
 }
 
 function NavLink({
@@ -188,9 +189,14 @@ function NavSection({ title, items, pathname, collapsed, defaultOpen = true }: S
   )
 }
 
-export default function Sidebar({ userName, userEmail, userRole }: SidebarProps) {
+export default function Sidebar({ userName, userEmail, userRole, userPermissions }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+
+  const isSuperAdmin = userRole === "ADMIN"
+  const hasNavPerms = userPermissions.some(p => p.startsWith("NAV_"))
+  // If no NAV_* perms set (no team assigned), show all non-admin sections
+  const can = (key: string) => isSuperAdmin || (hasNavPerms ? userPermissions.includes(key) : key !== "NAV_ADMIN")
 
   return (
     <div
@@ -226,31 +232,37 @@ export default function Sidebar({ userName, userEmail, userRole }: SidebarProps)
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto sidebar-scroll">
-        <NavSection
-          title="Referrals"
-          items={referralItems}
-          pathname={pathname}
-          collapsed={collapsed}
-          defaultOpen
-        />
+        {can("NAV_REFERRALS") && (
+          <NavSection
+            title="Referrals"
+            items={referralItems}
+            pathname={pathname}
+            collapsed={collapsed}
+            defaultOpen
+          />
+        )}
 
-        <NavSection
-          title="Appointments"
-          items={appointmentItems}
-          pathname={pathname}
-          collapsed={collapsed}
-          defaultOpen
-        />
+        {can("NAV_APPOINTMENTS") && (
+          <NavSection
+            title="Appointments"
+            items={appointmentItems}
+            pathname={pathname}
+            collapsed={collapsed}
+            defaultOpen
+          />
+        )}
 
-        <NavSection
-          title="Scheduling"
-          items={schedulingItems}
-          pathname={pathname}
-          collapsed={collapsed}
-          defaultOpen={false}
-        />
+        {can("NAV_SCHEDULING") && (
+          <NavSection
+            title="Scheduling"
+            items={schedulingItems}
+            pathname={pathname}
+            collapsed={collapsed}
+            defaultOpen={false}
+          />
+        )}
 
-        {userRole === "ADMIN" && (
+        {can("NAV_ADMIN") && (
           <NavSection
             title="Admin"
             items={adminItems}

@@ -147,11 +147,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Token refresh — re-fetch role and permissions from DB so changes take effect immediately
         const fresh = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true, permissions: true, isActive: true },
+          select: {
+            role: true,
+            permissions: true,
+            isActive: true,
+            teamMemberships: { select: { team: { select: { permissions: true } } } },
+          },
         })
         if (fresh) {
+          const teamPerms = fresh.teamMemberships.flatMap((m: any) => m.team.permissions as string[])
           token.role = fresh.role
-          token.permissions = fresh.permissions
+          token.permissions = [...new Set([...fresh.permissions, ...teamPerms])]
         }
       }
       return token

@@ -21,6 +21,7 @@ export default async function UsersPage() {
         permissions: true,
         createdAt: true,
         _count: { select: { referralsCreated: true } },
+        teamMemberships: { select: { team: { select: { id: true, name: true } } } },
       },
     }),
     getTeams(),

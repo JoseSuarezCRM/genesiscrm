@@ -60,7 +60,7 @@ export async function createUser(data: unknown) {
   })
 
   revalidatePath("/settings/users")
-  return { success: true }
+  return { success: true, userId: newUser.id }
 }
 
 export async function updateUserRole(id: string, role: Role) {
