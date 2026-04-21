@@ -293,7 +293,7 @@ function Picker({ placeholder, value, options, onSelect, onClear }: {
           <div className="p-2 border-b border-slate-100">
             <Input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search..." className="h-8 text-sm" />
           </div>
-          <ul className="max-h-52 overflow-y-auto py-1">
+          <ul className="max-h-52 overflow-y-auto py-1 bg-white">
             {filtered.length === 0
               ? <li className="px-3 py-2 text-xs text-slate-400">No results</li>
               : filtered.map(o => (
