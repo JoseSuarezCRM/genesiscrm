@@ -9,7 +9,11 @@ import { StaffRole, SchedDay, AvailabilityType } from "@prisma/client"
 
 async function requireAdmin() {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") throw new Error("Unauthorized")
+  if (!session?.user) throw new Error("Unauthorized")
+  const user = session.user as any
+  const isAdmin = user.role === "ADMIN"
+  const hasSchedulingPerm = (user.permissions as string[] | undefined)?.includes("MANAGE_SCHEDULING") || (user.permissions as string[] | undefined)?.includes("NAV_SCHEDULING")
+  if (!isAdmin && !hasSchedulingPerm) throw new Error("Unauthorized")
 }
 
 // ── Locations ─────────────────────────────────────────────────────────────────
