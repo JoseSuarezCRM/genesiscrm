@@ -13,25 +13,30 @@ async function requireAuth() {
 
 export async function listTags() {
   await requireAuth()
-  return prisma.tag.findMany({ orderBy: { name: "asc" } })
+  return (prisma.tag as any).findMany({ where: { scope: "REFERRAL" }, orderBy: { name: "asc" } })
+}
+
+export async function listActivityTags() {
+  await requireAuth()
+  return (prisma.tag as any).findMany({ where: { scope: "ACTIVITY" }, orderBy: { name: "asc" } })
 }
 
 export async function createTag(data: { name: string; color: string }) {
   await requireAuth()
   if (!data.name.trim()) return { error: "Name is required" }
-  const existing = await prisma.tag.findUnique({ where: { name: data.name.trim() } })
+  const existing = await (prisma.tag as any).findFirst({ where: { name: data.name.trim(), scope: "REFERRAL" } })
   if (existing) return { error: "A tag with this name already exists" }
-  const tag = await prisma.tag.create({ data: { name: data.name.trim(), color: data.color } })
+  const tag = await (prisma.tag as any).create({ data: { name: data.name.trim(), color: data.color, scope: "REFERRAL" } })
   revalidatePath("/referrals")
   return { success: true, tag }
 }
 
 export async function upsertActivityTag(name: string, color: string) {
   await requireAuth()
-  const tag = await prisma.tag.upsert({
-    where: { name: name.trim().toLowerCase() },
+  const tag = await (prisma.tag as any).upsert({
+    where: { name_scope: { name: name.trim().toLowerCase(), scope: "ACTIVITY" } },
     update: { color },
-    create: { name: name.trim().toLowerCase(), color },
+    create: { name: name.trim().toLowerCase(), color, scope: "ACTIVITY" },
   })
   revalidatePath("/activities")
   return tag

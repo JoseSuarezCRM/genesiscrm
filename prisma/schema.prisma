@@ -348,13 +348,21 @@ model OutreachMessage {
   @@index([createdAt])
 }
 
+enum TagScope {
+  REFERRAL
+  ACTIVITY
+}
+
 model Tag {
   id         String        @id @default(cuid())
-  name       String        @unique
+  name       String
+  scope      TagScope      @default(REFERRAL)
   color      String        // hex color e.g. "#3b82f6"
   createdAt  DateTime      @default(now())
   referrals  ReferralTag[]
   activities ActivityTag[]
+
+  @@unique([name, scope])
 }
 
 model ReferralTag {

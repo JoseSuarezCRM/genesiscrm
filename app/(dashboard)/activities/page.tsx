@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import ActivityManager from "@/components/activity-manager"
+import { listActivityTags } from "@/app/actions/tags"
 
 export default async function ActivitiesPage() {
   const session = await auth()
@@ -37,7 +38,7 @@ export default async function ActivitiesPage() {
         },
       },
     }),
-    prisma.tag.findMany({ orderBy: { name: "asc" } }),
+    listActivityTags(),
   ])
 
   const allDoctors = practices.flatMap((p) =>
@@ -64,7 +65,7 @@ export default async function ActivitiesPage() {
         activities={serialized as any}
         practices={practices as any}
         allDoctors={allDoctors}
-        allTags={allTags}
+        allTags={allTags as any}
         currentUserId={session!.user.id}
       />
     </div>

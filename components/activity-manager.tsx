@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
+import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -262,18 +263,22 @@ function TagInput({ selected, onChange, allTags }: {
 
 // ─── Searchable single-select picker ─────────────────────────────────────────
 
-function Picker({ placeholder, value, options, onSelect, onClear }: {
+function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate }: {
   placeholder: string; value: string
   options: { id: string; label: string; sub?: string }[]
   onSelect: (id: string) => void; onClear: () => void
+  onQuickCreate?: (name: string) => Promise<{ id: string; label: string } | null>
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
+  const [creating, setCreating] = useState(false)
   const filtered = options.filter(o =>
     o.label.toLowerCase().includes(q.toLowerCase()) ||
     (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
   )
   const selected = options.find(o => o.id === value)
+  const hasExact = filtered.some(o => o.label.toLowerCase() === q.trim().toLowerCase())
+  const canCreate = !!onQuickCreate && q.trim().length > 0 && !hasExact
 
   return (
     <div className="relative">
@@ -294,7 +299,7 @@ function Picker({ placeholder, value, options, onSelect, onClear }: {
             <Input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search..." className="h-8 text-sm" />
           </div>
           <ul className="max-h-52 overflow-y-auto py-1 bg-white">
-            {filtered.length === 0
+            {filtered.length === 0 && !canCreate
               ? <li className="px-3 py-2 text-xs text-slate-400">No results</li>
               : filtered.map(o => (
                 <li key={o.id} onClick={() => { onSelect(o.id); setOpen(false); setQ("") }}
@@ -304,6 +309,25 @@ function Picker({ placeholder, value, options, onSelect, onClear }: {
                 </li>
               ))
             }
+            {canCreate && (
+              <li className={cn("border-t border-slate-100", filtered.length > 0 ? "mt-1" : "")}>
+                <button
+                  type="button"
+                  disabled={creating}
+                  onMouseDown={async (e) => {
+                    e.preventDefault()
+                    setCreating(true)
+                    const result = await onQuickCreate!(q.trim())
+                    setCreating(false)
+                    if (result) { onSelect(result.id); setOpen(false); setQ("") }
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                  Create "{q.trim()}"
+                </button>
+              </li>
+            )}
           </ul>
         </div>
       )}
@@ -313,15 +337,19 @@ function Picker({ placeholder, value, options, onSelect, onClear }: {
 
 // ─── Multi-select provider picker ────────────────────────────────────────────
 
-function ProviderPicker({ options, selected, onToggle }: {
+function ProviderPicker({ options, selected, onToggle, onQuickCreate }: {
   options: { id: string; label: string; sub?: string }[]
   selected: string[]; onToggle: (id: string) => void
+  onQuickCreate?: (name: string) => Promise<{ id: string; label: string } | null>
 }) {
   const [q, setQ] = useState("")
+  const [creating, setCreating] = useState(false)
   const filtered = options.filter(o =>
     o.label.toLowerCase().includes(q.toLowerCase()) ||
     (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
   )
+  const hasExact = filtered.some(o => o.label.toLowerCase() === q.trim().toLowerCase())
+  const canCreate = !!onQuickCreate && q.trim().length > 0 && !hasExact
 
   return (
     <div className="border border-slate-200 rounded-md bg-white overflow-hidden">
@@ -330,8 +358,8 @@ function ProviderPicker({ options, selected, onToggle }: {
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search providers..."
           className="flex-1 text-sm outline-none bg-transparent placeholder:text-slate-400" />
       </div>
-      <ul className="max-h-40 overflow-y-auto py-1">
-        {filtered.length === 0
+      <ul className="max-h-40 overflow-y-auto py-1 bg-white">
+        {filtered.length === 0 && !canCreate
           ? <li className="px-3 py-2 text-xs text-slate-400">No providers found</li>
           : filtered.map(o => {
             const isSel = selected.includes(o.id)
@@ -349,6 +377,25 @@ function ProviderPicker({ options, selected, onToggle }: {
             )
           })
         }
+        {canCreate && (
+          <li className={cn("border-t border-slate-100", filtered.length > 0 ? "mt-1" : "")}>
+            <button
+              type="button"
+              disabled={creating}
+              onMouseDown={async (e) => {
+                e.preventDefault()
+                setCreating(true)
+                const result = await onQuickCreate!(q.trim())
+                setCreating(false)
+                if (result) { onToggle(result.id); setQ("") }
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-50"
+            >
+              {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              Create "{q.trim()}"
+            </button>
+          </li>
+        )}
       </ul>
     </div>
   )
@@ -389,19 +436,64 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   // Merged tag registry (allTags + any newly created during this session)
   const [tagRegistry, setTagRegistry] = useState<TagObj[]>(allTags)
 
+  // Locally created orgs/locations/doctors (available immediately after inline creation)
+  const [extraPractices, setExtraPractices] = useState<{ id: string; name: string }[]>([])
+  const [extraLocations, setExtraLocations] = useState<{ id: string; name: string; practiceId: string }[]>([])
+  const [extraDoctors, setExtraDoctors] = useState<{ id: string; name: string; title: string | null; practiceId: string; practiceName: string }[]>([])
+
+  const allPractices = useMemo(() => [...practices, ...extraPractices.map(p => ({ ...p, locations: [], doctors: [] }))], [practices, extraPractices])
+
+  const practiceOptions = allPractices.map(p => ({ id: p.id, label: p.name }))
+
   const locationOptions = useMemo(() => {
-    if (!form.practiceId) return practices.flatMap(p => p.locations.map(l => ({ id: l.id, label: l.name, sub: p.name + (l.address ? ` · ${l.address}` : "") })))
-    const p = practices.find(p => p.id === form.practiceId)
-    return (p?.locations ?? []).map(l => ({ id: l.id, label: l.name, sub: l.address ?? undefined }))
-  }, [form.practiceId, practices])
+    const extras = extraLocations.filter(l => !form.practiceId || l.practiceId === form.practiceId)
+      .map(l => ({ id: l.id, label: l.name, sub: undefined as string | undefined }))
+    if (!form.practiceId) {
+      const base = allPractices.flatMap(p => p.locations.map(l => ({ id: l.id, label: l.name, sub: p.name + (l.address ? ` · ${l.address}` : "") })))
+      return [...base, ...extras]
+    }
+    const p = allPractices.find(p => p.id === form.practiceId)
+    const base = (p?.locations ?? []).map(l => ({ id: l.id, label: l.name, sub: l.address ?? undefined }))
+    return [...base, ...extras]
+  }, [form.practiceId, allPractices, extraLocations])
+
+  const combinedDoctors = useMemo(() => [...allDoctors, ...extraDoctors], [allDoctors, extraDoctors])
 
   const doctorOptions = useMemo(() => {
-    if (!form.practiceId) return allDoctors.map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
-    const p = practices.find(p => p.id === form.practiceId)
-    return (p?.doctors ?? []).map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
-  }, [form.practiceId, practices, allDoctors])
+    if (!form.practiceId) return combinedDoctors.map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
+    const p = allPractices.find(p => p.id === form.practiceId)
+    const baseIds = new Set((p?.doctors ?? []).map(d => d.id))
+    const extras = extraDoctors.filter(d => d.practiceId === form.practiceId)
+    const base = (p?.doctors ?? []).map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
+    return [...base, ...extras.filter(d => !baseIds.has(d.id)).map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))]
+  }, [form.practiceId, allPractices, combinedDoctors, extraDoctors])
 
-  const practiceOptions = practices.map(p => ({ id: p.id, label: p.name }))
+  // ── Inline create handlers ─────────────────────────────────────────────────
+
+  async function handleCreateOrg(name: string): Promise<{ id: string; label: string } | null> {
+    const res = await createPractice({ name, phone: "", fax: "", address: "" })
+    if (!res || res.error || !res.id) return null
+    setExtraPractices(prev => [...prev, { id: res.id!, name }])
+    return { id: res.id!, label: name }
+  }
+
+  async function handleCreateLocation(name: string): Promise<{ id: string; label: string } | null> {
+    if (!form.practiceId) { setError("Select an organization first to create a location."); return null }
+    const practiceName = allPractices.find(p => p.id === form.practiceId)?.name ?? ""
+    const res = await createLocation({ name, practiceId: form.practiceId, phone: "", fax: "", address: "" })
+    if (!res || res.error || !res.id) return null
+    setExtraLocations(prev => [...prev, { id: res.id!, name, practiceId: form.practiceId }])
+    return { id: res.id!, label: name }
+  }
+
+  async function handleCreateProvider(name: string): Promise<{ id: string; label: string } | null> {
+    if (!form.practiceId) { setError("Select an organization first to create a provider."); return null }
+    const practiceName = allPractices.find(p => p.id === form.practiceId)?.name ?? ""
+    const res = await createDoctor({ name, practiceId: form.practiceId, title: "", npi: "", specialty: "", phone: "", email: "", locationIds: [] })
+    if (!res || res.error || !res.id) return null
+    setExtraDoctors(prev => [...prev, { id: res.id!, name, title: null, practiceId: form.practiceId, practiceName }])
+    return { id: res.id!, label: name }
+  }
 
   function openNew() {
     setForm(emptyForm()); setEditId(null); setError(null); setOpen(true)
@@ -624,19 +716,22 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Account <span className="text-slate-400 font-normal">(Organization)</span></label>
               <Picker placeholder="Search Account..." value={form.practiceId} options={practiceOptions}
-                onSelect={id => set("practiceId", id)} onClear={() => set("practiceId", "")} />
+                onSelect={id => set("practiceId", id)} onClear={() => set("practiceId", "")}
+                onQuickCreate={handleCreateOrg} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Clinic Location</label>
               <Picker placeholder="Search Locations..." value={form.locationId} options={locationOptions}
-                onSelect={id => set("locationId", id)} onClear={() => set("locationId", "")} />
+                onSelect={id => set("locationId", id)} onClear={() => set("locationId", "")}
+                onQuickCreate={form.practiceId ? handleCreateLocation : undefined} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Providers</label>
               <ProviderPicker options={doctorOptions} selected={form.providerIds}
                 onToggle={id => set("providerIds", form.providerIds.includes(id)
                   ? form.providerIds.filter(x => x !== id) : [...form.providerIds, id]
-                )} />
+                )}
+                onQuickCreate={form.practiceId ? handleCreateProvider : undefined} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Selected Providers</label>
@@ -644,7 +739,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 {form.providerIds.length === 0
                   ? <p className="text-xs text-slate-400 self-center">None selected</p>
                   : form.providerIds.map(id => {
-                    const d = allDoctors.find(x => x.id === id)
+                    const d = combinedDoctors.find(x => x.id === id)
                     return d ? (
                       <Badge key={id} variant="secondary" className="text-xs flex items-center gap-1">
                         {d.name}{d.title ? `, ${d.title}` : ""}
