@@ -457,10 +457,10 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
                   {!newIsSuperAdmin && (
                     <div className="space-y-1.5">
                       <Label>Assign to Team</Label>
-                      <Select value={newTeamId} onValueChange={setNewTeamId}>
+                      <Select value={newTeamId || "none"} onValueChange={v => setNewTeamId(v === "none" ? "" : v)}>
                         <SelectTrigger><SelectValue placeholder="No team (assign later)" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No team</SelectItem>
+                          <SelectItem value="none">No team (assign later)</SelectItem>
                           {teams.map(t => (
                             <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                           ))}
