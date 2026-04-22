@@ -314,14 +314,19 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
     })
   }
 
-  // Flat list of all providers across all practices
-  const allProviders = practices
-    .flatMap((p) => p.doctors.map((d) => ({ ...d, practiceName: p.name, practice: p })))
-    .sort((a, b) =>
-      providerSort === "referrals"
-        ? b._count.referrals - a._count.referrals
-        : a.name.localeCompare(b.name)
-    )
+  // Flat list of all providers across all practices — deduplicated by doctor ID
+  // (a doctor can appear in multiple practice enrichments via cross-org location links)
+  const allProviders = (() => {
+    const seen = new Set<string>()
+    return practices
+      .flatMap((p) => p.doctors.map((d) => ({ ...d, practiceName: p.name, practice: p })))
+      .filter((d) => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
+      .sort((a, b) =>
+        providerSort === "referrals"
+          ? b._count.referrals - a._count.referrals
+          : a.name.localeCompare(b.name)
+      )
+  })()
 
   return (
     <div className="space-y-4">
