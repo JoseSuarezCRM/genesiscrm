@@ -82,7 +82,7 @@ export default function NewReferralPage({ practices }: NewReferralPageProps) {
         </>
       )}
 
-      {mode === "batch" && <BatchFaxUpload />}
+      {mode === "batch" && <BatchFaxUpload practices={practices} />}
     </div>
   )
 }

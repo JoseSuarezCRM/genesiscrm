@@ -15,13 +15,40 @@ const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
 
 type ItemStatus = "pending" | "processing" | "done" | "error" | "created" | "skipped"
 
+interface Location {
+  id: string
+  name: string
+  phone: string | null
+  fax: string | null
+  address: string | null
+}
+
+interface Doctor {
+  id: string
+  name: string
+  specialty: string | null
+  locations: { locationId: string }[]
+}
+
+interface Practice {
+  id: string
+  name: string
+  locations: Location[]
+  doctors: Doctor[]
+}
+
 interface QueueItem {
   id: string
   fileName: string
   status: ItemStatus
   data: ExtractedReferralData | null
   error: string | null
+  practiceId: string | null
+  locationId: string | null
+  doctorId: string | null
 }
+
+// ── Small helpers ──────────────────────────────────────────────────────────────
 
 function EditableField({
   label,
@@ -60,6 +87,39 @@ function EditableField({
   )
 }
 
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: { id: string; label: string }[]
+  placeholder: string
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex gap-2 items-center">
+      <span className="text-slate-400 text-xs w-28 flex-shrink-0 leading-none">{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1 text-xs text-slate-800 bg-white border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <option value="">{placeholder}</option>
+        {options.map(o => (
+          <option key={o.id} value={o.id}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide pt-2 pb-1">
@@ -68,16 +128,22 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ── QueueCard ──────────────────────────────────────────────────────────────────
+
 function QueueCard({
   item,
+  practices,
   onCreate,
   onEdit,
+  onSetIds,
   onSkip,
   onRemove,
 }: {
   item: QueueItem
+  practices: Practice[]
   onCreate: (item: QueueItem) => void
   onEdit: (patch: Partial<ExtractedReferralData>) => void
+  onSetIds: (ids: { practiceId?: string | null; locationId?: string | null; doctorId?: string | null }) => void
   onSkip: () => void
   onRemove: () => void
 }) {
@@ -86,8 +152,33 @@ function QueueCard({
   const canCreate = item.status === "done" && !!d?.patientFirstName && !!d?.patientLastName
   const isExpandable = (item.status === "done" || item.status === "created") && !!d
 
+  const selectedPractice = practices.find(p => p.id === item.practiceId) ?? null
+  const availableLocations = selectedPractice?.locations ?? []
+  const availableDoctors = selectedPractice
+    ? selectedPractice.doctors.filter(doc => {
+        if (!item.locationId) return true
+        return doc.locations.length === 0 || doc.locations.some(dl => dl.locationId === item.locationId)
+      })
+    : []
+
+  function handlePracticeChange(pid: string) {
+    onSetIds({ practiceId: pid || null, locationId: null, doctorId: null })
+  }
+
+  function handleLocationChange(lid: string) {
+    onSetIds({ locationId: lid || null, doctorId: null })
+  }
+
+  function handleDoctorChange(did: string) {
+    onSetIds({ doctorId: did || null })
+  }
+
   const field = (key: keyof ExtractedReferralData) => (v: string) =>
     onEdit({ [key]: v.trim() === "" ? null : v })
+
+  // Determine display name for the linked practice/doctor in the summary
+  const linkedPracticeName = selectedPractice?.name
+  const linkedDoctorName = selectedPractice?.doctors.find(d => d.id === item.doctorId)?.name
 
   return (
     <div
@@ -103,7 +194,6 @@ function QueueCard({
     >
       {/* Main row */}
       <div className="flex items-start gap-3 p-4">
-        {/* Status icon */}
         <div className="mt-0.5 flex-shrink-0">
           {(item.status === "pending" || (item.status === "processing" && !item.data)) && (
             <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
@@ -117,7 +207,6 @@ function QueueCard({
           )}
         </div>
 
-        {/* Summary */}
         <div className="flex-1 min-w-0">
           <p className="text-xs text-slate-400 truncate mb-0.5">{item.fileName}</p>
           {item.status === "pending" && <p className="text-sm text-slate-500">Queued…</p>}
@@ -137,9 +226,18 @@ function QueueCard({
                 <p className="text-xs text-amber-600 font-medium">Patient name not found — expand to fill in</p>
               )}
               {d.patientDob && <p className="text-xs text-slate-500">DOB: {d.patientDob}</p>}
-              {d.referringOrg && <p className="text-xs text-slate-500">From: {d.referringOrg}</p>}
-              {d.referringDoctorName && (
-                <p className="text-xs text-slate-500">Provider: {d.referringDoctorName}</p>
+              {/* Show linked name if resolved, otherwise extracted text */}
+              {(linkedPracticeName ?? d.referringOrg) && (
+                <p className="text-xs text-slate-500">
+                  From: {linkedPracticeName ?? d.referringOrg}
+                  {linkedPracticeName && <span className="ml-1 text-green-600 font-medium">✓ linked</span>}
+                </p>
+              )}
+              {(linkedDoctorName ?? d.referringDoctorName) && (
+                <p className="text-xs text-slate-500">
+                  Provider: {linkedDoctorName ?? d.referringDoctorName}
+                  {linkedDoctorName && <span className="ml-1 text-green-600 font-medium">✓ linked</span>}
+                </p>
               )}
               {item.status === "created" && (
                 <p className="text-xs font-medium text-green-700 mt-0.5">Referral created</p>
@@ -154,13 +252,12 @@ function QueueCard({
           )}
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-1 flex-shrink-0">
           {isExpandable && (
             <button
               onClick={() => setExpanded(v => !v)}
               className="h-7 w-7 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              title={expanded ? "Collapse" : "Edit details"}
+              title={expanded ? "Collapse" : "Edit / link details"}
             >
               {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
@@ -195,9 +292,11 @@ function QueueCard({
         </div>
       </div>
 
-      {/* Editable detail panel */}
+      {/* Expanded editable panel */}
       {isExpandable && expanded && d && (
         <div className="border-t border-slate-100 px-4 py-3 space-y-2">
+
+          {/* ── Patient ── */}
           <SectionLabel>Patient</SectionLabel>
           <EditableField label="First name" value={d.patientFirstName} onChange={field("patientFirstName")} placeholder="First name" />
           <EditableField label="Last name" value={d.patientLastName} onChange={field("patientLastName")} placeholder="Last name" />
@@ -206,7 +305,8 @@ function QueueCard({
           <EditableField label="Email" value={d.patientEmail} onChange={field("patientEmail")} placeholder="patient@email.com" />
           <EditableField label="MRN" value={d.patientMrn} onChange={field("patientMrn")} placeholder="Chart number" />
 
-          <SectionLabel>Referring Provider</SectionLabel>
+          {/* ── Referring Provider — free text (from extraction) ── */}
+          <SectionLabel>Extracted Text</SectionLabel>
           <EditableField label="Organization" value={d.referringOrg} onChange={field("referringOrg")} placeholder="Practice name" />
           <EditableField label="Doctor" value={d.referringDoctorName} onChange={field("referringDoctorName")} placeholder="Provider name" />
           <EditableField label="Title / Credentials" value={d.referringDoctorTitle} onChange={field("referringDoctorTitle")} placeholder="MD, DO, PA-C…" />
@@ -215,10 +315,41 @@ function QueueCard({
           <EditableField label="Fax" value={d.referringFax} onChange={field("referringFax")} placeholder="(555) 555-5555" />
           <EditableField label="Address" value={d.referringAddress} onChange={field("referringAddress")} placeholder="Street, City, State ZIP" />
 
+          {/* ── Link to existing record (overrides free text on create) ── */}
+          <SectionLabel>Link to Existing Record</SectionLabel>
+          <p className="text-xs text-slate-400 -mt-1 mb-1">
+            Select below to link to an existing org/location/provider. These take priority over the extracted text above.
+          </p>
+          <SelectField
+            label="Organization"
+            value={item.practiceId ?? ""}
+            onChange={handlePracticeChange}
+            placeholder="— match or create from text —"
+            options={practices.map(p => ({ id: p.id, label: p.name }))}
+          />
+          <SelectField
+            label="Location"
+            value={item.locationId ?? ""}
+            onChange={handleLocationChange}
+            placeholder={item.practiceId ? "— any location —" : "— select org first —"}
+            disabled={!item.practiceId}
+            options={availableLocations.map(l => ({ id: l.id, label: l.name }))}
+          />
+          <SelectField
+            label="Provider"
+            value={item.doctorId ?? ""}
+            onChange={handleDoctorChange}
+            placeholder={item.practiceId ? "— any provider —" : "— select org first —"}
+            disabled={!item.practiceId}
+            options={availableDoctors.map(d => ({ id: d.id, label: d.name }))}
+          />
+
+          {/* ── Insurance ── */}
           <SectionLabel>Insurance</SectionLabel>
           <EditableField label="Provider" value={d.insuranceProvider} onChange={field("insuranceProvider")} placeholder="Insurance name" />
           <EditableField label="Member ID" value={d.insuranceMemberId} onChange={field("insuranceMemberId")} placeholder="Member ID" />
 
+          {/* ── Notes ── */}
           <SectionLabel>Notes</SectionLabel>
           <EditableField label="Notes" value={d.notes} onChange={field("notes")} multiline placeholder="Reason for referral, chief complaint…" />
 
@@ -240,7 +371,13 @@ function QueueCard({
   )
 }
 
-export default function BatchFaxUpload() {
+// ── BatchFaxUpload ─────────────────────────────────────────────────────────────
+
+interface BatchFaxUploadProps {
+  practices: Practice[]
+}
+
+export default function BatchFaxUpload({ practices }: BatchFaxUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const filesRef = useRef<Map<string, File>>(new Map())
   const [queue, setQueue] = useState<QueueItem[]>([])
@@ -254,8 +391,24 @@ export default function BatchFaxUpload() {
   function handleEdit(id: string, patch: Partial<ExtractedReferralData>) {
     setQueue(prev =>
       prev.map(item =>
-        item.id === id && item.data
-          ? { ...item, data: { ...item.data, ...patch } }
+        item.id === id && item.data ? { ...item, data: { ...item.data, ...patch } } : item,
+      ),
+    )
+  }
+
+  function handleSetIds(
+    id: string,
+    ids: { practiceId?: string | null; locationId?: string | null; doctorId?: string | null },
+  ) {
+    setQueue(prev =>
+      prev.map(item =>
+        item.id === id
+          ? {
+              ...item,
+              practiceId: "practiceId" in ids ? (ids.practiceId ?? null) : item.practiceId,
+              locationId: "locationId" in ids ? (ids.locationId ?? null) : item.locationId,
+              doctorId: "doctorId" in ids ? (ids.doctorId ?? null) : item.doctorId,
+            }
           : item,
       ),
     )
@@ -301,6 +454,9 @@ export default function BatchFaxUpload() {
         status: "pending" as ItemStatus,
         data: null,
         error: null,
+        practiceId: null,
+        locationId: null,
+        doctorId: null,
       })),
     ])
 
@@ -325,7 +481,12 @@ export default function BatchFaxUpload() {
           patientPhone: d.patientPhone ?? undefined,
           patientEmail: d.patientEmail ?? undefined,
           patientDob: d.patientDob ?? undefined,
-          referringDoctorName: d.referringDoctorName ?? undefined,
+          // Linked IDs take priority; fall back to free-text for org resolution
+          referringPracticeId: item.practiceId ?? undefined,
+          referringLocationId: item.locationId ?? undefined,
+          referringDoctorId: item.doctorId ?? undefined,
+          // Pass free-text only when no linked practice (triggers resolveOrCreatePractice)
+          referringDoctorName: !item.practiceId ? (d.referringDoctorName ?? undefined) : undefined,
           referringNpi: d.referringNpi ?? undefined,
           referringPhone: d.referringPhone ?? undefined,
           referringAddress: d.referringAddress ?? undefined,
@@ -378,7 +539,6 @@ export default function BatchFaxUpload() {
 
   return (
     <div className="space-y-4">
-      {/* Drop zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
@@ -419,8 +579,10 @@ export default function BatchFaxUpload() {
             <QueueCard
               key={item.id}
               item={item}
+              practices={practices}
               onCreate={handleCreateItem}
               onEdit={patch => handleEdit(item.id, patch)}
+              onSetIds={ids => handleSetIds(item.id, ids)}
               onSkip={() => updateItem(item.id, { status: "skipped" })}
               onRemove={() => {
                 filesRef.current.delete(item.id)
