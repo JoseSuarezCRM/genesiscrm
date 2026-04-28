@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react"
 import {
-  FileText, Upload, CheckCircle2, AlertCircle, Loader2,
-  X, SkipForward, Plus, Layers,
+  FileText, CheckCircle2, AlertCircle, Loader2,
+  X, SkipForward, Plus, Layers, ChevronDown, ChevronUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { createReferral } from "@/app/actions/referrals"
@@ -23,6 +23,16 @@ interface QueueItem {
   error: string | null
 }
 
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null
+  return (
+    <div className="flex gap-2 text-xs">
+      <span className="text-slate-400 w-28 flex-shrink-0">{label}</span>
+      <span className="text-slate-700 break-words">{value}</span>
+    </div>
+  )
+}
+
 function QueueCard({
   item,
   onCreate,
@@ -34,12 +44,14 @@ function QueueCard({
   onSkip: () => void
   onRemove: () => void
 }) {
+  const [expanded, setExpanded] = useState(false)
   const d = item.data
   const canCreate = item.status === "done" && !!d?.patientFirstName && !!d?.patientLastName
+  const isExpandable = (item.status === "done" || item.status === "created") && !!d
 
   return (
     <div
-      className={`rounded-lg border p-4 flex items-start gap-3 transition-colors ${
+      className={`rounded-lg border transition-colors ${
         item.status === "created"
           ? "border-green-200 bg-green-50"
           : item.status === "skipped"
@@ -49,98 +61,136 @@ function QueueCard({
           : "border-slate-200 bg-white"
       }`}
     >
-      {/* Status icon */}
-      <div className="mt-0.5 flex-shrink-0">
-        {(item.status === "pending" || (item.status === "processing" && !item.data)) && (
-          <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-        )}
-        {item.status === "done" && <FileText className="h-4 w-4 text-slate-500" />}
-        {item.status === "created" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-        {item.status === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
-        {item.status === "skipped" && <SkipForward className="h-4 w-4 text-slate-400" />}
-        {item.status === "processing" && item.data && (
-          <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-        )}
-      </div>
+      {/* Main row */}
+      <div className="flex items-start gap-3 p-4">
+        {/* Status icon */}
+        <div className="mt-0.5 flex-shrink-0">
+          {(item.status === "pending" || (item.status === "processing" && !item.data)) && (
+            <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+          )}
+          {item.status === "done" && <FileText className="h-4 w-4 text-slate-500" />}
+          {item.status === "created" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+          {item.status === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
+          {item.status === "skipped" && <SkipForward className="h-4 w-4 text-slate-400" />}
+          {item.status === "processing" && item.data && (
+            <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+          )}
+        </div>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-slate-400 truncate mb-0.5">{item.fileName}</p>
-        {item.status === "pending" && (
-          <p className="text-sm text-slate-500">Queued…</p>
-        )}
-        {item.status === "processing" && !item.data && (
-          <p className="text-sm text-slate-500">Extracting referral data…</p>
-        )}
-        {item.status === "processing" && item.data && (
-          <p className="text-sm text-slate-500">Creating referral…</p>
-        )}
-        {item.status === "done" && d && (
-          <div className="space-y-0.5">
-            {d.patientFirstName && d.patientLastName ? (
-              <p className="text-sm font-medium text-slate-800">
-                {d.patientFirstName} {d.patientLastName}
-              </p>
-            ) : (
-              <p className="text-xs text-amber-600 font-medium">Patient name not found</p>
-            )}
-            {d.patientDob && (
-              <p className="text-xs text-slate-500">DOB: {d.patientDob}</p>
-            )}
-            {d.referringOrg && (
-              <p className="text-xs text-slate-500">From: {d.referringOrg}</p>
-            )}
-            {d.referringDoctorName && (
-              <p className="text-xs text-slate-500">Provider: {d.referringDoctorName}</p>
-            )}
-            {d.insuranceProvider && (
-              <p className="text-xs text-slate-500">Insurance: {d.insuranceProvider}</p>
-            )}
-          </div>
-        )}
-        {item.status === "error" && (
-          <p className="text-sm text-red-600">{item.error}</p>
-        )}
-        {item.status === "created" && d && (
-          <p className="text-sm font-medium text-green-700">
-            {d.patientFirstName} {d.patientLastName} — Referral created
-          </p>
-        )}
-        {item.status === "skipped" && (
-          <p className="text-sm text-slate-400">Skipped</p>
-        )}
-      </div>
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-slate-400 truncate mb-0.5">{item.fileName}</p>
+          {item.status === "pending" && <p className="text-sm text-slate-500">Queued…</p>}
+          {item.status === "processing" && !item.data && (
+            <p className="text-sm text-slate-500">Extracting referral data…</p>
+          )}
+          {item.status === "processing" && item.data && (
+            <p className="text-sm text-slate-500">Creating referral…</p>
+          )}
+          {(item.status === "done" || item.status === "created") && d && (
+            <div className="space-y-0.5">
+              {d.patientFirstName && d.patientLastName ? (
+                <p className="text-sm font-medium text-slate-800">
+                  {d.patientFirstName} {d.patientLastName}
+                </p>
+              ) : (
+                <p className="text-xs text-amber-600 font-medium">Patient name not found</p>
+              )}
+              {d.patientDob && <p className="text-xs text-slate-500">DOB: {d.patientDob}</p>}
+              {d.referringOrg && <p className="text-xs text-slate-500">From: {d.referringOrg}</p>}
+              {d.referringDoctorName && (
+                <p className="text-xs text-slate-500">Provider: {d.referringDoctorName}</p>
+              )}
+              {item.status === "created" && (
+                <p className="text-xs font-medium text-green-700">Referral created</p>
+              )}
+            </div>
+          )}
+          {item.status === "error" && (
+            <p className="text-sm text-red-600">{item.error}</p>
+          )}
+          {item.status === "skipped" && (
+            <p className="text-sm text-slate-400">Skipped</p>
+          )}
+        </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {item.status === "done" && (
-          <>
-            {canCreate && (
-              <Button size="sm" onClick={() => onCreate(item)} className="h-7 text-xs px-2">
-                Create
+        {/* Action buttons */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {isExpandable && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              className="h-7 w-7 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              title={expanded ? "Collapse" : "Expand details"}
+            >
+              {expanded ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+          {item.status === "done" && (
+            <>
+              {canCreate && (
+                <Button size="sm" onClick={() => onCreate(item)} className="h-7 text-xs px-2">
+                  Create
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onSkip}
+                className="h-7 text-xs px-2 text-slate-400 hover:text-slate-600"
+              >
+                Skip
               </Button>
-            )}
+            </>
+          )}
+          {(item.status === "error" || item.status === "skipped") && (
             <Button
               size="sm"
               variant="ghost"
-              onClick={onSkip}
-              className="h-7 text-xs px-2 text-slate-400 hover:text-slate-600"
+              onClick={onRemove}
+              className="h-7 w-7 p-0 text-slate-400 hover:text-slate-600"
             >
-              Skip
+              <X className="h-3.5 w-3.5" />
             </Button>
-          </>
-        )}
-        {(item.status === "error" || item.status === "skipped") && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onRemove}
-            className="h-7 w-7 p-0 text-slate-400 hover:text-slate-600"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Expanded detail panel */}
+      {isExpandable && expanded && d && (
+        <div className="border-t border-slate-100 px-4 py-3 space-y-1.5">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Patient</p>
+          <DetailRow label="First name" value={d.patientFirstName} />
+          <DetailRow label="Last name" value={d.patientLastName} />
+          <DetailRow label="Date of birth" value={d.patientDob} />
+          <DetailRow label="Phone" value={d.patientPhone} />
+          <DetailRow label="Email" value={d.patientEmail} />
+          <DetailRow label="MRN" value={d.patientMrn} />
+
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-3 mb-2">Referring Provider</p>
+          <DetailRow label="Organization" value={d.referringOrg} />
+          <DetailRow label="Doctor" value={d.referringDoctorName} />
+          <DetailRow label="Title" value={d.referringDoctorTitle} />
+          <DetailRow label="NPI" value={d.referringNpi} />
+          <DetailRow label="Phone" value={d.referringPhone} />
+          <DetailRow label="Fax" value={d.referringFax} />
+          <DetailRow label="Address" value={d.referringAddress} />
+
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-3 mb-2">Insurance</p>
+          <DetailRow label="Provider" value={d.insuranceProvider} />
+          <DetailRow label="Member ID" value={d.insuranceMemberId} />
+
+          {d.notes && (
+            <>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-3 mb-2">Notes</p>
+              <p className="text-xs text-slate-700 whitespace-pre-wrap">{d.notes}</p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
