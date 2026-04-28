@@ -23,24 +23,61 @@ interface QueueItem {
   error: string | null
 }
 
-function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value) return null
+function EditableField({
+  label,
+  value,
+  onChange,
+  multiline,
+  placeholder,
+}: {
+  label: string
+  value: string | null | undefined
+  onChange: (v: string) => void
+  multiline?: boolean
+  placeholder?: string
+}) {
+  const base =
+    "flex-1 text-xs text-slate-800 bg-white border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 placeholder:text-slate-300"
   return (
-    <div className="flex gap-2 text-xs">
-      <span className="text-slate-400 w-28 flex-shrink-0">{label}</span>
-      <span className="text-slate-700 break-words">{value}</span>
+    <div className="flex gap-2 items-start">
+      <span className="text-slate-400 text-xs w-28 flex-shrink-0 mt-1.5 leading-none">{label}</span>
+      {multiline ? (
+        <textarea
+          className={`${base} resize-none min-h-[60px]`}
+          value={value ?? ""}
+          placeholder={placeholder}
+          onChange={e => onChange(e.target.value)}
+        />
+      ) : (
+        <input
+          className={base}
+          value={value ?? ""}
+          placeholder={placeholder ?? "—"}
+          onChange={e => onChange(e.target.value)}
+        />
+      )}
     </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide pt-2 pb-1">
+      {children}
+    </p>
   )
 }
 
 function QueueCard({
   item,
   onCreate,
+  onEdit,
   onSkip,
   onRemove,
 }: {
   item: QueueItem
   onCreate: (item: QueueItem) => void
+  onEdit: (patch: Partial<ExtractedReferralData>) => void
   onSkip: () => void
   onRemove: () => void
 }) {
@@ -48,6 +85,9 @@ function QueueCard({
   const d = item.data
   const canCreate = item.status === "done" && !!d?.patientFirstName && !!d?.patientLastName
   const isExpandable = (item.status === "done" || item.status === "created") && !!d
+
+  const field = (key: keyof ExtractedReferralData) => (v: string) =>
+    onEdit({ [key]: v.trim() === "" ? null : v })
 
   return (
     <div
@@ -77,7 +117,7 @@ function QueueCard({
           )}
         </div>
 
-        {/* Content */}
+        {/* Summary */}
         <div className="flex-1 min-w-0">
           <p className="text-xs text-slate-400 truncate mb-0.5">{item.fileName}</p>
           {item.status === "pending" && <p className="text-sm text-slate-500">Queued…</p>}
@@ -94,7 +134,7 @@ function QueueCard({
                   {d.patientFirstName} {d.patientLastName}
                 </p>
               ) : (
-                <p className="text-xs text-amber-600 font-medium">Patient name not found</p>
+                <p className="text-xs text-amber-600 font-medium">Patient name not found — expand to fill in</p>
               )}
               {d.patientDob && <p className="text-xs text-slate-500">DOB: {d.patientDob}</p>}
               {d.referringOrg && <p className="text-xs text-slate-500">From: {d.referringOrg}</p>}
@@ -102,7 +142,7 @@ function QueueCard({
                 <p className="text-xs text-slate-500">Provider: {d.referringDoctorName}</p>
               )}
               {item.status === "created" && (
-                <p className="text-xs font-medium text-green-700">Referral created</p>
+                <p className="text-xs font-medium text-green-700 mt-0.5">Referral created</p>
               )}
             </div>
           )}
@@ -114,19 +154,15 @@ function QueueCard({
           )}
         </div>
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div className="flex items-center gap-1 flex-shrink-0">
           {isExpandable && (
             <button
               onClick={() => setExpanded(v => !v)}
               className="h-7 w-7 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              title={expanded ? "Collapse" : "Expand details"}
+              title={expanded ? "Collapse" : "Edit details"}
             >
-              {expanded ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           )}
           {item.status === "done" && (
@@ -159,35 +195,44 @@ function QueueCard({
         </div>
       </div>
 
-      {/* Expanded detail panel */}
+      {/* Editable detail panel */}
       {isExpandable && expanded && d && (
-        <div className="border-t border-slate-100 px-4 py-3 space-y-1.5">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Patient</p>
-          <DetailRow label="First name" value={d.patientFirstName} />
-          <DetailRow label="Last name" value={d.patientLastName} />
-          <DetailRow label="Date of birth" value={d.patientDob} />
-          <DetailRow label="Phone" value={d.patientPhone} />
-          <DetailRow label="Email" value={d.patientEmail} />
-          <DetailRow label="MRN" value={d.patientMrn} />
+        <div className="border-t border-slate-100 px-4 py-3 space-y-2">
+          <SectionLabel>Patient</SectionLabel>
+          <EditableField label="First name" value={d.patientFirstName} onChange={field("patientFirstName")} placeholder="First name" />
+          <EditableField label="Last name" value={d.patientLastName} onChange={field("patientLastName")} placeholder="Last name" />
+          <EditableField label="Date of birth" value={d.patientDob} onChange={field("patientDob")} placeholder="YYYY-MM-DD" />
+          <EditableField label="Phone" value={d.patientPhone} onChange={field("patientPhone")} placeholder="(555) 555-5555" />
+          <EditableField label="Email" value={d.patientEmail} onChange={field("patientEmail")} placeholder="patient@email.com" />
+          <EditableField label="MRN" value={d.patientMrn} onChange={field("patientMrn")} placeholder="Chart number" />
 
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-3 mb-2">Referring Provider</p>
-          <DetailRow label="Organization" value={d.referringOrg} />
-          <DetailRow label="Doctor" value={d.referringDoctorName} />
-          <DetailRow label="Title" value={d.referringDoctorTitle} />
-          <DetailRow label="NPI" value={d.referringNpi} />
-          <DetailRow label="Phone" value={d.referringPhone} />
-          <DetailRow label="Fax" value={d.referringFax} />
-          <DetailRow label="Address" value={d.referringAddress} />
+          <SectionLabel>Referring Provider</SectionLabel>
+          <EditableField label="Organization" value={d.referringOrg} onChange={field("referringOrg")} placeholder="Practice name" />
+          <EditableField label="Doctor" value={d.referringDoctorName} onChange={field("referringDoctorName")} placeholder="Provider name" />
+          <EditableField label="Title / Credentials" value={d.referringDoctorTitle} onChange={field("referringDoctorTitle")} placeholder="MD, DO, PA-C…" />
+          <EditableField label="NPI" value={d.referringNpi} onChange={field("referringNpi")} placeholder="10-digit NPI" />
+          <EditableField label="Phone" value={d.referringPhone} onChange={field("referringPhone")} placeholder="(555) 555-5555" />
+          <EditableField label="Fax" value={d.referringFax} onChange={field("referringFax")} placeholder="(555) 555-5555" />
+          <EditableField label="Address" value={d.referringAddress} onChange={field("referringAddress")} placeholder="Street, City, State ZIP" />
 
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-3 mb-2">Insurance</p>
-          <DetailRow label="Provider" value={d.insuranceProvider} />
-          <DetailRow label="Member ID" value={d.insuranceMemberId} />
+          <SectionLabel>Insurance</SectionLabel>
+          <EditableField label="Provider" value={d.insuranceProvider} onChange={field("insuranceProvider")} placeholder="Insurance name" />
+          <EditableField label="Member ID" value={d.insuranceMemberId} onChange={field("insuranceMemberId")} placeholder="Member ID" />
 
-          {d.notes && (
-            <>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-3 mb-2">Notes</p>
-              <p className="text-xs text-slate-700 whitespace-pre-wrap">{d.notes}</p>
-            </>
+          <SectionLabel>Notes</SectionLabel>
+          <EditableField label="Notes" value={d.notes} onChange={field("notes")} multiline placeholder="Reason for referral, chief complaint…" />
+
+          {item.status === "done" && (
+            <div className="flex justify-end pt-1">
+              <Button
+                size="sm"
+                onClick={() => onCreate(item)}
+                disabled={!d.patientFirstName || !d.patientLastName}
+                className="text-xs"
+              >
+                Create Referral
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -204,6 +249,16 @@ export default function BatchFaxUpload() {
 
   function updateItem(id: string, patch: Partial<QueueItem>) {
     setQueue(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  function handleEdit(id: string, patch: Partial<ExtractedReferralData>) {
+    setQueue(prev =>
+      prev.map(item =>
+        item.id === id && item.data
+          ? { ...item, data: { ...item.data, ...patch } }
+          : item,
+      ),
+    )
   }
 
   async function processFile(id: string) {
@@ -249,14 +304,13 @@ export default function BatchFaxUpload() {
       })),
     ])
 
-    // Start extraction for all in parallel
     valid.forEach(({ id }) => processFile(id))
   }
 
   async function handleCreateItem(item: QueueItem) {
     const d = item.data
     if (!d?.patientFirstName || !d?.patientLastName) {
-      updateItem(item.id, { status: "error", error: "Patient name not found. Create manually." })
+      updateItem(item.id, { status: "error", error: "Patient name required. Expand the card to fill it in." })
       return
     }
 
@@ -297,8 +351,7 @@ export default function BatchFaxUpload() {
   async function handleCreateAll() {
     setCreatingAll(true)
     const ready = queue.filter(
-      item =>
-        item.status === "done" && !!item.data?.patientFirstName && !!item.data?.patientLastName,
+      item => item.status === "done" && !!item.data?.patientFirstName && !!item.data?.patientLastName,
     )
     await Promise.allSettled(ready.map(item => handleCreateItem(item)))
     setCreatingAll(false)
@@ -332,16 +385,12 @@ export default function BatchFaxUpload() {
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
         className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
-          isDragging
-            ? "border-blue-400 bg-blue-50"
-            : "border-slate-300 hover:border-slate-400 bg-white"
+          isDragging ? "border-blue-400 bg-blue-50" : "border-slate-300 hover:border-slate-400 bg-white"
         }`}
       >
         <div className="flex flex-col items-center gap-2">
           <Layers className="h-9 w-9 text-slate-400" />
-          <p className="text-sm font-medium text-slate-600">
-            Drop multiple faxes here or click to browse
-          </p>
+          <p className="text-sm font-medium text-slate-600">Drop multiple faxes here or click to browse</p>
           <p className="text-xs text-slate-400">
             PDF, JPG, PNG, WEBP · max {MAX_SIZE_MB} MB each · multiple files at once
           </p>
@@ -357,7 +406,6 @@ export default function BatchFaxUpload() {
         onChange={handleChange}
       />
 
-      {/* Processing summary badge */}
       {processingCount > 0 && (
         <div className="flex items-center gap-2 text-sm text-blue-600">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -365,7 +413,6 @@ export default function BatchFaxUpload() {
         </div>
       )}
 
-      {/* Queue cards */}
       {queue.length > 0 && (
         <div className="space-y-2">
           {queue.map(item => (
@@ -373,6 +420,7 @@ export default function BatchFaxUpload() {
               key={item.id}
               item={item}
               onCreate={handleCreateItem}
+              onEdit={patch => handleEdit(item.id, patch)}
               onSkip={() => updateItem(item.id, { status: "skipped" })}
               onRemove={() => {
                 filesRef.current.delete(item.id)
@@ -383,7 +431,6 @@ export default function BatchFaxUpload() {
         </div>
       )}
 
-      {/* Footer bar */}
       {(readyCount > 0 || createdCount > 0) && (
         <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
           <p className="text-sm text-slate-600">
@@ -394,28 +441,17 @@ export default function BatchFaxUpload() {
             {readyCount > 0 && `${readyCount} ready`}
           </p>
           {readyCount > 0 && (
-            <Button
-              onClick={handleCreateAll}
-              disabled={creatingAll}
-              size="sm"
-            >
+            <Button onClick={handleCreateAll} disabled={creatingAll} size="sm">
               {creatingAll ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  Creating…
-                </>
+                <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Creating…</>
               ) : (
-                <>
-                  <Plus className="h-3.5 w-3.5 mr-1.5" />
-                  Create All {readyCount} Referrals
-                </>
+                <><Plus className="h-3.5 w-3.5 mr-1.5" />Create All {readyCount} Referrals</>
               )}
             </Button>
           )}
         </div>
       )}
 
-      {/* All done state */}
       {queue.length > 0 && readyCount === 0 && processingCount === 0 && createdCount > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
           <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
