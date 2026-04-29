@@ -362,10 +362,8 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         const did = matchedDoctorId
         setTimeout(() => {
           if (pid) setValue("referringPracticeId", pid)
-          setTimeout(() => {
-            if (lid) setValue("referringLocationId", lid)
-            if (did) setValue("referringDoctorId", did)
-          }, 0)
+          if (lid) setValue("referringLocationId", lid)
+          if (did) setValue("referringDoctorId", did)
         }, 0)
       }
     }
