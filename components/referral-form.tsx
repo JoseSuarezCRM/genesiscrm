@@ -182,11 +182,6 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const [newLocationError, setNewLocationError] = useState<string | null>(null)
   const [newLocationPending, startNewLocationTransition] = useTransition()
 
-  // Pending referring source IDs to set once localPractices has the ghost entries
-  const [pendingPrefillIds, setPendingPrefillIds] = useState<{
-    practiceId?: string; locationId?: string; doctorId?: string
-  } | null>(null)
-
   // Pending records to create on submit (from fax extraction — not created until user saves)
   const [pendingPracticeData, setPendingPracticeData] = useState<{ name: string; phone?: string; address?: string } | null>(null)
   const [pendingLocationData, setPendingLocationData] = useState<{ name: string; address?: string; phone?: string; fax?: string } | null>(null)
@@ -360,14 +355,20 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       if (prefillData.notes) setValue("notes", prefillData.notes)
       if (prefillData.referringDoctorName && !matchedDoctorId) setValue("referringDoctorName", prefillData.referringDoctorName)
 
-      // Queue referring source IDs — the useEffect below will set them once
-      // localPractices has been updated with the ghost entries
+      // Set referring source IDs via setTimeout(0) so the call lands in a macrotask,
+      // after React has committed the setLocalPractices(ghost) microtask render.
+      // This ensures SelectItem ghost entries are in the DOM before setValue fires.
       if (matchedPracticeId || matchedLocationId || matchedDoctorId) {
-        setPendingPrefillIds({
-          practiceId: matchedPracticeId,
-          locationId: matchedLocationId,
-          doctorId: matchedDoctorId,
-        })
+        const pid = matchedPracticeId
+        const lid = matchedLocationId
+        const did = matchedDoctorId
+        setTimeout(() => {
+          if (pid) setValue("referringPracticeId", pid)
+          setTimeout(() => {
+            if (lid) setValue("referringLocationId", lid)
+            if (did) setValue("referringDoctorId", did)
+          }, 0)
+        }, 0)
       }
     }
 
@@ -391,22 +392,6 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         .filter((p) => p.id !== practiceId && !p.id.startsWith("__"))
         .flatMap((p) => p.doctors.map((d) => ({ ...d, _practiceName: p.name })))
     : []
-
-  // Once localPractices has been updated with ghost entries, set the form IDs
-  useEffect(() => {
-    if (!pendingPrefillIds) return
-    const { practiceId: pid, locationId: lid, doctorId: did } = pendingPrefillIds
-    // Wait until the ghost practice entry is actually in localPractices
-    if (pid && !localPractices.find((p) => p.id === pid)) return
-    setPendingPrefillIds(null)
-    if (pid) setValue("referringPracticeId", pid)
-    // Defer location/doctor by one tick so the practice renders first,
-    // ensuring the location/provider selects are no longer disabled when their values are set
-    setTimeout(() => {
-      if (lid) setValue("referringLocationId", lid)
-      if (did) setValue("referringDoctorId", did)
-    }, 0)
-  }, [localPractices, pendingPrefillIds, setValue])
 
   function removeFile(index: number) {
     setFiles((prev) => prev.filter((_, i) => i !== index))
