@@ -407,7 +407,7 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                     const isOpen = activeCell?.locationId === loc.id && activeCell.role === role && activeCell.day === day
 
                     return (
-                      <td key={day} className="px-2 py-1.5 border-r border-slate-100 last:border-r-0 align-top min-w-28">
+                      <td key={day} className="px-2 py-1.5 border-r border-slate-100 last:border-r-0 align-middle min-w-28">
                         <div className="flex flex-wrap gap-1 items-start relative">
                           {cellEntries.map(entry => (
                             <span
