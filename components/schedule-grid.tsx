@@ -15,7 +15,7 @@ interface Location {
   id: string
   code: string
   order: number
-  requirements: { role: StaffRole; count: number }[]
+  requirements: { role: StaffRole; countMon: number; countTue: number; countWed: number; countThu: number; countFri: number }[]
 }
 
 interface Staff {
@@ -63,7 +63,11 @@ const ROLE_CHIP: Record<StaffRole, string> = {
 const ROLE_ORDER: StaffRole[] = ["XR_TECH", "MA", "FD"]
 
 function getRoles(loc: Location): StaffRole[] {
-  const active = new Set(loc.requirements.filter(r => r.count > 0).map(r => r.role))
+  const active = new Set(
+    loc.requirements
+      .filter(r => r.countMon > 0 || r.countTue > 0 || r.countWed > 0 || r.countThu > 0 || r.countFri > 0)
+      .map(r => r.role)
+  )
   return ROLE_ORDER.filter(r => active.has(r))
 }
 

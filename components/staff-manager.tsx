@@ -33,9 +33,15 @@ interface StaffMember {
   locationAssignments: StaffLocationAssignment[]
 }
 
+type DayCountMap = Record<SchedDay, number>
+
 interface RoleRequirement {
   role: StaffRole
-  count: number
+  countMon: number
+  countTue: number
+  countWed: number
+  countThu: number
+  countFri: number
 }
 
 interface Location {
@@ -271,6 +277,99 @@ function AvailabilityRow({ member }: { member: StaffMember }) {
   )
 }
 
+// ── Requirements grid ─────────────────────────────────────────────────────────
+
+function RequirementsGrid({
+  reqs, openDays, onChange,
+}: {
+  reqs: { role: StaffRole; counts: DayCountMap }[]
+  openDays: string[]
+  onChange: (r: { role: StaffRole; counts: DayCountMap }[]) => void
+}) {
+  const activeDays = ALL_DAYS.filter(d => openDays.includes(d))
+  const activeReqs  = reqs.filter(r => Object.values(r.counts).some(v => v > 0))
+  const inactiveReqs = reqs.filter(r => !Object.values(r.counts).some(v => v > 0))
+
+  function adjust(role: StaffRole, day: SchedDay, delta: number) {
+    onChange(reqs.map(r =>
+      r.role === role ? { ...r, counts: { ...r.counts, [day]: Math.max(0, r.counts[day] + delta) } } : r
+    ))
+  }
+  function activate(role: StaffRole) {
+    onChange(reqs.map(r =>
+      r.role === role
+        ? { ...r, counts: Object.fromEntries(ALL_DAYS.map(d => [d, openDays.includes(d) ? 1 : 0])) as DayCountMap }
+        : r
+    ))
+  }
+  function clear(role: StaffRole) {
+    onChange(reqs.map(r =>
+      r.role === role ? { ...r, counts: { MON: 0, TUE: 0, WED: 0, THU: 0, FRI: 0 } } : r
+    ))
+  }
+
+  return (
+    <div className="space-y-2">
+      {activeReqs.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="text-xs border-collapse">
+            <thead>
+              <tr>
+                <th className="text-left pr-4 pb-1.5 text-slate-400 font-medium min-w-[72px]" />
+                {activeDays.map(d => (
+                  <th key={d} className="text-center px-2 pb-1.5 text-slate-400 font-medium min-w-[64px]">
+                    {DAY_SHORT[d]}
+                  </th>
+                ))}
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {activeReqs.map(({ role, counts }) => (
+                <tr key={role} className="group">
+                  <td className="pr-4 py-1">
+                    <span className={cn("inline-flex items-center px-2 py-0.5 rounded font-semibold text-xs",
+                      ROLE_COLORS_LOC[role].bg, ROLE_COLORS_LOC[role].text)}>
+                      {ROLE_LABEL[role]}
+                    </span>
+                  </td>
+                  {activeDays.map(d => (
+                    <td key={d} className="px-2 py-1 text-center">
+                      <div className="inline-flex items-center gap-0.5">
+                        <button type="button" onClick={() => adjust(role, d, -1)}
+                          className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold leading-none">−</button>
+                        <span className="w-5 text-center font-semibold text-slate-700">{counts[d]}</span>
+                        <button type="button" onClick={() => adjust(role, d, +1)}
+                          className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold leading-none">+</button>
+                      </div>
+                    </td>
+                  ))}
+                  <td className="pl-2 py-1">
+                    <button type="button" onClick={() => clear(role)}
+                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {inactiveReqs.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {inactiveReqs.map(({ role }) => (
+            <button key={role} type="button" onClick={() => activate(role)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-dashed border-slate-200 text-xs font-medium text-slate-400 hover:border-slate-400 hover:text-slate-600 transition-colors">
+              <Plus className="h-3 w-3" />{ROLE_LABEL[role]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Location card (collapsed + expanded) ──────────────────────────────────────
 
 const ALL_DAYS: SchedDay[] = ["MON", "TUE", "WED", "THU", "FRI"]
@@ -299,9 +398,12 @@ function LocationCard({
   const [openDays, setOpenDays] = useState<string[]>(
     loc.openDays.length > 0 ? loc.openDays : ALL_DAYS
   )
-  const [reqs, setReqs] = useState<{ role: StaffRole; count: number }[]>(() => {
-    const existing = new Map(loc.requirements.map(r => [r.role as StaffRole, r.count]))
-    return ROLE_ORDER_LOC.map(role => ({ role, count: existing.get(role) ?? 0 }))
+  const [reqs, setReqs] = useState<{ role: StaffRole; counts: DayCountMap }[]>(() => {
+    const existing = new Map(loc.requirements.map(r => [r.role as StaffRole, r]))
+    return ROLE_ORDER_LOC.map(role => {
+      const r = existing.get(role)
+      return { role, counts: { MON: r?.countMon ?? 0, TUE: r?.countTue ?? 0, WED: r?.countWed ?? 0, THU: r?.countThu ?? 0, FRI: r?.countFri ?? 0 } }
+    })
   })
 
   const [staffPending, startStaffTransition] = useTransition()
@@ -314,14 +416,6 @@ function LocationCard({
     setOpenDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
   }
 
-  function setCount(role: StaffRole, delta: number) {
-    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: Math.max(0, r.count + delta) } : r))
-  }
-
-  function toggleRole(role: StaffRole) {
-    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: r.count > 0 ? 0 : 1 } : r))
-  }
-
   function save() {
     setError("")
     startSaveTransition(async () => {
@@ -330,7 +424,13 @@ function LocationCard({
         code: code.trim().toUpperCase(),
         name: name.trim() || code.trim().toUpperCase(),
         openDays: days,
-        requirements: reqs.filter(r => r.count > 0),
+        requirements: reqs
+          .filter(r => Object.values(r.counts).some(v => v > 0))
+          .map(r => ({
+            role: r.role,
+            countMon: r.counts.MON, countTue: r.counts.TUE, countWed: r.counts.WED,
+            countThu: r.counts.THU, countFri: r.counts.FRI,
+          })),
       })
       if (!res.success) setError(res.error ?? "Failed.")
     })
@@ -349,7 +449,9 @@ function LocationCard({
   }
 
   const displayDays = loc.openDays.length === 0 ? "All days" : loc.openDays.map(d => DAY_SHORT[d as SchedDay]).join(", ")
-  const displayReqs = loc.requirements.filter(r => r.count > 0)
+  const displayReqs = loc.requirements
+    .map(r => ({ role: r.role, max: Math.max(r.countMon, r.countTue, r.countWed, r.countThu, r.countFri) }))
+    .filter(r => r.max > 0)
 
   return (
     <div className={cn("bg-white border rounded-xl overflow-hidden transition-shadow", open ? "border-blue-300 shadow-md col-span-full" : "border-slate-200 hover:border-slate-300 cursor-pointer")}>
@@ -371,7 +473,7 @@ function LocationCard({
                 r.role === "XR_TECH" ? "bg-blue-50 text-blue-700" :
                 r.role === "MA"      ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"
               )}>
-                {r.count}× {ROLE_LABEL[r.role as StaffRole]}
+                {r.max}× {ROLE_LABEL[r.role as StaffRole]}
               </span>
             ))}
             <span className="text-xs text-slate-400">· {assigned.size} staff</span>
@@ -430,38 +532,7 @@ function LocationCard({
           {/* Role requirements */}
           <div>
             <p className="text-xs font-medium text-slate-500 mb-2">Staff needed per day</p>
-            <div className="flex gap-3 flex-wrap">
-              {reqs.map(({ role, count }) => {
-                const active = count > 0
-                const colors = ROLE_COLORS_LOC[role]
-                return (
-                  <div key={role} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
-                    active ? "border-transparent " + colors.bg : "border-slate-200 bg-white"
-                  )}>
-                    <button
-                      type="button"
-                      onClick={() => toggleRole(role)}
-                      className={cn("text-xs font-semibold", active ? colors.text : "text-slate-500")}
-                    >
-                      {ROLE_LABEL[role]}
-                    </button>
-                    {active && (
-                      <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => setCount(role, -1)}
-                          className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">−</button>
-                        <span className={cn("text-sm font-bold w-4 text-center", colors.text)}>{count}</span>
-                        <button type="button" onClick={() => setCount(role, +1)}
-                          className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">+</button>
-                      </div>
-                    )}
-                    {!active && (
-                      <button type="button" onClick={() => toggleRole(role)}
-                        className="text-xs text-slate-400 hover:text-slate-600">+ Add</button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <RequirementsGrid reqs={reqs} openDays={openDays} onChange={setReqs} />
           </div>
 
           {/* Staff assignment */}
@@ -520,20 +591,17 @@ function AddLocationForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
   const [openDays, setOpenDays] = useState<string[]>(ALL_DAYS)
-  const [reqs, setReqs] = useState<{ role: StaffRole; count: number }[]>([
-    { role: "XR_TECH", count: 1 }, { role: "MA", count: 1 }, { role: "FD", count: 1 },
+  const defaultCounts = (): DayCountMap => ({ MON: 1, TUE: 1, WED: 1, THU: 1, FRI: 1 })
+  const [reqs, setReqs] = useState<{ role: StaffRole; counts: DayCountMap }[]>([
+    { role: "XR_TECH", counts: defaultCounts() },
+    { role: "MA",      counts: defaultCounts() },
+    { role: "FD",      counts: defaultCounts() },
   ])
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState("")
 
   function toggleDay(day: string) {
     setOpenDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
-  }
-  function setCount(role: StaffRole, delta: number) {
-    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: Math.max(0, r.count + delta) } : r))
-  }
-  function toggleRole(role: StaffRole) {
-    setReqs(prev => prev.map(r => r.role === role ? { ...r, count: r.count > 0 ? 0 : 1 } : r))
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -546,7 +614,13 @@ function AddLocationForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
         code: code.trim().toUpperCase(),
         name: name.trim() || code.trim().toUpperCase(),
         openDays: days,
-        requirements: reqs.filter(r => r.count > 0),
+        requirements: reqs
+          .filter(r => Object.values(r.counts).some(v => v > 0))
+          .map(r => ({
+            role: r.role,
+            countMon: r.counts.MON, countTue: r.counts.TUE, countWed: r.counts.WED,
+            countThu: r.counts.THU, countFri: r.counts.FRI,
+          })),
       })
       if (!res.success) { setError(res.error ?? "Failed."); return }
       onSave()
@@ -587,31 +661,7 @@ function AddLocationForm({ onSave, onCancel }: { onSave: () => void; onCancel: (
       </div>
       <div>
         <p className="text-xs font-medium text-slate-600 mb-2">Staff needed per day</p>
-        <div className="flex gap-3 flex-wrap">
-          {reqs.map(({ role, count }) => {
-            const active = count > 0
-            const colors = ROLE_COLORS_LOC[role]
-            return (
-              <div key={role} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
-                active ? "border-transparent " + colors.bg : "border-slate-200 bg-white"
-              )}>
-                <button type="button" onClick={() => toggleRole(role)}
-                  className={cn("text-xs font-semibold", active ? colors.text : "text-slate-500")}>
-                  {ROLE_LABEL[role]}
-                </button>
-                {active && (
-                  <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => setCount(role, -1)}
-                      className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">−</button>
-                    <span className={cn("text-sm font-bold w-4 text-center", colors.text)}>{count}</span>
-                    <button type="button" onClick={() => setCount(role, +1)}
-                      className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm leading-none">+</button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <RequirementsGrid reqs={reqs} openDays={openDays} onChange={setReqs} />
       </div>
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">Cancel</button>

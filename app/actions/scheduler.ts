@@ -25,11 +25,13 @@ export async function getLocations() {
   })
 }
 
+type ReqInput = { role: string; countMon: number; countTue: number; countWed: number; countThu: number; countFri: number }
+
 export async function createLocation(input: {
   code: string
   name: string
   openDays: string[]
-  requirements: { role: string; count: number }[]
+  requirements: ReqInput[]
 }): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
   try {
@@ -41,7 +43,11 @@ export async function createLocation(input: {
         openDays: input.openDays,
         order: (max._max.order ?? 0) + 1,
         requirements: {
-          create: input.requirements.map(r => ({ role: r.role as any, count: r.count })),
+          create: input.requirements.map(r => ({
+            role: r.role as any,
+            countMon: r.countMon, countTue: r.countTue, countWed: r.countWed,
+            countThu: r.countThu, countFri: r.countFri,
+          })),
         },
       },
     })
@@ -58,7 +64,7 @@ export async function updateLocation(
     code: string
     name: string
     openDays: string[]
-    requirements: { role: string; count: number }[]
+    requirements: ReqInput[]
   }
 ): Promise<{ success: boolean; error?: string }> {
   await requireAdmin()
@@ -70,7 +76,11 @@ export async function updateLocation(
       }),
       prisma.locationRoleRequirement.deleteMany({ where: { locationId: id } }),
       prisma.locationRoleRequirement.createMany({
-        data: input.requirements.map(r => ({ locationId: id, role: r.role as any, count: r.count })),
+        data: input.requirements.map(r => ({
+          locationId: id, role: r.role as any,
+          countMon: r.countMon, countTue: r.countTue, countWed: r.countWed,
+          countThu: r.countThu, countFri: r.countFri,
+        })),
       }),
     ])
     revalidatePath("/scheduler")
@@ -303,7 +313,10 @@ export async function autoGenerate(scheduleId: string): Promise<{ success: boole
 
         for (const req of loc.requirements) {
           const role = req.role as StaffRole
-          for (let i = 0; i < req.count; i++) {
+          const dayCount: Record<SchedDay, number> = {
+            MON: req.countMon, TUE: req.countTue, WED: req.countWed, THU: req.countThu, FRI: req.countFri,
+          }
+          for (let i = 0; i < dayCount[day]; i++) {
             const pool = [...locRegular, ...locLastResort].filter(
               (s) => eligible(role, s.roles) && !assignedPerRole[role].has(s.id)
             )

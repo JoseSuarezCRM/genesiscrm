@@ -763,7 +763,11 @@ model LocationRoleRequirement {
   locationId String
   location   ScheduleLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
   role       StaffRole
-  count      Int              @default(1)
+  countMon   Int              @default(0)
+  countTue   Int              @default(0)
+  countWed   Int              @default(0)
+  countThu   Int              @default(0)
+  countFri   Int              @default(0)
 
   @@unique([locationId, role])
 }
