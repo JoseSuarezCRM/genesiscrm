@@ -158,6 +158,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const today = new Date().toISOString().slice(0, 10)
   const [files, setFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Holds location/doctor IDs from fax prefill; applied after practiceId commits (see useEffect below)
+  const pendingLocationIdRef = useRef<string | undefined>(undefined)
+  const pendingDoctorIdRef = useRef<string | undefined>(undefined)
 
   // Local practice list so newly created items appear immediately
   const [localPractices, setLocalPractices] = useState<Practice[]>(practices)
@@ -353,25 +356,14 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       if (prefillData.notes) setValue("notes", prefillData.notes)
       if (prefillData.referringDoctorName && !matchedDoctorId) setValue("referringDoctorName", prefillData.referringDoctorName)
 
-      console.log("[prefill]", {
-        org: prefillData.referringOrg,
-        address: prefillData.referringAddress,
-        doctor: prefillData.referringDoctorName,
-        matchedPracticeId,
-        matchedLocationId,
-        matchedDoctorId,
-      })
+      // Store location/doctor IDs in refs; they are applied by the useEffect below
+      // AFTER practiceId has been committed, so availableLocations is populated.
+      pendingLocationIdRef.current = matchedLocationId
+      pendingDoctorIdRef.current = matchedDoctorId
 
-      if (matchedPracticeId || matchedLocationId || matchedDoctorId) {
+      if (matchedPracticeId) {
         const pid = matchedPracticeId
-        const lid = matchedLocationId
-        const did = matchedDoctorId
-        setTimeout(() => {
-          console.log("[prefill setValue]", { pid, lid, did })
-          if (pid) setValue("referringPracticeId", pid)
-          if (lid) setValue("referringLocationId", lid)
-          if (did) setValue("referringDoctorId", did)
-        }, 0)
+        setTimeout(() => { setValue("referringPracticeId", pid) }, 0)
       }
     }
 
@@ -382,6 +374,19 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
   const locationId = watch("referringLocationId")
   const doctorId = watch("referringDoctorId")
   const statusValue = watch("status")
+
+  // After practiceId commits to React state, availableLocations is populated.
+  // Apply any pending location/doctor IDs from fax prefill at that point.
+  useEffect(() => {
+    if (!practiceId || practiceId === NONE) return
+    const lid = pendingLocationIdRef.current
+    const did = pendingDoctorIdRef.current
+    if (!lid && !did) return
+    pendingLocationIdRef.current = undefined
+    pendingDoctorIdRef.current = undefined
+    if (lid) setValue("referringLocationId", lid)
+    if (did) setValue("referringDoctorId", did)
+  }, [practiceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedPractice = localPractices.find((p) => p.id === practiceId)
   const availableLocations = selectedPractice?.locations ?? []
