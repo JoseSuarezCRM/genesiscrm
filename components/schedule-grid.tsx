@@ -247,6 +247,15 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
       const hideEls = el.querySelectorAll<HTMLElement>("[data-export-hide]")
       hideEls.forEach(n => { n.style.display = "none" })
 
+      // Force explicit pixel line-height on chips so html2canvas doesn't
+      // inherit the 1rem line-height from the parent <table text-xs> and
+      // misplace the text baseline
+      const chipEls = el.querySelectorAll<HTMLElement>("[data-chip]")
+      chipEls.forEach(c => {
+        const fs = parseFloat(getComputedStyle(c).fontSize) || 12
+        c.style.lineHeight = `${fs}px`
+      })
+
       const html2canvas = (await import("html2canvas")).default
       const gridCanvas = await html2canvas(el, {
         backgroundColor: "#ffffff",
@@ -256,6 +265,7 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
       })
 
       hideEls.forEach(n => { n.style.display = "" })
+      chipEls.forEach(c => { c.style.lineHeight = "" })
 
       // Compose: title banner + grid
       const S = 2
@@ -412,6 +422,7 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                           {cellEntries.map(entry => (
                             <span
                               key={entry.id}
+                              data-chip=""
                               className={cn("inline-block px-1.5 py-[3px] rounded-md font-medium leading-none", ROLE_CHIP[role])}
                             >
                               {entry.staff.isLastResort && <span className="text-slate-400 mr-0.5">⚑</span>}
