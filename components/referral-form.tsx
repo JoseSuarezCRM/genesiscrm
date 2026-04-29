@@ -608,7 +608,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select practice..." />
+                  {practiceId && practiceId !== NONE
+                    ? <span>{localPractices.find(p => p.id === practiceId)?.name ?? "Select practice..."}</span>
+                    : <span className="text-muted-foreground">Select practice...</span>}
                 </SelectTrigger>
                 <SelectContent forceMount>
                   <SelectItem value={NONE}>— None —</SelectItem>
@@ -633,7 +635,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 disabled={!practiceId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableLocations.length === 0 ? "No locations added" : "Select location..."} />
+                  {locationId && locationId !== NONE
+                    ? <span>{availableLocations.find(l => l.id === locationId)?.name ?? "Select location..."}</span>
+                    : <span className="text-muted-foreground">
+                        {!practiceId ? "Select practice first" : availableLocations.length === 0 ? "No locations added" : "Select location..."}
+                      </span>}
                 </SelectTrigger>
                 <SelectContent forceMount>
                   <SelectItem value={NONE}>— Any location —</SelectItem>
@@ -661,7 +667,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 disabled={!practiceId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."} />
+                  {doctorId && doctorId !== NONE
+                    ? <span>{(availableDoctors.find(d => d.id === doctorId) ?? crossOrgDoctors.find(d => d.id === doctorId))?.name ?? "Select provider..."}</span>
+                    : <span className="text-muted-foreground">
+                        {!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."}
+                      </span>}
                 </SelectTrigger>
                 <SelectContent forceMount>
                   <SelectItem value={NONE}>— None —</SelectItem>
