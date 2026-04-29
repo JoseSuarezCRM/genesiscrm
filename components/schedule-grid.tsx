@@ -245,7 +245,7 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
 
       // Hide interactive UI (+ add buttons, × remove buttons) during capture
       const hideEls = el.querySelectorAll<HTMLElement>("[data-export-hide]")
-      hideEls.forEach(n => { n.style.visibility = "hidden" })
+      hideEls.forEach(n => { n.style.display = "none" })
 
       const html2canvas = (await import("html2canvas")).default
       const gridCanvas = await html2canvas(el, {
@@ -255,7 +255,7 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
         logging: false,
       })
 
-      hideEls.forEach(n => { n.style.visibility = "" })
+      hideEls.forEach(n => { n.style.display = "" })
 
       // Compose: title banner + grid
       const S = 2
