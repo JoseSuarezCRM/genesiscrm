@@ -608,13 +608,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select practice...">
-                    {practiceId && practiceId !== NONE
-                      ? localPractices.find(p => p.id === practiceId)?.name
-                      : undefined}
-                  </SelectValue>
+                  <SelectValue placeholder="Select practice..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent forceMount>
                   <SelectItem value={NONE}>— None —</SelectItem>
                   {localPractices.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -637,13 +633,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 disabled={!practiceId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableLocations.length === 0 ? "No locations added" : "Select location..."}>
-                    {locationId && locationId !== NONE
-                      ? availableLocations.find(l => l.id === locationId)?.name
-                      : undefined}
-                  </SelectValue>
+                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableLocations.length === 0 ? "No locations added" : "Select location..."} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent forceMount>
                   <SelectItem value={NONE}>— Any location —</SelectItem>
                   {availableLocations.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
@@ -669,13 +661,9 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 disabled={!practiceId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."}>
-                    {doctorId && doctorId !== NONE
-                      ? [...availableDoctors, ...crossOrgDoctors].find(d => d.id === doctorId)?.name
-                      : undefined}
-                  </SelectValue>
+                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent forceMount>
                   <SelectItem value={NONE}>— None —</SelectItem>
                   {availableDoctors.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
