@@ -412,10 +412,10 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                           {cellEntries.map(entry => (
                             <span
                               key={entry.id}
-                              className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-medium leading-none", ROLE_CHIP[role])}
+                              className={cn("inline-block px-1.5 py-[3px] rounded-md font-medium leading-none", ROLE_CHIP[role])}
                             >
-                              {entry.staff.isLastResort && <span className="text-slate-400">⚑</span>}
-                              <span>{entry.staff.name.split(" ")[0]}</span>
+                              {entry.staff.isLastResort && <span className="text-slate-400 mr-0.5">⚑</span>}
+                              {entry.staff.name.split(" ")[0]}
                               <button
                                 data-export-hide=""
                                 onClick={() => startTransition(async () => { await removeEntry(entry.id); router.refresh() })}
