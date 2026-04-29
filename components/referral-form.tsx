@@ -252,8 +252,6 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       let matchedLocationId: string | undefined
       if (prefillData.referringAddress && matchedPracticeId) {
         const practiceForLoc = localPractices.find((p) => p.id === matchedPracticeId)
-        const extractedAddr = prefillData.referringAddress.toLowerCase().trim()
-
         // Normalize address for comparison: strip zip+4 extensions and extra whitespace
         const normalizeAddr = (s: string) => s.toLowerCase().trim().replace(/\b(\d{5})-\d{4}\b/, "$1").replace(/\s+/g, " ")
         const normExtracted = normalizeAddr(prefillData.referringAddress)
@@ -610,7 +608,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select practice..." />
+                  <SelectValue placeholder="Select practice...">
+                    {practiceId && practiceId !== NONE
+                      ? localPractices.find(p => p.id === practiceId)?.name
+                      : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NONE}>— None —</SelectItem>
@@ -635,7 +637,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 disabled={!practiceId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableLocations.length === 0 ? "No locations added" : "Select location..."} />
+                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableLocations.length === 0 ? "No locations added" : "Select location..."}>
+                    {locationId && locationId !== NONE
+                      ? availableLocations.find(l => l.id === locationId)?.name
+                      : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NONE}>— Any location —</SelectItem>
@@ -663,7 +669,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
                 disabled={!practiceId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."} />
+                  <SelectValue placeholder={!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."}>
+                    {doctorId && doctorId !== NONE
+                      ? [...availableDoctors, ...crossOrgDoctors].find(d => d.id === doctorId)?.name
+                      : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NONE}>— None —</SelectItem>
