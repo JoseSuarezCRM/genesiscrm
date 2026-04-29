@@ -241,16 +241,55 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
     if (!gridRef.current || exporting) return
     setExporting(true)
     try {
+      const el = gridRef.current
+
+      // Hide interactive UI (+ add buttons, × remove buttons) during capture
+      const hideEls = el.querySelectorAll<HTMLElement>("[data-export-hide]")
+      hideEls.forEach(n => { n.style.visibility = "hidden" })
+
       const html2canvas = (await import("html2canvas")).default
-      const canvas = await html2canvas(gridRef.current, {
+      const gridCanvas = await html2canvas(el, {
         backgroundColor: "#ffffff",
         scale: 2,
         useCORS: true,
         logging: false,
       })
+
+      hideEls.forEach(n => { n.style.visibility = "" })
+
+      // Compose: title banner + grid
+      const S = 2
+      const padX = 32 * S
+      const padY = 20 * S
+      const headerH = 56 * S
+
+      const out = document.createElement("canvas")
+      out.width = gridCanvas.width + padX * 2
+      out.height = gridCanvas.height + padY * 2 + headerH
+      const ctx = out.getContext("2d")!
+
+      // Slate-100 background
+      ctx.fillStyle = "#f1f5f9"
+      ctx.fillRect(0, 0, out.width, out.height)
+
+      // White card for grid
+      ctx.fillStyle = "#ffffff"
+      ctx.fillRect(padX, padY + headerH, gridCanvas.width, gridCanvas.height)
+      ctx.drawImage(gridCanvas, padX, padY + headerH)
+
+      // Title
+      ctx.fillStyle = "#0f172a"
+      ctx.font = `bold ${18 * S}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+      ctx.fillText("Genesis Ortho", padX, padY + 22 * S)
+
+      // Subtitle
+      ctx.fillStyle = "#475569"
+      ctx.font = `${11 * S}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+      ctx.fillText(`Staff Schedule — Week of ${formatWeek(weekOf)}`, padX, padY + 42 * S)
+
       const link = document.createElement("a")
       link.download = `schedule-${weekOf}.png`
-      link.href = canvas.toDataURL("image/png")
+      link.href = out.toDataURL("image/png")
       link.click()
     } finally {
       setExporting(false)
@@ -378,6 +417,7 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                               {entry.staff.isLastResort && <span className="text-slate-400">⚑</span>}
                               {entry.staff.name.split(" ")[0]}
                               <button
+                                data-export-hide=""
                                 onClick={() => startTransition(async () => { await removeEntry(entry.id); router.refresh() })}
                                 className="hover:text-red-600 ml-0.5 opacity-60 hover:opacity-100"
                               >
@@ -387,7 +427,7 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                           ))}
 
                           {/* Add button */}
-                          <div className="relative">
+                          <div data-export-hide="" className="relative">
                             <button
                               onClick={() => setActiveCell(isOpen ? null : { locationId: loc.id, role, day })}
                               className="inline-flex items-center justify-center h-5 w-5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
