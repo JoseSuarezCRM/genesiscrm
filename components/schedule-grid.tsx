@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import {
   assignStaff, removeEntry, autoGenerate, clearSchedule,
 } from "@/app/actions/scheduler"
-import { ChevronLeft, ChevronRight, Zap, Trash2, X, Plus, AlertCircle, CheckCircle2, ImageDown } from "lucide-react"
+import { ChevronLeft, ChevronRight, Zap, Trash2, X, Plus, AlertCircle, CheckCircle2, ImageDown, FileSpreadsheet } from "lucide-react"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -241,6 +241,36 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
     })
   }
 
+  async function handleExportExcel() {
+    const { utils, writeFile } = await import("xlsx")
+
+    const headerRow = [
+      "Location", "Role",
+      ...DAYS.map(d => `${DAY_LABELS[d]} ${getDayDate(weekOf, d)}`),
+    ]
+
+    const dataRows: string[][] = []
+    for (const loc of locations) {
+      for (const role of getRoles(loc)) {
+        const row = [loc.code, ROLE_LABELS[role]]
+        for (const day of DAYS) {
+          const names = entries
+            .filter(e => e.locationId === loc.id && e.assignedRole === role && e.day === day)
+            .map(e => e.staff.name.split(" ")[0])
+          row.push(names.join(", "))
+        }
+        dataRows.push(row)
+      }
+    }
+
+    const ws = utils.aoa_to_sheet([headerRow, ...dataRows])
+    ws["!cols"] = [{ wch: 10 }, { wch: 8 }, ...DAYS.map(() => ({ wch: 22 }))]
+
+    const wb = utils.book_new()
+    utils.book_append_sheet(wb, ws, formatWeek(weekOf))
+    writeFile(wb, `schedule-${weekOf}.xlsx`)
+  }
+
   async function handleExport() {
     if (!gridRef.current || exporting) return
     setExporting(true)
@@ -342,12 +372,19 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
             Clear
           </button>
           <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-2 rounded-lg"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Excel
+          </button>
+          <button
             onClick={handleExport}
             disabled={exporting}
             className="flex items-center gap-1.5 text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-2 rounded-lg disabled:opacity-50"
           >
             <ImageDown className="h-3.5 w-3.5" />
-            {exporting ? "Exporting…" : "Export"}
+            {exporting ? "Exporting…" : "Image"}
           </button>
         </div>
       </div>
