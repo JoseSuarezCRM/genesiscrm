@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import {
   assignStaff, removeEntry, autoGenerate, clearSchedule,
 } from "@/app/actions/scheduler"
-import { ChevronLeft, ChevronRight, Zap, Trash2, X, Plus, AlertCircle, CheckCircle2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Zap, Trash2, X, Plus, AlertCircle, CheckCircle2, ImageDown } from "lucide-react"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -195,6 +195,8 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
   const [activeCell, setActiveCell] = useState<{ locationId: string; role: StaffRole; day: SchedDay } | null>(null)
   const [flash, setFlash] = useState<{ msg: string; ok: boolean } | null>(null)
   const [entries, setEntries] = useState<Entry[]>(initialSchedule.entries)
+  const [exporting, setExporting] = useState(false)
+  const gridRef = useRef<HTMLDivElement>(null)
   const weekOf = toISO(getMondayOf(new Date(initialSchedule.weekOf + "T00:00:00")))
 
   // Poll for real-time updates every 30 seconds
@@ -233,6 +235,26 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
       showFlash("Schedule cleared.")
       router.refresh()
     })
+  }
+
+  async function handleExport() {
+    if (!gridRef.current || exporting) return
+    setExporting(true)
+    try {
+      const html2canvas = (await import("html2canvas")).default
+      const canvas = await html2canvas(gridRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      })
+      const link = document.createElement("a")
+      link.download = `schedule-${weekOf}.png`
+      link.href = canvas.toDataURL("image/png")
+      link.click()
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -283,11 +305,19 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
             <Trash2 className="h-3.5 w-3.5" />
             Clear
           </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-2 rounded-lg disabled:opacity-50"
+          >
+            <ImageDown className="h-3.5 w-3.5" />
+            {exporting ? "Exporting…" : "Export"}
+          </button>
         </div>
       </div>
 
       {/* Grid */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div ref={gridRef} className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
