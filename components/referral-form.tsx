@@ -90,6 +90,7 @@ interface ReferralFormProps {
   prefillData?: ExtractedReferralData
   pendingFile?: PendingFile | null
   onSuccess?: () => void
+  onCancel?: () => void
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -151,7 +152,7 @@ function parseDoctorTitle(fullName: string): { name: string; title?: string } {
   return { name, title }
 }
 
-export default function ReferralForm({ practices, defaultValues, referralId, prefillData, pendingFile, onSuccess }: ReferralFormProps) {
+export default function ReferralForm({ practices, defaultValues, referralId, prefillData, pendingFile, onSuccess, onCancel }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
@@ -540,7 +541,11 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
             fd.append("referralId", newId)
             await fetch("/api/documents/upload", { method: "POST", body: fd })
           }
-          router.push(`/referrals/${newId}`)
+          if (onSuccess) {
+            onSuccess()
+          } else {
+            router.push(`/referrals/${newId}`)
+          }
         }
       }
     })
@@ -837,7 +842,7 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{saveError}</p>
         )}
         <div className="flex justify-end gap-3 pt-2 border-t">
-          <Button type="button" variant="outline" onClick={() => { setSaveError(null); onSuccess ? onSuccess() : history.back() }}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={() => { setSaveError(null); onCancel ? onCancel() : history.back() }}>Cancel</Button>
           <Button type="submit" disabled={isPending} onClick={() => setSaveError(null)}>
             {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {referralId ? "Save Changes" : "Create Referral"}
