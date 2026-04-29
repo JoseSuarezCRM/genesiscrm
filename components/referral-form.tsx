@@ -353,12 +353,26 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       if (prefillData.notes) setValue("notes", prefillData.notes)
       if (prefillData.referringDoctorName && !matchedDoctorId) setValue("referringDoctorName", prefillData.referringDoctorName)
 
-      // All setLocalPractices + setValue calls are synchronous in this async function
-      // (no await before any of them), so React 18 automatic batching commits every
-      // state update — ghost entries AND IDs — in a single render pass.
-      if (matchedPracticeId) setValue("referringPracticeId", matchedPracticeId)
-      if (matchedLocationId) setValue("referringLocationId", matchedLocationId)
-      if (matchedDoctorId) setValue("referringDoctorId", matchedDoctorId)
+      console.log("[prefill]", {
+        org: prefillData.referringOrg,
+        address: prefillData.referringAddress,
+        doctor: prefillData.referringDoctorName,
+        matchedPracticeId,
+        matchedLocationId,
+        matchedDoctorId,
+      })
+
+      if (matchedPracticeId || matchedLocationId || matchedDoctorId) {
+        const pid = matchedPracticeId
+        const lid = matchedLocationId
+        const did = matchedDoctorId
+        setTimeout(() => {
+          console.log("[prefill setValue]", { pid, lid, did })
+          if (pid) setValue("referringPracticeId", pid)
+          if (lid) setValue("referringLocationId", lid)
+          if (did) setValue("referringDoctorId", did)
+        }, 0)
+      }
     }
 
     applyPrefill()
