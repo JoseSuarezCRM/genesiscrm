@@ -353,19 +353,12 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
       if (prefillData.notes) setValue("notes", prefillData.notes)
       if (prefillData.referringDoctorName && !matchedDoctorId) setValue("referringDoctorName", prefillData.referringDoctorName)
 
-      // Set referring source IDs via setTimeout(0) so the call lands in a macrotask,
-      // after React has committed the setLocalPractices(ghost) microtask render.
-      // This ensures SelectItem ghost entries are in the DOM before setValue fires.
-      if (matchedPracticeId || matchedLocationId || matchedDoctorId) {
-        const pid = matchedPracticeId
-        const lid = matchedLocationId
-        const did = matchedDoctorId
-        setTimeout(() => {
-          if (pid) setValue("referringPracticeId", pid)
-          if (lid) setValue("referringLocationId", lid)
-          if (did) setValue("referringDoctorId", did)
-        }, 0)
-      }
+      // All setLocalPractices + setValue calls are synchronous in this async function
+      // (no await before any of them), so React 18 automatic batching commits every
+      // state update — ghost entries AND IDs — in a single render pass.
+      if (matchedPracticeId) setValue("referringPracticeId", matchedPracticeId)
+      if (matchedLocationId) setValue("referringLocationId", matchedLocationId)
+      if (matchedDoctorId) setValue("referringDoctorId", matchedDoctorId)
     }
 
     applyPrefill()
