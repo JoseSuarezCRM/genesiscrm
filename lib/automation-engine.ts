@@ -272,6 +272,33 @@ export async function runTrigger_ReferralCreated(referralId: string, triggeredBy
   }
 }
 
+export async function runTrigger_EmbedReferralReceived(referralId: string) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: AutomationTrigger.EMBED_REFERRAL_RECEIVED, isActive: true },
+  })
+  if (!automations.length) return
+
+  const referral = await fetchReferralForEngine(referralId)
+  if (!referral) return
+
+  const vars: TemplateVars = {
+    provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
+    practice_name: referral.referringPractice?.name ?? undefined,
+    patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
+    patient_first_name: referral.patientFirstName,
+  }
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    if (!checkConditions(referral, cfg)) continue
+
+    await executeAction(auto, referralId, vars)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Triggered on embed form referral for ${vars.patient_name}` },
+    })
+  }
+}
+
 export async function runTrigger_StatusChanged(referralId: string, fromStatus: ReferralStatus, toStatus: ReferralStatus, triggeredByUserId?: string) {
   const automations = await prisma.automation.findMany({
     where: { triggerType: AutomationTrigger.REFERRAL_STATUS_CHANGED, isActive: true },

@@ -59,6 +59,7 @@ const TRIGGER_LABELS: Record<string, string> = {
   TAG_ADDED: "Tag added to referral",
   DOCUMENT_UPLOADED: "Document uploaded to referral",
   AUTH_STATUS_CHANGED: "Auth status changed",
+  EMBED_REFERRAL_RECEIVED: "Referral received via embed form",
 }
 
 const ACTION_LABELS: Record<AutomationAction, string> = {
@@ -84,6 +85,7 @@ const TRIGGER_COLORS: Record<string, string> = {
   TAG_ADDED: "bg-pink-100 text-pink-700",
   DOCUMENT_UPLOADED: "bg-sky-100 text-sky-700",
   AUTH_STATUS_CHANGED: "bg-yellow-100 text-yellow-700",
+  EMBED_REFERRAL_RECEIVED: "bg-emerald-100 text-emerald-700",
 }
 
 const ACTION_COLORS: Record<AutomationAction, string> = {
@@ -128,7 +130,7 @@ const REFERRAL_TRIGGERS = new Set([
   "REFERRAL_CREATED", "REFERRAL_STATUS_CHANGED", "CALL_ATTEMPTS_REACHED",
   "REFERRAL_ASSIGNED", "REFERRAL_NO_ACTIVITY", "APPOINTMENT_UPCOMING",
   "APPOINTMENT_OVERDUE", "REFERRAL_STALE", "TAG_ADDED", "DOCUMENT_UPLOADED",
-  "AUTH_STATUS_CHANGED",
+  "AUTH_STATUS_CHANGED", "EMBED_REFERRAL_RECEIVED",
 ])
 
 // ─── Multi-criteria condition builder ────────────────────────────────────────
@@ -275,7 +277,7 @@ function emptyTriggerConfig(type: string): Record<string, unknown> {
   if (type === "REFERRAL_ASSIGNED") return { assignedToId: "", conditions: [] }
   if (type === "TAG_ADDED") return { tagId: "", conditions: [] }
   if (type === "AUTH_STATUS_CHANGED") return { toAuthStatus: "", conditions: [] }
-  return { conditions: [] } // REFERRAL_CREATED, DOCUMENT_UPLOADED
+  return { conditions: [] } // REFERRAL_CREATED, DOCUMENT_UPLOADED, EMBED_REFERRAL_RECEIVED
 }
 
 function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
@@ -302,7 +304,7 @@ function TriggerConfigFields({
   const showConditions = REFERRAL_TRIGGERS.has(type)
 
   function renderPrimary() {
-    if (type === "REFERRAL_CREATED") {
+    if (type === "REFERRAL_CREATED" || type === "EMBED_REFERRAL_RECEIVED") {
       return (
         <div className="grid grid-cols-2 gap-3">
           <div>

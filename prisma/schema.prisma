@@ -87,6 +87,7 @@ enum AutomationTrigger {
   DOCUMENT_UPLOADED
   AUTH_STATUS_CHANGED
   LOCATION_REFERRAL_COUNT
+  EMBED_REFERRAL_RECEIVED
 }
 
 enum AutomationAction {

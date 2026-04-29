@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { sendEmail } from "@/lib/graph-mailer"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
+import { runTrigger_EmbedReferralReceived } from "@/lib/automation-engine"
 
 const schema = z.object({
   // Provider (all required)
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
     "(Submitted via web referral form)",
   ]
 
-  await prisma.referral.create({
+  const referral = await prisma.referral.create({
     data: {
       patientFirstName,
       patientLastName,
@@ -67,6 +68,9 @@ export async function POST(req: NextRequest) {
       // createdById is null — web submission, no logged-in user
     },
   })
+
+  // Fire automations non-blocking
+  void runTrigger_EmbedReferralReceived(referral.id)
 
   // Notify users who have opted in to embed form notifications
   const notifyUsers = await prisma.user.findMany({
