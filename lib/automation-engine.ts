@@ -17,9 +17,13 @@ interface TemplateVars {
   call_count?: number
   auth_status?: string
   tag_name?: string
+  referral_url?: string
 }
 
 function resolveTemplate(template: string, vars: TemplateVars): string {
+  const btnHtml = vars.referral_url
+    ? `<a href="${vars.referral_url}" style="display:inline-block;margin:16px 0;padding:10px 24px;background-color:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:6px;font-family:sans-serif;font-weight:600;font-size:14px;">View Referral →</a>`
+    : ""
   return template
     .replace(/\{provider_name\}/g, vars.provider_name ?? "the provider")
     .replace(/\{practice_name\}/g, vars.practice_name ?? "the practice")
@@ -32,6 +36,13 @@ function resolveTemplate(template: string, vars: TemplateVars): string {
     .replace(/\{call_count\}/g, String(vars.call_count ?? ""))
     .replace(/\{auth_status\}/g, vars.auth_status ?? "")
     .replace(/\{tag_name\}/g, vars.tag_name ?? "")
+    .replace(/\{referral_url\}/g, vars.referral_url ?? "")
+    .replace(/\{referral_button\}/g, btnHtml)
+}
+
+function buildReferralUrl(referralId: string): string | undefined {
+  const base = (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).replace(/\/$/, "")
+  return base ? `${base}/referrals/${referralId}` : undefined
 }
 
 // ─── Period helpers ────────────────────────────────────────────────────────────
@@ -319,6 +330,7 @@ export async function runTrigger_ReferralCreated(referralId: string, triggeredBy
     practice_name: referral.referringPractice?.name ?? undefined,
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -346,6 +358,7 @@ export async function runTrigger_EmbedReferralReceived(referralId: string) {
     practice_name: referral.referringPractice?.name ?? undefined,
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -374,6 +387,7 @@ export async function runTrigger_StatusChanged(referralId: string, fromStatus: R
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
     status: toStatus,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -406,6 +420,7 @@ export async function runTrigger_CallAttemptsReached(referralId: string, callCou
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
     call_count: callCount,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -439,6 +454,7 @@ export async function runTrigger_ReferralAssigned(referralId: string, assignedTo
     practice_name: referral.referringPractice?.name ?? undefined,
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -468,6 +484,7 @@ export async function runTrigger_TagAdded(referralId: string, tagId: string, tag
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
     tag_name: tagName,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -502,6 +519,7 @@ export async function runTrigger_DocumentUploaded(referralId: string, triggeredB
     practice_name: referral.referringPractice?.name ?? undefined,
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -530,6 +548,7 @@ export async function runTrigger_AuthStatusChanged(referralId: string, _fromAuth
     patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
     patient_first_name: referral.patientFirstName,
     auth_status: toAuthStatus,
+    referral_url: buildReferralUrl(referralId),
   }
 
   for (const auto of automations) {
@@ -709,6 +728,7 @@ async function runTrigger_NoActivity() {
         patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
         patient_first_name: referral.patientFirstName,
         days,
+        referral_url: buildReferralUrl(referral.id),
       }
 
       await executeAction(auto, referral.id, vars)
@@ -752,6 +772,7 @@ async function runTrigger_AppointmentUpcoming() {
         patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
         patient_first_name: referral.patientFirstName,
         days: daysAhead,
+        referral_url: buildReferralUrl(referral.id),
       }
 
       await executeAction(auto, referral.id, vars)
@@ -799,6 +820,7 @@ async function runTrigger_AppointmentOverdue() {
         patient_first_name: referral.patientFirstName,
         provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
         practice_name: referral.referringPractice?.name ?? undefined,
+        referral_url: buildReferralUrl(referral.id),
       }
 
       await executeAction(auto, referral.id, vars)
@@ -845,6 +867,7 @@ async function runTrigger_ReferralStale() {
         provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
         practice_name: referral.referringPractice?.name ?? undefined,
         days,
+        referral_url: buildReferralUrl(referral.id),
       }
 
       await executeAction(auto, referral.id, vars)

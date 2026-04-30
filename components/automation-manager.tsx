@@ -125,6 +125,7 @@ const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
 const TEMPLATE_VARS = [
   "{patient_name}", "{patient_first_name}", "{provider_name}", "{practice_name}",
   "{count}", "{period}", "{days}", "{status}", "{call_count}", "{auth_status}", "{tag_name}",
+  "{referral_url}", "{referral_button}",
 ]
 
 // Triggers that fire on a specific referral (support extra conditions)
