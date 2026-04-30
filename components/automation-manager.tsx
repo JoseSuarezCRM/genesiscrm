@@ -622,12 +622,11 @@ function ActionConfigFields({
 
   if (type === "SEND_EMAIL") {
     const recipients = (config.recipients as { type: string; value: string }[]) ?? [{ type: "all_admins", value: "" }]
-    function setRecipients(next: { type: string; value: string }[]) { set("recipients", next) }
-    function addRecipient() { setRecipients([...recipients, { type: "all_admins", value: "" }]) }
-    function removeRecipient(i: number) { setRecipients(recipients.filter((_, idx) => idx !== i)) }
-    function updateRecipient(i: number, t: string, v: string) {
+    const setRecipients = (next: { type: string; value: string }[]) => set("recipients", next)
+    const addRecipient = () => setRecipients([...recipients, { type: "all_admins", value: "" }])
+    const removeRecipient = (i: number) => setRecipients(recipients.filter((_, idx) => idx !== i))
+    const updateRecipient = (i: number, t: string, v: string) =>
       setRecipients(recipients.map((r, idx) => idx === i ? { type: t, value: v } : r))
-    }
 
     return (
       <div className="space-y-3">
