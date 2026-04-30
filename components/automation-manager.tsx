@@ -560,6 +560,7 @@ function ActionConfigFields({
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
   const [showVars, setShowVars] = useState(false)
+  const [showBodyVars, setShowBodyVars] = useState(false)
   const [showCc, setShowCc] = useState(() => Array.isArray(config.cc) && (config.cc as unknown[]).length > 0)
   const [showBcc, setShowBcc] = useState(() => Array.isArray(config.bcc) && (config.bcc as unknown[]).length > 0)
 
@@ -756,7 +757,20 @@ function ActionConfigFields({
 
         {/* Body */}
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Body *</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-medium text-slate-600">Body *</label>
+            <button type="button" onClick={() => setShowBodyVars(v => !v)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <Info className="h-3 w-3" /> Template vars
+            </button>
+          </div>
+          {showBodyVars && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {TEMPLATE_VARS.map(v => (
+                <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
+                  onClick={() => set("body", ((config.body as string) || "") + v)}>{v}</span>
+              ))}
+            </div>
+          )}
           <textarea rows={4} className="w-full border rounded-md px-3 py-2 text-sm resize-none"
             placeholder={"e.g. Hi,\n\nA new referral for {patient_name} was received from {practice_name}."}
             value={(config.body as string) || ""} onChange={e => set("body", e.target.value)} />
