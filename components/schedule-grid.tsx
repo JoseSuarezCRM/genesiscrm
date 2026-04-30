@@ -62,6 +62,14 @@ const ROLE_CHIP: Record<StaffRole, string> = {
 
 const ROLE_ORDER: StaffRole[] = ["XR_TECH", "MA", "FD"]
 
+const DAY_COUNT_FIELD: Record<SchedDay, "countMon" | "countTue" | "countWed" | "countThu" | "countFri"> = {
+  MON: "countMon", TUE: "countTue", WED: "countWed", THU: "countThu", FRI: "countFri",
+}
+
+function getRequired(loc: Location, role: StaffRole, day: SchedDay): number {
+  return loc.requirements.find(r => r.role === role)?.[DAY_COUNT_FIELD[day]] ?? 0
+}
+
 function getRoles(loc: Location): StaffRole[] {
   const active = new Set(
     loc.requirements
@@ -438,10 +446,15 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                     const cellEntries = entries.filter(
                       e => e.locationId === loc.id && e.assignedRole === role && e.day === day
                     )
+                    const required = getRequired(loc, role, day)
+                    const gap = required > 0 ? Math.max(0, required - cellEntries.length) : 0
                     const isOpen = activeCell?.locationId === loc.id && activeCell.role === role && activeCell.day === day
 
                     return (
-                      <td key={day} className="px-2 py-1.5 border-r border-slate-100 last:border-r-0 align-middle min-w-28">
+                      <td key={day} className={cn(
+                        "px-2 py-1.5 border-r border-slate-100 last:border-r-0 align-middle min-w-28",
+                        gap > 0 && "bg-amber-50"
+                      )}>
                         <div className="flex flex-wrap gap-1 items-start relative">
                           {cellEntries.map(entry => (
                             <span
@@ -459,6 +472,14 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                               </button>
                             </span>
                           ))}
+
+                          {/* Gap badge */}
+                          {gap > 0 && (
+                            <span data-export-hide="" className="inline-flex items-center gap-0.5 text-amber-600 text-xs font-medium">
+                              <AlertCircle className="h-3 w-3" />
+                              {gap} short
+                            </span>
+                          )}
 
                           {/* Add button */}
                           <div data-export-hide="" className="relative">
