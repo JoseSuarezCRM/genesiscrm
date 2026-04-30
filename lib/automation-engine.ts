@@ -237,23 +237,42 @@ async function executeAction(
     const bodyText = resolveTemplate((cfg.body as string) || "", vars)
     const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${bodyText.replace(/\n/g, "<br/>")}</div>`
 
-    const toType = cfg.toType as string
-    let recipients: string[] = []
+    const emailSet = new Set<string>()
 
-    if (toType === "custom" && cfg.customEmail) {
-      recipients = [(cfg.customEmail as string).trim()]
-    } else if (toType === "all_admins") {
-      const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
-      recipients = admins.map(a => a.email)
-    } else if (toType === "assigned_to" && referralId) {
-      const r = await prisma.referral.findUnique({ where: { id: referralId }, select: { assignedTo: { select: { email: true } } } })
-      if (r?.assignedTo?.email) recipients = [r.assignedTo.email]
-    } else if (toType === "specific_user" && cfg.userId) {
-      const u = await prisma.user.findUnique({ where: { id: cfg.userId as string }, select: { email: true } })
-      if (u?.email) recipients = [u.email]
+    if (Array.isArray(cfg.recipients)) {
+      // New multi-recipient format
+      for (const r of cfg.recipients as { type: string; value: string }[]) {
+        if (r.type === "all_admins") {
+          const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
+          admins.forEach(a => emailSet.add(a.email))
+        } else if (r.type === "assigned_to" && referralId) {
+          const ref = await prisma.referral.findUnique({ where: { id: referralId }, select: { assignedTo: { select: { email: true } } } })
+          if (ref?.assignedTo?.email) emailSet.add(ref.assignedTo.email)
+        } else if (r.type === "user" && r.value) {
+          const u = await prisma.user.findUnique({ where: { id: r.value }, select: { email: true } })
+          if (u?.email) emailSet.add(u.email)
+        } else if (r.type === "email" && r.value) {
+          emailSet.add(r.value.trim())
+        }
+      }
+    } else {
+      // Legacy single-recipient format (backward compat)
+      const toType = cfg.toType as string
+      if (toType === "custom" && cfg.customEmail) {
+        emailSet.add((cfg.customEmail as string).trim())
+      } else if (toType === "all_admins") {
+        const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
+        admins.forEach(a => emailSet.add(a.email))
+      } else if (toType === "assigned_to" && referralId) {
+        const r = await prisma.referral.findUnique({ where: { id: referralId }, select: { assignedTo: { select: { email: true } } } })
+        if (r?.assignedTo?.email) emailSet.add(r.assignedTo.email)
+      } else if ((toType === "specific_user" || toType === "user") && cfg.userId) {
+        const u = await prisma.user.findUnique({ where: { id: cfg.userId as string }, select: { email: true } })
+        if (u?.email) emailSet.add(u.email)
+      }
     }
 
-    await Promise.all(recipients.map(email => sendEmail(email, subject, html)))
+    await Promise.all(Array.from(emailSet).map(email => sendEmail(email, subject, html)))
   }
 
   if (automation.actionType === AutomationAction.ADD_TAG && referralId) {
