@@ -247,9 +247,12 @@ async function executeAction(
           } else if (r.type === "assigned_to" && referralId) {
             const ref = await prisma.referral.findUnique({ where: { id: referralId }, select: { assignedTo: { select: { email: true } } } })
             if (ref?.assignedTo?.email) emailSet.add(ref.assignedTo.email)
-          } else if (r.type === "user" && r.value) {
-            const u = await prisma.user.findUnique({ where: { id: r.value }, select: { email: true } })
-            if (u?.email) emailSet.add(u.email)
+          } else if (r.type === "user") {
+            const ids = Array.isArray(r.value) ? r.value : (r.value ? [r.value] : [])
+            for (const id of ids) {
+              const u = await prisma.user.findUnique({ where: { id }, select: { email: true } })
+              if (u?.email) emailSet.add(u.email)
+            }
           } else if (r.type === "email" && r.value) {
             emailSet.add(r.value.trim())
           }

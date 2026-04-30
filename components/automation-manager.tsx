@@ -491,7 +491,7 @@ function TriggerConfigFields({
 
 // ─── Shared recipient rows widget ────────────────────────────────────────────
 
-type Recipient = { type: string; value: string }
+type Recipient = { type: string; value: string | string[] }
 
 function RecipientRows({
   rows, users, onChange, allowEmpty = false,
@@ -503,35 +503,46 @@ function RecipientRows({
 }) {
   return (
     <div className="space-y-2">
-      {rows.map((r, i) => (
-        <div key={i} className="flex items-center gap-2 flex-wrap">
-          <select className="border rounded-md px-2 py-1.5 text-sm" value={r.type}
-            onChange={e => onChange(rows.map((x, j) => j === i ? { type: e.target.value, value: "" } : x))}>
-            <option value="all_admins">All admins</option>
-            <option value="assigned_to">Referral assignee</option>
-            <option value="user">Specific user</option>
-            <option value="email">Custom email</option>
-          </select>
-          {r.type === "user" && (
-            <select className="flex-1 border rounded-md px-2 py-1.5 text-sm" value={r.value}
-              onChange={e => onChange(rows.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}>
-              <option value="">Select user</option>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+      {rows.map((r, i) => {
+        const selectedIds = Array.isArray(r.value) ? r.value : (r.value ? [r.value as string] : [])
+        const toggleUser = (uid: string, checked: boolean) => {
+          const next = checked ? [...selectedIds, uid] : selectedIds.filter(id => id !== uid)
+          onChange(rows.map((x, j) => j === i ? { ...x, value: next } : x))
+        }
+        return (
+          <div key={i} className="flex items-start gap-2 flex-wrap">
+            <select className="border rounded-md px-2 py-1.5 text-sm shrink-0" value={r.type}
+              onChange={e => onChange(rows.map((x, j) => j === i ? { type: e.target.value, value: [] } : x))}>
+              <option value="all_admins">All admins</option>
+              <option value="assigned_to">Referral assignee</option>
+              <option value="user">Specific users</option>
+              <option value="email">Custom email</option>
             </select>
-          )}
-          {r.type === "email" && (
-            <input type="email" className="flex-1 border rounded-md px-2 py-1.5 text-sm"
-              placeholder="email@example.com" value={r.value}
-              onChange={e => onChange(rows.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} />
-          )}
-          {(allowEmpty || rows.length > 1) && (
-            <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))}
-              className="text-slate-400 hover:text-red-500">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      ))}
+            {r.type === "user" && (
+              <div className="flex-1 border rounded-md overflow-y-auto max-h-36">
+                {users.map(u => (
+                  <label key={u.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" className="accent-blue-600" checked={selectedIds.includes(u.id)}
+                      onChange={e => toggleUser(u.id, e.target.checked)} />
+                    <span className="text-sm text-slate-700">{u.name || u.email}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {r.type === "email" && (
+              <input type="email" className="flex-1 border rounded-md px-2 py-1.5 text-sm"
+                placeholder="email@example.com" value={r.value as string}
+                onChange={e => onChange(rows.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} />
+            )}
+            {(allowEmpty || rows.length > 1) && (
+              <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))}
+                className="text-slate-400 hover:text-red-500 mt-1.5">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
