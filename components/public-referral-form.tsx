@@ -92,11 +92,11 @@ export default function PublicReferralForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-      {/* Provider Info */}
-      <section>
-        <SectionTitle>Referring Provider Information</SectionTitle>
-        <div className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Provider Info */}
+        <section className="space-y-4">
+          <SectionTitle>Referring Provider Information</SectionTitle>
           <Field label="Full Name">
             <Input
               value={providerName}
@@ -131,13 +131,11 @@ export default function PublicReferralForm() {
               required
             />
           </Field>
-        </div>
-      </section>
+        </section>
 
-      {/* Patient Info */}
-      <section>
-        <SectionTitle>Patient Information</SectionTitle>
-        <div className="space-y-4">
+        {/* Patient Info */}
+        <section className="space-y-4">
+          <SectionTitle>Patient Information</SectionTitle>
           <div className="grid grid-cols-2 gap-3">
             <Field label="First Name">
               <Input
@@ -172,12 +170,12 @@ export default function PublicReferralForm() {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Describe the reason for this referral..."
-              rows={4}
+              rows={5}
               required
             />
           </Field>
-        </div>
-      </section>
+        </section>
+      </div>
 
       {status === "error" && (
         <p className="text-sm text-red-600">{errorMsg}</p>

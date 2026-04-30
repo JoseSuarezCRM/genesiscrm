@@ -4,8 +4,8 @@ export const metadata = { title: "Submit a Referral" }
 
 export default function ReferPage() {
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center py-8 px-4">
-      <div className="w-full max-w-xl">
+    <div className="min-h-screen bg-white flex flex-col items-center py-8 px-6">
+      <div className="w-full max-w-4xl">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Submit a Referral</h1>
           <p className="text-sm text-slate-500 mt-1">
