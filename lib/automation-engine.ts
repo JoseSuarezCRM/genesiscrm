@@ -237,7 +237,7 @@ async function executeAction(
     const bodyText = resolveTemplate((cfg.body as string) || "", vars)
     const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${bodyText.replace(/\n/g, "<br/>")}</div>`
 
-    async function resolveRecipientList(list: unknown): Promise<string[]> {
+    const resolveRecipientList = async (list: unknown): Promise<string[]> => {
       const emailSet = new Set<string>()
       if (Array.isArray(list)) {
         for (const r of list as { type: string; value: string }[]) {
