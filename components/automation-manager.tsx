@@ -288,7 +288,7 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "UPDATE_REFERRAL_STATUS") return { status: "" }
   if (type === "ASSIGN_REFERRAL") return { userId: "" }
   if (type === "ADD_TAG") return { tagId: "" }
-  if (type === "SEND_EMAIL") return { recipients: [{ type: "all_admins", value: "" }], subject: "", body: "" }
+  if (type === "SEND_EMAIL") return { recipients: [{ type: "all_admins", value: "" }], cc: [], bcc: [], subject: "", body: "" }
   return {}
 }
 
@@ -489,6 +489,53 @@ function TriggerConfigFields({
   )
 }
 
+// ─── Shared recipient rows widget ────────────────────────────────────────────
+
+type Recipient = { type: string; value: string }
+
+function RecipientRows({
+  rows, users, onChange, allowEmpty = false,
+}: {
+  rows: Recipient[]
+  users: User[]
+  onChange: (next: Recipient[]) => void
+  allowEmpty?: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-2 flex-wrap">
+          <select className="border rounded-md px-2 py-1.5 text-sm" value={r.type}
+            onChange={e => onChange(rows.map((x, j) => j === i ? { type: e.target.value, value: "" } : x))}>
+            <option value="all_admins">All admins</option>
+            <option value="assigned_to">Referral assignee</option>
+            <option value="user">Specific user</option>
+            <option value="email">Custom email</option>
+          </select>
+          {r.type === "user" && (
+            <select className="flex-1 border rounded-md px-2 py-1.5 text-sm" value={r.value}
+              onChange={e => onChange(rows.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}>
+              <option value="">Select user</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+            </select>
+          )}
+          {r.type === "email" && (
+            <input type="email" className="flex-1 border rounded-md px-2 py-1.5 text-sm"
+              placeholder="email@example.com" value={r.value}
+              onChange={e => onChange(rows.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} />
+          )}
+          {(allowEmpty || rows.length > 1) && (
+            <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))}
+              className="text-slate-400 hover:text-red-500">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Action config form ───────────────────────────────────────────────────────
 
 function ActionConfigFields({
@@ -502,6 +549,8 @@ function ActionConfigFields({
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
   const [showVars, setShowVars] = useState(false)
+  const [showCc, setShowCc] = useState(() => Array.isArray(config.cc) && (config.cc as unknown[]).length > 0)
+  const [showBcc, setShowBcc] = useState(() => Array.isArray(config.bcc) && (config.bcc as unknown[]).length > 0)
 
   if (type === "CREATE_TASK") {
     return (
@@ -621,53 +670,60 @@ function ActionConfigFields({
   }
 
   if (type === "SEND_EMAIL") {
-    const recipients = (config.recipients as { type: string; value: string }[]) ?? [{ type: "all_admins", value: "" }]
-    const setRecipients = (next: { type: string; value: string }[]) => set("recipients", next)
-    const addRecipient = () => setRecipients([...recipients, { type: "all_admins", value: "" }])
-    const removeRecipient = (i: number) => setRecipients(recipients.filter((_, idx) => idx !== i))
-    const updateRecipient = (i: number, t: string, v: string) =>
-      setRecipients(recipients.map((r, idx) => idx === i ? { type: t, value: v } : r))
+    const toRows = (config.recipients as Recipient[]) ?? [{ type: "all_admins", value: "" }]
+    const ccRows = (config.cc as Recipient[]) ?? []
+    const bccRows = (config.bcc as Recipient[]) ?? []
 
     return (
       <div className="space-y-3">
+        {/* To */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium text-slate-600">Send to *</label>
-            <button type="button" onClick={addRecipient} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-              <Plus className="h-3 w-3" /> Add recipient
-            </button>
+            <label className="text-xs font-medium text-slate-600">To *</label>
+            <div className="flex items-center gap-3">
+              {!showCc && <button type="button" onClick={() => { setShowCc(true); set("cc", [{ type: "email", value: "" }]) }} className="text-xs text-slate-500 hover:text-blue-600">+ CC</button>}
+              {!showBcc && <button type="button" onClick={() => { setShowBcc(true); set("bcc", [{ type: "email", value: "" }]) }} className="text-xs text-slate-500 hover:text-blue-600">+ BCC</button>}
+              <button type="button" onClick={() => set("recipients", [...toRows, { type: "all_admins", value: "" }])} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                <Plus className="h-3 w-3" /> Add
+              </button>
+            </div>
           </div>
-          <div className="space-y-2">
-            {recipients.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 flex-wrap">
-                <select className="border rounded-md px-2 py-1.5 text-sm" value={r.type}
-                  onChange={e => updateRecipient(i, e.target.value, "")}>
-                  <option value="all_admins">All admins</option>
-                  <option value="assigned_to">Referral assignee</option>
-                  <option value="user">Specific user</option>
-                  <option value="email">Custom email</option>
-                </select>
-                {r.type === "user" && (
-                  <select className="flex-1 border rounded-md px-2 py-1.5 text-sm" value={r.value}
-                    onChange={e => updateRecipient(i, r.type, e.target.value)}>
-                    <option value="">Select user</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-                  </select>
-                )}
-                {r.type === "email" && (
-                  <input type="email" className="flex-1 border rounded-md px-2 py-1.5 text-sm"
-                    placeholder="email@example.com" value={r.value}
-                    onChange={e => updateRecipient(i, r.type, e.target.value)} />
-                )}
-                {recipients.length > 1 && (
-                  <button type="button" onClick={() => removeRecipient(i)} className="text-slate-400 hover:text-red-500">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} />
         </div>
+
+        {/* CC */}
+        {showCc && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-slate-600">CC</label>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => set("cc", [...ccRows, { type: "email", value: "" }])} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+                <button type="button" onClick={() => { setShowCc(false); set("cc", []) }} className="text-xs text-slate-400 hover:text-red-500">Remove CC</button>
+              </div>
+            </div>
+            <RecipientRows rows={ccRows} users={users} onChange={next => set("cc", next)} allowEmpty />
+          </div>
+        )}
+
+        {/* BCC */}
+        {showBcc && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-slate-600">BCC</label>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => set("bcc", [...bccRows, { type: "email", value: "" }])} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+                <button type="button" onClick={() => { setShowBcc(false); set("bcc", []) }} className="text-xs text-slate-400 hover:text-red-500">Remove BCC</button>
+              </div>
+            </div>
+            <RecipientRows rows={bccRows} users={users} onChange={next => set("bcc", next)} allowEmpty />
+          </div>
+        )}
+
+        {/* Subject */}
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs font-medium text-slate-600">Subject *</label>
@@ -686,6 +742,8 @@ function ActionConfigFields({
           <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. New referral from {practice_name}"
             value={(config.subject as string) || ""} onChange={e => set("subject", e.target.value)} />
         </div>
+
+        {/* Body */}
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Body *</label>
           <textarea rows={4} className="w-full border rounded-md px-3 py-2 text-sm resize-none"

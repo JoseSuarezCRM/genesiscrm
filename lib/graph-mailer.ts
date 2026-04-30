@@ -50,12 +50,17 @@ async function getAccessToken(): Promise<string> {
 }
 
 export async function sendEmail(
-  to: string,
+  to: string | string[],
   subject: string,
-  html: string
+  html: string,
+  options?: { cc?: string[]; bcc?: string[] }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getAccessToken()
+    const toList = Array.isArray(to) ? to : [to]
+    const toRecipients = toList.map(a => ({ emailAddress: { address: a } }))
+    const ccRecipients = (options?.cc ?? []).map(a => ({ emailAddress: { address: a } }))
+    const bccRecipients = (options?.bcc ?? []).map(a => ({ emailAddress: { address: a } }))
 
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(FROM_EMAIL)}/sendMail`,
@@ -69,7 +74,9 @@ export async function sendEmail(
           message: {
             subject,
             body: { contentType: "HTML", content: html },
-            toRecipients: [{ emailAddress: { address: to } }],
+            toRecipients,
+            ...(ccRecipients.length ? { ccRecipients } : {}),
+            ...(bccRecipients.length ? { bccRecipients } : {}),
             from: { emailAddress: { address: FROM_EMAIL, name: "Genesis Ortho CRM" } },
           },
           saveToSentItems: true,
