@@ -15,6 +15,7 @@ interface Location {
   id: string
   code: string
   order: number
+  openDays: string[]
   requirements: { role: StaffRole; countMon: number; countTue: number; countWed: number; countThu: number; countFri: number }[]
 }
 
@@ -447,7 +448,8 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
                       e => e.locationId === loc.id && e.assignedRole === role && e.day === day
                     )
                     const required = getRequired(loc, role, day)
-                    const gap = required > 0 ? Math.max(0, required - cellEntries.length) : 0
+                    const isOpen = loc.openDays.length === 0 || loc.openDays.includes(day)
+                    const gap = isOpen && required > 0 ? Math.max(0, required - cellEntries.length) : 0
                     const isOpen = activeCell?.locationId === loc.id && activeCell.role === role && activeCell.day === day
 
                     return (
