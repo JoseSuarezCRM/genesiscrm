@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
+import { sendEmail } from "@/lib/graph-mailer"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
 
 // ─── Template variable resolution ─────────────────────────────────────────────
@@ -229,6 +230,30 @@ async function executeAction(
         },
       })
     }
+  }
+
+  if (automation.actionType === AutomationAction.SEND_EMAIL) {
+    const subject = resolveTemplate((cfg.subject as string) || "Automation notification", vars)
+    const bodyText = resolveTemplate((cfg.body as string) || "", vars)
+    const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${bodyText.replace(/\n/g, "<br/>")}</div>`
+
+    const toType = cfg.toType as string
+    let recipients: string[] = []
+
+    if (toType === "custom" && cfg.customEmail) {
+      recipients = [(cfg.customEmail as string).trim()]
+    } else if (toType === "all_admins") {
+      const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
+      recipients = admins.map(a => a.email)
+    } else if (toType === "assigned_to" && referralId) {
+      const r = await prisma.referral.findUnique({ where: { id: referralId }, select: { assignedTo: { select: { email: true } } } })
+      if (r?.assignedTo?.email) recipients = [r.assignedTo.email]
+    } else if (toType === "specific_user" && cfg.userId) {
+      const u = await prisma.user.findUnique({ where: { id: cfg.userId as string }, select: { email: true } })
+      if (u?.email) recipients = [u.email]
+    }
+
+    await Promise.all(recipients.map(email => sendEmail(email, subject, html)))
   }
 
   if (automation.actionType === AutomationAction.ADD_TAG && referralId) {

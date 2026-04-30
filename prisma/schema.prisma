@@ -93,6 +93,7 @@ enum AutomationTrigger {
 enum AutomationAction {
   CREATE_TASK
   SEND_NOTIFICATION
+  SEND_EMAIL
   UPDATE_REFERRAL_STATUS
   ASSIGN_REFERRAL
   ADD_TAG

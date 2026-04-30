@@ -68,6 +68,7 @@ const ACTION_LABELS: Record<AutomationAction, string> = {
   UPDATE_REFERRAL_STATUS: "Update referral status",
   ASSIGN_REFERRAL: "Assign referral to user",
   ADD_TAG: "Add tag to referral",
+  SEND_EMAIL: "Send email",
 }
 
 const TRIGGER_COLORS: Record<string, string> = {
@@ -94,6 +95,7 @@ const ACTION_COLORS: Record<AutomationAction, string> = {
   UPDATE_REFERRAL_STATUS: "bg-blue-100 text-blue-700",
   ASSIGN_REFERRAL: "bg-teal-100 text-teal-700",
   ADD_TAG: "bg-slate-100 text-slate-700",
+  SEND_EMAIL: "bg-sky-100 text-sky-700",
 }
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -286,6 +288,7 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "UPDATE_REFERRAL_STATUS") return { status: "" }
   if (type === "ASSIGN_REFERRAL") return { userId: "" }
   if (type === "ADD_TAG") return { tagId: "" }
+  if (type === "SEND_EMAIL") return { toType: "all_admins", userId: "", customEmail: "", subject: "", body: "" }
   return {}
 }
 
@@ -613,6 +616,59 @@ function ActionConfigFields({
           <option value="">Select tag</option>
           {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+      </div>
+    )
+  }
+
+  if (type === "SEND_EMAIL") {
+    const toType = (config.toType as string) || "all_admins"
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Send to *</label>
+          <select className="w-full border rounded-md px-3 py-2 text-sm" value={toType} onChange={e => set("toType", e.target.value)}>
+            <option value="all_admins">All admins</option>
+            <option value="assigned_to">Referral assignee</option>
+            <option value="specific_user">Specific user</option>
+            <option value="custom">Custom email address</option>
+          </select>
+        </div>
+        {toType === "specific_user" && (
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">User *</label>
+            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.userId as string) || ""} onChange={e => set("userId", e.target.value)}>
+              <option value="">Select user</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+            </select>
+          </div>
+        )}
+        {toType === "custom" && (
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Email address *</label>
+            <input type="email" className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. manager@clinic.com" value={(config.customEmail as string) || ""} onChange={e => set("customEmail", e.target.value)} />
+          </div>
+        )}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-medium text-slate-600">Subject *</label>
+            <button type="button" onClick={() => setShowVars(v => !v)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <Info className="h-3 w-3" /> Template vars
+            </button>
+          </div>
+          {showVars && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {TEMPLATE_VARS.map(v => (
+                <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
+                  onClick={() => set("subject", ((config.subject as string) || "") + v)}>{v}</span>
+              ))}
+            </div>
+          )}
+          <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. New referral from {practice_name}" value={(config.subject as string) || ""} onChange={e => set("subject", e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Body *</label>
+          <textarea rows={4} className="w-full border rounded-md px-3 py-2 text-sm resize-none" placeholder="e.g. Hi,&#10;&#10;A new referral has been received for {patient_name} from {practice_name}." value={(config.body as string) || ""} onChange={e => set("body", e.target.value)} />
+        </div>
       </div>
     )
   }
