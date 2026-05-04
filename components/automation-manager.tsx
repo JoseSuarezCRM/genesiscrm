@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
 import {
   createAutomation,
@@ -990,11 +991,14 @@ function AutomationRow({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AutomationManager({ automations: initial, users, tags, practices, locations }: Props) {
-  const [automations] = useState(initial)
+  const router = useRouter()
+  const [automations, setAutomations] = useState(initial)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Automation | null>(null)
   const [runPending, startRunTransition] = useTransition()
   const [runMsg, setRunMsg] = useState("")
+
+  useEffect(() => { setAutomations(initial) }, [initial])
 
   function openCreate() { setEditing(null); setDialogOpen(true) }
   function openEdit(a: Automation) { setEditing(a); setDialogOpen(true) }
@@ -1002,11 +1006,11 @@ export default function AutomationManager({ automations: initial, users, tags, p
   function handleClose(refresh?: boolean) {
     setDialogOpen(false)
     setEditing(null)
-    if (refresh) window.location.reload()
+    if (refresh) router.refresh()
   }
 
-  function handleDeleted() { window.location.reload() }
-  function handleToggled() { window.location.reload() }
+  function handleDeleted() { router.refresh() }
+  function handleToggled() { router.refresh() }
 
   function handleRunScheduled() {
     setRunMsg("")
