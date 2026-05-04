@@ -83,7 +83,7 @@ export async function setReferralTags(referralId: string, tagIds: string[]) {
 
   if (addedIds.length > 0) {
     const addedTags = await prisma.tag.findMany({ where: { id: { in: addedIds } }, select: { id: true, name: true } })
-    Promise.allSettled(addedTags.map(tag => runTrigger_TagAdded(referralId, tag.id, tag.name, session.user.id)))
+    await Promise.allSettled(addedTags.map(tag => runTrigger_TagAdded(referralId, tag.id, tag.name, session.user.id)))
   }
 
   revalidatePath(`/referrals/${referralId}`)

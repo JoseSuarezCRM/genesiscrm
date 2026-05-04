@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     metadata: { referralId, fileName: file.name },
   })
 
-  Promise.allSettled([runTrigger_DocumentUploaded(referralId, session.user.id)])
+  await Promise.allSettled([runTrigger_DocumentUploaded(referralId, session.user.id)])
 
   return NextResponse.json(doc)
 }

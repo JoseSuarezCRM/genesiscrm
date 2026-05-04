@@ -150,10 +150,9 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
   revalidatePath("/referrals")
   revalidatePath("/")
 
-  // Run automations + sequence enrollment (non-blocking)
   const rid = referral.id
   const uid = session.user.id
-  Promise.allSettled([
+  await Promise.allSettled([
     runTrigger_ReferralCreated(rid, uid),
     referral.referringDoctorId ? runTrigger_ProviderReferralCount(referral.referringDoctorId, uid) : Promise.resolve(),
     referral.referringPracticeId ? runTrigger_PracticeReferralCount(referral.referringPracticeId, uid) : Promise.resolve(),
@@ -212,7 +211,7 @@ export async function updateReferral(id: string, data: unknown) {
   })
 
   if (d.authStatus && d.authStatus !== (prev?.authStatus ?? "")) {
-    Promise.allSettled([runTrigger_AuthStatusChanged(id, prev?.authStatus ?? null, d.authStatus, session.user.id)])
+    await Promise.allSettled([runTrigger_AuthStatusChanged(id, prev?.authStatus ?? null, d.authStatus, session.user.id)])
   }
 
   revalidatePath(`/referrals/${id}`)
@@ -266,7 +265,7 @@ export async function updateReferralStatus(id: string, status: ReferralStatus) {
   revalidatePath("/")
 
   if (prev?.status && prev.status !== status) {
-    Promise.allSettled([runTrigger_StatusChanged(id, prev.status, status, session.user.id)])
+    await Promise.allSettled([runTrigger_StatusChanged(id, prev.status, status, session.user.id)])
   }
 }
 
@@ -317,7 +316,7 @@ export async function assignReferral(referralId: string, assignedToId: string | 
   revalidatePath(`/referrals/${referralId}`)
 
   if (assignedToId) {
-    Promise.allSettled([runTrigger_ReferralAssigned(referralId, assignedToId, session.user.id)])
+    await Promise.allSettled([runTrigger_ReferralAssigned(referralId, assignedToId, session.user.id)])
   }
 
   return { success: true }

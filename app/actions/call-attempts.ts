@@ -38,7 +38,7 @@ export async function logCallAttempt(data: {
   revalidatePath("/referrals")
 
   const newCount = count + 1
-  Promise.allSettled([runTrigger_CallAttemptsReached(data.referralId, newCount, (session.user as any).id)])
+  await Promise.allSettled([runTrigger_CallAttemptsReached(data.referralId, newCount, (session.user as any).id)])
 
   return { success: true, attempt }
 }

@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  // Fire automations non-blocking
-  void runTrigger_EmbedReferralReceived(referral.id)
+  // Fire automations before responding — void/non-blocking gets killed by Vercel on function exit
+  await runTrigger_EmbedReferralReceived(referral.id)
 
   // Notify users who have opted in to embed form notifications
   const notifyUsers = await prisma.user.findMany({
