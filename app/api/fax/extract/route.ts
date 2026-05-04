@@ -23,7 +23,7 @@ Return ONLY a valid JSON object with these exact keys. Use null for any field yo
   "referringNpi": "string or null - 10-digit NPI number if present",
   "referringPhone": "string or null - phone number of the referring provider or practice",
   "referringFax": "string or null - fax number of the referring provider or practice",
-  "referringAddress": "string or null - address of the referring provider or practice",
+  "referringAddress": "string or null - address formatted as: Street, City, State ZIP (e.g. '1050 Logan Ave, Belvidere, IL 60108'). Always put street first, then city, then state and zip last.",
   "reason": "string or null - chief complaint or reason for referral",
   "insuranceProvider": "string or null",
   "insuranceMemberId": "string or null"
@@ -33,7 +33,7 @@ Rules:
 - Do not invent or guess data. If a field is not clearly present, use null.
 - patientDob must be YYYY-MM-DD. Convert MM/DD/YYYY, Month DD YYYY, etc.
 - reason should be a concise summary of the referral reason or chief complaint.
-- referringAddress should be the full address on one line if possible.`
+- referringAddress must always follow the format: Street, City, State ZIP — never reverse the order.`
 
 export interface PendingFile {
   url: string
