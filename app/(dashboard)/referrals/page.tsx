@@ -64,6 +64,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
             { patientLastName: { contains: search, mode: "insensitive" as const } },
             { referringDoctorName: { contains: search, mode: "insensitive" as const } },
             { referringPractice: { name: { contains: search, mode: "insensitive" as const } } },
+            { genesisMrn: { contains: search, mode: "insensitive" as const } },
           ],
         }
       : {}),
