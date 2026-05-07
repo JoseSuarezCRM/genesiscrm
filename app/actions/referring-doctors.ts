@@ -9,9 +9,11 @@ import { auth } from "@/lib/auth"
 const LOWER_WORDS = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "so", "the", "to", "up", "yet"])
 
 function toProperCase(str: string): string {
-  // Detect "Last, First" format and reorder to "First Last"
-  const normalized = str.includes(",")
-    ? str.split(",").map(s => s.trim()).filter(Boolean).reverse().join(" ")
+  // Only reverse "Last, First" person names — not addresses (addresses have digits or multiple commas)
+  const parts = str.split(",")
+  const isPersonName = parts.length === 2 && !/\d/.test(parts[0])
+  const normalized = isPersonName
+    ? parts.map(s => s.trim()).filter(Boolean).reverse().join(" ")
     : str
 
   return normalized
