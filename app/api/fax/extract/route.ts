@@ -17,7 +17,7 @@ Return ONLY a valid JSON object with these exact keys. Use null for any field yo
   "patientPhone": "string or null - digits and common separators, preserve as found",
   "patientEmail": "string or null",
   "patientMrn": "string or null - patient medical record number (MRN), chart number, or patient ID if present",
-  "referringDoctorName": "string or null - provider's name ONLY, no title or credentials (e.g. 'Emily Westel', not 'Emily Westel PA-C')",
+  "referringDoctorName": "string or null - provider's full name ONLY, no title or credentials. Always use First Last order (e.g. 'Ann McLaughlin'). If the name appears as Last, First (e.g. 'McLaughlin, Ann') convert it to First Last.",
   "referringDoctorTitle": "string or null - provider's title or credentials only (e.g. 'Dr.', 'MD', 'DO', 'PA-C', 'NP', 'APRN', 'FNP-C', etc.)",
   "referringOrg": "string or null - name of the referring practice or organization",
   "referringNpi": "string or null - 10-digit NPI number if present",

@@ -323,10 +323,12 @@ export async function createDoctor(data: unknown) {
 
   const { locationIds = [], ...rest } = parsed.data
 
+  // Normalize before dedup — handles "Last, First" vs "First Last" variations
+  const normalizedName = toProperCase(rest.name)
   const existing = await prisma.referringDoctor.findFirst({
     where: {
       practiceId: rest.practiceId,
-      name: { equals: rest.name, mode: "insensitive" },
+      name: { equals: normalizedName, mode: "insensitive" },
     },
   })
   if (existing) return { error: `A provider named "${existing.name}" already exists in this practice.`, id: existing.id, duplicate: true }
