@@ -298,21 +298,32 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <Pagination page={page} totalPages={totalPages} total={total} searchParams={searchParams} />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            baseParams={Object.fromEntries(
+              Object.entries(searchParams).flatMap(([k, v]) =>
+                v == null || k === "page" ? [] : Array.isArray(v) ? v.map((val) => [k, val]) : [[k, v]]
+              )
+            )}
+          />
         )}
       </div>
     </div>
   )
 }
 
-function Pagination({ page, totalPages, total, searchParams }: {
+function Pagination({ page, totalPages, total, baseParams }: {
   page: number
   totalPages: number
   total: number
-  searchParams: Record<string, string | undefined>
+  baseParams: [string, string][]
 }) {
   function href(p: number) {
-    return `/referrals?${new URLSearchParams({ ...searchParams, page: String(p) } as Record<string, string>)}`
+    const params = new URLSearchParams(baseParams)
+    params.set("page", String(p))
+    return `/referrals?${params.toString()}`
   }
 
   // Build page number list with ellipsis: always show first, last, current ±2
