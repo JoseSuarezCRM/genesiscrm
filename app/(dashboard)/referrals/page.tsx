@@ -3,23 +3,28 @@ import { ReferralStatus } from "@prisma/client"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/status-badge"
-import { STATUS_LABELS, formatDate, formatPhone } from "@/lib/utils"
-import { Plus, Download, Phone, AlertCircle } from "lucide-react"
-import ReferralSearch from "@/components/referral-search"
+import { formatDate, formatPhone } from "@/lib/utils"
+import { Plus, Download, Phone } from "lucide-react"
+import ReferralFilters from "@/components/referral-filters"
 
 interface PageProps {
   searchParams: {
     search?: string
-    status?: string
+    status?: string | string[]
     from?: string
     to?: string
-    practice?: string
-    tag?: string
+    practice?: string | string[]
+    tag?: string | string[]
+    doctor?: string | string[]
     page?: string
     incomplete?: string
   }
+}
+
+function toArray(val: string | string[] | undefined): string[] {
+  if (!val) return []
+  return Array.isArray(val) ? val : [val]
 }
 
 const PAGE_SIZE = 20
@@ -27,7 +32,13 @@ const PAGE_SIZE = 20
 async function getReferrals(searchParams: PageProps["searchParams"]) {
   const page = Math.max(1, parseInt(searchParams.page ?? "1"))
   const skip = (page - 1) * PAGE_SIZE
-  const status = searchParams.status as ReferralStatus | undefined
+
+  const statuses = toArray(searchParams.status).filter((s) =>
+    Object.values(ReferralStatus).includes(s as ReferralStatus)
+  ) as ReferralStatus[]
+  const practiceIds = toArray(searchParams.practice)
+  const tagIds = toArray(searchParams.tag)
+  const doctorIds = toArray(searchParams.doctor)
   const search = searchParams.search?.trim()
   const incompleteOnly = searchParams.incomplete === "1"
 
@@ -41,18 +52,13 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
           ],
         }
       : {}),
-    ...(status && Object.values(ReferralStatus).includes(status)
-      ? { status }
-      : {}),
-    ...(searchParams.practice
-      ? { referringPracticeId: searchParams.practice }
-      : {}),
+    ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
+    ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
+    ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
     ...(searchParams.from || searchParams.to
       ? {
           referralDate: {
-            ...(searchParams.from
-              ? { gte: new Date(searchParams.from) }
-              : {}),
+            ...(searchParams.from ? { gte: new Date(searchParams.from) } : {}),
             ...(searchParams.to ? { lte: new Date(searchParams.to) } : {}),
           },
         }
@@ -68,12 +74,10 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
           ],
         }
       : {}),
-    ...(searchParams.tag
-      ? { tags: { some: { tagId: searchParams.tag } } }
-      : {}),
+    ...(tagIds.length > 0 ? { tags: { some: { tagId: { in: tagIds } } } } : {}),
   }
 
-  const [referrals, total, practices, allTags, incompleteCount] = await Promise.all([
+  const [referrals, total, practices, allTags, incompleteCount, allDoctors] = await Promise.all([
     prisma.referral.findMany({
       where,
       take: PAGE_SIZE,
@@ -91,18 +95,59 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     prisma.referral.count({
       where: { OR: [{ referringPracticeId: null }, { referringLocationId: null }, { referringDoctorId: null }] },
     }),
+    prisma.referringDoctor.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, title: true },
+    }),
   ])
 
-  return { referrals, total, practices, allTags, page, incompleteCount, incompleteOnly }
+  return {
+    referrals,
+    total,
+    practices,
+    allTags,
+    allDoctors,
+    page,
+    incompleteCount,
+    incompleteOnly,
+    statuses,
+    practiceIds,
+    tagIds,
+    doctorIds,
+  }
 }
 
 export default async function ReferralsPage({ searchParams }: PageProps) {
-  const { referrals, total, practices, allTags, page, incompleteCount, incompleteOnly } = await getReferrals(searchParams)
-  const listUrl = `/referrals?${new URLSearchParams(Object.fromEntries(Object.entries(searchParams).filter(([,v]) => v != null)) as Record<string, string>)}`
+  const {
+    referrals,
+    total,
+    practices,
+    allTags,
+    allDoctors,
+    page,
+    incompleteCount,
+    incompleteOnly,
+    statuses,
+    practiceIds,
+    tagIds,
+    doctorIds,
+  } = await getReferrals(searchParams)
+
+  const listUrl = `/referrals?${new URLSearchParams(
+    Object.fromEntries(
+      Object.entries(searchParams).flatMap(([k, v]) =>
+        v == null ? [] : Array.isArray(v) ? v.map((val) => [k, val]) : [[k, v]]
+      )
+    )
+  )}`
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
+  // Build export URL preserving all active filters
   const exportParams = new URLSearchParams()
-  if (searchParams.status) exportParams.set("status", searchParams.status)
+  statuses.forEach((s) => exportParams.append("status", s))
+  practiceIds.forEach((id) => exportParams.append("practice", id))
+  doctorIds.forEach((id) => exportParams.append("doctor", id))
+  tagIds.forEach((id) => exportParams.append("tag", id))
   if (searchParams.from) exportParams.set("from", searchParams.from)
   if (searchParams.to) exportParams.set("to", searchParams.to)
 
@@ -112,7 +157,9 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Referrals</h1>
-          <p className="text-sm text-slate-500">{total} total referral{total !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-slate-500">
+            {total} total referral{total !== 1 ? "s" : ""}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
@@ -131,86 +178,26 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 bg-white border rounded-lg p-4">
+      <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm">
         <Suspense fallback={null}>
-          <ReferralSearch defaultValue={searchParams.search} />
+          <ReferralFilters
+            practices={practices.map((p) => ({ id: p.id, label: p.name }))}
+            doctors={allDoctors.map((d) => ({
+              id: d.id,
+              label: d.title ? `${d.name}, ${d.title}` : d.name,
+            }))}
+            tags={allTags.map((t) => ({ id: t.id, label: t.name, color: t.color }))}
+            incompleteCount={incompleteCount}
+            currentSearch={searchParams.search}
+            currentStatuses={statuses}
+            currentPractices={practiceIds}
+            currentDoctors={doctorIds}
+            currentTags={tagIds}
+            currentFrom={searchParams.from}
+            currentTo={searchParams.to}
+            incompleteOnly={incompleteOnly}
+          />
         </Suspense>
-        <form method="GET" className="contents">
-        <select
-          name="status"
-          defaultValue={searchParams.status ?? ""}
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="">All Statuses</option>
-          {Object.values(ReferralStatus).map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <select
-          name="practice"
-          defaultValue={searchParams.practice ?? ""}
-          className="h-10 w-48 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="">All Practices</option>
-          {practices.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        {allTags.length > 0 && (
-          <select
-            name="tag"
-            defaultValue={searchParams.tag ?? ""}
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option value="">All Tags</option>
-            {allTags.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        )}
-        <Input
-          name="from"
-          type="date"
-          defaultValue={searchParams.from}
-          className="w-auto"
-          title="From date"
-        />
-        <Input
-          name="to"
-          type="date"
-          defaultValue={searchParams.to}
-          className="w-auto"
-          title="To date"
-        />
-        <Button type="submit" variant="secondary">
-          Filter
-        </Button>
-        <Button type="reset" variant="ghost" asChild>
-          <Link href="/referrals">Clear</Link>
-        </Button>
-        </form>
-        <Link
-          href={incompleteOnly ? "/referrals" : "/referrals?incomplete=1"}
-          className={`inline-flex items-center gap-1.5 h-10 px-3 rounded-md border text-sm font-medium transition-colors ${
-            incompleteOnly
-              ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
-              : incompleteCount > 0
-              ? "border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100"
-              : "border-input text-slate-500 bg-background hover:bg-slate-50"
-          }`}
-        >
-          <AlertCircle className="h-3.5 w-3.5" />
-          Incomplete source
-          {incompleteCount > 0 && (
-            <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${incompleteOnly ? "bg-white text-amber-600" : "bg-amber-500 text-white"}`}>
-              {incompleteCount}
-            </span>
-          )}
-        </Link>
       </div>
 
       {/* Table */}

@@ -18,13 +18,21 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const status = searchParams.get("status") as ReferralStatus | null
+  const statuses = searchParams.getAll("status").filter((s) =>
+    Object.values(ReferralStatus).includes(s as ReferralStatus)
+  ) as ReferralStatus[]
+  const practiceIds = searchParams.getAll("practice")
+  const doctorIds = searchParams.getAll("doctor")
+  const tagIds = searchParams.getAll("tag")
   const from = searchParams.get("from")
   const to = searchParams.get("to")
 
   const referrals = await prisma.referral.findMany({
     where: {
-      ...(status ? { status } : {}),
+      ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
+      ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
+      ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
+      ...(tagIds.length > 0 ? { tags: { some: { tagId: { in: tagIds } } } } : {}),
       ...(from || to
         ? {
             referralDate: {
@@ -98,7 +106,7 @@ export async function GET(req: NextRequest) {
     userId: session.user.id,
     action: AuditAction.EXPORT_CSV,
     metadata: {
-      filters: { status, from, to },
+      filters: { statuses, practiceIds, doctorIds, tagIds, from, to },
       recordCount: referrals.length,
     },
   })
