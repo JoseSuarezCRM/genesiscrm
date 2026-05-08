@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { OutreachChannel, OutreachTrigger } from "@prisma/client"
-import { updateOutreachTemplate } from "@/app/actions/outreach-templates"
+import { updateOutreachTemplate, toggleOutreachTemplate } from "@/app/actions/outreach-templates"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -45,6 +45,7 @@ export default function OutreachTemplateManager({ templates: initial }: Props) {
   const [templates, setTemplates] = useState(initial)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Edit form state
@@ -53,6 +54,22 @@ export default function OutreachTemplateManager({ templates: initial }: Props) {
   const [editIsActive, setEditIsActive] = useState(true)
 
   const editing = templates.find((t) => t.id === editingId) ?? null
+
+  function handleToggle(t: Template) {
+    setTogglingId(t.id)
+    startTransition(async () => {
+      try {
+        const result = await toggleOutreachTemplate(t.id)
+        setTemplates((prev) =>
+          prev.map((tmpl) =>
+            tmpl.id === t.id ? { ...tmpl, isActive: result.isActive, updatedAt: new Date() } : tmpl
+          )
+        )
+      } finally {
+        setTogglingId(null)
+      }
+    })
+  }
 
   function openEdit(t: Template) {
     setEditingId(t.id)
@@ -151,10 +168,21 @@ export default function OutreachTemplateManager({ templates: initial }: Props) {
                   {t.updatedAt.toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(t)}>
-                    <Pencil className="h-4 w-4 mr-1" />
-                    Edit
-                  </Button>
+                  <div className="inline-flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleToggle(t)}
+                      disabled={togglingId === t.id}
+                      className={t.isActive ? "text-slate-500 hover:text-red-600" : "text-slate-500 hover:text-green-600"}
+                    >
+                      {t.isActive ? "Disable" : "Enable"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(t)}>
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -33,6 +33,27 @@ export async function getEmailTemplates() {
   })
 }
 
+export async function toggleOutreachTemplate(id: string) {
+  const session = await requireAdmin()
+
+  const current = await prisma.outreachTemplate.findUniqueOrThrow({ where: { id } })
+  const template = await prisma.outreachTemplate.update({
+    where: { id },
+    data: { isActive: !current.isActive },
+  })
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.USER_UPDATE,
+    resourceType: "OutreachTemplate",
+    resourceId: id,
+    metadata: { trigger: template.trigger, channel: template.channel, isActive: template.isActive },
+  })
+
+  revalidatePath("/settings/outreach")
+  return { isActive: template.isActive }
+}
+
 export async function updateOutreachTemplate(
   id: string,
   data: { body: string; subject?: string | null; isActive: boolean }
