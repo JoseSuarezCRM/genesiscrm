@@ -16,6 +16,7 @@ interface PageProps {
     to?: string
     practice?: string | string[]
     tag?: string | string[]
+    tagMode?: string
     doctor?: string | string[]
     page?: string
     incomplete?: string
@@ -38,6 +39,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
   ) as ReferralStatus[]
   const practiceIds = toArray(searchParams.practice)
   const tagIds = toArray(searchParams.tag)
+  const tagMode: "any" | "none" = searchParams.tagMode === "none" ? "none" : "any"
   const doctorIds = toArray(searchParams.doctor)
   const search = searchParams.search?.trim()
   const incompleteOnly = searchParams.incomplete === "1"
@@ -74,7 +76,11 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
           ],
         }
       : {}),
-    ...(tagIds.length > 0 ? { tags: { some: { tagId: { in: tagIds } } } } : {}),
+    ...(tagIds.length > 0
+      ? { tags: tagMode === "none"
+          ? { none: { tagId: { in: tagIds } } }
+          : { some: { tagId: { in: tagIds } } } }
+      : {}),
   }
 
   const [referrals, total, practices, allTags, incompleteCount, allDoctors] = await Promise.all([
@@ -113,6 +119,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     statuses,
     practiceIds,
     tagIds,
+    tagMode,
     doctorIds,
   }
 }
@@ -130,6 +137,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     statuses,
     practiceIds,
     tagIds,
+    tagMode,
     doctorIds,
   } = await getReferrals(searchParams)
 
@@ -193,6 +201,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
             currentPractices={practiceIds}
             currentDoctors={doctorIds}
             currentTags={tagIds}
+            currentTagMode={tagMode}
             currentFrom={searchParams.from}
             currentTo={searchParams.to}
             incompleteOnly={incompleteOnly}
