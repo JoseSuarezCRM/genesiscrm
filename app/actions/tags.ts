@@ -18,7 +18,11 @@ export async function listTags() {
 
 export async function listActivityTags() {
   await requireAuth()
-  return (prisma.tag as any).findMany({ where: { scope: "ACTIVITY" }, orderBy: { name: "asc" } })
+  // Return any tag used by at least one activity, regardless of scope
+  return prisma.tag.findMany({
+    where: { activities: { some: {} } },
+    orderBy: { name: "asc" },
+  })
 }
 
 export async function createTag(data: { name: string; color: string }) {
