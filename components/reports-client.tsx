@@ -144,7 +144,7 @@ export default function ReportsClient({
           title="Pending Follow-up"
           value={kpis.pending}
           icon={<Clock className="h-4 w-4 text-yellow-500" />}
-          href={`${referralsBase}&status=NEW`}
+          href={`${referralsBase}&status=NEW&status=READY_FOR_CALL&status=CONTACTED`}
           sub="New + Contacted"
         />
         <KpiCard
