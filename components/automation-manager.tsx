@@ -63,13 +63,14 @@ const TRIGGER_LABELS: Record<string, string> = {
   EMBED_REFERRAL_RECEIVED: "Referral received via embed form",
 }
 
-const ACTION_LABELS: Record<AutomationAction, string> = {
+const ACTION_LABELS: Record<string, string> = {
   CREATE_TASK: "Create a task",
   SEND_NOTIFICATION: "Send in-app notification",
   UPDATE_REFERRAL_STATUS: "Update referral status",
   ASSIGN_REFERRAL: "Assign referral to user",
   ADD_TAG: "Add tag to referral",
   SEND_EMAIL: "Send email",
+  SEND_SMS: "Send SMS to patient",
 }
 
 const TRIGGER_COLORS: Record<string, string> = {
@@ -90,13 +91,14 @@ const TRIGGER_COLORS: Record<string, string> = {
   EMBED_REFERRAL_RECEIVED: "bg-emerald-100 text-emerald-700",
 }
 
-const ACTION_COLORS: Record<AutomationAction, string> = {
+const ACTION_COLORS: Record<string, string> = {
   CREATE_TASK: "bg-violet-100 text-violet-700",
   SEND_NOTIFICATION: "bg-pink-100 text-pink-700",
   UPDATE_REFERRAL_STATUS: "bg-blue-100 text-blue-700",
   ASSIGN_REFERRAL: "bg-teal-100 text-teal-700",
   ADD_TAG: "bg-slate-100 text-slate-700",
   SEND_EMAIL: "bg-sky-100 text-sky-700",
+  SEND_SMS: "bg-green-100 text-green-700",
 }
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -291,6 +293,7 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "ASSIGN_REFERRAL") return { userId: "" }
   if (type === "ADD_TAG") return { tagId: "" }
   if (type === "SEND_EMAIL") return { recipients: [{ type: "all_admins", value: "" }], cc: [], bcc: [], subject: "", body: "" }
+  if (type === "SEND_SMS") return { body: "" }
   return {}
 }
 
@@ -679,6 +682,44 @@ function ActionConfigFields({
           <option value="">Select tag</option>
           {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+      </div>
+    )
+  }
+
+  if ((type as string) === "SEND_SMS") {
+    const body = (config.body as string) || ""
+    const SMS_LIMIT = 160
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Sends an SMS to the patient's phone number on the referral.</p>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-medium text-slate-600">Message *</label>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs ${body.length > SMS_LIMIT ? "text-red-600" : "text-slate-400"}`}>
+                {body.length} / {SMS_LIMIT}
+              </span>
+              <button type="button" onClick={() => setShowVars(v => !v)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                <Info className="h-3 w-3" /> Template vars
+              </button>
+            </div>
+          </div>
+          {showVars && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {TEMPLATE_VARS.map(v => (
+                <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
+                  onClick={() => set("body", body + v)}>{v}</span>
+              ))}
+            </div>
+          )}
+          <textarea
+            rows={3}
+            className="w-full border rounded-md px-3 py-2 text-sm resize-none"
+            placeholder="e.g. Hi {patient_first_name}, your appointment at {practice_name} is coming up. Reply STOP to opt out."
+            value={body}
+            onChange={e => set("body", e.target.value)}
+          />
+        </div>
       </div>
     )
   }

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
 import { sendEmail } from "@/lib/graph-mailer"
+import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
 
 // ─── Template variable resolution ─────────────────────────────────────────────
@@ -299,6 +300,15 @@ async function executeAction(
 
     if (toEmails.length) {
       await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails })
+    }
+  }
+
+  if ((automation.actionType as string) === "SEND_SMS" && referralId) {
+    const body = resolveTemplate((cfg.body as string) || "", vars)
+    if (body) {
+      const referral = await prisma.referral.findUnique({ where: { id: referralId }, select: { patientPhone: true } })
+      const phone = referral?.patientPhone
+      if (phone) await sendSMS(phone, body)
     }
   }
 
