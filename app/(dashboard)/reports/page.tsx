@@ -4,7 +4,7 @@ import { STATUS_LABELS } from "@/lib/utils"
 import ReportsClient from "@/components/reports-client"
 
 interface PageProps {
-  searchParams: { from?: string; to?: string; range?: string }
+  searchParams: { from?: string; to?: string; range?: string; practiceId?: string }
 }
 
 const STATUS_COLORS: Record<ReferralStatus, string> = {
@@ -39,7 +39,9 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const fromStr = start.toISOString().slice(0, 10)
   const toStr = end.toISOString().slice(0, 10)
 
-  const where = { referralDate: { gte: start, lte: end } }
+  const practiceId = searchParams.practiceId
+  const practiceFilter = practiceId ? { referringPracticeId: practiceId } : {}
+  const where = { referralDate: { gte: start, lte: end }, ...practiceFilter }
 
   const [
     allInRange,
@@ -48,6 +50,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     topProviders,
     topInsurance,
     totalEver,
+    practiceName,
   ] = await Promise.all([
     prisma.referral.findMany({
       where,
@@ -59,13 +62,13 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       _count: { _all: true },
     }),
     prisma.referringPractice.findMany({
-      where: { referrals: { some: { referralDate: { gte: start, lte: end } } } },
+      where: { referrals: { some: { referralDate: { gte: start, lte: end }, ...practiceFilter } } },
       select: { id: true, name: true, _count: { select: { referrals: true } } },
       orderBy: { referrals: { _count: "desc" } },
       take: 10,
     }),
     prisma.referringDoctor.findMany({
-      where: { referrals: { some: { referralDate: { gte: start, lte: end } } } },
+      where: { referrals: { some: { referralDate: { gte: start, lte: end }, ...practiceFilter } } },
       select: { id: true, name: true, specialty: true, practice: { select: { name: true } }, _count: { select: { referrals: true } } },
       orderBy: { referrals: { _count: "desc" } },
       take: 10,
@@ -77,7 +80,10 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       orderBy: { _count: { insuranceProvider: "desc" } },
       take: 8,
     }),
-    prisma.referral.count(),
+    prisma.referral.count({ where: practiceFilter }),
+    practiceId
+      ? prisma.referringPractice.findUnique({ where: { id: practiceId }, select: { name: true } }).then((p) => p?.name ?? null)
+      : Promise.resolve(null),
   ])
 
   // Monthly breakdown
@@ -134,6 +140,8 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       currentTo={searchParams.to}
       rangeFromStr={fromStr}
       rangeToStr={toStr}
+      practiceId={practiceId}
+      practiceName={practiceName}
     />
   )
 }

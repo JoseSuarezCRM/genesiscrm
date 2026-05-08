@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import Link from "next/link"
 import { ReferralStatus } from "@prisma/client"
-import { Users, CheckCircle2, Calendar, Clock, TrendingUp, BarChart2, ChevronRight } from "lucide-react"
+import { Users, CheckCircle2, Calendar, Clock, TrendingUp, BarChart2, ChevronRight, X } from "lucide-react"
 
 interface Props {
   kpis: {
@@ -28,6 +28,8 @@ interface Props {
   currentTo?: string
   rangeFromStr: string
   rangeToStr: string
+  practiceId?: string
+  practiceName?: string | null
 }
 
 const RANGE_OPTIONS = [
@@ -54,21 +56,25 @@ export default function ReportsClient({
   currentTo,
   rangeFromStr,
   rangeToStr,
+  practiceId,
+  practiceName,
 }: Props) {
   const router = useRouter()
   const [range, setRange] = useState(currentRange)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
 
+  const practiceParam = practiceId ? `&practiceId=${practiceId}` : ""
+
   function applyRange(r: string) {
     setRange(r)
     if (r === "custom") return
-    router.push(`/reports?range=${r}`)
+    router.push(`/reports?range=${r}${practiceParam}`)
   }
 
   function applyCustom() {
     if (!customFrom || !customTo) return
-    router.push(`/reports?from=${customFrom}&to=${customTo}&range=custom`)
+    router.push(`/reports?from=${customFrom}&to=${customTo}&range=custom${practiceParam}`)
   }
 
   const maxMonthly = Math.max(...monthlyData.map((m) => m.count), 1)
@@ -77,7 +83,7 @@ export default function ReportsClient({
   const maxProvider = Math.max(...providersData.map((p) => p.count), 1)
   const maxInsurance = Math.max(...insuranceData.map((i) => i.count), 1)
 
-  const referralsBase = `/referrals?from=${rangeFromStr}&to=${rangeToStr}`
+  const referralsBase = `/referrals?from=${rangeFromStr}&to=${rangeToStr}${practiceId ? `&practice=${practiceId}` : ""}`
 
   return (
     <div className="p-6 space-y-6">
@@ -86,6 +92,14 @@ export default function ReportsClient({
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
           <p className="text-sm text-slate-500">Click any metric to view the matching referrals</p>
+          {practiceName && (
+            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700 font-medium">
+              <span>Filtered by: {practiceName}</span>
+              <Link href={`/reports?range=${range}`} className="hover:text-blue-900 transition-colors" title="Remove filter">
+                <X className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {RANGE_OPTIONS.map((opt) => (

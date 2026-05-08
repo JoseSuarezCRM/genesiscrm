@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2 } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -510,19 +510,24 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
                   </span>
                 </button>
                 {p.phone && <span className="text-sm text-slate-500 hidden md:block shrink-0">{p.phone}</span>}
-                {isAdmin && (
-                  <div className="flex gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-500 hover:bg-blue-50" title="Merge into another practice" onClick={() => { setMergePracticeTargetId(""); setMergePracticeFor(p) }}>
-                      <Merge className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditPractice(p)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:bg-red-50" disabled={isPending} onClick={() => run(() => deletePractice(p.id))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                )}
+                <div className="flex gap-1 shrink-0">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50" title={`View reports for ${p.name}`} asChild>
+                    <Link href={`/reports?practiceId=${p.id}`}><BarChart2 className="h-3.5 w-3.5" /></Link>
+                  </Button>
+                  {isAdmin && (
+                    <>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-500 hover:bg-blue-50" title="Merge into another practice" onClick={() => { setMergePracticeTargetId(""); setMergePracticeFor(p) }}>
+                        <Merge className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditPractice(p)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:bg-red-50" disabled={isPending} onClick={() => run(() => deletePractice(p.id))}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Expanded panel */}
