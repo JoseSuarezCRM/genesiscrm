@@ -302,10 +302,8 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
             page={page}
             totalPages={totalPages}
             total={total}
-            baseParams={Object.fromEntries(
-              Object.entries(searchParams).flatMap(([k, v]) =>
-                v == null || k === "page" ? [] : Array.isArray(v) ? v.map((val) => [k, val]) : [[k, v]]
-              )
+            baseParams={Object.entries(searchParams).flatMap(([k, v]) =>
+              v == null || k === "page" ? [] : Array.isArray(v) ? v.map((val): [string, string] => [k, val]) : [[k, v] as [string, string]]
             )}
           />
         )}
