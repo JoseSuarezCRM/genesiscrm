@@ -4,7 +4,7 @@ import { STATUS_LABELS } from "@/lib/utils"
 import ReportsClient from "@/components/reports-client"
 
 interface PageProps {
-  searchParams: { from?: string; to?: string; range?: string; practiceId?: string }
+  searchParams: { from?: string; to?: string; range?: string; practiceId?: string; doctorId?: string }
 }
 
 const STATUS_COLORS: Record<ReferralStatus, string> = {
@@ -30,7 +30,7 @@ function resolveRange(range?: string, from?: string, to?: string): { start: Date
     case "last_3m": return { start: new Date(now.getFullYear(), now.getMonth() - 2, 1), end: now }
     case "last_year": return { start: new Date(now.getFullYear() - 1, now.getMonth(), 1), end: now }
     case "all": return { start: new Date(0), end: now }
-    default: return { start: new Date(now.getFullYear(), now.getMonth() - 5, 1), end: now } // last 6 months
+    default: return { start: new Date(now.getFullYear(), now.getMonth() - 5, 1), end: now }
   }
 }
 
@@ -40,8 +40,12 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const toStr = end.toISOString().slice(0, 10)
 
   const practiceId = searchParams.practiceId
-  const practiceFilter = practiceId ? { referringPracticeId: practiceId } : {}
-  const where = { referralDate: { gte: start, lte: end }, ...practiceFilter }
+  const doctorId = searchParams.doctorId
+  const entityFilter = {
+    ...(practiceId ? { referringPracticeId: practiceId } : {}),
+    ...(doctorId ? { referringDoctorId: doctorId } : {}),
+  }
+  const where = { referralDate: { gte: start, lte: end }, ...entityFilter }
 
   const [
     allInRange,
@@ -51,24 +55,23 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     topInsurance,
     totalEver,
     practiceName,
+    doctorName,
+    filterPractices,
+    filterDoctors,
   ] = await Promise.all([
     prisma.referral.findMany({
       where,
       select: { referralDate: true, status: true, referringPracticeId: true },
     }),
-    prisma.referral.groupBy({
-      by: ["status"],
-      where,
-      _count: { _all: true },
-    }),
+    prisma.referral.groupBy({ by: ["status"], where, _count: { _all: true } }),
     prisma.referringPractice.findMany({
-      where: { referrals: { some: { referralDate: { gte: start, lte: end }, ...practiceFilter } } },
+      where: { referrals: { some: { referralDate: { gte: start, lte: end }, ...entityFilter } } },
       select: { id: true, name: true, _count: { select: { referrals: true } } },
       orderBy: { referrals: { _count: "desc" } },
       take: 10,
     }),
     prisma.referringDoctor.findMany({
-      where: { referrals: { some: { referralDate: { gte: start, lte: end }, ...practiceFilter } } },
+      where: { referrals: { some: { referralDate: { gte: start, lte: end }, ...entityFilter } } },
       select: { id: true, name: true, specialty: true, practice: { select: { name: true } }, _count: { select: { referrals: true } } },
       orderBy: { referrals: { _count: "desc" } },
       take: 10,
@@ -80,10 +83,18 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       orderBy: { _count: { insuranceProvider: "desc" } },
       take: 8,
     }),
-    prisma.referral.count({ where: practiceFilter }),
+    prisma.referral.count({ where: entityFilter }),
     practiceId
       ? prisma.referringPractice.findUnique({ where: { id: practiceId }, select: { name: true } }).then((p) => p?.name ?? null)
       : Promise.resolve(null),
+    doctorId
+      ? prisma.referringDoctor.findUnique({ where: { id: doctorId }, select: { name: true, title: true } }).then((d) => d ? (d.title ? `${d.name}, ${d.title}` : d.name) : null)
+      : Promise.resolve(null),
+    prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.referringDoctor.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, title: true, practiceId: true },
+    }),
   ])
 
   // Monthly breakdown
@@ -97,7 +108,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     monthlyData.push({ label, year: ms.getFullYear(), month: ms.getMonth() + 1, count })
   }
 
-  // KPI stats
   const total = allInRange.length
   const completed = allInRange.filter((r) => r.status === "COMPLETED").length
   const scheduled = allInRange.filter((r) => r.status === "SCHEDULED").length
@@ -107,24 +117,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
 
   const statusCountMap = Object.fromEntries(statusCounts.map((s) => [s.status, s._count._all])) as Record<string, number>
 
-  const practicesData = topPractices.map((p) => ({
-    id: p.id,
-    name: p.name,
-    count: p._count.referrals,
-  }))
-
-  const providersData = topProviders.map((d) => ({
-    id: d.id,
-    name: d.name,
-    specialty: d.specialty,
-    practiceName: d.practice?.name ?? null,
-    count: d._count.referrals,
-  }))
-
-  const insuranceData = topInsurance
-    .filter((i) => i.insuranceProvider)
-    .map((i) => ({ name: i.insuranceProvider!, count: typeof i._count === "number" ? i._count : 0 }))
-
   return (
     <ReportsClient
       kpis={{ total, completed, scheduled, pending, conversionRate, scheduleRate, totalEver }}
@@ -132,9 +124,9 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       statusCountMap={statusCountMap}
       statusColors={STATUS_COLORS}
       statusLabels={STATUS_LABELS}
-      practicesData={practicesData}
-      providersData={providersData}
-      insuranceData={insuranceData}
+      practicesData={topPractices.map((p) => ({ id: p.id, name: p.name, count: p._count.referrals }))}
+      providersData={topProviders.map((d) => ({ id: d.id, name: d.name, specialty: d.specialty, practiceName: d.practice?.name ?? null, count: d._count.referrals }))}
+      insuranceData={topInsurance.filter((i) => i.insuranceProvider).map((i) => ({ name: i.insuranceProvider!, count: typeof i._count === "number" ? i._count : 0 }))}
       currentRange={searchParams.range ?? "last_6m"}
       currentFrom={searchParams.from}
       currentTo={searchParams.to}
@@ -142,6 +134,10 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       rangeToStr={toStr}
       practiceId={practiceId}
       practiceName={practiceName}
+      doctorId={doctorId}
+      doctorName={doctorName}
+      filterPractices={filterPractices}
+      filterDoctors={filterDoctors.map((d) => ({ id: d.id, label: d.title ? `${d.name}, ${d.title}` : d.name, practiceId: d.practiceId }))}
     />
   )
 }

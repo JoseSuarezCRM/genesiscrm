@@ -1,10 +1,10 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { ReferralStatus } from "@prisma/client"
-import { Users, CheckCircle2, Calendar, Clock, TrendingUp, BarChart2, ChevronRight, X } from "lucide-react"
+import { Users, CheckCircle2, Calendar, Clock, TrendingUp, BarChart2, ChevronRight, X, ChevronDown, Check, Building2, User } from "lucide-react"
 
 interface Props {
   kpis: {
@@ -30,6 +30,10 @@ interface Props {
   rangeToStr: string
   practiceId?: string
   practiceName?: string | null
+  doctorId?: string
+  doctorName?: string | null
+  filterPractices: { id: string; name: string }[]
+  filterDoctors: { id: string; label: string; practiceId: string }[]
 }
 
 const RANGE_OPTIONS = [
@@ -58,24 +62,48 @@ export default function ReportsClient({
   rangeToStr,
   practiceId,
   practiceName,
+  doctorId,
+  doctorName,
+  filterPractices,
+  filterDoctors,
 }: Props) {
   const router = useRouter()
   const [range, setRange] = useState(currentRange)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
 
-  const practiceParam = practiceId ? `&practiceId=${practiceId}` : ""
+  function buildUrl(r: string, from?: string, to?: string, pid?: string | null, did?: string | null) {
+    const p = new URLSearchParams()
+    if (from && to) { p.set("from", from); p.set("to", to); p.set("range", "custom") }
+    else p.set("range", r)
+    if (pid) p.set("practiceId", pid)
+    if (did) p.set("doctorId", did)
+    return `/reports?${p.toString()}`
+  }
 
   function applyRange(r: string) {
     setRange(r)
     if (r === "custom") return
-    router.push(`/reports?range=${r}${practiceParam}`)
+    router.push(buildUrl(r, undefined, undefined, practiceId, doctorId))
   }
 
   function applyCustom() {
     if (!customFrom || !customTo) return
-    router.push(`/reports?from=${customFrom}&to=${customTo}&range=custom${practiceParam}`)
+    router.push(buildUrl("custom", customFrom, customTo, practiceId, doctorId))
   }
+
+  function selectPractice(id: string | null) {
+    router.push(buildUrl(range === "custom" ? "custom" : range, customFrom || undefined, customTo || undefined, id, doctorId))
+  }
+
+  function selectDoctor(id: string | null) {
+    router.push(buildUrl(range === "custom" ? "custom" : range, customFrom || undefined, customTo || undefined, practiceId, id))
+  }
+
+  // When a practice is selected, scope the doctor dropdown to that practice's doctors
+  const visibleDoctors = practiceId
+    ? filterDoctors.filter((d) => d.practiceId === practiceId)
+    : filterDoctors
 
   const maxMonthly = Math.max(...monthlyData.map((m) => m.count), 1)
   const maxStatus = Math.max(...Object.values(statusCountMap), 1)
@@ -83,7 +111,7 @@ export default function ReportsClient({
   const maxProvider = Math.max(...providersData.map((p) => p.count), 1)
   const maxInsurance = Math.max(...insuranceData.map((i) => i.count), 1)
 
-  const referralsBase = `/referrals?from=${rangeFromStr}&to=${rangeToStr}${practiceId ? `&practice=${practiceId}` : ""}`
+  const referralsBase = `/referrals?from=${rangeFromStr}&to=${rangeToStr}${practiceId ? `&practice=${practiceId}` : ""}${doctorId ? `&doctor=${doctorId}` : ""}`
 
   return (
     <div className="p-6 space-y-6">
@@ -92,14 +120,6 @@ export default function ReportsClient({
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
           <p className="text-sm text-slate-500">Click any metric to view the matching referrals</p>
-          {practiceName && (
-            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700 font-medium">
-              <span>Filtered by: {practiceName}</span>
-              <Link href={`/reports?range=${range}`} className="hover:text-blue-900 transition-colors" title="Remove filter">
-                <X className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {RANGE_OPTIONS.map((opt) => (
@@ -128,6 +148,35 @@ export default function ReportsClient({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Entity filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SingleSelectDropdown
+          label="Practice"
+          icon={<Building2 className="h-3.5 w-3.5 shrink-0" />}
+          options={filterPractices.map((p) => ({ id: p.id, label: p.name }))}
+          value={practiceId ?? null}
+          selectedLabel={practiceName ?? null}
+          onSelect={selectPractice}
+        />
+        <SingleSelectDropdown
+          label="Provider"
+          icon={<User className="h-3.5 w-3.5 shrink-0" />}
+          options={visibleDoctors}
+          value={doctorId ?? null}
+          selectedLabel={doctorName ?? null}
+          onSelect={selectDoctor}
+          searchable={visibleDoctors.length > 8}
+        />
+        {(practiceId || doctorId) && (
+          <button
+            onClick={() => router.push(buildUrl(range === "custom" ? "custom" : range, customFrom || undefined, customTo || undefined, null, null))}
+            className="h-9 px-2 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* KPI Cards */}
@@ -304,6 +353,105 @@ export default function ReportsClient({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function SingleSelectDropdown({
+  label,
+  icon,
+  options,
+  value,
+  selectedLabel,
+  onSelect,
+  searchable,
+}: {
+  label: string
+  icon?: React.ReactNode
+  options: { id: string; label: string }[]
+  value: string | null
+  selectedLabel: string | null
+  onSelect: (id: string | null) => void
+  searchable?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const filtered = searchable && search.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setSearch("")
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handler)
+      if (searchable) setTimeout(() => inputRef.current?.focus(), 0)
+    }
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open, searchable])
+
+  const active = !!value
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all select-none ${
+          active
+            ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
+            : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
+        }`}
+      >
+        {icon}
+        <span className="max-w-[160px] truncate">{active ? selectedLabel : label}</span>
+        {active
+          ? <X className="h-3.5 w-3.5 opacity-60 shrink-0" onClick={(e) => { e.stopPropagation(); onSelect(null) }} />
+          : <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+        }
+      </button>
+
+      {open && (
+        <div className="absolute top-full mt-2 left-0 z-50 min-w-[200px] max-w-[280px] bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden">
+          {searchable && (
+            <div className="px-2 pt-2 pb-1">
+              <input
+                ref={inputRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search ${label.toLowerCase()}...`}
+                className="w-full h-8 px-2.5 text-sm bg-zinc-50 border border-zinc-200 rounded-lg outline-none focus:border-zinc-400 focus:bg-white transition-colors"
+              />
+            </div>
+          )}
+          <div className="max-h-64 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2.5 text-sm text-zinc-400">No results</div>
+            ) : (
+              filtered.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => { onSelect(opt.id === value ? null : opt.id); setOpen(false); setSearch("") }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors"
+                >
+                  <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
+                    opt.id === value ? "bg-zinc-900 border-zinc-900" : "border-zinc-300"
+                  }`}>
+                    {opt.id === value && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                  </span>
+                  <span className="text-zinc-800 text-left truncate">{opt.label}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
