@@ -4,7 +4,18 @@ import { STATUS_LABELS } from "@/lib/utils"
 import ReportsClient from "@/components/reports-client"
 
 interface PageProps {
-  searchParams: { from?: string; to?: string; range?: string; practiceId?: string; doctorId?: string }
+  searchParams: {
+    from?: string
+    to?: string
+    range?: string
+    practiceId?: string | string[]
+    doctorId?: string | string[]
+  }
+}
+
+function toArray(val: string | string[] | undefined): string[] {
+  if (!val) return []
+  return Array.isArray(val) ? val : [val]
 }
 
 const STATUS_COLORS: Record<ReferralStatus, string> = {
@@ -39,11 +50,12 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const fromStr = start.toISOString().slice(0, 10)
   const toStr = end.toISOString().slice(0, 10)
 
-  const practiceId = searchParams.practiceId
-  const doctorId = searchParams.doctorId
+  const practiceIds = toArray(searchParams.practiceId)
+  const doctorIds = toArray(searchParams.doctorId)
+
   const entityFilter = {
-    ...(practiceId ? { referringPracticeId: practiceId } : {}),
-    ...(doctorId ? { referringDoctorId: doctorId } : {}),
+    ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
+    ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
   }
   const where = { referralDate: { gte: start, lte: end }, ...entityFilter }
 
@@ -54,8 +66,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     topProviders,
     topInsurance,
     totalEver,
-    practiceName,
-    doctorName,
     filterPractices,
     filterDoctors,
   ] = await Promise.all([
@@ -83,13 +93,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       orderBy: { _count: { insuranceProvider: "desc" } },
       take: 8,
     }),
-    prisma.referral.count({ where: entityFilter }),
-    practiceId
-      ? prisma.referringPractice.findUnique({ where: { id: practiceId }, select: { name: true } }).then((p) => p?.name ?? null)
-      : Promise.resolve(null),
-    doctorId
-      ? prisma.referringDoctor.findUnique({ where: { id: doctorId }, select: { name: true, title: true } }).then((d) => d ? (d.title ? `${d.name}, ${d.title}` : d.name) : null)
-      : Promise.resolve(null),
+    prisma.referral.count({ where: Object.keys(entityFilter).length > 0 ? entityFilter : undefined }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.referringDoctor.findMany({
       orderBy: { name: "asc" },
@@ -132,10 +136,8 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       currentTo={searchParams.to}
       rangeFromStr={fromStr}
       rangeToStr={toStr}
-      practiceId={practiceId}
-      practiceName={practiceName}
-      doctorId={doctorId}
-      doctorName={doctorName}
+      practiceIds={practiceIds}
+      doctorIds={doctorIds}
       filterPractices={filterPractices}
       filterDoctors={filterDoctors.map((d) => ({ id: d.id, label: d.title ? `${d.name}, ${d.title}` : d.name, practiceId: d.practiceId }))}
     />
