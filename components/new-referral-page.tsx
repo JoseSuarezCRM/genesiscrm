@@ -34,9 +34,10 @@ interface Pipeline { id: string; name: string; color: string }
 interface NewReferralPageProps {
   practices: Practice[]
   pipelines?: Pipeline[]
+  defaultPipelineId?: string
 }
 
-export default function NewReferralPage({ practices, pipelines = [] }: NewReferralPageProps) {
+export default function NewReferralPage({ practices, pipelines = [], defaultPipelineId }: NewReferralPageProps) {
   const [mode, setMode] = useState<"single" | "batch">("single")
   const [extractedData, setExtractedData] = useState<ExtractedReferralData | null>(null)
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null)
@@ -79,6 +80,7 @@ export default function NewReferralPage({ practices, pipelines = [] }: NewReferr
             <ReferralForm
               practices={practices}
               pipelines={pipelines}
+              defaultValues={defaultPipelineId ? { pipelineId: defaultPipelineId } : undefined}
               prefillData={extractedData ?? undefined}
               pendingFile={pendingFile}
             />

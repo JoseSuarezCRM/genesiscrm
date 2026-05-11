@@ -201,7 +201,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
             </a>
           </Button>
           <Button asChild>
-            <Link href="/referrals/new">
+            <Link href={`/referrals/new${pipelineId ? `?pipeline=${pipelineId}` : ""}`}>
               <Plus className="h-4 w-4 mr-2" />
               New Referral
             </Link>

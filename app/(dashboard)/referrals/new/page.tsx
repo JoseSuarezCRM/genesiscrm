@@ -3,7 +3,7 @@ import NewReferralPage from "@/components/new-referral-page"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 
-export default async function NewReferralServerPage() {
+export default async function NewReferralServerPage({ searchParams }: { searchParams: { pipeline?: string } }) {
   const [practices, pipelines] = await Promise.all([
     prisma.referringPractice.findMany({
       orderBy: { name: "asc" },
@@ -37,7 +37,11 @@ export default async function NewReferralServerPage() {
         </p>
       </div>
 
-      <NewReferralPage practices={practices} pipelines={pipelines} />
+      <NewReferralPage
+        practices={practices}
+        pipelines={pipelines}
+        defaultPipelineId={searchParams.pipeline}
+      />
     </div>
   )
 }
