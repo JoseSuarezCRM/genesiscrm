@@ -43,6 +43,7 @@ const ReferralSchema = z.object({
   insuranceGroup: z.string().optional(),
   authStatus: z.string().optional(),
   notes: z.string().optional(),
+  pipelineId: z.string().optional(),
 })
 
 function parseDate(val: string | undefined): Date | null {
@@ -122,6 +123,7 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
       insuranceGroup: d.insuranceGroup || null,
       authStatus: d.authStatus || null,
       notes: d.notes || null,
+      pipelineId: d.pipelineId || null,
       createdById: session.user.id,
     },
   })
@@ -200,6 +202,7 @@ export async function updateReferral(id: string, data: unknown) {
       insuranceGroup: d.insuranceGroup || null,
       authStatus: d.authStatus || null,
       notes: d.notes || null,
+      pipelineId: d.pipelineId || null,
     },
   })
 

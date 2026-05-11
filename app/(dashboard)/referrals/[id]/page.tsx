@@ -43,21 +43,24 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
 
   if (!referral) notFound()
 
-  const [allTags, users] = await Promise.all([
+  const [allTags, users, practices, pipelines] = await Promise.all([
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
-  ])
-
-  const practices = await prisma.referringPractice.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      locations: { orderBy: { name: "asc" } },
-      doctors: {
-        orderBy: { name: "asc" },
-        include: { locations: { select: { locationId: true } } },
+    prisma.referringPractice.findMany({
+      orderBy: { name: "asc" },
+      include: {
+        locations: { orderBy: { name: "asc" } },
+        doctors: {
+          orderBy: { name: "asc" },
+          include: { locations: { select: { locationId: true } } },
+        },
       },
-    },
-  })
+    }),
+    prisma.pipeline.findMany({
+      where: { isActive: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    }),
+  ])
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
@@ -88,7 +91,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             {(referral.patientPhone || referral.patientEmail) && (
               <OutreachDialog referral={referral} />
             )}
-            <EditReferralDialog referral={referral} practices={practices} />
+            <EditReferralDialog referral={referral} practices={practices} pipelines={pipelines} />
             <form
               action={async () => {
                 "use server"

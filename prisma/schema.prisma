@@ -232,6 +232,16 @@ model DoctorLocation {
   @@id([doctorId, locationId])
 }
 
+model Pipeline {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  color     String     @default("#3b82f6")
+  order     Int        @default(0)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  referrals Referral[]
+}
+
 model Referral {
   id                  String             @id @default(cuid())
   // Patient info
@@ -262,6 +272,9 @@ model Referral {
   insuranceMemberId   String?
   insuranceGroup      String?
   authStatus          String?
+  // Pipeline
+  pipelineId          String?
+  pipeline            Pipeline?          @relation(fields: [pipelineId], references: [id])
   // Notes & meta
   notes               String?
   createdById         String?

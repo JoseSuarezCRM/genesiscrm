@@ -60,6 +60,7 @@ const adminItems = [
   { href: "/settings/duplicates", label: "Duplicate Detection",icon: CopyX },
   { href: "/settings/reconcile",  label: "Appt Reconciliation",icon: RefreshCw },
   { href: "/settings/org-rules",  label: "Org Name Rules",     icon: Building2 },
+  { href: "/settings/pipelines",  label: "Pipelines",          icon: LayoutDashboard },
 ]
 
 interface SidebarProps {

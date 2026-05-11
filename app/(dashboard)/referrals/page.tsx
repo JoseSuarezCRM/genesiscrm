@@ -20,6 +20,7 @@ interface PageProps {
     doctor?: string | string[]
     page?: string
     incomplete?: string
+    pipeline?: string
   }
 }
 
@@ -43,8 +44,10 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
   const doctorIds = toArray(searchParams.doctor)
   const search = searchParams.search?.trim()
   const incompleteOnly = searchParams.incomplete === "1"
+  const pipelineId = searchParams.pipeline ?? null
 
   const where = {
+    ...(pipelineId ? { pipelineId } : {}),
     ...(incompleteOnly
       ? {
           OR: [
@@ -83,7 +86,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       : {}),
   }
 
-  const [referrals, total, practices, allTags, incompleteCount, allDoctors] = await Promise.all([
+  const [referrals, total, practices, allTags, incompleteCount, allDoctors, pipelines] = await Promise.all([
     prisma.referral.findMany({
       where,
       take: PAGE_SIZE,
@@ -105,6 +108,11 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy: { name: "asc" },
       select: { id: true, name: true, title: true },
     }),
+    prisma.pipeline.findMany({
+      where: { isActive: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      include: { _count: { select: { referrals: true } } },
+    }),
   ])
 
   return {
@@ -113,6 +121,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     practices,
     allTags,
     allDoctors,
+    pipelines,
     page,
     incompleteCount,
     incompleteOnly,
@@ -121,6 +130,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     tagIds,
     tagMode,
     doctorIds,
+    pipelineId,
   }
 }
 
@@ -131,6 +141,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     practices,
     allTags,
     allDoctors,
+    pipelines,
     page,
     incompleteCount,
     incompleteOnly,
@@ -139,6 +150,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     tagIds,
     tagMode,
     doctorIds,
+    pipelineId,
   } = await getReferrals(searchParams)
 
   const listUrl = `/referrals?${new URLSearchParams(
@@ -156,8 +168,20 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
   practiceIds.forEach((id) => exportParams.append("practice", id))
   doctorIds.forEach((id) => exportParams.append("doctor", id))
   tagIds.forEach((id) => exportParams.append("tag", id))
+  if (pipelineId) exportParams.set("pipeline", pipelineId)
   if (searchParams.from) exportParams.set("from", searchParams.from)
   if (searchParams.to) exportParams.set("to", searchParams.to)
+
+  // Build a tab href that resets page but keeps other filters
+  function pipelineTabHref(id: string | null) {
+    const p = new URLSearchParams()
+    statuses.forEach((s) => p.append("status", s))
+    practiceIds.forEach((pid) => p.append("practice", pid))
+    doctorIds.forEach((did) => p.append("doctor", did))
+    tagIds.forEach((tid) => p.append("tag", tid))
+    if (id) p.set("pipeline", id)
+    return `/referrals?${p.toString()}`
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -184,6 +208,42 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
           </Button>
         </div>
       </div>
+
+      {/* Pipeline tabs */}
+      {pipelines.length > 0 && (
+        <div className="flex gap-1 border-b border-zinc-200">
+          <Link
+            href={pipelineTabHref(null)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              !pipelineId
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+            }`}
+          >
+            All
+          </Link>
+          {pipelines.map((p) => (
+            <Link
+              key={p.id}
+              href={pipelineTabHref(p.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                pipelineId === p.id
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+              }`}
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: p.color }}
+              />
+              {p.name}
+              <span className="ml-1 text-xs text-slate-400">
+                {(p as any)._count.referrals}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm">

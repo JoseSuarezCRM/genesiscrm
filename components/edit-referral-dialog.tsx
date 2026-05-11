@@ -18,12 +18,19 @@ type PracticeWithRelations = ReferringPractice & {
   doctors: (ReferringDoctor & { locations: Pick<DoctorLocation, "locationId">[] })[]
 }
 
+interface Pipeline {
+  id: string
+  name: string
+  color: string
+}
+
 interface Props {
   referral: Referral
   practices: PracticeWithRelations[]
+  pipelines?: Pipeline[]
 }
 
-export default function EditReferralDialog({ referral, practices }: Props) {
+export default function EditReferralDialog({ referral, practices, pipelines = [] }: Props) {
   const [open, setOpen] = useState(false)
 
   const defaultValues = {
@@ -50,6 +57,7 @@ export default function EditReferralDialog({ referral, practices }: Props) {
     insuranceGroup: referral.insuranceGroup ?? "",
     authStatus: referral.authStatus ?? "",
     notes: referral.notes ?? "",
+    pipelineId: (referral as any).pipelineId ?? "",
   }
 
   return (
@@ -66,6 +74,7 @@ export default function EditReferralDialog({ referral, practices }: Props) {
         </DialogHeader>
         <ReferralForm
           practices={practices}
+          pipelines={pipelines}
           defaultValues={defaultValues}
           referralId={referral.id}
           onSuccess={() => setOpen(false)}

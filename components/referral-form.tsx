@@ -54,6 +54,12 @@ interface Practice {
   doctors: Doctor[]
 }
 
+interface Pipeline {
+  id: string
+  name: string
+  color: string
+}
+
 // ─── Form schema ──────────────────────────────────────────────────────────────
 
 const schema = z.object({
@@ -79,12 +85,14 @@ const schema = z.object({
   insuranceGroup: z.string().optional(),
   authStatus: z.string().optional(),
   notes: z.string().optional(),
+  pipelineId: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
 
 interface ReferralFormProps {
   practices: Practice[]
+  pipelines?: Pipeline[]
   defaultValues?: Partial<FormValues>
   referralId?: string
   prefillData?: ExtractedReferralData
@@ -152,7 +160,7 @@ function parseDoctorTitle(fullName: string): { name: string; title?: string } {
   return { name, title }
 }
 
-export default function ReferralForm({ practices, defaultValues, referralId, prefillData, pendingFile, onSuccess, onCancel }: ReferralFormProps) {
+export default function ReferralForm({ practices, pipelines = [], defaultValues, referralId, prefillData, pendingFile, onSuccess, onCancel }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
@@ -741,6 +749,26 @@ export default function ReferralForm({ practices, defaultValues, referralId, pre
         <section>
           <SectionTitle>Status & Dates</SectionTitle>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {pipelines.length > 0 && (
+              <Field label="Pipeline" error={errors.pipelineId?.message}>
+                <Select
+                  value={watch("pipelineId") ?? ""}
+                  onValueChange={v => setValue("pipelineId", v)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select pipeline" /></SelectTrigger>
+                  <SelectContent>
+                    {pipelines.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: p.color }} />
+                          {p.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
             <Field label="Status *" error={errors.status?.message}>
               <Select value={statusValue} onValueChange={(v) => setValue("status", v as ReferralStatus)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>

@@ -4,16 +4,22 @@ import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 
 export default async function NewReferralServerPage() {
-  const practices = await prisma.referringPractice.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      locations: { orderBy: { name: "asc" } },
-      doctors: {
-        orderBy: { name: "asc" },
-        include: { locations: { select: { locationId: true } } },
+  const [practices, pipelines] = await Promise.all([
+    prisma.referringPractice.findMany({
+      orderBy: { name: "asc" },
+      include: {
+        locations: { orderBy: { name: "asc" } },
+        doctors: {
+          orderBy: { name: "asc" },
+          include: { locations: { select: { locationId: true } } },
+        },
       },
-    },
-  })
+    }),
+    prisma.pipeline.findMany({
+      where: { isActive: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    }),
+  ])
 
   return (
     <div className="p-6 max-w-4xl">
@@ -31,7 +37,7 @@ export default async function NewReferralServerPage() {
         </p>
       </div>
 
-      <NewReferralPage practices={practices} />
+      <NewReferralPage practices={practices} pipelines={pipelines} />
     </div>
   )
 }

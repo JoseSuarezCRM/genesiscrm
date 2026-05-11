@@ -29,11 +29,14 @@ interface Practice {
   doctors: Doctor[]
 }
 
+interface Pipeline { id: string; name: string; color: string }
+
 interface NewReferralPageProps {
   practices: Practice[]
+  pipelines?: Pipeline[]
 }
 
-export default function NewReferralPage({ practices }: NewReferralPageProps) {
+export default function NewReferralPage({ practices, pipelines = [] }: NewReferralPageProps) {
   const [mode, setMode] = useState<"single" | "batch">("single")
   const [extractedData, setExtractedData] = useState<ExtractedReferralData | null>(null)
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null)
@@ -75,6 +78,7 @@ export default function NewReferralPage({ practices }: NewReferralPageProps) {
           <div className="bg-white border rounded-lg p-6">
             <ReferralForm
               practices={practices}
+              pipelines={pipelines}
               prefillData={extractedData ?? undefined}
               pendingFile={pendingFile}
             />
