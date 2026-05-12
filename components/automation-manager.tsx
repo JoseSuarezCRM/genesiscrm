@@ -33,6 +33,7 @@ interface User { id: string; name: string | null; email: string }
 interface Tag { id: string; name: string; color: string }
 interface Practice { id: string; name: string }
 interface Location { id: string; name: string }
+interface Pipeline { id: string; name: string; color: string }
 
 interface Props {
   automations: Automation[]
@@ -40,6 +41,7 @@ interface Props {
   tags: Tag[]
   practices: Practice[]
   locations: Location[]
+  pipelines?: Pipeline[]
   currentUserId: string
 }
 
@@ -61,6 +63,7 @@ const TRIGGER_LABELS: Record<string, string> = {
   DOCUMENT_UPLOADED: "Document uploaded to referral",
   AUTH_STATUS_CHANGED: "Auth status changed",
   EMBED_REFERRAL_RECEIVED: "Referral received via embed form",
+  PIPELINE_CHANGED: "Referral moved to pipeline",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -89,6 +92,7 @@ const TRIGGER_COLORS: Record<string, string> = {
   DOCUMENT_UPLOADED: "bg-sky-100 text-sky-700",
   AUTH_STATUS_CHANGED: "bg-yellow-100 text-yellow-700",
   EMBED_REFERRAL_RECEIVED: "bg-emerald-100 text-emerald-700",
+  PIPELINE_CHANGED: "bg-violet-100 text-violet-700",
 }
 
 const ACTION_COLORS: Record<string, string> = {
@@ -136,7 +140,7 @@ const REFERRAL_TRIGGERS = new Set([
   "REFERRAL_CREATED", "REFERRAL_STATUS_CHANGED", "CALL_ATTEMPTS_REACHED",
   "REFERRAL_ASSIGNED", "REFERRAL_NO_ACTIVITY", "APPOINTMENT_UPCOMING",
   "APPOINTMENT_OVERDUE", "REFERRAL_STALE", "TAG_ADDED", "DOCUMENT_UPLOADED",
-  "AUTH_STATUS_CHANGED", "EMBED_REFERRAL_RECEIVED",
+  "AUTH_STATUS_CHANGED", "EMBED_REFERRAL_RECEIVED", "PIPELINE_CHANGED",
 ])
 
 // ─── Multi-criteria condition builder ────────────────────────────────────────
@@ -283,6 +287,7 @@ function emptyTriggerConfig(type: string): Record<string, unknown> {
   if (type === "REFERRAL_ASSIGNED") return { assignedToId: "", conditions: [] }
   if (type === "TAG_ADDED") return { tagId: "", conditions: [] }
   if (type === "AUTH_STATUS_CHANGED") return { toAuthStatus: "", conditions: [] }
+  if (type === "PIPELINE_CHANGED") return { fromPipelineId: "", toPipelineId: "", conditions: [] }
   return { conditions: [] } // REFERRAL_CREATED, DOCUMENT_UPLOADED, EMBED_REFERRAL_RECEIVED
 }
 
@@ -300,12 +305,12 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
 // ─── Trigger config form ──────────────────────────────────────────────────────
 
 function TriggerConfigFields({
-  type, config, onChange, users, tags, practices, locations,
+  type, config, onChange, users, tags, practices, locations, pipelines,
 }: {
   type: string
   config: Record<string, unknown>
   onChange: (cfg: Record<string, unknown>) => void
-  users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
+  users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines: Pipeline[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
   const conditions = (config.conditions as Condition[]) ?? []
@@ -461,6 +466,31 @@ function TriggerConfigFields({
             <option value="">Any tag</option>
             {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
+        </div>
+      )
+    }
+
+    if (type === "PIPELINE_CHANGED") {
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">From pipeline (optional)</label>
+            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.fromPipelineId as string) || ""} onChange={e => set("fromPipelineId", e.target.value || undefined)}>
+              <option value="">Any</option>
+              {pipelines.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">To pipeline (optional)</label>
+            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.toPipelineId as string) || ""} onChange={e => set("toPipelineId", e.target.value || undefined)}>
+              <option value="">Any</option>
+              {pipelines.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       )
     }
@@ -828,12 +858,12 @@ function ActionConfigFields({
 // ─── Automation form dialog ───────────────────────────────────────────────────
 
 function AutomationDialog({
-  open, onClose, editing, users, tags, practices, locations,
+  open, onClose, editing, users, tags, practices, locations, pipelines,
 }: {
   open: boolean
   onClose: (refresh?: boolean) => void
   editing: Automation | null
-  users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
+  users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines: Pipeline[]
 }) {
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState(editing?.name ?? "")
@@ -901,7 +931,7 @@ function AutomationDialog({
             </select>
             <TriggerConfigFields
               type={triggerType} config={triggerConfig} onChange={setTriggerConfig}
-              users={users} tags={tags} practices={practices} locations={locations}
+              users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines}
             />
           </div>
 
@@ -1031,7 +1061,7 @@ function AutomationRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AutomationManager({ automations: initial, users, tags, practices, locations }: Props) {
+export default function AutomationManager({ automations: initial, users, tags, practices, locations, pipelines = [] }: Props) {
   const router = useRouter()
   const [automations, setAutomations] = useState(initial)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -1110,7 +1140,7 @@ export default function AutomationManager({ automations: initial, users, tags, p
         </div>
       )}
 
-      <AutomationDialog key={editing?.id ?? "new"} open={dialogOpen} onClose={handleClose} editing={editing} users={users} tags={tags} practices={practices} locations={locations} />
+      <AutomationDialog key={editing?.id ?? "new"} open={dialogOpen} onClose={handleClose} editing={editing} users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines} />
     </div>
   )
 }

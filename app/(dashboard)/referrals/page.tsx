@@ -3,10 +3,9 @@ import { ReferralStatus } from "@prisma/client"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/status-badge"
-import { formatDate, formatPhone } from "@/lib/utils"
-import { Plus, Download, Phone } from "lucide-react"
+import { Plus, Download } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
+import ReferralTable from "@/components/referral-table"
 
 interface PageProps {
   searchParams: {
@@ -271,99 +270,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
 
       {/* Table */}
       <div className="bg-white border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-                <th className="text-left px-6 py-3 font-semibold">Patient</th>
-                <th className="text-left px-6 py-3 font-semibold">Phone</th>
-                <th className="text-left px-6 py-3 font-semibold">Referring Practice</th>
-                <th className="text-left px-6 py-3 font-semibold">Tags</th>
-                <th className="text-left px-6 py-3 font-semibold">Referral Date</th>
-                <th className="text-left px-6 py-3 font-semibold">Appt Date</th>
-                <th className="text-left px-6 py-3 font-semibold">Calls</th>
-                <th className="text-left px-6 py-3 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {referrals.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-6 py-12 text-center text-slate-400"
-                  >
-                    No referrals found.{" "}
-                    <Link
-                      href="/referrals/new"
-                      className="text-blue-600 hover:underline"
-                    >
-                      Create one
-                    </Link>
-                    .
-                  </td>
-                </tr>
-              ) : (
-                referrals.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b hover:bg-slate-50 transition-colors"
-                  >
-                    <td className="px-6 py-3">
-                      <Link
-                        href={`/referrals/${r.id}?from=${encodeURIComponent(listUrl)}`}
-                        className="font-medium text-slate-900 hover:text-blue-600"
-                      >
-                        {r.patientFirstName} {r.patientLastName}
-                      </Link>
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {formatPhone(r.patientPhone)}
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {r.referringPractice?.name ?? "—"}
-                    </td>
-                    <td className="px-6 py-3">
-                      {r.tags.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {r.tags.map(({ tag }) => (
-                            <span
-                              key={tag.id}
-                              className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-white"
-                              style={{ backgroundColor: tag.color }}
-                            >
-                              {tag.name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {formatDate(r.referralDate)}
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {formatDate(r.appointmentDate)}
-                    </td>
-                    <td className="px-6 py-3">
-                      {r._count.callAttempts > 0 ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600">
-                          <Phone className="h-3 w-3" />
-                          {r._count.callAttempts}/3
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-3">
-                      <StatusBadge status={r.status} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <ReferralTable referrals={referrals} pipelines={pipelines} listUrl={listUrl} />
 
         {/* Pagination */}
         {totalPages > 1 && (

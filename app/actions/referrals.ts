@@ -16,6 +16,7 @@ import {
   runTrigger_ReferralAssigned,
   runTrigger_AuthStatusChanged,
   runTrigger_LocationReferralCount,
+  runTrigger_PipelineChanged,
 } from "@/lib/automation-engine"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
@@ -287,6 +288,38 @@ export async function deleteReferral(id: string) {
   revalidatePath("/referrals")
   revalidatePath("/")
   redirect("/referrals")
+}
+
+export async function moveReferralsToPipeline(ids: string[], pipelineId: string | null) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  const prev = await prisma.referral.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, pipelineId: true },
+  })
+
+  await prisma.referral.updateMany({
+    where: { id: { in: ids } },
+    data: { pipelineId: pipelineId || null },
+  })
+
+  await Promise.allSettled(
+    prev.map(async (r) => {
+      await createAuditLog({
+        userId: session.user.id,
+        action: AuditAction.REFERRAL_UPDATE,
+        resourceType: "Referral",
+        resourceId: r.id,
+        metadata: { field: "pipelineId", from: r.pipelineId, to: pipelineId },
+      })
+      await runTrigger_PipelineChanged(r.id, r.pipelineId, pipelineId, session.user.id)
+    })
+  )
+
+  revalidatePath("/referrals")
+  revalidatePath("/")
+  return { success: true, count: ids.length }
 }
 
 export async function assignReferral(referralId: string, assignedToId: string | null) {

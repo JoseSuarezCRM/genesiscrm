@@ -1,0 +1,1 @@
+ALTER TYPE "AutomationTrigger" ADD VALUE 'PIPELINE_CHANGED';

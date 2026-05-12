@@ -573,6 +573,36 @@ export async function runTrigger_AuthStatusChanged(referralId: string, _fromAuth
   }
 }
 
+export async function runTrigger_PipelineChanged(referralId: string, fromPipelineId: string | null, toPipelineId: string | null, triggeredByUserId?: string) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "PIPELINE_CHANGED" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const referral = await fetchReferralForEngine(referralId)
+  if (!referral) return
+
+  const vars: TemplateVars = {
+    provider_name: referral.referringDoctor?.name ?? referral.referringDoctorName ?? undefined,
+    practice_name: referral.referringPractice?.name ?? undefined,
+    patient_name: `${referral.patientFirstName} ${referral.patientLastName}`,
+    patient_first_name: referral.patientFirstName,
+    referral_url: buildReferralUrl(referralId),
+  }
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    if (cfg.toPipelineId && cfg.toPipelineId !== toPipelineId) continue
+    if (cfg.fromPipelineId && cfg.fromPipelineId !== fromPipelineId) continue
+    if (!checkConditions(referral, cfg)) continue
+
+    await executeAction(auto, referralId, vars, triggeredByUserId)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Pipeline changed ${fromPipelineId ?? "none"} → ${toPipelineId ?? "none"}` },
+    })
+  }
+}
+
 // ─── Count triggers ───────────────────────────────────────────────────────────
 
 export async function runTrigger_ProviderReferralCount(providerId: string, triggeredByUserId?: string) {

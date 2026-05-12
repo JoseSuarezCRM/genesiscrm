@@ -5,7 +5,7 @@ import AutomationManager from "@/components/automation-manager"
 export default async function AutomationsPage() {
   const session = await auth()
 
-  const [automations, users, tags, practices, locations] = await Promise.all([
+  const [automations, users, tags, practices, locations, pipelines] = await Promise.all([
     prisma.automation.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -17,6 +17,7 @@ export default async function AutomationsPage() {
     prisma.tag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.practiceLocation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    (prisma as any).pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, color: true } }),
   ])
 
   return (
@@ -31,6 +32,7 @@ export default async function AutomationsPage() {
         tags={tags}
         practices={practices}
         locations={locations}
+        pipelines={pipelines}
         currentUserId={session!.user.id}
       />
     </div>

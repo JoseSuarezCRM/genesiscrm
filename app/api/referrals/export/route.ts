@@ -24,11 +24,13 @@ export async function GET(req: NextRequest) {
   const practiceIds = searchParams.getAll("practice")
   const doctorIds = searchParams.getAll("doctor")
   const tagIds = searchParams.getAll("tag")
+  const pipelineId = searchParams.get("pipeline")
   const from = searchParams.get("from")
   const to = searchParams.get("to")
 
-  const referrals = await prisma.referral.findMany({
+  const referrals = await (prisma as any).referral.findMany({
     where: {
+      ...(pipelineId ? { pipelineId } : {}),
       ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
       ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
       ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
@@ -44,6 +46,7 @@ export async function GET(req: NextRequest) {
     },
     include: {
       referringPractice: true,
+      pipeline: { select: { name: true } },
       createdBy: { select: { name: true, email: true } },
     },
     orderBy: { referralDate: "desc" },
@@ -57,6 +60,7 @@ export async function GET(req: NextRequest) {
     "Date of Birth",
     "Referring Practice",
     "Referring Doctor",
+    "Pipeline",
     "Status",
     "Referral Date",
     "Appointment Date",
@@ -86,6 +90,7 @@ export async function GET(req: NextRequest) {
     r.patientDob ? new Date(r.patientDob).toLocaleDateString() : "",
     r.referringPractice?.name,
     r.referringDoctorName,
+    r.pipeline?.name,
     STATUS_LABELS[r.status],
     new Date(r.referralDate).toLocaleDateString(),
     r.appointmentDate ? new Date(r.appointmentDate).toLocaleDateString() : "",

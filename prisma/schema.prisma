@@ -88,6 +88,7 @@ enum AutomationTrigger {
   AUTH_STATUS_CHANGED
   LOCATION_REFERRAL_COUNT
   EMBED_REFERRAL_RECEIVED
+  PIPELINE_CHANGED
 }
 
 enum AutomationAction {

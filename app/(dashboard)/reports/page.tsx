@@ -10,6 +10,7 @@ interface PageProps {
     range?: string
     practiceId?: string | string[]
     doctorId?: string | string[]
+    pipelineId?: string | string[]
   }
 }
 
@@ -52,10 +53,12 @@ export default async function ReportsPage({ searchParams }: PageProps) {
 
   const practiceIds = toArray(searchParams.practiceId)
   const doctorIds = toArray(searchParams.doctorId)
+  const pipelineIds = toArray(searchParams.pipelineId)
 
   const entityFilter = {
     ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
     ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
+    ...(pipelineIds.length > 0 ? { pipelineId: { in: pipelineIds } } : {}),
   }
   const where = { referralDate: { gte: start, lte: end }, ...entityFilter }
 
@@ -68,6 +71,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     totalEver,
     filterPractices,
     filterDoctors,
+    filterPipelines,
   ] = await Promise.all([
     prisma.referral.findMany({
       where,
@@ -98,6 +102,11 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     prisma.referringDoctor.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, title: true, practiceId: true },
+    }),
+    (prisma as any).pipeline.findMany({
+      where: { isActive: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true, color: true },
     }),
   ])
 
@@ -138,8 +147,10 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       rangeToStr={toStr}
       practiceIds={practiceIds}
       doctorIds={doctorIds}
+      pipelineIds={pipelineIds}
       filterPractices={filterPractices}
       filterDoctors={filterDoctors.map((d) => ({ id: d.id, label: d.title ? `${d.name}, ${d.title}` : d.name, practiceId: d.practiceId }))}
+      filterPipelines={(filterPipelines as { id: string; name: string; color: string }[]) ?? []}
     />
   )
 }

@@ -30,8 +30,10 @@ interface Props {
   rangeToStr: string
   practiceIds: string[]
   doctorIds: string[]
+  pipelineIds: string[]
   filterPractices: { id: string; name: string }[]
   filterDoctors: { id: string; label: string; practiceId: string }[]
+  filterPipelines: { id: string; name: string; color: string }[]
 }
 
 const RANGE_OPTIONS = [
@@ -60,20 +62,23 @@ export default function ReportsClient({
   rangeToStr,
   practiceIds,
   doctorIds,
+  pipelineIds,
   filterPractices,
   filterDoctors,
+  filterPipelines,
 }: Props) {
   const router = useRouter()
   const [range, setRange] = useState(currentRange)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
 
-  function buildUrl(r: string, from?: string, to?: string, pids?: string[], dids?: string[]) {
+  function buildUrl(r: string, from?: string, to?: string, pids?: string[], dids?: string[], plids?: string[]) {
     const p = new URLSearchParams()
     if (from && to) { p.set("from", from); p.set("to", to); p.set("range", "custom") }
     else p.set("range", r)
     pids?.forEach((id) => p.append("practiceId", id))
     dids?.forEach((id) => p.append("doctorId", id))
+    plids?.forEach((id) => p.append("pipelineId", id))
     return `/reports?${p.toString()}`
   }
 
@@ -82,30 +87,39 @@ export default function ReportsClient({
   function applyRange(r: string) {
     setRange(r)
     if (r === "custom") return
-    router.push(buildUrl(r, undefined, undefined, practiceIds, doctorIds))
+    router.push(buildUrl(r, undefined, undefined, practiceIds, doctorIds, pipelineIds))
   }
 
   function applyCustom() {
     if (!customFrom || !customTo) return
-    router.push(buildUrl("custom", customFrom, customTo, practiceIds, doctorIds))
+    router.push(buildUrl("custom", customFrom, customTo, practiceIds, doctorIds, pipelineIds))
   }
 
   function togglePractice(id: string) {
     const next = practiceIds.includes(id) ? practiceIds.filter((x) => x !== id) : [...practiceIds, id]
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, next, doctorIds))
+    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, next, doctorIds, pipelineIds))
   }
 
   function toggleDoctor(id: string) {
     const next = doctorIds.includes(id) ? doctorIds.filter((x) => x !== id) : [...doctorIds, id]
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, next))
+    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, next, pipelineIds))
+  }
+
+  function togglePipeline(id: string) {
+    const next = pipelineIds.includes(id) ? pipelineIds.filter((x) => x !== id) : [...pipelineIds, id]
+    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, doctorIds, next))
   }
 
   function clearPractices() {
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, [], doctorIds))
+    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, [], doctorIds, pipelineIds))
   }
 
   function clearDoctors() {
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, []))
+    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, [], pipelineIds))
+  }
+
+  function clearPipelines() {
+    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, doctorIds, []))
   }
 
   // When practices are selected, scope provider dropdown to those practices
@@ -121,7 +135,8 @@ export default function ReportsClient({
 
   const practiceParams = practiceIds.map((id) => `&practice=${id}`).join("")
   const doctorParams = doctorIds.map((id) => `&doctor=${id}`).join("")
-  const referralsBase = `/referrals?from=${rangeFromStr}&to=${rangeToStr}${practiceParams}${doctorParams}`
+  const pipelineParams = pipelineIds.map((id) => `&pipeline=${id}`).join("")
+  const referralsBase = `/referrals?from=${rangeFromStr}&to=${rangeToStr}${practiceParams}${doctorParams}${pipelineParams}`
 
   return (
     <div className="p-6 space-y-6">
@@ -180,9 +195,19 @@ export default function ReportsClient({
           onClear={clearDoctors}
           searchable={visibleDoctors.length > 8}
         />
-        {(practiceIds.length > 0 || doctorIds.length > 0) && (
+        {filterPipelines.length > 0 && (
+          <MultiSelectDropdown
+            label="Pipeline"
+            icon={<ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+            options={filterPipelines.map((p) => ({ id: p.id, label: p.name }))}
+            selected={pipelineIds}
+            onToggle={togglePipeline}
+            onClear={clearPipelines}
+          />
+        )}
+        {(practiceIds.length > 0 || doctorIds.length > 0 || pipelineIds.length > 0) && (
           <button
-            onClick={() => router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, [], []))}
+            onClick={() => router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, [], [], []))}
             className="h-9 px-2 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
           >
             Clear filters
@@ -245,7 +270,7 @@ export default function ReportsClient({
               const lastDay = new Date(year, month, 0).getDate()
               const mTo = `${year}-${String(month).padStart(2, "0")}-${lastDay}`
               return (
-                <Link key={label} href={`/referrals?from=${mFrom}&to=${mTo}${practiceParams}${doctorParams}`} className="flex items-center gap-3 group">
+                <Link key={label} href={`/referrals?from=${mFrom}&to=${mTo}${practiceParams}${doctorParams}${pipelineParams}`} className="flex items-center gap-3 group">
                   <span className="text-xs text-slate-500 w-12 shrink-0">{label}</span>
                   <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
                     <div
