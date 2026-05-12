@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     return str
   }
 
-  const rows = referrals.map((r) => [
+  const rows = (referrals as any[]).map((r) => [
     r.patientFirstName,
     r.patientLastName,
     r.patientPhone,
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
     r.referringPractice?.name,
     r.referringDoctorName,
     r.pipeline?.name,
-    STATUS_LABELS[r.status],
+    STATUS_LABELS[r.status as import("@prisma/client").ReferralStatus],
     new Date(r.referralDate).toLocaleDateString(),
     r.appointmentDate ? new Date(r.appointmentDate).toLocaleDateString() : "",
     r.insuranceProvider,
