@@ -6,94 +6,44 @@ import Link from "next/link"
 import {
   ChevronLeft,
   LayoutDashboard,
-  Pin,
   Trash2,
-  ExternalLink,
-  BookmarkX,
   PlusCircle,
+  BookmarkX,
+  ChevronRight,
+  FileBarChart2,
 } from "lucide-react"
 import {
-  deleteSavedReport,
-  togglePinSavedReport,
-  renameSavedReport,
-  type SavedReport,
-  type SavedReportConfig,
-} from "@/app/actions/saved-reports"
+  createDashboard,
+  deleteDashboard,
+  renameDashboard,
+  type DashboardSummary,
+} from "@/app/actions/dashboards"
 
-const GROUP_LABELS: Record<string, string> = {
-  practice: "Practice",
-  pipeline: "Pipeline",
-  status: "Status",
-  provider: "Provider",
-  insurance: "Insurance",
-  month: "Time",
-}
-
-const RANGE_LABELS: Record<string, string> = {
-  last_6m: "Last 6 months",
-  this_month: "This month",
-  last_month: "Last month",
-  last_3m: "Last 3 months",
-  last_year: "Last 12 months",
-  all: "All time",
-  custom: "Custom range",
-}
-
-function buildBuilderUrl(cfg: SavedReportConfig): string {
-  const p = new URLSearchParams()
-  p.set("groupBy", cfg.groupBy)
-  if (cfg.groupBy === "month") p.set("granularity", cfg.granularity)
-  if (cfg.from && cfg.to) {
-    p.set("from", cfg.from)
-    p.set("to", cfg.to)
-    p.set("range", "custom")
-  } else {
-    p.set("range", cfg.range)
-  }
-  cfg.practiceIds?.forEach((id) => p.append("practiceId", id))
-  cfg.pipelineIds?.forEach((id) => p.append("pipelineId", id))
-  return `/reports/builder?${p.toString()}`
-}
-
-function ReportCard({ report }: { report: SavedReport }) {
+function DashboardCard({ dashboard }: { dashboard: DashboardSummary }) {
   const router = useRouter()
   const [deleting, startDelete] = useTransition()
-  const [pinning, startPin] = useTransition()
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(report.name)
-  const [renaming, startRename] = useTransition()
-
-  const cfg = report.config as SavedReportConfig
-  const href = buildBuilderUrl(cfg)
+  const [name, setName] = useState(dashboard.name)
+  const [, startRename] = useTransition()
 
   function handleDelete() {
     startDelete(async () => {
-      await deleteSavedReport(report.id)
-      router.refresh()
-    })
-  }
-
-  function handleTogglePin() {
-    startPin(async () => {
-      await togglePinSavedReport(report.id, !report.isPinned)
+      await deleteDashboard(dashboard.id)
       router.refresh()
     })
   }
 
   function handleRename() {
-    if (!name.trim() || name.trim() === report.name) { setEditing(false); return }
+    if (!name.trim() || name.trim() === dashboard.name) { setEditing(false); return }
     startRename(async () => {
-      await renameSavedReport(report.id, name.trim())
+      await renameDashboard(dashboard.id, name.trim())
       setEditing(false)
       router.refresh()
     })
   }
 
-  const filterCount = (cfg.practiceIds?.length ?? 0) + (cfg.pipelineIds?.length ?? 0)
-
   return (
-    <div className={`bg-white border rounded-xl p-5 flex flex-col gap-3 hover:border-zinc-300 transition-all ${deleting ? "opacity-50" : ""}`}>
-      {/* Card header */}
+    <div className={`bg-white border rounded-xl p-5 flex flex-col gap-4 hover:border-zinc-300 transition-all ${deleting ? "opacity-50" : ""}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {editing ? (
@@ -102,77 +52,68 @@ function ReportCard({ report }: { report: SavedReport }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={handleRename}
-              onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") { setName(report.name); setEditing(false) } }}
-              className="w-full text-sm font-semibold border-b border-zinc-300 focus:outline-none focus:border-zinc-700 bg-transparent pb-0.5"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleRename()
+                if (e.key === "Escape") { setName(dashboard.name); setEditing(false) }
+              }}
+              className="w-full text-base font-semibold border-b border-zinc-300 focus:outline-none focus:border-zinc-700 bg-transparent pb-0.5"
             />
           ) : (
             <button
               onClick={() => setEditing(true)}
-              className="text-sm font-semibold text-slate-900 hover:text-zinc-600 text-left truncate max-w-full block"
+              className="text-base font-semibold text-slate-900 hover:text-zinc-600 text-left block truncate max-w-full"
               title="Click to rename"
             >
-              {report.name}
+              {dashboard.name}
             </button>
           )}
           <p className="text-xs text-slate-400 mt-0.5">
-            {new Date(report.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {dashboard.reportCount} report{dashboard.reportCount !== 1 ? "s" : ""}
+            {" · "}Updated {new Date(dashboard.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </p>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={handleTogglePin}
-            disabled={pinning}
-            className={`p-1.5 rounded-lg transition-all ${report.isPinned ? "text-amber-400 bg-amber-50 hover:bg-amber-100" : "text-zinc-300 hover:text-amber-400 hover:bg-amber-50"}`}
-            title={report.isPinned ? "Unpin" : "Pin"}
-          >
-            <Pin className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all"
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
+          title="Delete dashboard"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between mt-auto">
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <FileBarChart2 className="h-3.5 w-3.5" />
+          <span>{dashboard.reportCount === 0 ? "Empty" : `${dashboard.reportCount} report${dashboard.reportCount !== 1 ? "s" : ""}`}</span>
         </div>
+        <Link
+          href={`/reports/dashboard/${dashboard.id}`}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-900 transition-all"
+        >
+          Open
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
-
-      {/* Config summary */}
-      <div className="flex flex-wrap gap-1.5">
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-xs font-medium">
-          {GROUP_LABELS[cfg.groupBy] ?? cfg.groupBy}
-        </span>
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-xs">
-          {RANGE_LABELS[cfg.range] ?? cfg.range}
-        </span>
-        {cfg.viz && cfg.viz !== "bar" && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-xs capitalize">
-            {cfg.viz}
-          </span>
-        )}
-        {filterCount > 0 && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-xs">
-            {filterCount} filter{filterCount > 1 ? "s" : ""}
-          </span>
-        )}
-      </div>
-
-      {/* Open button */}
-      <Link
-        href={href}
-        className="mt-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-900 transition-all"
-      >
-        <ExternalLink className="h-3.5 w-3.5" />
-        Open Report
-      </Link>
     </div>
   )
 }
 
-export default function ReportsDashboardClient({ savedReports }: { savedReports: SavedReport[] }) {
-  const pinned = savedReports.filter((r) => r.isPinned)
-  const unpinned = savedReports.filter((r) => !r.isPinned)
+export default function DashboardListClient({ dashboards }: { dashboards: DashboardSummary[] }) {
+  const router = useRouter()
+  const [creating, startCreate] = useTransition()
+  const [newName, setNewName] = useState("")
+  const [showInput, setShowInput] = useState(false)
+
+  function handleCreate() {
+    if (!newName.trim()) return
+    startCreate(async () => {
+      const { id } = await createDashboard(newName.trim())
+      setNewName("")
+      setShowInput(false)
+      router.push(`/reports/dashboard/${id}`)
+    })
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -186,56 +127,69 @@ export default function ReportsDashboardClient({ savedReports }: { savedReports:
           <span className="text-slate-300">/</span>
           <div className="flex items-center gap-2">
             <LayoutDashboard className="h-5 w-5 text-slate-700" />
-            <h1 className="text-2xl font-bold text-slate-900">My Dashboard</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Dashboards</h1>
           </div>
         </div>
-        <Link
-          href="/reports/builder"
+        <button
+          onClick={() => setShowInput(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
         >
           <PlusCircle className="h-3.5 w-3.5" />
-          New Report
-        </Link>
+          New Dashboard
+        </button>
       </div>
 
+      {/* New dashboard inline input */}
+      {showInput && (
+        <div className="bg-white border border-zinc-300 rounded-xl p-5 flex items-center gap-3">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Dashboard name…"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate()
+              if (e.key === "Escape") { setNewName(""); setShowInput(false) }
+            }}
+            className="flex-1 text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          />
+          <button
+            onClick={handleCreate}
+            disabled={creating || !newName.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
+          >
+            {creating ? "Creating…" : "Create"}
+          </button>
+          <button
+            onClick={() => { setNewName(""); setShowInput(false) }}
+            className="px-3 py-2 rounded-lg text-sm border border-zinc-200 text-zinc-600 hover:border-zinc-400 transition-all"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Empty state */}
-      {savedReports.length === 0 && (
+      {dashboards.length === 0 && !showInput && (
         <div className="bg-white border rounded-xl p-16 text-center space-y-3">
           <BookmarkX className="h-8 w-8 text-slate-300 mx-auto" />
-          <p className="text-slate-500 font-medium">No saved reports yet</p>
-          <p className="text-slate-400 text-sm">Build a custom report and click <strong>Save Report</strong> to add it here.</p>
-          <Link
-            href="/reports/builder"
+          <p className="text-slate-500 font-medium">No dashboards yet</p>
+          <p className="text-slate-400 text-sm">Create a dashboard to organize your saved reports.</p>
+          <button
+            onClick={() => setShowInput(true)}
             className="inline-flex items-center gap-1.5 px-4 py-2 mt-2 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
           >
             <PlusCircle className="h-3.5 w-3.5" />
-            Create a Report
-          </Link>
+            Create a Dashboard
+          </button>
         </div>
       )}
 
-      {/* Pinned */}
-      {pinned.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Pin className="h-3.5 w-3.5 text-amber-400" />
-            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pinned</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pinned.map((r) => <ReportCard key={r.id} report={r} />)}
-          </div>
-        </div>
-      )}
-
-      {/* All reports */}
-      {unpinned.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-            {pinned.length > 0 ? "Other Reports" : "All Reports"}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {unpinned.map((r) => <ReportCard key={r.id} report={r} />)}
-          </div>
+      {/* Dashboard grid */}
+      {dashboards.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {dashboards.map((d) => <DashboardCard key={d.id} dashboard={d} />)}
         </div>
       )}
     </div>

@@ -5,6 +5,8 @@ import ReportBuilderClient from "@/components/report-builder-client"
 import type { GroupBy, Granularity, ReportRow } from "@/components/report-builder-client"
 import { STATUS_LABELS } from "@/lib/utils"
 import { getSavedReports } from "@/app/actions/saved-reports"
+import { getDashboards } from "@/app/actions/dashboards"
+import type { DashboardSummary } from "@/app/actions/dashboards"
 
 function toArray(val: string | string[] | undefined): string[] {
   if (!val) return []
@@ -145,7 +147,7 @@ export default async function ReportBuilderPage({
   const doctorIds = toArray(searchParams.doctorId)
   const hasRun = !!searchParams.groupBy
 
-  const [filterPractices, filterPipelines, filterDoctors, savedReports] = await Promise.all([
+  const [filterPractices, filterPipelines, filterDoctors, savedReports, dashboards] = await Promise.all([
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     (prisma as any).pipeline.findMany({
       where: { isActive: true },
@@ -157,6 +159,7 @@ export default async function ReportBuilderPage({
       select: { id: true, name: true },
     }),
     getSavedReports(),
+    getDashboards(),
   ])
 
   let rows: ReportRow[] = []
@@ -226,6 +229,7 @@ export default async function ReportBuilderPage({
       rangeFromStr={rangeFromStr}
       rangeToStr={rangeToStr}
       savedReports={savedReports}
+      dashboards={dashboards}
     />
   )
 }

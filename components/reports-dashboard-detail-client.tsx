@@ -1,0 +1,304 @@
+"use client"
+
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import {
+  ChevronLeft,
+  LayoutDashboard,
+  Trash2,
+  Plus,
+  ExternalLink,
+  X,
+  BookmarkX,
+  Check,
+} from "lucide-react"
+import {
+  addReportToDashboard,
+  removeReportFromDashboard,
+  renameDashboard,
+  type DashboardDetail,
+} from "@/app/actions/dashboards"
+import type { SavedReport } from "@/app/actions/saved-reports"
+
+const GROUP_LABELS: Record<string, string> = {
+  practice: "Practice", pipeline: "Pipeline", status: "Status",
+  provider: "Provider", insurance: "Insurance", month: "Time",
+}
+const RANGE_LABELS: Record<string, string> = {
+  last_6m: "Last 6 months", this_month: "This month", last_month: "Last month",
+  last_3m: "Last 3 months", last_year: "Last 12 months", all: "All time", custom: "Custom range",
+}
+
+function buildBuilderUrl(cfg: any): string {
+  const p = new URLSearchParams()
+  p.set("groupBy", cfg.groupBy)
+  if (cfg.groupBy === "month") p.set("granularity", cfg.granularity)
+  if (cfg.from && cfg.to) { p.set("from", cfg.from); p.set("to", cfg.to); p.set("range", "custom") }
+  else p.set("range", cfg.range)
+  cfg.practiceIds?.forEach((id: string) => p.append("practiceId", id))
+  cfg.pipelineIds?.forEach((id: string) => p.append("pipelineId", id))
+  cfg.statusIds?.forEach((id: string) => p.append("statusId", id))
+  cfg.doctorIds?.forEach((id: string) => p.append("doctorId", id))
+  return `/reports/builder?${p.toString()}`
+}
+
+function ReportCard({
+  entry,
+  dashboardId,
+}: {
+  entry: DashboardDetail["reports"][number]
+  dashboardId: string
+}) {
+  const router = useRouter()
+  const [removing, startRemove] = useTransition()
+  const cfg = entry.savedReport.config as any
+  const href = buildBuilderUrl(cfg)
+  const filterCount = (cfg.practiceIds?.length ?? 0) + (cfg.pipelineIds?.length ?? 0) +
+    (cfg.statusIds?.length ?? 0) + (cfg.doctorIds?.length ?? 0)
+
+  function handleRemove() {
+    startRemove(async () => {
+      await removeReportFromDashboard(dashboardId, entry.savedReportId)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className={`bg-white border rounded-xl p-5 flex flex-col gap-3 hover:border-zinc-300 transition-all ${removing ? "opacity-50" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-slate-900 truncate">{entry.savedReport.name}</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Added {new Date(entry.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </p>
+        </div>
+        <button
+          onClick={handleRemove}
+          disabled={removing}
+          className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
+          title="Remove from dashboard"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-xs font-medium">
+          {GROUP_LABELS[cfg.groupBy] ?? cfg.groupBy}
+        </span>
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-xs">
+          {RANGE_LABELS[cfg.range] ?? cfg.range}
+        </span>
+        {cfg.viz && cfg.viz !== "bar" && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-xs capitalize">
+            {cfg.viz}
+          </span>
+        )}
+        {filterCount > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-xs">
+            {filterCount} filter{filterCount > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      <Link
+        href={href}
+        className="mt-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-700 hover:border-zinc-400 hover:text-zinc-900 transition-all"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        Open Report
+      </Link>
+    </div>
+  )
+}
+
+function AddReportPicker({
+  dashboardId,
+  alreadyAdded,
+  allReports,
+  onClose,
+}: {
+  dashboardId: string
+  alreadyAdded: Set<string>
+  allReports: SavedReport[]
+  onClose: () => void
+}) {
+  const router = useRouter()
+  const [adding, startAdd] = useTransition()
+  const [addingId, setAddingId] = useState<string | null>(null)
+  const available = allReports.filter((r) => !alreadyAdded.has(r.id))
+
+  function handleAdd(reportId: string) {
+    setAddingId(reportId)
+    startAdd(async () => {
+      await addReportToDashboard(dashboardId, reportId)
+      setAddingId(null)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900">Add Report to Dashboard</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {available.length === 0 ? (
+          <div className="py-8 text-center">
+            <Check className="h-8 w-8 text-green-400 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">All your saved reports are already in this dashboard.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100 max-h-80 overflow-y-auto rounded-lg border">
+            {available.map((r) => {
+              const cfg = r.config as any
+              return (
+                <li key={r.id} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-800 truncate">{r.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {GROUP_LABELS[cfg?.groupBy] ?? cfg?.groupBy} · {RANGE_LABELS[cfg?.range] ?? cfg?.range}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAdd(r.id)}
+                    disabled={adding && addingId === r.id}
+                    className="ml-3 shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
+                  >
+                    {adding && addingId === r.id ? "Adding…" : "Add"}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        <div className="flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-600 border border-zinc-200 rounded-lg hover:border-zinc-400 transition-all">
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function DashboardDetailClient({
+  dashboard,
+  allReports,
+}: {
+  dashboard: DashboardDetail
+  allReports: SavedReport[]
+}) {
+  const router = useRouter()
+  const [editingName, setEditingName] = useState(false)
+  const [name, setName] = useState(dashboard.name)
+  const [, startRename] = useTransition()
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const alreadyAdded = new Set(dashboard.reports.map((r) => r.savedReportId))
+
+  function handleRename() {
+    if (!name.trim() || name.trim() === dashboard.name) { setEditingName(false); return }
+    startRename(async () => {
+      await renameDashboard(dashboard.id, name.trim())
+      setEditingName(false)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link href="/reports/dashboard" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 transition-colors">
+            <ChevronLeft className="h-4 w-4" />
+            Dashboards
+          </Link>
+          <span className="text-slate-300">/</span>
+          <div className="flex items-center gap-2">
+            <LayoutDashboard className="h-5 w-5 text-slate-700" />
+            {editingName ? (
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={handleRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRename()
+                  if (e.key === "Escape") { setName(dashboard.name); setEditingName(false) }
+                }}
+                className="text-2xl font-bold text-slate-900 border-b-2 border-zinc-400 focus:outline-none focus:border-zinc-900 bg-transparent"
+              />
+            ) : (
+              <button
+                onClick={() => setEditingName(true)}
+                className="text-2xl font-bold text-slate-900 hover:text-zinc-600 transition-colors"
+                title="Click to rename"
+              >
+                {dashboard.name}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/reports/builder"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Builder
+          </Link>
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Report
+          </button>
+        </div>
+      </div>
+
+      {/* Empty state */}
+      {dashboard.reports.length === 0 && (
+        <div className="bg-white border rounded-xl p-16 text-center space-y-3">
+          <BookmarkX className="h-8 w-8 text-slate-300 mx-auto" />
+          <p className="text-slate-500 font-medium">No reports yet</p>
+          <p className="text-slate-400 text-sm">Click <strong>Add Report</strong> to add saved reports to this dashboard.</p>
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 mt-2 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Report
+          </button>
+        </div>
+      )}
+
+      {/* Report grid */}
+      {dashboard.reports.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {dashboard.reports.map((entry) => (
+            <ReportCard key={entry.savedReportId} entry={entry} dashboardId={dashboard.id} />
+          ))}
+        </div>
+      )}
+
+      {/* Add report picker modal */}
+      {pickerOpen && (
+        <AddReportPicker
+          dashboardId={dashboard.id}
+          alreadyAdded={alreadyAdded}
+          allReports={allReports}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+    </div>
+  )
+}

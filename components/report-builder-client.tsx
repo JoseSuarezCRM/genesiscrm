@@ -26,6 +26,7 @@ import {
   type SavedReport,
   type SavedReportConfig,
 } from "@/app/actions/saved-reports"
+import { addReportToDashboard, type DashboardSummary } from "@/app/actions/dashboards"
 
 export type GroupBy = "practice" | "pipeline" | "status" | "provider" | "insurance" | "month"
 export type VizType = "bar" | "line" | "pie" | "donut" | "table"
@@ -159,6 +160,7 @@ interface Props {
   rangeFromStr: string
   rangeToStr: string
   savedReports: SavedReport[]
+  dashboards: DashboardSummary[]
 }
 
 export default function ReportBuilderClient({
@@ -180,6 +182,7 @@ export default function ReportBuilderClient({
   rangeFromStr,
   rangeToStr,
   savedReports,
+  dashboards,
 }: Props) {
   const router = useRouter()
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
@@ -193,6 +196,7 @@ export default function ReportBuilderClient({
   const [showComparison, setShowComparison] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [saveName, setSaveName] = useState("")
+  const [saveDashboardId, setSaveDashboardId] = useState<string>("")
   const [saving, startSaving] = useTransition()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [pinning, startPinning] = useTransition()
@@ -375,9 +379,11 @@ export default function ReportBuilderClient({
   function handleSave() {
     if (!saveName.trim()) return
     startSaving(async () => {
-      await createSavedReport(saveName.trim(), currentConfig())
+      const { id } = await createSavedReport(saveName.trim(), currentConfig())
+      if (saveDashboardId) await addReportToDashboard(saveDashboardId, id)
       setSaveDialogOpen(false)
       setSaveName("")
+      setSaveDashboardId("")
       router.refresh()
     })
   }
@@ -446,10 +452,6 @@ export default function ReportBuilderClient({
   const activeFilterCount = practiceIds.length + pipelineIds.length + statusIds.length + doctorIds.length
   const showDisplayInfo = (limit !== undefined && limit < filteredRows.length) || (minRows > 0 && filteredRows.length < rows.length)
 
-  function delta(curr: number, prev: number | undefined) {
-    if (prev === undefined) return null
-    return curr - prev
-  }
 
   return (
     <div className="p-6 space-y-6">
@@ -527,15 +529,29 @@ export default function ReportBuilderClient({
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <input
-              autoFocus
-              type="text"
-              placeholder="Report name…"
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSave()}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            />
+            <div className="space-y-3">
+              <input
+                autoFocus
+                type="text"
+                placeholder="Report name…"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+              {dashboards.length > 0 && (
+                <select
+                  value={saveDashboardId}
+                  onChange={(e) => setSaveDashboardId(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                >
+                  <option value="">No dashboard (save to library only)</option>
+                  {dashboards.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setSaveDialogOpen(false)}
