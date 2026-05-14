@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import ReportBuilderClient from "@/components/report-builder-client"
-import type { GroupBy, ReportRow } from "@/components/report-builder-client"
+import type { GroupBy, Granularity, ReportRow } from "@/components/report-builder-client"
 import { STATUS_LABELS } from "@/lib/utils"
 
 function toArray(val: string | string[] | undefined): string[] {
@@ -32,6 +32,7 @@ export default async function ReportBuilderPage({
 }: {
   searchParams: {
     groupBy?: string
+    granularity?: string
     range?: string
     from?: string
     to?: string
@@ -43,6 +44,7 @@ export default async function ReportBuilderPage({
   if (!session) redirect("/login")
 
   const groupBy = (searchParams.groupBy ?? "practice") as GroupBy
+  const granularity = (searchParams.granularity ?? "month") as Granularity
   const range = searchParams.range ?? "last_6m"
   const practiceIds = toArray(searchParams.practiceId)
   const pipelineIds = toArray(searchParams.pipelineId)
@@ -115,8 +117,23 @@ export default async function ReportBuilderPage({
           break
         case "month": {
           const d = new Date(r.referralDate)
-          key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-          label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+          if (granularity === "day") {
+            key = d.toISOString().slice(0, 10)
+            label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          } else if (granularity === "week") {
+            // Key = Monday of that week (YYYY-MM-DD, sorts correctly)
+            const ws = new Date(d.getTime())
+            ws.setHours(0, 0, 0, 0)
+            ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7))
+            key = ws.toISOString().slice(0, 10)
+            label = ws.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          } else if (granularity === "year") {
+            key = String(d.getFullYear())
+            label = String(d.getFullYear())
+          } else {
+            key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+            label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+          }
           break
         }
         default:
@@ -146,6 +163,7 @@ export default async function ReportBuilderPage({
       }
     })
 
+    // Default server-side sort: chronological for time, total desc for others
     if (groupBy === "month") {
       rows.sort((a, b) => a.key.localeCompare(b.key))
     } else {
@@ -156,6 +174,7 @@ export default async function ReportBuilderPage({
   return (
     <ReportBuilderClient
       groupBy={groupBy}
+      granularity={granularity}
       range={range}
       currentFrom={searchParams.from}
       currentTo={searchParams.to}

@@ -17,6 +17,7 @@ import {
 
 export type GroupBy = "practice" | "pipeline" | "status" | "provider" | "insurance" | "month"
 export type VizType = "bar" | "line" | "pie" | "donut" | "table"
+export type Granularity = "day" | "week" | "month" | "year"
 
 export interface ReportRow {
   key: string
@@ -35,7 +36,7 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "status", label: "Status" },
   { value: "provider", label: "Provider" },
   { value: "insurance", label: "Insurance" },
-  { value: "month", label: "Month" },
+  { value: "month", label: "Time" },
 ]
 
 const RANGE_OPTIONS = [
@@ -48,6 +49,13 @@ const RANGE_OPTIONS = [
   { value: "custom", label: "Custom range" },
 ]
 
+const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
+  { value: "day", label: "Daily" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+  { value: "year", label: "Yearly" },
+]
+
 const VIZ_OPTIONS: { value: VizType; label: string }[] = [
   { value: "bar", label: "Bar" },
   { value: "line", label: "Line" },
@@ -56,17 +64,46 @@ const VIZ_OPTIONS: { value: VizType; label: string }[] = [
   { value: "table", label: "Table only" },
 ]
 
+const LIMIT_OPTIONS: { label: string; value: number | undefined }[] = [
+  { label: "5", value: 5 },
+  { label: "10", value: 10 },
+  { label: "25", value: 25 },
+  { label: "50", value: 50 },
+  { label: "All", value: undefined },
+]
+
 const PALETTE = [
   "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
   "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
   "#14b8a6", "#a855f7",
 ]
 
-type SortKey = keyof Pick<ReportRow, "label" | "total" | "completed" | "scheduled" | "noShow" | "pending" | "conversionRate">
+// "key" enables chronological sort for time groupBy (keys are YYYY-MM-DD / YYYY-MM / YYYY)
+type SortKey = keyof Pick<ReportRow, "key" | "label" | "total" | "completed" | "scheduled" | "noShow" | "pending" | "conversionRate">
 type SortDir = "asc" | "desc"
+
+function getSortOptions(groupBy: GroupBy): { label: string; key: SortKey; dir: SortDir }[] {
+  if (groupBy === "month") {
+    return [
+      { label: "Oldest first", key: "key", dir: "asc" },
+      { label: "Newest first", key: "key", dir: "desc" },
+      { label: "Total ↓", key: "total", dir: "desc" },
+      { label: "Total ↑", key: "total", dir: "asc" },
+    ]
+  }
+  return [
+    { label: "Total ↓", key: "total", dir: "desc" },
+    { label: "Total ↑", key: "total", dir: "asc" },
+    { label: "Name A→Z", key: "label", dir: "asc" },
+    { label: "Name Z→A", key: "label", dir: "desc" },
+    { label: "Conv. % ↓", key: "conversionRate", dir: "desc" },
+    { label: "Conv. % ↑", key: "conversionRate", dir: "asc" },
+  ]
+}
 
 interface Props {
   groupBy: GroupBy
+  granularity: Granularity
   range: string
   currentFrom?: string
   currentTo?: string
@@ -82,6 +119,7 @@ interface Props {
 
 export default function ReportBuilderClient({
   groupBy,
+  granularity,
   range,
   currentFrom,
   currentTo,
@@ -97,13 +135,34 @@ export default function ReportBuilderClient({
   const router = useRouter()
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
-  const [sortKey, setSortKey] = useState<SortKey>("total")
-  const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [viz, setViz] = useState<VizType>("bar")
+  const [limit, setLimit] = useState<number | undefined>(undefined)
+  const [sortKey, setSortKey] = useState<SortKey>(() => groupBy === "month" ? "key" : "total")
+  const [sortDir, setSortDir] = useState<SortDir>(() => groupBy === "month" ? "asc" : "desc")
 
-  function buildUrl(g: GroupBy, r: string, from?: string, to?: string, pids?: string[], plids?: string[]) {
+  // Reset sort when groupBy changes via URL navigation
+  const prevGroupByRef = useRef(groupBy)
+  useEffect(() => {
+    if (prevGroupByRef.current !== groupBy) {
+      setSortKey(groupBy === "month" ? "key" : "total")
+      setSortDir(groupBy === "month" ? "asc" : "desc")
+      setLimit(undefined)
+      prevGroupByRef.current = groupBy
+    }
+  }, [groupBy])
+
+  function buildUrl(
+    g: GroupBy,
+    gran: Granularity,
+    r: string,
+    from?: string,
+    to?: string,
+    pids?: string[],
+    plids?: string[],
+  ) {
     const p = new URLSearchParams()
     p.set("groupBy", g)
+    if (g === "month") p.set("granularity", gran)
     if (from && to) { p.set("from", from); p.set("to", to); p.set("range", "custom") }
     else p.set("range", r)
     pids?.forEach((id) => p.append("practiceId", id))
@@ -112,60 +171,69 @@ export default function ReportBuilderClient({
   }
 
   function applyGroupBy(g: GroupBy) {
-    router.push(buildUrl(g, range, currentFrom, currentTo, practiceIds, pipelineIds))
+    router.push(buildUrl(g, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds))
+  }
+
+  function applyGranularity(gran: Granularity) {
+    router.push(buildUrl(groupBy, gran, range, currentFrom, currentTo, practiceIds, pipelineIds))
   }
 
   function applyRange(r: string) {
     if (r === "custom") {
-      router.push(buildUrl(groupBy, "custom", undefined, undefined, practiceIds, pipelineIds))
+      router.push(buildUrl(groupBy, granularity, "custom", undefined, undefined, practiceIds, pipelineIds))
       return
     }
-    router.push(buildUrl(groupBy, r, undefined, undefined, practiceIds, pipelineIds))
+    router.push(buildUrl(groupBy, granularity, r, undefined, undefined, practiceIds, pipelineIds))
   }
 
   function applyCustom() {
     if (!customFrom || !customTo) return
-    router.push(buildUrl(groupBy, "custom", customFrom, customTo, practiceIds, pipelineIds))
+    router.push(buildUrl(groupBy, granularity, "custom", customFrom, customTo, practiceIds, pipelineIds))
   }
 
   function togglePractice(id: string) {
     const next = practiceIds.includes(id) ? practiceIds.filter((x) => x !== id) : [...practiceIds, id]
-    router.push(buildUrl(groupBy, range, currentFrom, currentTo, next, pipelineIds))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, next, pipelineIds))
   }
 
   function togglePipeline(id: string) {
     const next = pipelineIds.includes(id) ? pipelineIds.filter((x) => x !== id) : [...pipelineIds, id]
-    router.push(buildUrl(groupBy, range, currentFrom, currentTo, practiceIds, next))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, next))
   }
 
   function clearPractices() {
-    router.push(buildUrl(groupBy, range, currentFrom, currentTo, [], pipelineIds))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], pipelineIds))
   }
 
   function clearPipelines() {
-    router.push(buildUrl(groupBy, range, currentFrom, currentTo, practiceIds, []))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, []))
   }
 
-  function handleSort(key: SortKey) {
+  function handleTableSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"))
     } else {
       setSortKey(key)
-      setSortDir(key === "label" ? "asc" : "desc")
+      setSortDir(key === "key" || key === "label" ? "asc" : "desc")
     }
   }
 
   const sortedRows = [...rows].sort((a, b) => {
-    const av = a[sortKey]
-    const bv = b[sortKey]
+    const av = a[sortKey], bv = b[sortKey]
     if (typeof av === "string" && typeof bv === "string") {
       return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av)
     }
     return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number)
   })
 
+  const displayedRows = limit !== undefined ? sortedRows.slice(0, limit) : sortedRows
+
   const groupLabel = GROUP_OPTIONS.find((g) => g.value === groupBy)?.label ?? groupBy
   const rangeLabel = RANGE_OPTIONS.find((r) => r.value === range)?.label ?? range
+  const currentSortOpts = getSortOptions(groupBy)
+
+  // "Group" table column: clicking sorts chronologically for time, alphabetically otherwise
+  const groupColSortKey: SortKey = groupBy === "month" ? "key" : "label"
 
   function rowHref(row: ReportRow): string | undefined {
     const pParams = practiceIds.map((id) => `&practice=${id}`).join("")
@@ -181,10 +249,21 @@ export default function ReportBuilderClient({
       case "provider":
         return row.key === "__none__" ? undefined : `${base}&doctor=${row.key}${pParams}${plParams}`
       case "month": {
-        const [y, m] = row.key.split("-").map(Number)
-        const mFrom = `${y}-${String(m).padStart(2, "0")}-01`
-        const lastDay = new Date(y, m, 0).getDate()
-        const mTo = `${y}-${String(m).padStart(2, "0")}-${lastDay}`
+        let mFrom: string, mTo: string
+        if (granularity === "day") {
+          mFrom = row.key; mTo = row.key
+        } else if (granularity === "week") {
+          mFrom = row.key
+          const weekEnd = new Date(row.key)
+          weekEnd.setDate(weekEnd.getDate() + 6)
+          mTo = weekEnd.toISOString().slice(0, 10)
+        } else if (granularity === "year") {
+          mFrom = `${row.key}-01-01`; mTo = `${row.key}-12-31`
+        } else {
+          const [y, m] = row.key.split("-").map(Number)
+          mFrom = `${y}-${String(m).padStart(2, "0")}-01`
+          mTo = `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`
+        }
         return `/referrals?from=${mFrom}&to=${mTo}${pParams}${plParams}`
       }
       default:
@@ -193,17 +272,16 @@ export default function ReportBuilderClient({
   }
 
   function downloadCsv() {
+    // Exports all sorted rows, ignoring limit
     const headers = [groupLabel, "Total", "Completed", "Scheduled", "No-Show", "Pending", "Conversion %"]
     const csvRows = sortedRows.map((r) => [
       r.label, r.total, r.completed, r.scheduled, r.noShow, r.pending, `${r.conversionRate}%`,
     ])
     const csv = [headers, ...csvRows]
-      .map((row) =>
-        row.map((v) => {
-          const s = String(v)
-          return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
-        }).join(",")
-      )
+      .map((row) => row.map((v) => {
+        const s = String(v)
+        return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
+      }).join(","))
       .join("\n")
     const blob = new Blob([csv], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
@@ -215,7 +293,7 @@ export default function ReportBuilderClient({
   }
 
   const TABLE_COLS: { key: SortKey; label: string }[] = [
-    { key: "label", label: groupLabel },
+    { key: groupColSortKey, label: groupLabel },
     { key: "total", label: "Total" },
     { key: "completed", label: "Completed" },
     { key: "scheduled", label: "Scheduled" },
@@ -228,6 +306,8 @@ export default function ReportBuilderClient({
     viz === "line" ? `${groupLabel} Trend` :
     viz === "pie" || viz === "donut" ? `${groupLabel} Distribution` :
     `${groupLabel} by Volume`
+
+  const showDisplayInfo = limit !== undefined && limit < rows.length
 
   return (
     <div className="p-6 space-y-6">
@@ -262,6 +342,28 @@ export default function ReportBuilderClient({
             ))}
           </div>
         </div>
+
+        {/* Granularity — only when groupBy = "month" (Time) */}
+        {groupBy === "month" && (
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Granularity</p>
+            <div className="flex flex-wrap gap-2">
+              {GRANULARITY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => applyGranularity(opt.value)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                    granularity === opt.value
+                      ? "bg-zinc-900 text-white border-zinc-900"
+                      : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Period */}
         <div>
@@ -321,7 +423,7 @@ export default function ReportBuilderClient({
             )}
             {(practiceIds.length > 0 || pipelineIds.length > 0) && (
               <button
-                onClick={() => router.push(buildUrl(groupBy, range, currentFrom, currentTo, [], []))}
+                onClick={() => router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], []))}
                 className="h-9 px-2 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
               >
                 Clear filters
@@ -330,26 +432,72 @@ export default function ReportBuilderClient({
           </div>
         </div>
 
-        {/* Visualization type — only shown once results are available */}
+        {/* Sort, Limit, Visualization — only after results load */}
         {hasRun && rows.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Visualization</p>
-            <div className="flex flex-wrap gap-2">
-              {VIZ_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setViz(opt.value)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                    viz === opt.value
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+          <>
+            {/* Sort */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Sort</p>
+              <div className="flex flex-wrap gap-2">
+                {currentSortOpts.map((opt) => (
+                  <button
+                    key={`${opt.key}-${opt.dir}`}
+                    onClick={() => { setSortKey(opt.key); setSortDir(opt.dir) }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                      sortKey === opt.key && sortDir === opt.dir
+                        ? "bg-zinc-900 text-white border-zinc-900"
+                        : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+
+            {/* Limit */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                Limit
+                <span className="ml-1.5 font-normal normal-case text-slate-400">· {rows.length} rows total</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {LIMIT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.label}
+                    onClick={() => setLimit(opt.value)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                      limit === opt.value
+                        ? "bg-zinc-900 text-white border-zinc-900"
+                        : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Visualization */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Visualization</p>
+              <div className="flex flex-wrap gap-2">
+                {VIZ_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setViz(opt.value)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                      viz === opt.value
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -365,8 +513,14 @@ export default function ReportBuilderClient({
         <>
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
-              <span className="font-semibold text-slate-900">{rows.length}</span> rows · Grouped by{" "}
-              <span className="font-medium text-slate-700">{groupLabel}</span> · {rangeLabel}
+              <span className="font-semibold text-slate-900">
+                {showDisplayInfo ? `${displayedRows.length} of ${rows.length}` : rows.length}
+              </span>{" "}
+              rows · Grouped by <span className="font-medium text-slate-700">{groupLabel}</span>
+              {groupBy === "month" && (
+                <span className="text-slate-400"> · {GRANULARITY_OPTIONS.find(g => g.value === granularity)?.label}</span>
+              )}
+              {" "}· {rangeLabel}
             </p>
             {rows.length > 0 && (
               <button
@@ -385,18 +539,18 @@ export default function ReportBuilderClient({
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Chart — hidden when viz = "table" */}
+              {/* Chart */}
               {viz !== "table" && (
                 <div className="bg-white border rounded-xl p-5">
                   <h2 className="text-sm font-semibold text-slate-700 mb-4">{chartTitle}</h2>
-                  {viz === "bar" && <BarChartViz rows={rows} rowHref={rowHref} />}
-                  {viz === "line" && <LineChartViz rows={rows} />}
-                  {viz === "pie" && <PieChartViz rows={rows} />}
-                  {viz === "donut" && <DonutChartViz rows={rows} />}
+                  {viz === "bar" && <BarChartViz rows={displayedRows} rowHref={rowHref} />}
+                  {viz === "line" && <LineChartViz rows={displayedRows} />}
+                  {viz === "pie" && <PieChartViz rows={displayedRows} />}
+                  {viz === "donut" && <DonutChartViz rows={displayedRows} />}
                 </div>
               )}
 
-              {/* Sortable table — always shown */}
+              {/* Table */}
               <div className="bg-white border rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="border-b bg-slate-50">
@@ -404,7 +558,7 @@ export default function ReportBuilderClient({
                       {TABLE_COLS.map((col) => (
                         <th
                           key={col.key}
-                          onClick={() => handleSort(col.key)}
+                          onClick={() => handleTableSort(col.key)}
                           className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide cursor-pointer hover:text-slate-800 select-none whitespace-nowrap"
                         >
                           <span className="inline-flex items-center gap-1">
@@ -420,7 +574,7 @@ export default function ReportBuilderClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {sortedRows.map((row) => {
+                    {displayedRows.map((row) => {
                       const href = rowHref(row)
                       return (
                         <tr key={row.key} className="hover:bg-slate-50 transition-colors">
@@ -450,6 +604,11 @@ export default function ReportBuilderClient({
                     })}
                   </tbody>
                 </table>
+                {showDisplayInfo && (
+                  <div className="px-4 py-2.5 border-t bg-slate-50 text-xs text-slate-400">
+                    Showing {displayedRows.length} of {rows.length} rows · Change limit above to see more
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -468,12 +627,10 @@ function BarChartViz({
   rows: ReportRow[]
   rowHref: (r: ReportRow) => string | undefined
 }) {
-  const chartRows = rows.slice(0, 15)
-  const maxTotal = Math.max(...chartRows.map((r) => r.total), 1)
-
+  const maxTotal = Math.max(...rows.map((r) => r.total), 1)
   return (
     <div className="space-y-2.5">
-      {chartRows.map((row) => {
+      {rows.map((row) => {
         const href = rowHref(row)
         const bar = (
           <div className="flex items-center gap-3 group">
@@ -494,9 +651,6 @@ function BarChartViz({
           ? <Link key={row.key} href={href}>{bar}</Link>
           : <div key={row.key}>{bar}</div>
       })}
-      {rows.length > 15 && (
-        <p className="text-xs text-slate-400 pt-1">Showing top 15 of {rows.length} rows</p>
-      )}
     </div>
   )
 }
@@ -504,15 +658,14 @@ function BarChartViz({
 // ─── Line chart ───────────────────────────────────────────────────────────────
 
 function LineChartViz({ rows }: { rows: ReportRow[] }) {
-  const displayRows = rows.slice(0, 20)
-  const max = Math.max(...displayRows.map((r) => r.total), 1)
+  const max = Math.max(...rows.map((r) => r.total), 1)
   const W = 560, H = 180
   const padX = 40, padTop = 20, padBottom = 36
   const chartW = W - padX * 2
   const chartH = H - padTop - padBottom
-  const n = displayRows.length
+  const n = rows.length
 
-  const pts = displayRows.map((r, i) => ({
+  const pts = rows.map((r, i) => ({
     x: padX + (n <= 1 ? chartW / 2 : (i / (n - 1)) * chartW),
     y: padTop + (1 - r.total / max) * chartH,
     ...r,
@@ -582,13 +735,11 @@ function pieArcPath(
   startAngle: number, endAngle: number,
   innerR = 0,
 ): string {
-  // Angles are 0 = top, clockwise. Convert to SVG (0 = right) by subtracting π/2.
   const s = startAngle - Math.PI / 2
   const e = endAngle - Math.PI / 2
   const x1 = cx + r * Math.cos(s), y1 = cy + r * Math.sin(s)
   const x2 = cx + r * Math.cos(e), y2 = cy + r * Math.sin(e)
   const large = endAngle - startAngle > Math.PI ? 1 : 0
-
   if (innerR === 0) {
     return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`
   }
@@ -636,14 +787,8 @@ function PieChartViz({ rows }: { rows: ReportRow[] }) {
             const d = pieArcPath(cx, cy, r, angle, angle + sweep)
             angle += sweep
             return (
-              <path
-                key={slice.key}
-                d={d}
-                fill={PALETTE[i % PALETTE.length]}
-                stroke="white"
-                strokeWidth="2"
-                className="hover:opacity-80 transition-opacity cursor-default"
-              />
+              <path key={slice.key} d={d} fill={PALETTE[i % PALETTE.length]}
+                stroke="white" strokeWidth="2" className="hover:opacity-80 transition-opacity cursor-default" />
             )
           })
         )}
@@ -677,14 +822,8 @@ function DonutChartViz({ rows }: { rows: ReportRow[] }) {
             const d = pieArcPath(cx, cy, r, angle, angle + sweep, innerR)
             angle += sweep
             return (
-              <path
-                key={slice.key}
-                d={d}
-                fill={PALETTE[i % PALETTE.length]}
-                stroke="white"
-                strokeWidth="2"
-                className="hover:opacity-80 transition-opacity cursor-default"
-              />
+              <path key={slice.key} d={d} fill={PALETTE[i % PALETTE.length]}
+                stroke="white" strokeWidth="2" className="hover:opacity-80 transition-opacity cursor-default" />
             )
           })
         )}
