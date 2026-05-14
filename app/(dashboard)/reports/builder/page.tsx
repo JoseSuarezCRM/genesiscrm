@@ -82,6 +82,7 @@ export default async function ReportBuilderPage({
         referringPractice: { select: { id: true, name: true } },
         referringDoctorName: true,
         referringDoctorId: true,
+        referringDoctor: { select: { id: true, name: true } },
         insuranceProvider: true,
         pipelineId: true,
         pipeline: { select: { id: true, name: true } },
@@ -109,7 +110,7 @@ export default async function ReportBuilderPage({
           break
         case "provider":
           key = r.referringDoctorId ?? r.referringDoctorName ?? "__none__"
-          label = r.referringDoctorName ?? "Unknown Provider"
+          label = r.referringDoctor?.name ?? r.referringDoctorName ?? "Unknown Provider"
           break
         case "insurance":
           key = r.insuranceProvider ?? "__none__"
