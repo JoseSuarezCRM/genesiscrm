@@ -8,6 +8,7 @@ import { z } from "zod"
 import { ReferralStatus } from "@prisma/client"
 import { createReferral, updateReferral } from "@/app/actions/referrals"
 import { createPractice, createLocation, createDoctor, linkDoctorToLocation } from "@/app/actions/referring-doctors"
+import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -235,6 +236,14 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
           if (a === b) score = 100
           else if (b.startsWith(a) || a.startsWith(b)) score = 80
           else if (b.includes(a) || a.includes(b)) score = 60
+          else {
+            // Word-overlap: count shared meaningful words (length > 2) to catch
+            // location-specific names like "Vna Health Highland Fp" → "VNA Health Care"
+            const aWords = new Set(a.split(/\W+/).filter((w) => w.length > 2))
+            const bWords = b.split(/\W+/).filter((w) => w.length > 2)
+            const shared = bWords.filter((w) => aWords.has(w)).length
+            if (shared >= 2) score = 40 + Math.min(shared * 5, 15)
+          }
           return { p, score }
         }).filter((x) => x.score > 0)
 
@@ -495,8 +504,14 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
       let resolvedDoctorId = data.referringDoctorId === NONE ? "" : (data.referringDoctorId ?? "")
 
       if (resolvedPracticeId === PENDING_PRACTICE_ID && pendingPracticeData) {
-        const r = await createPractice(pendingPracticeData)
-        resolvedPracticeId = (r as { id?: string }).id ?? ""
+        // Route through org-name rules before creating — catches aliases like
+        // "Vna Health Highland Fp" → "VNA Health Care" that the fuzzy matcher missed
+        const r = await resolveOrCreatePractice(
+          pendingPracticeData.name,
+          null, // location handled separately below via pendingLocationData
+          pendingPracticeData.phone ?? null,
+        )
+        resolvedPracticeId = r.practiceId
       }
       if (resolvedLocationId === PENDING_LOCATION_ID && pendingLocationData && resolvedPracticeId) {
         const r = await createLocation({ ...pendingLocationData, practiceId: resolvedPracticeId })
