@@ -4,6 +4,8 @@ import { redirect } from "next/navigation"
 import ReportBuilderClient from "@/components/report-builder-client"
 import type { GroupBy, Granularity, ReportRow } from "@/components/report-builder-client"
 import { STATUS_LABELS } from "@/lib/utils"
+import { getSavedReports } from "@/app/actions/saved-reports"
+import type { SavedReport } from "@/app/actions/saved-reports"
 
 function toArray(val: string | string[] | undefined): string[] {
   if (!val) return []
@@ -50,13 +52,14 @@ export default async function ReportBuilderPage({
   const pipelineIds = toArray(searchParams.pipelineId)
   const hasRun = !!searchParams.groupBy
 
-  const [filterPractices, filterPipelines] = await Promise.all([
+  const [filterPractices, filterPipelines, savedReports] = await Promise.all([
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     (prisma as any).pipeline.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true, color: true },
     }),
+    getSavedReports(),
   ])
 
   let rows: ReportRow[] = []
@@ -187,6 +190,7 @@ export default async function ReportBuilderPage({
       hasRun={hasRun}
       rangeFromStr={rangeFromStr}
       rangeToStr={rangeToStr}
+      savedReports={savedReports}
     />
   )
 }
