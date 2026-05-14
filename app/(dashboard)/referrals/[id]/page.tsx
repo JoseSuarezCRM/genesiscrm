@@ -30,6 +30,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
       referringPractice: true,
       referringLocation: true,
       referringDoctor: true,
+      pipeline: { select: { id: true, name: true } },
       createdBy: { select: { name: true, email: true } },
       assignedTo: { select: { id: true, name: true, email: true } },
       documents: { orderBy: { createdAt: "desc" } },
@@ -209,6 +210,9 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           <CardContent className="space-y-3 text-sm">
             <Row label="Referral Date" value={formatDate(referral.referralDate)} />
             <Row label="Appointment Date" value={formatDate(referral.appointmentDate)} />
+            {(referral as any).pipeline?.name?.toUpperCase().includes("MRI") && (
+              <Row label="Imaging Type" value={(referral as any).imagingType} />
+            )}
             <Row label="Created By" value={referral.createdBy?.name || referral.createdBy?.email} />
             <Row label="Last Updated" value={formatDate(referral.updatedAt)} />
           </CardContent>

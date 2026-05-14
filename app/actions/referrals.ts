@@ -45,6 +45,7 @@ const ReferralSchema = z.object({
   authStatus: z.string().optional(),
   notes: z.string().optional(),
   pipelineId: z.string().optional(),
+  imagingType: z.string().optional(),
 })
 
 function parseDate(val: string | undefined): Date | null {
@@ -125,6 +126,7 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
       authStatus: d.authStatus || null,
       notes: d.notes || null,
       pipelineId: d.pipelineId || null,
+      imagingType: d.imagingType || null,
       createdById: session.user.id,
     },
   })
@@ -204,6 +206,7 @@ export async function updateReferral(id: string, data: unknown) {
       authStatus: d.authStatus || null,
       notes: d.notes || null,
       pipelineId: d.pipelineId || null,
+      imagingType: d.imagingType || null,
     },
   })
 

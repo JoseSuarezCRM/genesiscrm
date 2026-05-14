@@ -58,6 +58,7 @@ export default function EditReferralDialog({ referral, practices, pipelines = []
     authStatus: referral.authStatus ?? "",
     notes: referral.notes ?? "",
     pipelineId: (referral as any).pipelineId ?? "",
+    imagingType: (referral as any).imagingType ?? "",
   }
 
   return (

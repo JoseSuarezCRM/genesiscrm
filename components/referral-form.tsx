@@ -87,6 +87,7 @@ const schema = z.object({
   authStatus: z.string().optional(),
   notes: z.string().optional(),
   pipelineId: z.string().optional(),
+  imagingType: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -780,6 +781,21 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                         </span>
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+            {pipelines.find(p => p.id === watch("pipelineId"))?.name?.toUpperCase().includes("MRI") && (
+              <Field label="Imaging Type">
+                <Select
+                  value={watch("imagingType") ?? ""}
+                  onValueChange={v => setValue("imagingType", v || undefined)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CT">CT</SelectItem>
+                    <SelectItem value="MRI">MRI</SelectItem>
+                    <SelectItem value="MRI Arthrogram">MRI Arthrogram</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>

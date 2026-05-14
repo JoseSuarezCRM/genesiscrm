@@ -278,6 +278,7 @@ model Referral {
   // Pipeline
   pipelineId          String?
   pipeline            Pipeline?          @relation(fields: [pipelineId], references: [id])
+  imagingType         String?            // CT | MRI | MRI Arthrogram — only set for MRI pipeline referrals
   // Notes & meta
   notes               String?
   createdById         String?
