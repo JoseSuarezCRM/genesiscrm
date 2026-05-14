@@ -133,6 +133,10 @@ export default async function ReportBuilderPage({
     pipelineId?: string | string[]
     statusId?: string | string[]
     doctorId?: string | string[]
+    practiceMode?: string
+    pipelineMode?: string
+    statusMode?: string
+    doctorMode?: string
   }
 }) {
   const session = await auth()
@@ -145,6 +149,10 @@ export default async function ReportBuilderPage({
   const pipelineIds = toArray(searchParams.pipelineId)
   const statusIds = toArray(searchParams.statusId)
   const doctorIds = toArray(searchParams.doctorId)
+  const practiceMode = searchParams.practiceMode === "exclude" ? "exclude" : "include"
+  const pipelineMode = searchParams.pipelineMode === "exclude" ? "exclude" : "include"
+  const statusMode = searchParams.statusMode === "exclude" ? "exclude" : "include"
+  const doctorMode = searchParams.doctorMode === "exclude" ? "exclude" : "include"
   const hasRun = !!searchParams.groupBy
 
   const [filterPractices, filterPipelines, filterDoctors, savedReports, dashboards] = await Promise.all([
@@ -173,10 +181,10 @@ export default async function ReportBuilderPage({
     rangeToStr = end.toISOString().slice(0, 10)
 
     const baseWhere = {
-      ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
-      ...(pipelineIds.length > 0 ? { pipelineId: { in: pipelineIds } } : {}),
-      ...(statusIds.length > 0 ? { status: { in: statusIds } } : {}),
-      ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
+      ...(practiceIds.length > 0 ? { referringPracticeId: practiceMode === "exclude" ? { notIn: practiceIds } : { in: practiceIds } } : {}),
+      ...(pipelineIds.length > 0 ? { pipelineId: pipelineMode === "exclude" ? { notIn: pipelineIds } : { in: pipelineIds } } : {}),
+      ...(statusIds.length > 0 ? { status: statusMode === "exclude" ? { notIn: statusIds } : { in: statusIds } } : {}),
+      ...(doctorIds.length > 0 ? { referringDoctorId: doctorMode === "exclude" ? { notIn: doctorIds } : { in: doctorIds } } : {}),
     }
 
     // Comparison = same duration immediately before the current range
@@ -220,6 +228,10 @@ export default async function ReportBuilderPage({
       pipelineIds={pipelineIds}
       statusIds={statusIds}
       doctorIds={doctorIds}
+      practiceMode={practiceMode}
+      pipelineMode={pipelineMode}
+      statusMode={statusMode}
+      doctorMode={doctorMode}
       filterPractices={filterPractices}
       filterPipelines={filterPipelines}
       filterDoctors={filterDoctors}

@@ -77,13 +77,6 @@ const VIZ_OPTIONS: { value: VizType; label: string }[] = [
   { value: "table", label: "Table only" },
 ]
 
-const LIMIT_OPTIONS: { label: string; value: number | undefined }[] = [
-  { label: "5", value: 5 },
-  { label: "10", value: 10 },
-  { label: "25", value: 25 },
-  { label: "50", value: 50 },
-  { label: "All", value: undefined },
-]
 
 const STATUS_OPTIONS = [
   { id: "NEW", label: "New" },
@@ -151,6 +144,10 @@ interface Props {
   pipelineIds: string[]
   statusIds: string[]
   doctorIds: string[]
+  practiceMode: "include" | "exclude"
+  pipelineMode: "include" | "exclude"
+  statusMode: "include" | "exclude"
+  doctorMode: "include" | "exclude"
   filterPractices: { id: string; name: string }[]
   filterPipelines: { id: string; name: string; color: string }[]
   filterDoctors: { id: string; name: string }[]
@@ -173,6 +170,10 @@ export default function ReportBuilderClient({
   pipelineIds,
   statusIds,
   doctorIds,
+  practiceMode,
+  pipelineMode,
+  statusMode,
+  doctorMode,
   filterPractices,
   filterPipelines,
   filterDoctors,
@@ -188,7 +189,7 @@ export default function ReportBuilderClient({
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
   const [viz, setViz] = useState<VizType>("bar")
-  const [limit, setLimit] = useState<number | undefined>(undefined)
+  const [limitInput, setLimitInput] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>(() => groupBy === "month" ? "key" : "total")
   const [sortDir, setSortDir] = useState<SortDir>(() => groupBy === "month" ? "asc" : "desc")
   const [minRows, setMinRows] = useState(0)
@@ -207,7 +208,7 @@ export default function ReportBuilderClient({
     if (prevGroupByRef.current !== groupBy) {
       setSortKey(groupBy === "month" ? "key" : "total")
       setSortDir(groupBy === "month" ? "asc" : "desc")
-      setLimit(undefined)
+      setLimitInput("")
       setMinRows(0)
       setHiddenCols(new Set())
       setShowComparison(false)
@@ -215,85 +216,73 @@ export default function ReportBuilderClient({
     }
   }, [groupBy])
 
-  function buildUrl(
-    g: GroupBy,
-    gran: Granularity,
-    r: string,
-    from?: string,
-    to?: string,
-    pids?: string[],
-    plids?: string[],
-    sids?: string[],
-    dids?: string[],
-  ) {
+  type FilterMode = "include" | "exclude"
+
+  function buildUrl(opts: {
+    g?: GroupBy; gran?: Granularity; r?: string; from?: string; to?: string
+    pids?: string[]; plids?: string[]; sids?: string[]; dids?: string[]
+    pm?: FilterMode; plm?: FilterMode; sm?: FilterMode; dm?: FilterMode
+  }) {
+    const {
+      g = groupBy, gran = granularity, r = range, from = currentFrom, to = currentTo,
+      pids = practiceIds, plids = pipelineIds, sids = statusIds, dids = doctorIds,
+      pm = practiceMode, plm = pipelineMode, sm = statusMode, dm = doctorMode,
+    } = opts
     const p = new URLSearchParams()
     p.set("groupBy", g)
     if (g === "month") p.set("granularity", gran)
     if (from && to) { p.set("from", from); p.set("to", to); p.set("range", "custom") }
     else p.set("range", r)
-    pids?.forEach((id) => p.append("practiceId", id))
-    plids?.forEach((id) => p.append("pipelineId", id))
-    sids?.forEach((id) => p.append("statusId", id))
-    dids?.forEach((id) => p.append("doctorId", id))
+    pids.forEach((id) => p.append("practiceId", id))
+    plids.forEach((id) => p.append("pipelineId", id))
+    sids.forEach((id) => p.append("statusId", id))
+    dids.forEach((id) => p.append("doctorId", id))
+    if (pm === "exclude") p.set("practiceMode", "exclude")
+    if (plm === "exclude") p.set("pipelineMode", "exclude")
+    if (sm === "exclude") p.set("statusMode", "exclude")
+    if (dm === "exclude") p.set("doctorMode", "exclude")
     return `/reports/builder?${p.toString()}`
   }
 
-  function applyGroupBy(g: GroupBy) {
-    router.push(buildUrl(g, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, doctorIds))
-  }
-
-  function applyGranularity(gran: Granularity) {
-    router.push(buildUrl(groupBy, gran, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, doctorIds))
-  }
+  function applyGroupBy(g: GroupBy) { router.push(buildUrl({ g })) }
+  function applyGranularity(gran: Granularity) { router.push(buildUrl({ gran })) }
 
   function applyRange(r: string) {
-    if (r === "custom") {
-      router.push(buildUrl(groupBy, granularity, "custom", undefined, undefined, practiceIds, pipelineIds, statusIds, doctorIds))
-      return
-    }
-    router.push(buildUrl(groupBy, granularity, r, undefined, undefined, practiceIds, pipelineIds, statusIds, doctorIds))
+    if (r === "custom") { router.push(buildUrl({ r: "custom", from: undefined, to: undefined })); return }
+    router.push(buildUrl({ r, from: undefined, to: undefined }))
   }
 
   function applyCustom() {
     if (!customFrom || !customTo) return
-    router.push(buildUrl(groupBy, granularity, "custom", customFrom, customTo, practiceIds, pipelineIds, statusIds, doctorIds))
+    router.push(buildUrl({ r: "custom", from: customFrom, to: customTo }))
   }
 
   function togglePractice(id: string) {
-    const next = practiceIds.includes(id) ? practiceIds.filter((x) => x !== id) : [...practiceIds, id]
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, next, pipelineIds, statusIds, doctorIds))
+    const pids = practiceIds.includes(id) ? practiceIds.filter((x) => x !== id) : [...practiceIds, id]
+    router.push(buildUrl({ pids }))
   }
-
   function togglePipeline(id: string) {
-    const next = pipelineIds.includes(id) ? pipelineIds.filter((x) => x !== id) : [...pipelineIds, id]
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, next, statusIds, doctorIds))
+    const plids = pipelineIds.includes(id) ? pipelineIds.filter((x) => x !== id) : [...pipelineIds, id]
+    router.push(buildUrl({ plids }))
   }
-
   function toggleStatus(id: string) {
-    const next = statusIds.includes(id) ? statusIds.filter((x) => x !== id) : [...statusIds, id]
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, next, doctorIds))
+    const sids = statusIds.includes(id) ? statusIds.filter((x) => x !== id) : [...statusIds, id]
+    router.push(buildUrl({ sids }))
   }
-
   function toggleDoctor(id: string) {
-    const next = doctorIds.includes(id) ? doctorIds.filter((x) => x !== id) : [...doctorIds, id]
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, next))
+    const dids = doctorIds.includes(id) ? doctorIds.filter((x) => x !== id) : [...doctorIds, id]
+    router.push(buildUrl({ dids }))
   }
 
-  function clearPractices() {
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], pipelineIds, statusIds, doctorIds))
-  }
+  function clearPractices() { router.push(buildUrl({ pids: [], pm: "include" })) }
+  function clearPipelines() { router.push(buildUrl({ plids: [], plm: "include" })) }
+  function clearStatuses() { router.push(buildUrl({ sids: [], sm: "include" })) }
+  function clearDoctors() { router.push(buildUrl({ dids: [], dm: "include" })) }
 
-  function clearPipelines() {
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, [], statusIds, doctorIds))
-  }
-
-  function clearStatuses() {
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, [], doctorIds))
-  }
-
-  function clearDoctors() {
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, []))
-  }
+  function setPracticeMode(m: FilterMode) { router.push(buildUrl({ pm: m })) }
+  function setPipelineMode(m: FilterMode) { router.push(buildUrl({ plm: m })) }
+  function setStatusMode(m: FilterMode) { router.push(buildUrl({ sm: m })) }
+  function setDoctorMode(m: FilterMode) { router.push(buildUrl({ dm: m })) }
 
   function handleTableSort(key: SortKey) {
     if (sortKey === key) {
@@ -313,6 +302,7 @@ export default function ReportBuilderClient({
   })
 
   const filteredRows = minRows > 0 ? sortedRows.filter((r) => r.total >= minRows) : sortedRows
+  const limit = limitInput.trim() ? Math.max(1, parseInt(limitInput) || 1) : undefined
   const displayedRows = limit !== undefined ? filteredRows.slice(0, limit) : filteredRows
 
   const compMap = new Map(comparisonRows.map((r) => [r.key, r]))
@@ -373,7 +363,11 @@ export default function ReportBuilderClient({
       sortKey,
       sortDir,
       limit,
-    }
+      practiceMode,
+      pipelineMode,
+      statusMode,
+      doctorMode,
+    } as any
   }
 
   function handleSave() {
@@ -415,6 +409,10 @@ export default function ReportBuilderClient({
     cfg.pipelineIds?.forEach((id) => p.append("pipelineId", id))
     ;(cfg as any).statusIds?.forEach((id: string) => p.append("statusId", id))
     ;(cfg as any).doctorIds?.forEach((id: string) => p.append("doctorId", id))
+    if ((cfg as any).practiceMode === "exclude") p.set("practiceMode", "exclude")
+    if ((cfg as any).pipelineMode === "exclude") p.set("pipelineMode", "exclude")
+    if ((cfg as any).statusMode === "exclude") p.set("statusMode", "exclude")
+    if ((cfg as any).doctorMode === "exclude") p.set("doctorMode", "exclude")
     router.push(`/reports/builder?${p.toString()}`)
   }
 
@@ -657,8 +655,10 @@ export default function ReportBuilderClient({
               icon={<Building2 className="h-3.5 w-3.5 shrink-0" />}
               options={filterPractices.map((p) => ({ id: p.id, label: p.name }))}
               selected={practiceIds}
+              mode={practiceMode}
               onToggle={togglePractice}
               onClear={clearPractices}
+              onModeChange={setPracticeMode}
               searchable={filterPractices.length > 8}
             />
             {filterPipelines.length > 0 && (
@@ -667,28 +667,34 @@ export default function ReportBuilderClient({
                 icon={<ChevronRight className="h-3.5 w-3.5 shrink-0" />}
                 options={filterPipelines.map((p) => ({ id: p.id, label: p.name }))}
                 selected={pipelineIds}
+                mode={pipelineMode}
                 onToggle={togglePipeline}
                 onClear={clearPipelines}
+                onModeChange={setPipelineMode}
               />
             )}
             <MultiSelectDropdown
               label="Status"
               options={STATUS_OPTIONS}
               selected={statusIds}
+              mode={statusMode}
               onToggle={toggleStatus}
               onClear={clearStatuses}
+              onModeChange={setStatusMode}
             />
             <MultiSelectDropdown
               label="Provider"
               options={filterDoctors.map((d) => ({ id: d.id, label: d.name }))}
               selected={doctorIds}
+              mode={doctorMode}
               onToggle={toggleDoctor}
               onClear={clearDoctors}
+              onModeChange={setDoctorMode}
               searchable={filterDoctors.length > 8}
             />
             {activeFilterCount > 0 && (
               <button
-                onClick={() => router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], [], [], []))}
+                onClick={() => router.push(buildUrl({ pids: [], plids: [], sids: [], dids: [], pm: "include", plm: "include", sm: "include", dm: "include" }))}
                 className="h-9 px-2 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
               >
                 Clear all
@@ -726,21 +732,14 @@ export default function ReportBuilderClient({
                 Limit
                 <span className="ml-1.5 font-normal normal-case text-slate-400">· {rows.length} rows total</span>
               </p>
-              <div className="flex flex-wrap gap-2">
-                {LIMIT_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.label}
-                    onClick={() => setLimit(opt.value)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                      limit === opt.value
-                        ? "bg-zinc-900 text-white border-zinc-900"
-                        : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              <input
+                type="number"
+                min="1"
+                value={limitInput}
+                onChange={(e) => setLimitInput(e.target.value)}
+                placeholder="All"
+                className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-zinc-400 transition-colors"
+              />
             </div>
 
             {/* Min rows */}
@@ -1220,16 +1219,20 @@ function MultiSelectDropdown({
   icon,
   options,
   selected,
+  mode = "include",
   onToggle,
   onClear,
+  onModeChange,
   searchable,
 }: {
   label: string
   icon?: React.ReactNode
   options: { id: string; label: string }[]
   selected: string[]
+  mode?: "include" | "exclude"
   onToggle: (id: string) => void
   onClear: () => void
+  onModeChange?: (m: "include" | "exclude") => void
   searchable?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -1257,13 +1260,16 @@ function MultiSelectDropdown({
   }, [open, searchable])
 
   const active = selected.length > 0
+  const isExclude = active && mode === "exclude"
 
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
         className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all select-none ${
-          active
+          isExclude
+            ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
+            : active
             ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
             : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
         }`}
@@ -1279,7 +1285,28 @@ function MultiSelectDropdown({
       </button>
 
       {open && (
-        <div className="absolute top-full mt-2 left-0 z-50 min-w-[200px] max-w-[280px] bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute top-full mt-2 left-0 z-50 min-w-[220px] max-w-[280px] bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden">
+          {/* Mode toggle */}
+          {onModeChange && (
+            <div className="flex items-center gap-1 px-2 pt-2 pb-1.5 border-b border-zinc-100">
+              <button
+                onClick={() => onModeChange("include")}
+                className={`flex-1 py-1 text-xs font-medium rounded-md transition-all ${
+                  mode === "include" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-100"
+                }`}
+              >
+                Any of
+              </button>
+              <button
+                onClick={() => onModeChange("exclude")}
+                className={`flex-1 py-1 text-xs font-medium rounded-md transition-all ${
+                  mode === "exclude" ? "bg-red-600 text-white" : "text-zinc-500 hover:bg-zinc-100"
+                }`}
+              >
+                None of
+              </button>
+            </div>
+          )}
           {searchable && (
             <div className="px-2 pt-2 pb-1">
               <input
@@ -1302,7 +1329,9 @@ function MultiSelectDropdown({
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors"
                 >
                   <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
-                    selected.includes(opt.id) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300"
+                    selected.includes(opt.id)
+                      ? mode === "exclude" ? "bg-red-600 border-red-600" : "bg-zinc-900 border-zinc-900"
+                      : "border-zinc-300"
                   }`}>
                     {selected.includes(opt.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                   </span>
