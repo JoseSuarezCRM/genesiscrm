@@ -14,7 +14,6 @@ import {
   ArrowUp,
   ArrowDown,
   Bookmark,
-  BookmarkCheck,
   Pin,
   Trash2,
   X,
@@ -85,6 +84,33 @@ const LIMIT_OPTIONS: { label: string; value: number | undefined }[] = [
   { label: "All", value: undefined },
 ]
 
+const STATUS_OPTIONS = [
+  { id: "NEW", label: "New" },
+  { id: "READY_FOR_CALL", label: "Ready for Call" },
+  { id: "CONTACTED", label: "Contacted" },
+  { id: "SCHEDULED", label: "Scheduled" },
+  { id: "COMPLETED", label: "Completed" },
+  { id: "NO_SHOW", label: "No Show" },
+  { id: "LOST", label: "Lost" },
+]
+
+const MIN_ROWS_OPTIONS: { label: string; value: number }[] = [
+  { label: "None", value: 0 },
+  { label: "≥ 2", value: 2 },
+  { label: "≥ 5", value: 5 },
+  { label: "≥ 10", value: 10 },
+  { label: "≥ 25", value: 25 },
+]
+
+const METRIC_COLS: { key: SortKey; label: string }[] = [
+  { key: "total", label: "Total" },
+  { key: "completed", label: "Completed" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "noShow", label: "No-Show" },
+  { key: "pending", label: "Pending" },
+  { key: "conversionRate", label: "Conv. %" },
+]
+
 const PALETTE = [
   "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
   "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
@@ -122,9 +148,13 @@ interface Props {
   currentTo?: string
   practiceIds: string[]
   pipelineIds: string[]
+  statusIds: string[]
+  doctorIds: string[]
   filterPractices: { id: string; name: string }[]
   filterPipelines: { id: string; name: string; color: string }[]
+  filterDoctors: { id: string; name: string }[]
   rows: ReportRow[]
+  comparisonRows: ReportRow[]
   hasRun: boolean
   rangeFromStr: string
   rangeToStr: string
@@ -139,9 +169,13 @@ export default function ReportBuilderClient({
   currentTo,
   practiceIds,
   pipelineIds,
+  statusIds,
+  doctorIds,
   filterPractices,
   filterPipelines,
+  filterDoctors,
   rows,
+  comparisonRows,
   hasRun,
   rangeFromStr,
   rangeToStr,
@@ -154,19 +188,25 @@ export default function ReportBuilderClient({
   const [limit, setLimit] = useState<number | undefined>(undefined)
   const [sortKey, setSortKey] = useState<SortKey>(() => groupBy === "month" ? "key" : "total")
   const [sortDir, setSortDir] = useState<SortDir>(() => groupBy === "month" ? "asc" : "desc")
+  const [minRows, setMinRows] = useState(0)
+  const [hiddenCols, setHiddenCols] = useState<Set<SortKey>>(new Set())
+  const [showComparison, setShowComparison] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [saveName, setSaveName] = useState("")
   const [saving, startSaving] = useTransition()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [pinning, startPinning] = useTransition()
 
-  // Reset sort when groupBy changes via URL navigation
+  // Reset sort/display state when groupBy changes via URL navigation
   const prevGroupByRef = useRef(groupBy)
   useEffect(() => {
     if (prevGroupByRef.current !== groupBy) {
       setSortKey(groupBy === "month" ? "key" : "total")
       setSortDir(groupBy === "month" ? "asc" : "desc")
       setLimit(undefined)
+      setMinRows(0)
+      setHiddenCols(new Set())
+      setShowComparison(false)
       prevGroupByRef.current = groupBy
     }
   }, [groupBy])
@@ -179,6 +219,8 @@ export default function ReportBuilderClient({
     to?: string,
     pids?: string[],
     plids?: string[],
+    sids?: string[],
+    dids?: string[],
   ) {
     const p = new URLSearchParams()
     p.set("groupBy", g)
@@ -187,46 +229,66 @@ export default function ReportBuilderClient({
     else p.set("range", r)
     pids?.forEach((id) => p.append("practiceId", id))
     plids?.forEach((id) => p.append("pipelineId", id))
+    sids?.forEach((id) => p.append("statusId", id))
+    dids?.forEach((id) => p.append("doctorId", id))
     return `/reports/builder?${p.toString()}`
   }
 
   function applyGroupBy(g: GroupBy) {
-    router.push(buildUrl(g, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds))
+    router.push(buildUrl(g, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, doctorIds))
   }
 
   function applyGranularity(gran: Granularity) {
-    router.push(buildUrl(groupBy, gran, range, currentFrom, currentTo, practiceIds, pipelineIds))
+    router.push(buildUrl(groupBy, gran, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, doctorIds))
   }
 
   function applyRange(r: string) {
     if (r === "custom") {
-      router.push(buildUrl(groupBy, granularity, "custom", undefined, undefined, practiceIds, pipelineIds))
+      router.push(buildUrl(groupBy, granularity, "custom", undefined, undefined, practiceIds, pipelineIds, statusIds, doctorIds))
       return
     }
-    router.push(buildUrl(groupBy, granularity, r, undefined, undefined, practiceIds, pipelineIds))
+    router.push(buildUrl(groupBy, granularity, r, undefined, undefined, practiceIds, pipelineIds, statusIds, doctorIds))
   }
 
   function applyCustom() {
     if (!customFrom || !customTo) return
-    router.push(buildUrl(groupBy, granularity, "custom", customFrom, customTo, practiceIds, pipelineIds))
+    router.push(buildUrl(groupBy, granularity, "custom", customFrom, customTo, practiceIds, pipelineIds, statusIds, doctorIds))
   }
 
   function togglePractice(id: string) {
     const next = practiceIds.includes(id) ? practiceIds.filter((x) => x !== id) : [...practiceIds, id]
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, next, pipelineIds))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, next, pipelineIds, statusIds, doctorIds))
   }
 
   function togglePipeline(id: string) {
     const next = pipelineIds.includes(id) ? pipelineIds.filter((x) => x !== id) : [...pipelineIds, id]
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, next))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, next, statusIds, doctorIds))
+  }
+
+  function toggleStatus(id: string) {
+    const next = statusIds.includes(id) ? statusIds.filter((x) => x !== id) : [...statusIds, id]
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, next, doctorIds))
+  }
+
+  function toggleDoctor(id: string) {
+    const next = doctorIds.includes(id) ? doctorIds.filter((x) => x !== id) : [...doctorIds, id]
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, next))
   }
 
   function clearPractices() {
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], pipelineIds))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], pipelineIds, statusIds, doctorIds))
   }
 
   function clearPipelines() {
-    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, []))
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, [], statusIds, doctorIds))
+  }
+
+  function clearStatuses() {
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, [], doctorIds))
+  }
+
+  function clearDoctors() {
+    router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, practiceIds, pipelineIds, statusIds, []))
   }
 
   function handleTableSort(key: SortKey) {
@@ -246,7 +308,10 @@ export default function ReportBuilderClient({
     return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number)
   })
 
-  const displayedRows = limit !== undefined ? sortedRows.slice(0, limit) : sortedRows
+  const filteredRows = minRows > 0 ? sortedRows.filter((r) => r.total >= minRows) : sortedRows
+  const displayedRows = limit !== undefined ? filteredRows.slice(0, limit) : filteredRows
+
+  const compMap = new Map(comparisonRows.map((r) => [r.key, r]))
 
   const groupLabel = GROUP_OPTIONS.find((g) => g.value === groupBy)?.label ?? groupBy
   const rangeLabel = RANGE_OPTIONS.find((r) => r.value === range)?.label ?? range
@@ -342,6 +407,8 @@ export default function ReportBuilderClient({
     else p.set("range", cfg.range)
     cfg.practiceIds?.forEach((id) => p.append("practiceId", id))
     cfg.pipelineIds?.forEach((id) => p.append("pipelineId", id))
+    ;(cfg as any).statusIds?.forEach((id: string) => p.append("statusId", id))
+    ;(cfg as any).doctorIds?.forEach((id: string) => p.append("doctorId", id))
     router.push(`/reports/builder?${p.toString()}`)
   }
 
@@ -368,12 +435,7 @@ export default function ReportBuilderClient({
 
   const TABLE_COLS: { key: SortKey; label: string }[] = [
     { key: groupColSortKey, label: groupLabel },
-    { key: "total", label: "Total" },
-    { key: "completed", label: "Completed" },
-    { key: "scheduled", label: "Scheduled" },
-    { key: "noShow", label: "No-Show" },
-    { key: "pending", label: "Pending" },
-    { key: "conversionRate", label: "Conv. %" },
+    ...METRIC_COLS.filter((c) => !hiddenCols.has(c.key)),
   ]
 
   const chartTitle =
@@ -381,7 +443,13 @@ export default function ReportBuilderClient({
     viz === "pie" || viz === "donut" ? `${groupLabel} Distribution` :
     `${groupLabel} by Volume`
 
-  const showDisplayInfo = limit !== undefined && limit < rows.length
+  const activeFilterCount = practiceIds.length + pipelineIds.length + statusIds.length + doctorIds.length
+  const showDisplayInfo = (limit !== undefined && limit < filteredRows.length) || (minRows > 0 && filteredRows.length < rows.length)
+
+  function delta(curr: number, prev: number | undefined) {
+    if (prev === undefined) return null
+    return curr - prev
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -587,12 +655,27 @@ export default function ReportBuilderClient({
                 onClear={clearPipelines}
               />
             )}
-            {(practiceIds.length > 0 || pipelineIds.length > 0) && (
+            <MultiSelectDropdown
+              label="Status"
+              options={STATUS_OPTIONS}
+              selected={statusIds}
+              onToggle={toggleStatus}
+              onClear={clearStatuses}
+            />
+            <MultiSelectDropdown
+              label="Provider"
+              options={filterDoctors.map((d) => ({ id: d.id, label: d.name }))}
+              selected={doctorIds}
+              onToggle={toggleDoctor}
+              onClear={clearDoctors}
+              searchable={filterDoctors.length > 8}
+            />
+            {activeFilterCount > 0 && (
               <button
-                onClick={() => router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], []))}
+                onClick={() => router.push(buildUrl(groupBy, granularity, range, currentFrom, currentTo, [], [], [], []))}
                 className="h-9 px-2 text-sm text-zinc-400 hover:text-zinc-700 transition-colors"
               >
-                Clear filters
+                Clear all
               </button>
             )}
           </div>
@@ -644,6 +727,53 @@ export default function ReportBuilderClient({
               </div>
             </div>
 
+            {/* Min rows */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Min. rows</p>
+              <div className="flex flex-wrap gap-2">
+                {MIN_ROWS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.label}
+                    onClick={() => setMinRows(opt.value)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                      minRows === opt.value
+                        ? "bg-zinc-900 text-white border-zinc-900"
+                        : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Column visibility */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Columns</p>
+              <div className="flex flex-wrap gap-2">
+                {METRIC_COLS.map((col) => {
+                  const hidden = hiddenCols.has(col.key)
+                  return (
+                    <button
+                      key={col.key}
+                      onClick={() => {
+                        const next = new Set(hiddenCols)
+                        hidden ? next.delete(col.key) : next.add(col.key)
+                        setHiddenCols(next)
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                        hidden
+                          ? "bg-white text-zinc-300 border-zinc-100 line-through"
+                          : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+                      }`}
+                    >
+                      {col.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* Visualization */}
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Visualization</p>
@@ -677,7 +807,7 @@ export default function ReportBuilderClient({
       {/* Results */}
       {hasRun && (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-sm text-slate-500">
               <span className="font-semibold text-slate-900">
                 {showDisplayInfo ? `${displayedRows.length} of ${rows.length}` : rows.length}
@@ -687,16 +817,33 @@ export default function ReportBuilderClient({
                 <span className="text-slate-400"> · {GRANULARITY_OPTIONS.find(g => g.value === granularity)?.label}</span>
               )}
               {" "}· {rangeLabel}
+              {minRows > 0 && filteredRows.length < rows.length && (
+                <span className="text-slate-400"> · {rows.length - filteredRows.length} hidden by min. filter</span>
+              )}
             </p>
-            {rows.length > 0 && (
-              <button
-                onClick={downloadCsv}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Export CSV
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {comparisonRows.length > 0 && range !== "all" && (
+                <button
+                  onClick={() => setShowComparison((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border rounded-lg transition-all ${
+                    showComparison
+                      ? "bg-violet-50 border-violet-300 text-violet-700"
+                      : "border-zinc-200 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
+                  }`}
+                >
+                  {showComparison ? "Hide comparison" : "Compare to prior period"}
+                </button>
+              )}
+              {rows.length > 0 && (
+                <button
+                  onClick={downloadCsv}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export CSV
+                </button>
+              )}
+            </div>
           </div>
 
           {rows.length === 0 ? (
@@ -742,6 +889,7 @@ export default function ReportBuilderClient({
                   <tbody className="divide-y divide-slate-100">
                     {displayedRows.map((row) => {
                       const href = rowHref(row)
+                      const comp = showComparison ? compMap.get(row.key) : undefined
                       return (
                         <tr key={row.key} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-3 font-medium text-slate-800 max-w-[220px] truncate">
@@ -749,22 +897,47 @@ export default function ReportBuilderClient({
                               <Link href={href} className="hover:text-blue-600 hover:underline">{row.label}</Link>
                             ) : row.label}
                           </td>
-                          <td className="px-4 py-3 font-semibold text-slate-900">{row.total}</td>
-                          <td className="px-4 py-3 text-green-700 font-medium">{row.completed}</td>
-                          <td className="px-4 py-3 text-purple-700 font-medium">{row.scheduled}</td>
-                          <td className="px-4 py-3 text-red-500 font-medium">{row.noShow}</td>
-                          <td className="px-4 py-3 text-slate-500">{row.pending}</td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              row.conversionRate >= 70
-                                ? "bg-green-100 text-green-700"
-                                : row.conversionRate >= 40
-                                ? "bg-yellow-100 text-yellow-700"
-                                : "bg-red-100 text-red-600"
-                            }`}>
-                              {row.conversionRate}%
-                            </span>
-                          </td>
+                          {!hiddenCols.has("total") && (
+                            <td className="px-4 py-3 font-semibold text-slate-900">
+                              <DeltaCell value={row.total} prev={comp?.total} />
+                            </td>
+                          )}
+                          {!hiddenCols.has("completed") && (
+                            <td className="px-4 py-3 text-green-700 font-medium">
+                              <DeltaCell value={row.completed} prev={comp?.completed} />
+                            </td>
+                          )}
+                          {!hiddenCols.has("scheduled") && (
+                            <td className="px-4 py-3 text-purple-700 font-medium">
+                              <DeltaCell value={row.scheduled} prev={comp?.scheduled} />
+                            </td>
+                          )}
+                          {!hiddenCols.has("noShow") && (
+                            <td className="px-4 py-3 text-red-500 font-medium">
+                              <DeltaCell value={row.noShow} prev={comp?.noShow} />
+                            </td>
+                          )}
+                          {!hiddenCols.has("pending") && (
+                            <td className="px-4 py-3 text-slate-500">
+                              <DeltaCell value={row.pending} prev={comp?.pending} />
+                            </td>
+                          )}
+                          {!hiddenCols.has("conversionRate") && (
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                row.conversionRate >= 70
+                                  ? "bg-green-100 text-green-700"
+                                  : row.conversionRate >= 40
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-red-100 text-red-600"
+                              }`}>
+                                {row.conversionRate}%
+                              </span>
+                              {comp !== undefined && (
+                                <DeltaBadge d={row.conversionRate - comp.conversionRate} suffix="%" />
+                              )}
+                            </td>
+                          )}
                         </tr>
                       )
                     })}
@@ -772,7 +945,9 @@ export default function ReportBuilderClient({
                 </table>
                 {showDisplayInfo && (
                   <div className="px-4 py-2.5 border-t bg-slate-50 text-xs text-slate-400">
-                    Showing {displayedRows.length} of {rows.length} rows · Change limit above to see more
+                    Showing {displayedRows.length} of {rows.length} rows
+                    {minRows > 0 && filteredRows.length < rows.length && ` · ${rows.length - filteredRows.length} hidden (below min. threshold)`}
+                    {limit !== undefined && limit < filteredRows.length && " · Change limit to see more"}
                   </div>
                 )}
               </div>
@@ -781,6 +956,27 @@ export default function ReportBuilderClient({
         </>
       )}
     </div>
+  )
+}
+
+// ─── Delta helpers ────────────────────────────────────────────────────────────
+
+function DeltaBadge({ d, suffix = "" }: { d: number; suffix?: string }) {
+  if (d === 0) return null
+  const pos = d > 0
+  return (
+    <span className={`ml-1.5 inline-flex items-center text-xs font-medium ${pos ? "text-green-600" : "text-red-500"}`}>
+      {pos ? "+" : ""}{d}{suffix}
+    </span>
+  )
+}
+
+function DeltaCell({ value, prev }: { value: number; prev: number | undefined }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {value}
+      {prev !== undefined && <DeltaBadge d={value - prev} />}
+    </span>
   )
 }
 

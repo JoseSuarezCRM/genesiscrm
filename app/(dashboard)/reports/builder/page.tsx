@@ -5,7 +5,6 @@ import ReportBuilderClient from "@/components/report-builder-client"
 import type { GroupBy, Granularity, ReportRow } from "@/components/report-builder-client"
 import { STATUS_LABELS } from "@/lib/utils"
 import { getSavedReports } from "@/app/actions/saved-reports"
-import type { SavedReport } from "@/app/actions/saved-reports"
 
 function toArray(val: string | string[] | undefined): string[] {
   if (!val) return []
@@ -29,6 +28,96 @@ function resolveRange(range?: string, from?: string, to?: string): { start: Date
   }
 }
 
+function groupReferrals(referrals: any[], groupBy: GroupBy, granularity: Granularity): ReportRow[] {
+  const map = new Map<string, { label: string; refs: any[] }>()
+
+  for (const r of referrals) {
+    let key: string
+    let label: string
+
+    switch (groupBy) {
+      case "practice":
+        key = r.referringPracticeId ?? "__none__"
+        label = r.referringPractice?.name ?? "Unknown Practice"
+        break
+      case "pipeline":
+        key = r.pipelineId ?? "__none__"
+        label = r.pipeline?.name ?? "No Pipeline"
+        break
+      case "status":
+        key = r.status
+        label = STATUS_LABELS[r.status as keyof typeof STATUS_LABELS] ?? r.status
+        break
+      case "provider":
+        key = r.referringDoctorId ?? r.referringDoctorName ?? "__none__"
+        label = r.referringDoctor?.name ?? r.referringDoctorName ?? "Unknown Provider"
+        break
+      case "insurance":
+        key = r.insuranceProvider ?? "__none__"
+        label = r.insuranceProvider ?? "No Insurance"
+        break
+      case "month": {
+        const d = new Date(r.referralDate)
+        if (granularity === "day") {
+          key = d.toISOString().slice(0, 10)
+          label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        } else if (granularity === "week") {
+          const ws = new Date(d.getTime())
+          ws.setHours(0, 0, 0, 0)
+          ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7))
+          key = ws.toISOString().slice(0, 10)
+          label = ws.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        } else if (granularity === "year") {
+          key = String(d.getFullYear())
+          label = String(d.getFullYear())
+        } else {
+          key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+          label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+        }
+        break
+      }
+      default:
+        key = "__none__"
+        label = "Unknown"
+    }
+
+    if (!map.has(key)) map.set(key, { label, refs: [] })
+    map.get(key)!.refs.push(r)
+  }
+
+  return Array.from(map.entries()).map(([key, { label, refs }]) => {
+    const total = refs.length
+    const completed = refs.filter((r) => r.status === "COMPLETED").length
+    const scheduled = refs.filter((r) => r.status === "SCHEDULED").length
+    const noShow = refs.filter((r) => r.status === "NO_SHOW").length
+    const pending = refs.filter((r) => ["NEW", "READY_FOR_CALL", "CONTACTED"].includes(r.status)).length
+    return {
+      key,
+      label,
+      total,
+      completed,
+      scheduled,
+      noShow,
+      pending,
+      conversionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+    }
+  })
+}
+
+const REFERRAL_SELECT = {
+  id: true,
+  status: true,
+  referralDate: true,
+  referringPracticeId: true,
+  referringPractice: { select: { id: true, name: true } },
+  referringDoctorName: true,
+  referringDoctorId: true,
+  referringDoctor: { select: { id: true, name: true } },
+  insuranceProvider: true,
+  pipelineId: true,
+  pipeline: { select: { id: true, name: true } },
+}
+
 export default async function ReportBuilderPage({
   searchParams,
 }: {
@@ -40,6 +129,8 @@ export default async function ReportBuilderPage({
     to?: string
     practiceId?: string | string[]
     pipelineId?: string | string[]
+    statusId?: string | string[]
+    doctorId?: string | string[]
   }
 }) {
   const session = await auth()
@@ -50,19 +141,26 @@ export default async function ReportBuilderPage({
   const range = searchParams.range ?? "last_6m"
   const practiceIds = toArray(searchParams.practiceId)
   const pipelineIds = toArray(searchParams.pipelineId)
+  const statusIds = toArray(searchParams.statusId)
+  const doctorIds = toArray(searchParams.doctorId)
   const hasRun = !!searchParams.groupBy
 
-  const [filterPractices, filterPipelines, savedReports] = await Promise.all([
+  const [filterPractices, filterPipelines, filterDoctors, savedReports] = await Promise.all([
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     (prisma as any).pipeline.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true, color: true },
     }),
+    (prisma as any).referringDoctor.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     getSavedReports(),
   ])
 
   let rows: ReportRow[] = []
+  let comparisonRows: ReportRow[] = []
   let rangeFromStr = ""
   let rangeToStr = ""
 
@@ -71,105 +169,38 @@ export default async function ReportBuilderPage({
     rangeFromStr = start.toISOString().slice(0, 10)
     rangeToStr = end.toISOString().slice(0, 10)
 
-    const referrals = await (prisma as any).referral.findMany({
-      where: {
-        referralDate: { gte: start, lte: end },
-        ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
-        ...(pipelineIds.length > 0 ? { pipelineId: { in: pipelineIds } } : {}),
-      },
-      select: {
-        id: true,
-        status: true,
-        referralDate: true,
-        referringPracticeId: true,
-        referringPractice: { select: { id: true, name: true } },
-        referringDoctorName: true,
-        referringDoctorId: true,
-        referringDoctor: { select: { id: true, name: true } },
-        insuranceProvider: true,
-        pipelineId: true,
-        pipeline: { select: { id: true, name: true } },
-      },
-    })
-
-    const map = new Map<string, { label: string; refs: any[] }>()
-
-    for (const r of referrals as any[]) {
-      let key: string
-      let label: string
-
-      switch (groupBy) {
-        case "practice":
-          key = r.referringPracticeId ?? "__none__"
-          label = r.referringPractice?.name ?? "Unknown Practice"
-          break
-        case "pipeline":
-          key = r.pipelineId ?? "__none__"
-          label = r.pipeline?.name ?? "No Pipeline"
-          break
-        case "status":
-          key = r.status
-          label = STATUS_LABELS[r.status as keyof typeof STATUS_LABELS] ?? r.status
-          break
-        case "provider":
-          key = r.referringDoctorId ?? r.referringDoctorName ?? "__none__"
-          label = r.referringDoctor?.name ?? r.referringDoctorName ?? "Unknown Provider"
-          break
-        case "insurance":
-          key = r.insuranceProvider ?? "__none__"
-          label = r.insuranceProvider ?? "No Insurance"
-          break
-        case "month": {
-          const d = new Date(r.referralDate)
-          if (granularity === "day") {
-            key = d.toISOString().slice(0, 10)
-            label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-          } else if (granularity === "week") {
-            // Key = Monday of that week (YYYY-MM-DD, sorts correctly)
-            const ws = new Date(d.getTime())
-            ws.setHours(0, 0, 0, 0)
-            ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7))
-            key = ws.toISOString().slice(0, 10)
-            label = ws.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-          } else if (granularity === "year") {
-            key = String(d.getFullYear())
-            label = String(d.getFullYear())
-          } else {
-            key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-            label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" })
-          }
-          break
-        }
-        default:
-          key = "__none__"
-          label = "Unknown"
-      }
-
-      if (!map.has(key)) map.set(key, { label, refs: [] })
-      map.get(key)!.refs.push(r)
+    const baseWhere = {
+      ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
+      ...(pipelineIds.length > 0 ? { pipelineId: { in: pipelineIds } } : {}),
+      ...(statusIds.length > 0 ? { status: { in: statusIds } } : {}),
+      ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
     }
 
-    rows = Array.from(map.entries()).map(([key, { label, refs }]) => {
-      const total = refs.length
-      const completed = refs.filter((r) => r.status === "COMPLETED").length
-      const scheduled = refs.filter((r) => r.status === "SCHEDULED").length
-      const noShow = refs.filter((r) => r.status === "NO_SHOW").length
-      const pending = refs.filter((r) => ["NEW", "READY_FOR_CALL", "CONTACTED"].includes(r.status)).length
-      return {
-        key,
-        label,
-        total,
-        completed,
-        scheduled,
-        noShow,
-        pending,
-        conversionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-      }
-    })
+    // Comparison = same duration immediately before the current range
+    const duration = end.getTime() - start.getTime()
+    const compStart = new Date(start.getTime() - duration)
+    const compEnd = new Date(start.getTime() - 1)
 
-    // Default server-side sort: chronological for time, total desc for others
+    const [referrals, compReferrals] = await Promise.all([
+      (prisma as any).referral.findMany({
+        where: { referralDate: { gte: start, lte: end }, ...baseWhere },
+        select: REFERRAL_SELECT,
+      }),
+      // Skip comparison for "all time" — no meaningful previous period
+      range !== "all"
+        ? (prisma as any).referral.findMany({
+            where: { referralDate: { gte: compStart, lte: compEnd }, ...baseWhere },
+            select: REFERRAL_SELECT,
+          })
+        : Promise.resolve([]),
+    ])
+
+    rows = groupReferrals(referrals, groupBy, granularity)
+    comparisonRows = groupReferrals(compReferrals, groupBy, granularity)
+
     if (groupBy === "month") {
       rows.sort((a, b) => a.key.localeCompare(b.key))
+      comparisonRows.sort((a, b) => a.key.localeCompare(b.key))
     } else {
       rows.sort((a, b) => b.total - a.total)
     }
@@ -184,9 +215,13 @@ export default async function ReportBuilderPage({
       currentTo={searchParams.to}
       practiceIds={practiceIds}
       pipelineIds={pipelineIds}
+      statusIds={statusIds}
+      doctorIds={doctorIds}
       filterPractices={filterPractices}
       filterPipelines={filterPipelines}
+      filterDoctors={filterDoctors}
       rows={rows}
+      comparisonRows={comparisonRows}
       hasRun={hasRun}
       rangeFromStr={rangeFromStr}
       rangeToStr={rangeToStr}
