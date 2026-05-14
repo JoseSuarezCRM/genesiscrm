@@ -261,31 +261,43 @@ export default function ReportsClient({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Monthly Chart */}
+        {/* Monthly Chart — line chart when practice filtered, bars otherwise */}
         <div className="bg-white border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Monthly Volume</h2>
-          <div className="space-y-2.5">
-            {monthlyData.map(({ label, year, month, count }) => {
-              const mFrom = `${year}-${String(month).padStart(2, "0")}-01`
-              const lastDay = new Date(year, month, 0).getDate()
-              const mTo = `${year}-${String(month).padStart(2, "0")}-${lastDay}`
-              return (
-                <Link key={label} href={`/referrals?from=${mFrom}&to=${mTo}${practiceParams}${doctorParams}${pipelineParams}`} className="flex items-center gap-3 group">
-                  <span className="text-xs text-slate-500 w-12 shrink-0">{label}</span>
-                  <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
-                    <div
-                      className="h-6 bg-blue-500 group-hover:bg-blue-600 rounded-full flex items-center px-2 transition-all"
-                      style={{ width: `${Math.max((count / maxMonthly) * 100, count > 0 ? 8 : 0)}%` }}
-                    >
-                      {count > 0 && <span className="text-xs text-white font-medium">{count}</span>}
-                    </div>
-                  </div>
-                  {count === 0 && <span className="text-xs text-slate-400">0</span>}
-                  <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-500 shrink-0" />
-                </Link>
-              )
-            })}
-          </div>
+          {practiceIds.length > 0 ? (
+            <>
+              <h2 className="text-sm font-semibold text-slate-700 mb-1">Referrals Over Time</h2>
+              <p className="text-xs text-slate-400 mb-4">
+                {filterPractices.filter(p => practiceIds.includes(p.id)).map(p => p.name).join(", ")}
+              </p>
+              <PracticeLineChart monthlyData={monthlyData} practiceParams={practiceParams} doctorParams={doctorParams} pipelineParams={pipelineParams} />
+            </>
+          ) : (
+            <>
+              <h2 className="text-sm font-semibold text-slate-700 mb-4">Monthly Volume</h2>
+              <div className="space-y-2.5">
+                {monthlyData.map(({ label, year, month, count }) => {
+                  const mFrom = `${year}-${String(month).padStart(2, "0")}-01`
+                  const lastDay = new Date(year, month, 0).getDate()
+                  const mTo = `${year}-${String(month).padStart(2, "0")}-${lastDay}`
+                  return (
+                    <Link key={label} href={`/referrals?from=${mFrom}&to=${mTo}${practiceParams}${doctorParams}${pipelineParams}`} className="flex items-center gap-3 group">
+                      <span className="text-xs text-slate-500 w-12 shrink-0">{label}</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
+                        <div
+                          className="h-6 bg-blue-500 group-hover:bg-blue-600 rounded-full flex items-center px-2 transition-all"
+                          style={{ width: `${Math.max((count / maxMonthly) * 100, count > 0 ? 8 : 0)}%` }}
+                        >
+                          {count > 0 && <span className="text-xs text-white font-medium">{count}</span>}
+                        </div>
+                      </div>
+                      {count === 0 && <span className="text-xs text-slate-400">0</span>}
+                      <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                    </Link>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Status Breakdown */}
@@ -394,6 +406,77 @@ export default function ReportsClient({
 }
 
 // ─── Multi-select dropdown ────────────────────────────────────────────────────
+
+function PracticeLineChart({
+  monthlyData,
+  practiceParams,
+  doctorParams,
+  pipelineParams,
+}: {
+  monthlyData: { label: string; year: number; month: number; count: number }[]
+  practiceParams: string
+  doctorParams: string
+  pipelineParams: string
+}) {
+  const max = Math.max(...monthlyData.map((m) => m.count), 1)
+  const W = 480
+  const H = 160
+  const padX = 36
+  const padTop = 24
+  const padBottom = 28
+  const chartW = W - padX * 2
+  const chartH = H - padTop - padBottom
+  const n = monthlyData.length
+
+  const pts = monthlyData.map((m, i) => ({
+    x: padX + (n === 1 ? chartW / 2 : (i / (n - 1)) * chartW),
+    y: padTop + (1 - m.count / max) * chartH,
+    ...m,
+  }))
+
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ")
+  const areaPath = `${linePath} L${pts[pts.length - 1].x},${padTop + chartH} L${pts[0].x},${padTop + chartH} Z`
+
+  const yTicks = [0, 0.5, 1].map((pct) => ({
+    y: padTop + (1 - pct) * chartH,
+    val: Math.round(pct * max),
+  }))
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ overflow: "visible" }}>
+      {/* Y grid + labels */}
+      {yTicks.map(({ y, val }) => (
+        <g key={val}>
+          <line x1={padX} x2={W - padX} y1={y} y2={y} stroke="#f1f5f9" strokeWidth="1" />
+          <text x={padX - 6} y={y + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{val}</text>
+        </g>
+      ))}
+
+      {/* Area fill */}
+      <path d={areaPath} fill="rgba(59,130,246,0.07)" />
+
+      {/* Line */}
+      <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* Points + labels */}
+      {pts.map((p, i) => {
+        const mFrom = `${p.year}-${String(p.month).padStart(2, "0")}-01`
+        const lastDay = new Date(p.year, p.month, 0).getDate()
+        const mTo = `${p.year}-${String(p.month).padStart(2, "0")}-${lastDay}`
+        const href = `/referrals?from=${mFrom}&to=${mTo}${practiceParams}${doctorParams}${pipelineParams}`
+        return (
+          <a key={i} href={href}>
+            <circle cx={p.x} cy={p.y} r="4" fill="#3b82f6" stroke="white" strokeWidth="1.5" className="hover:r-6 cursor-pointer" />
+            {p.count > 0 && (
+              <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="11" fontWeight="600" fill="#1e293b">{p.count}</text>
+            )}
+            <text x={p.x} y={H - 4} textAnchor="middle" fontSize="10" fill="#94a3b8">{p.label}</text>
+          </a>
+        )
+      })}
+    </svg>
+  )
+}
 
 function MultiSelectDropdown({
   label,
