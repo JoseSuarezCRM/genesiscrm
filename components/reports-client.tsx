@@ -143,7 +143,12 @@ export default function ReportsClient({
       {/* Header + range selector */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
+            <Link href="/reports/builder" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all">
+              Custom Report
+            </Link>
+          </div>
           <p className="text-sm text-slate-500">Click any metric to view the matching referrals</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
