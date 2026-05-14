@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 export type GroupBy = "practice" | "pipeline" | "status" | "provider" | "insurance" | "month"
+export type VizType = "bar" | "line" | "pie" | "donut" | "table"
 
 export interface ReportRow {
   key: string
@@ -45,6 +46,20 @@ const RANGE_OPTIONS = [
   { value: "last_year", label: "Last 12 months" },
   { value: "all", label: "All time" },
   { value: "custom", label: "Custom range" },
+]
+
+const VIZ_OPTIONS: { value: VizType; label: string }[] = [
+  { value: "bar", label: "Bar" },
+  { value: "line", label: "Line" },
+  { value: "pie", label: "Pie" },
+  { value: "donut", label: "Donut" },
+  { value: "table", label: "Table only" },
+]
+
+const PALETTE = [
+  "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
+  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
+  "#14b8a6", "#a855f7",
 ]
 
 type SortKey = keyof Pick<ReportRow, "label" | "total" | "completed" | "scheduled" | "noShow" | "pending" | "conversionRate">
@@ -84,6 +99,7 @@ export default function ReportBuilderClient({
   const [customTo, setCustomTo] = useState(currentTo ?? "")
   const [sortKey, setSortKey] = useState<SortKey>("total")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [viz, setViz] = useState<VizType>("bar")
 
   function buildUrl(g: GroupBy, r: string, from?: string, to?: string, pids?: string[], plids?: string[]) {
     const p = new URLSearchParams()
@@ -100,7 +116,10 @@ export default function ReportBuilderClient({
   }
 
   function applyRange(r: string) {
-    if (r === "custom") { router.push(buildUrl(groupBy, "custom", undefined, undefined, practiceIds, pipelineIds)); return }
+    if (r === "custom") {
+      router.push(buildUrl(groupBy, "custom", undefined, undefined, practiceIds, pipelineIds))
+      return
+    }
     router.push(buildUrl(groupBy, r, undefined, undefined, practiceIds, pipelineIds))
   }
 
@@ -145,8 +164,6 @@ export default function ReportBuilderClient({
     return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number)
   })
 
-  const maxTotal = Math.max(...rows.map((r) => r.total), 1)
-  const chartRows = groupBy === "month" ? rows : rows.slice(0, 15)
   const groupLabel = GROUP_OPTIONS.find((g) => g.value === groupBy)?.label ?? groupBy
   const rangeLabel = RANGE_OPTIONS.find((r) => r.value === range)?.label ?? range
 
@@ -206,6 +223,11 @@ export default function ReportBuilderClient({
     { key: "pending", label: "Pending" },
     { key: "conversionRate", label: "Conv. %" },
   ]
+
+  const chartTitle =
+    viz === "line" ? `${groupLabel} Trend` :
+    viz === "pie" || viz === "donut" ? `${groupLabel} Distribution` :
+    `${groupLabel} by Volume`
 
   return (
     <div className="p-6 space-y-6">
@@ -307,6 +329,28 @@ export default function ReportBuilderClient({
             )}
           </div>
         </div>
+
+        {/* Visualization type — only shown once results are available */}
+        {hasRun && rows.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Visualization</p>
+            <div className="flex flex-wrap gap-2">
+              {VIZ_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setViz(opt.value)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                    viz === opt.value
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Empty state */}
@@ -341,42 +385,18 @@ export default function ReportBuilderClient({
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Bar chart */}
-              <div className="bg-white border rounded-xl p-5">
-                <h2 className="text-sm font-semibold text-slate-700 mb-4">
-                  {groupLabel} by Volume
-                  {chartRows.length < rows.length && (
-                    <span className="font-normal text-slate-400 ml-1">(top {chartRows.length})</span>
-                  )}
-                </h2>
-                <div className="space-y-2.5">
-                  {chartRows.map((row) => {
-                    const href = rowHref(row)
-                    const bar = (
-                      <div className="flex items-center gap-3 group">
-                        <span className="text-xs text-slate-500 w-40 shrink-0 truncate">{row.label}</span>
-                        <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
-                          <div
-                            className="h-6 bg-blue-500 group-hover:bg-blue-600 rounded-full flex items-center px-2 transition-all"
-                            style={{ width: `${Math.max((row.total / maxTotal) * 100, row.total > 0 ? 6 : 0)}%` }}
-                          >
-                            {row.total > 0 && <span className="text-xs text-white font-medium">{row.total}</span>}
-                          </div>
-                        </div>
-                        {row.total === 0 && <span className="text-xs text-slate-400">0</span>}
-                        {href && <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-500 shrink-0" />}
-                      </div>
-                    )
-                    return href ? (
-                      <Link key={row.key} href={href}>{bar}</Link>
-                    ) : (
-                      <div key={row.key}>{bar}</div>
-                    )
-                  })}
+              {/* Chart — hidden when viz = "table" */}
+              {viz !== "table" && (
+                <div className="bg-white border rounded-xl p-5">
+                  <h2 className="text-sm font-semibold text-slate-700 mb-4">{chartTitle}</h2>
+                  {viz === "bar" && <BarChartViz rows={rows} rowHref={rowHref} />}
+                  {viz === "line" && <LineChartViz rows={rows} />}
+                  {viz === "pie" && <PieChartViz rows={rows} />}
+                  {viz === "donut" && <DonutChartViz rows={rows} />}
                 </div>
-              </div>
+              )}
 
-              {/* Sortable table */}
+              {/* Sortable table — always shown */}
               <div className="bg-white border rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="border-b bg-slate-50">
@@ -390,9 +410,7 @@ export default function ReportBuilderClient({
                           <span className="inline-flex items-center gap-1">
                             {col.label}
                             {sortKey === col.key ? (
-                              sortDir === "asc"
-                                ? <ArrowUp className="h-3 w-3" />
-                                : <ArrowDown className="h-3 w-3" />
+                              sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                             ) : (
                               <ArrowUpDown className="h-3 w-3 opacity-25" />
                             )}
@@ -437,6 +455,243 @@ export default function ReportBuilderClient({
           )}
         </>
       )}
+    </div>
+  )
+}
+
+// ─── Bar chart ────────────────────────────────────────────────────────────────
+
+function BarChartViz({
+  rows,
+  rowHref,
+}: {
+  rows: ReportRow[]
+  rowHref: (r: ReportRow) => string | undefined
+}) {
+  const chartRows = rows.slice(0, 15)
+  const maxTotal = Math.max(...chartRows.map((r) => r.total), 1)
+
+  return (
+    <div className="space-y-2.5">
+      {chartRows.map((row) => {
+        const href = rowHref(row)
+        const bar = (
+          <div className="flex items-center gap-3 group">
+            <span className="text-xs text-slate-500 w-40 shrink-0 truncate">{row.label}</span>
+            <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
+              <div
+                className="h-6 bg-blue-500 group-hover:bg-blue-600 rounded-full flex items-center px-2 transition-all"
+                style={{ width: `${Math.max((row.total / maxTotal) * 100, row.total > 0 ? 6 : 0)}%` }}
+              >
+                {row.total > 0 && <span className="text-xs text-white font-medium">{row.total}</span>}
+              </div>
+            </div>
+            {row.total === 0 && <span className="text-xs text-slate-400">0</span>}
+            {href && <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-500 shrink-0" />}
+          </div>
+        )
+        return href
+          ? <Link key={row.key} href={href}>{bar}</Link>
+          : <div key={row.key}>{bar}</div>
+      })}
+      {rows.length > 15 && (
+        <p className="text-xs text-slate-400 pt-1">Showing top 15 of {rows.length} rows</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Line chart ───────────────────────────────────────────────────────────────
+
+function LineChartViz({ rows }: { rows: ReportRow[] }) {
+  const displayRows = rows.slice(0, 20)
+  const max = Math.max(...displayRows.map((r) => r.total), 1)
+  const W = 560, H = 180
+  const padX = 40, padTop = 20, padBottom = 36
+  const chartW = W - padX * 2
+  const chartH = H - padTop - padBottom
+  const n = displayRows.length
+
+  const pts = displayRows.map((r, i) => ({
+    x: padX + (n <= 1 ? chartW / 2 : (i / (n - 1)) * chartW),
+    y: padTop + (1 - r.total / max) * chartH,
+    ...r,
+  }))
+
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")
+  const areaPath = pts.length > 0
+    ? `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${(padTop + chartH).toFixed(1)} L${pts[0].x.toFixed(1)},${(padTop + chartH).toFixed(1)} Z`
+    : ""
+
+  const yTicks = [0, 0.5, 1].map((pct) => ({
+    y: padTop + (1 - pct) * chartH,
+    val: Math.round(pct * max),
+  }))
+
+  const maxLabelLen = n > 12 ? 5 : n > 8 ? 7 : 10
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ overflow: "visible" }}>
+      {yTicks.map(({ y, val }) => (
+        <g key={val}>
+          <line x1={padX} x2={W - padX} y1={y} y2={y} stroke="#f1f5f9" strokeWidth="1" />
+          <text x={padX - 6} y={y + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{val}</text>
+        </g>
+      ))}
+      {areaPath && <path d={areaPath} fill="rgba(59,130,246,0.07)" />}
+      <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((p, i) => {
+        const lbl = p.label.length > maxLabelLen ? p.label.slice(0, maxLabelLen - 1) + "…" : p.label
+        return (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r="4" fill="#3b82f6" stroke="white" strokeWidth="1.5" />
+            {p.total > 0 && (
+              <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="11" fontWeight="600" fill="#1e293b">
+                {p.total}
+              </text>
+            )}
+            <text x={p.x} y={H - 4} textAnchor="middle" fontSize="9" fill="#94a3b8">{lbl}</text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+// ─── Pie + Donut helpers ──────────────────────────────────────────────────────
+
+function preparePieSlices(rows: ReportRow[]): ReportRow[] {
+  const sorted = [...rows].sort((a, b) => b.total - a.total)
+  const TOP = 11
+  if (sorted.length <= TOP + 1) return sorted
+  const top = sorted.slice(0, TOP)
+  const rest = sorted.slice(TOP)
+  return [
+    ...top,
+    {
+      key: "__other__",
+      label: "Other",
+      total: rest.reduce((s, r) => s + r.total, 0),
+      completed: 0, scheduled: 0, noShow: 0, pending: 0, conversionRate: 0,
+    },
+  ]
+}
+
+function pieArcPath(
+  cx: number, cy: number, r: number,
+  startAngle: number, endAngle: number,
+  innerR = 0,
+): string {
+  // Angles are 0 = top, clockwise. Convert to SVG (0 = right) by subtracting π/2.
+  const s = startAngle - Math.PI / 2
+  const e = endAngle - Math.PI / 2
+  const x1 = cx + r * Math.cos(s), y1 = cy + r * Math.sin(s)
+  const x2 = cx + r * Math.cos(e), y2 = cy + r * Math.sin(e)
+  const large = endAngle - startAngle > Math.PI ? 1 : 0
+
+  if (innerR === 0) {
+    return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`
+  }
+  const ix1 = cx + innerR * Math.cos(s), iy1 = cy + innerR * Math.sin(s)
+  const ix2 = cx + innerR * Math.cos(e), iy2 = cy + innerR * Math.sin(e)
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix2.toFixed(2)} ${iy2.toFixed(2)} A ${innerR} ${innerR} 0 ${large} 0 ${ix1.toFixed(2)} ${iy1.toFixed(2)} Z`
+}
+
+function PieDonutLegend({ slices }: { slices: ReportRow[] }) {
+  const total = slices.reduce((s, r) => s + r.total, 0)
+  return (
+    <div className="flex-1 space-y-2 overflow-y-auto max-h-56 pr-1">
+      {slices.map((slice, i) => (
+        <div key={slice.key} className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: PALETTE[i % PALETTE.length] }} />
+          <span className="text-slate-700 truncate flex-1 text-xs">{slice.label}</span>
+          <span className="font-semibold text-slate-900 tabular-nums text-xs">{slice.total}</span>
+          <span className="text-slate-400 text-xs tabular-nums w-9 text-right">
+            {total > 0 ? Math.round((slice.total / total) * 100) : 0}%
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Pie chart ────────────────────────────────────────────────────────────────
+
+function PieChartViz({ rows }: { rows: ReportRow[] }) {
+  const slices = preparePieSlices(rows)
+  const total = slices.reduce((s, r) => s + r.total, 0)
+  if (total === 0) return null
+
+  const cx = 120, cy = 120, r = 108, size = 240
+  let angle = 0
+
+  return (
+    <div className="flex items-start gap-8">
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-48 shrink-0">
+        {slices.length === 1 ? (
+          <circle cx={cx} cy={cy} r={r} fill={PALETTE[0]} />
+        ) : (
+          slices.map((slice, i) => {
+            const sweep = (slice.total / total) * Math.PI * 2
+            const d = pieArcPath(cx, cy, r, angle, angle + sweep)
+            angle += sweep
+            return (
+              <path
+                key={slice.key}
+                d={d}
+                fill={PALETTE[i % PALETTE.length]}
+                stroke="white"
+                strokeWidth="2"
+                className="hover:opacity-80 transition-opacity cursor-default"
+              />
+            )
+          })
+        )}
+      </svg>
+      <PieDonutLegend slices={slices} />
+    </div>
+  )
+}
+
+// ─── Donut chart ──────────────────────────────────────────────────────────────
+
+function DonutChartViz({ rows }: { rows: ReportRow[] }) {
+  const slices = preparePieSlices(rows)
+  const total = slices.reduce((s, r) => s + r.total, 0)
+  if (total === 0) return null
+
+  const cx = 120, cy = 120, r = 108, innerR = 56, size = 240
+  let angle = 0
+
+  return (
+    <div className="flex items-start gap-8">
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-48 shrink-0">
+        {slices.length === 1 ? (
+          <>
+            <circle cx={cx} cy={cy} r={r} fill={PALETTE[0]} />
+            <circle cx={cx} cy={cy} r={innerR} fill="white" />
+          </>
+        ) : (
+          slices.map((slice, i) => {
+            const sweep = (slice.total / total) * Math.PI * 2
+            const d = pieArcPath(cx, cy, r, angle, angle + sweep, innerR)
+            angle += sweep
+            return (
+              <path
+                key={slice.key}
+                d={d}
+                fill={PALETTE[i % PALETTE.length]}
+                stroke="white"
+                strokeWidth="2"
+                className="hover:opacity-80 transition-opacity cursor-default"
+              />
+            )
+          })
+        )}
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="20" fontWeight="700" fill="#1e293b">{total}</text>
+        <text x={cx} y={cy + 15} textAnchor="middle" fontSize="10" fill="#94a3b8">total</text>
+      </svg>
+      <PieDonutLegend slices={slices} />
     </div>
   )
 }
