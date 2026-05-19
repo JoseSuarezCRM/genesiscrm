@@ -21,9 +21,13 @@ export async function GET(req: NextRequest) {
   const statuses = searchParams.getAll("status").filter((s) =>
     Object.values(ReferralStatus).includes(s as ReferralStatus)
   ) as ReferralStatus[]
+  const statusMode = searchParams.get("statusMode") === "none" ? "none" : "any"
   const practiceIds = searchParams.getAll("practice")
+  const practiceMode = searchParams.get("practiceMode") === "none" ? "none" : "any"
   const doctorIds = searchParams.getAll("doctor")
+  const doctorMode = searchParams.get("doctorMode") === "none" ? "none" : "any"
   const tagIds = searchParams.getAll("tag")
+  const tagMode = searchParams.get("tagMode") === "none" ? "none" : "any"
   const pipelineId = searchParams.get("pipeline")
   const from = searchParams.get("from")
   const to = searchParams.get("to")
@@ -31,10 +35,10 @@ export async function GET(req: NextRequest) {
   const referrals = await (prisma as any).referral.findMany({
     where: {
       ...(pipelineId ? { pipelineId } : {}),
-      ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
-      ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
-      ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
-      ...(tagIds.length > 0 ? { tags: { some: { tagId: { in: tagIds } } } } : {}),
+      ...(statuses.length > 0 ? { status: statusMode === "none" ? { notIn: statuses } : { in: statuses } } : {}),
+      ...(practiceIds.length > 0 ? { referringPracticeId: practiceMode === "none" ? { notIn: practiceIds } : { in: practiceIds } } : {}),
+      ...(doctorIds.length > 0 ? { referringDoctorId: doctorMode === "none" ? { notIn: doctorIds } : { in: doctorIds } } : {}),
+      ...(tagIds.length > 0 ? { tags: tagMode === "none" ? { none: { tagId: { in: tagIds } } } : { some: { tagId: { in: tagIds } } } } : {}),
       ...(from || to
         ? {
             referralDate: {

@@ -27,8 +27,11 @@ interface ReferralFiltersProps {
   incompleteCount: number
   currentSearch?: string
   currentStatuses: string[]
+  currentStatusMode: "any" | "none"
   currentPractices: string[]
+  currentPracticeMode: "any" | "none"
   currentDoctors: string[]
+  currentDoctorMode: "any" | "none"
   currentTags: string[]
   currentTagMode: "any" | "none"
   currentFrom?: string
@@ -305,8 +308,11 @@ export default function ReferralFilters({
   incompleteCount,
   currentSearch,
   currentStatuses,
+  currentStatusMode,
   currentPractices,
+  currentPracticeMode,
   currentDoctors,
+  currentDoctorMode,
   currentTags,
   currentTagMode,
   currentFrom,
@@ -385,6 +391,30 @@ export default function ReferralFilters({
     navigate(p)
   }
 
+  const setStatusMode = (mode: "any" | "none") => {
+    const p = new URLSearchParams(params.toString())
+    if (mode === "any") p.delete("statusMode")
+    else p.set("statusMode", "none")
+    p.delete("page")
+    navigate(p)
+  }
+
+  const setPracticeMode = (mode: "any" | "none") => {
+    const p = new URLSearchParams(params.toString())
+    if (mode === "any") p.delete("practiceMode")
+    else p.set("practiceMode", "none")
+    p.delete("page")
+    navigate(p)
+  }
+
+  const setDoctorMode = (mode: "any" | "none") => {
+    const p = new URLSearchParams(params.toString())
+    if (mode === "any") p.delete("doctorMode")
+    else p.set("doctorMode", "none")
+    p.delete("page")
+    navigate(p)
+  }
+
   const setTagMode = (mode: "any" | "none") => {
     const p = new URLSearchParams(params.toString())
     if (mode === "any") p.delete("tagMode")
@@ -404,16 +434,19 @@ export default function ReferralFilters({
       key: "status",
       value: s,
       label: STATUS_OPTIONS.find((o) => o.id === s)?.label ?? s,
+      exclude: currentStatusMode === "none",
     })),
     ...currentPractices.map((id) => ({
       key: "practice",
       value: id,
       label: practices.find((p) => p.id === id)?.label ?? id,
+      exclude: currentPracticeMode === "none",
     })),
     ...currentDoctors.map((id) => ({
       key: "doctor",
       value: id,
       label: doctors.find((d) => d.id === id)?.label ?? id,
+      exclude: currentDoctorMode === "none",
     })),
     ...currentTags.map((id) => ({
       key: "tag",
@@ -448,7 +481,9 @@ export default function ReferralFilters({
           options={STATUS_OPTIONS}
           selected={currentStatuses}
           onToggle={(v) => toggleMulti("status", v)}
-          onClear={() => clearKey("status")}
+          onClear={() => { clearKey("status"); setStatusMode("any") }}
+          mode={currentStatusMode}
+          onModeChange={setStatusMode}
         />
 
         {/* Practices */}
@@ -457,8 +492,10 @@ export default function ReferralFilters({
           options={practices}
           selected={currentPractices}
           onToggle={(v) => toggleMulti("practice", v)}
-          onClear={() => clearKey("practice")}
+          onClear={() => { clearKey("practice"); setPracticeMode("any") }}
           searchable={practices.length > 8}
+          mode={currentPracticeMode}
+          onModeChange={setPracticeMode}
         />
 
         {/* Providers */}
@@ -467,8 +504,10 @@ export default function ReferralFilters({
           options={doctors}
           selected={currentDoctors}
           onToggle={(v) => toggleMulti("doctor", v)}
-          onClear={() => clearKey("doctor")}
+          onClear={() => { clearKey("doctor"); setDoctorMode("any") }}
           searchable={doctors.length > 8}
+          mode={currentDoctorMode}
+          onModeChange={setDoctorMode}
         />
 
         {/* Tags */}

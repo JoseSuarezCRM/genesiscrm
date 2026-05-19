@@ -11,12 +11,15 @@ interface PageProps {
   searchParams: {
     search?: string
     status?: string | string[]
+    statusMode?: string
     from?: string
     to?: string
     practice?: string | string[]
+    practiceMode?: string
     tag?: string | string[]
     tagMode?: string
     doctor?: string | string[]
+    doctorMode?: string
     page?: string
     incomplete?: string
     pipeline?: string
@@ -37,10 +40,13 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
   const statuses = toArray(searchParams.status).filter((s) =>
     Object.values(ReferralStatus).includes(s as ReferralStatus)
   ) as ReferralStatus[]
+  const statusMode: "any" | "none" = searchParams.statusMode === "none" ? "none" : "any"
   const practiceIds = toArray(searchParams.practice)
+  const practiceMode: "any" | "none" = searchParams.practiceMode === "none" ? "none" : "any"
   const tagIds = toArray(searchParams.tag)
   const tagMode: "any" | "none" = searchParams.tagMode === "none" ? "none" : "any"
   const doctorIds = toArray(searchParams.doctor)
+  const doctorMode: "any" | "none" = searchParams.doctorMode === "none" ? "none" : "any"
   const search = searchParams.search?.trim()
   const incompleteOnly = searchParams.incomplete === "1"
   const pipelineId = searchParams.pipeline ?? null
@@ -56,9 +62,9 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
           ],
         }
       : {}),
-    ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
-    ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
-    ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
+    ...(statuses.length > 0 ? { status: statusMode === "none" ? { notIn: statuses } : { in: statuses } } : {}),
+    ...(practiceIds.length > 0 ? { referringPracticeId: practiceMode === "none" ? { notIn: practiceIds } : { in: practiceIds } } : {}),
+    ...(doctorIds.length > 0 ? { referringDoctorId: doctorMode === "none" ? { notIn: doctorIds } : { in: doctorIds } } : {}),
     ...(searchParams.from || searchParams.to
       ? {
           referralDate: {
@@ -125,10 +131,13 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     incompleteCount,
     incompleteOnly,
     statuses,
+    statusMode,
     practiceIds,
+    practiceMode,
     tagIds,
     tagMode,
     doctorIds,
+    doctorMode,
     pipelineId,
   }
 }
@@ -145,10 +154,13 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     incompleteCount,
     incompleteOnly,
     statuses,
+    statusMode,
     practiceIds,
+    practiceMode,
     tagIds,
     tagMode,
     doctorIds,
+    doctorMode,
     pipelineId,
   } = await getReferrals(searchParams)
 
@@ -164,9 +176,13 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
   // Build export URL preserving all active filters
   const exportParams = new URLSearchParams()
   statuses.forEach((s) => exportParams.append("status", s))
+  if (statusMode === "none") exportParams.set("statusMode", "none")
   practiceIds.forEach((id) => exportParams.append("practice", id))
+  if (practiceMode === "none") exportParams.set("practiceMode", "none")
   doctorIds.forEach((id) => exportParams.append("doctor", id))
+  if (doctorMode === "none") exportParams.set("doctorMode", "none")
   tagIds.forEach((id) => exportParams.append("tag", id))
+  if (tagMode === "none") exportParams.set("tagMode", "none")
   if (pipelineId) exportParams.set("pipeline", pipelineId)
   if (searchParams.from) exportParams.set("from", searchParams.from)
   if (searchParams.to) exportParams.set("to", searchParams.to)
@@ -257,8 +273,11 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
             incompleteCount={incompleteCount}
             currentSearch={searchParams.search}
             currentStatuses={statuses}
+            currentStatusMode={statusMode}
             currentPractices={practiceIds}
+            currentPracticeMode={practiceMode}
             currentDoctors={doctorIds}
+            currentDoctorMode={doctorMode}
             currentTags={tagIds}
             currentTagMode={tagMode}
             currentFrom={searchParams.from}
