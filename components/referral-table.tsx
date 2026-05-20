@@ -37,18 +37,23 @@ interface Props {
   referrals: Referral[]
   pipelines: Pipeline[]
   listUrl: string
+  total: number
+  allMatchingIds: string[]
 }
 
-export default function ReferralTable({ referrals, pipelines, listUrl }: Props) {
+export default function ReferralTable({ referrals, pipelines, listUrl, total, allMatchingIds }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [allPagesSelected, setAllPagesSelected] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const menuRef = useRef<HTMLDivElement>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
-  const allChecked = referrals.length > 0 && selected.size === referrals.length
-  const someChecked = selected.size > 0 && selected.size < referrals.length
+  const allPageChecked = referrals.length > 0 && referrals.every((r) => selected.has(r.id))
+  const allChecked = allPageChecked
+  const someChecked = selected.size > 0 && !allPageChecked
+  const showSelectAllBanner = allPageChecked && !allPagesSelected && total > referrals.length
 
   useEffect(() => {
     if (headerCheckRef.current) {
@@ -68,7 +73,23 @@ export default function ReferralTable({ referrals, pipelines, listUrl }: Props) 
   }, [menuOpen])
 
   function toggleAll() {
-    setSelected(allChecked ? new Set() : new Set(referrals.map((r) => r.id)))
+    if (allPageChecked) {
+      setSelected(new Set())
+      setAllPagesSelected(false)
+    } else {
+      setSelected(new Set(referrals.map((r) => r.id)))
+      setAllPagesSelected(false)
+    }
+  }
+
+  function selectAllPages() {
+    setSelected(new Set(allMatchingIds))
+    setAllPagesSelected(true)
+  }
+
+  function clearSelection() {
+    setSelected(new Set())
+    setAllPagesSelected(false)
   }
 
   function toggleRow(id: string) {
@@ -82,7 +103,7 @@ export default function ReferralTable({ referrals, pipelines, listUrl }: Props) 
   function moveTo(pipelineId: string | null) {
     startTransition(async () => {
       await moveReferralsToPipeline(Array.from(selected), pipelineId)
-      setSelected(new Set())
+      clearSelection()
       setMenuOpen(false)
       router.refresh()
     })
@@ -114,6 +135,28 @@ export default function ReferralTable({ referrals, pipelines, listUrl }: Props) 
             </tr>
           </thead>
           <tbody>
+            {/* Select-all-pages banner */}
+            {(showSelectAllBanner || allPagesSelected) && (
+              <tr>
+                <td colSpan={9} className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-center text-sm text-blue-800">
+                  {allPagesSelected ? (
+                    <>
+                      All <span className="font-semibold">{total}</span> records are selected.{" "}
+                      <button onClick={clearSelection} className="underline font-medium hover:text-blue-600">
+                        Clear selection
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      All <span className="font-semibold">{referrals.length}</span> records on this page are selected.{" "}
+                      <button onClick={selectAllPages} className="underline font-medium hover:text-blue-600">
+                        Select all {total} records
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            )}
             {referrals.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-6 py-12 text-center text-slate-400">

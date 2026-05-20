@@ -91,7 +91,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       : {}),
   }
 
-  const [referrals, total, practices, allTags, incompleteCount, allDoctors, pipelines] = await Promise.all([
+  const [referrals, total, allMatchingIds, practices, allTags, incompleteCount, allDoctors, pipelines] = await Promise.all([
     prisma.referral.findMany({
       where,
       take: PAGE_SIZE,
@@ -104,6 +104,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       },
     }),
     prisma.referral.count({ where }),
+    (prisma as any).referral.findMany({ where, select: { id: true }, orderBy: { referralDate: "desc" } }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" } }),
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.referral.count({
@@ -113,7 +114,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy: { name: "asc" },
       select: { id: true, name: true, title: true },
     }),
-    prisma.pipeline.findMany({
+    (prisma as any).pipeline.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       include: { _count: { select: { referrals: true } } },
@@ -123,6 +124,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
   return {
     referrals,
     total,
+    allMatchingIds: (allMatchingIds as { id: string }[]).map((r) => r.id),
     practices,
     allTags,
     allDoctors,
@@ -146,6 +148,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
   const {
     referrals,
     total,
+    allMatchingIds,
     practices,
     allTags,
     allDoctors,
@@ -289,7 +292,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
 
       {/* Table */}
       <div className="bg-white border rounded-lg overflow-hidden">
-        <ReferralTable referrals={referrals} pipelines={pipelines} listUrl={listUrl} />
+        <ReferralTable referrals={referrals} pipelines={pipelines} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
 
         {/* Pagination */}
         {totalPages > 1 && (
