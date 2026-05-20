@@ -64,6 +64,8 @@ const TRIGGER_LABELS: Record<string, string> = {
   AUTH_STATUS_CHANGED: "Auth status changed",
   EMBED_REFERRAL_RECEIVED: "Referral received via embed form",
   PIPELINE_CHANGED: "Referral moved to pipeline",
+  SURGERY_STATUS_CHANGED: "Surgery case status changed",
+  SURGERY_CALL_ATTEMPTS_REACHED: "Surgery call attempts reached (4)",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -93,6 +95,8 @@ const TRIGGER_COLORS: Record<string, string> = {
   AUTH_STATUS_CHANGED: "bg-yellow-100 text-yellow-700",
   EMBED_REFERRAL_RECEIVED: "bg-emerald-100 text-emerald-700",
   PIPELINE_CHANGED: "bg-violet-100 text-violet-700",
+  SURGERY_STATUS_CHANGED: "bg-teal-100 text-teal-700",
+  SURGERY_CALL_ATTEMPTS_REACHED: "bg-red-100 text-red-700",
 }
 
 const ACTION_COLORS: Record<string, string> = {

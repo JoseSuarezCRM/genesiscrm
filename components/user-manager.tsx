@@ -55,6 +55,7 @@ const NAV_PERMISSIONS: { key: string; label: string; description: string }[] = [
   { key: "NAV_REFERRALS",    label: "Referrals",    description: "Dashboard, Referrals, Providers, Activities, Tasks, SMS, Reports, Broadcasts" },
   { key: "NAV_APPOINTMENTS", label: "Appointments", description: "Completed appointments and referring providers" },
   { key: "NAV_SCHEDULING",   label: "Scheduling",   description: "Weekly schedule and staff roster" },
+  { key: "NAV_SURGERY",      label: "Surgery",      description: "Surgery cases tracker with file import, call log, and documents" },
   { key: "NAV_ADMIN",        label: "Admin",        description: "User management, automations, templates, and settings" },
 ]
 
