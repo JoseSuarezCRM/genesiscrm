@@ -1,9 +1,10 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { getSurgeryCases, SURGERY_STATUS_LABELS } from "@/app/actions/surgery"
+import { getSurgeryCases } from "@/app/actions/surgery"
+import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import SurgeryImportDialog from "@/components/surgery-import-dialog"
-import { Upload, Phone, FileText, Stethoscope } from "lucide-react"
+import { Phone, FileText, Stethoscope } from "lucide-react"
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: "bg-zinc-100 text-zinc-700",

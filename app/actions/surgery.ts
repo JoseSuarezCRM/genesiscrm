@@ -5,15 +5,6 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CallOutcome } from "@prisma/client"
 
-export const SURGERY_STATUS_LABELS: Record<string, string> = {
-  NEW: "New",
-  SCHEDULED: "Scheduled",
-  PENDING_CONFIRMATION: "Pending Confirmation",
-  PENDING_CLEARANCE: "Pending Clearance",
-  CANCELED: "Canceled",
-  COMPLETED: "Completed",
-}
-
 export async function getSurgeryCases() {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")

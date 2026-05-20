@@ -3,7 +3,8 @@
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
-import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument, SURGERY_STATUS_LABELS } from "@/app/actions/surgery"
+import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
+import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
