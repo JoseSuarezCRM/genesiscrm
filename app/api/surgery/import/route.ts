@@ -21,6 +21,15 @@ function findCol(row: Record<string, unknown>, ...names: string[]): string {
   return ""
 }
 
+function findRawCol(row: Record<string, unknown>, ...names: string[]): unknown {
+  const keys = Object.keys(row)
+  for (const name of names) {
+    const match = keys.find((k) => normalizeKey(k) === normalizeKey(name))
+    if (match !== undefined) return row[match]
+  }
+  return null
+}
+
 function parseExcelDate(val: unknown): Date | null {
   if (!val) return null
   if (val instanceof Date) return val
@@ -97,12 +106,8 @@ export async function POST(req: NextRequest) {
       await (prisma as any).surgeryCase.create({
         data: {
           mrn: mrn || null,
-          expires: parseExcelDate(
-            row[Object.keys(row).find((k) => normalizeKey(k) === "expires" || normalizeKey(k) === "expiration" || normalizeKey(k) === "expiry") ?? ""]
-          ),
-          creationDate: parseExcelDate(
-            row[Object.keys(row).find((k) => ["creationdate", "createddate", "createdate", "date"].includes(normalizeKey(k))) ?? ""]
-          ),
+          expires: parseExcelDate(findRawCol(row, "expires", "expiration", "expiry")),
+          creationDate: parseExcelDate(findRawCol(row, "creation date", "created date", "create date")),
           status: "NEW",
           patientName,
           orderingProvider: findCol(row, "ordering provider", "orderingprovider", "ordering dr", "ordering physician", "provider") || null,
