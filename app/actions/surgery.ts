@@ -126,6 +126,17 @@ export async function bulkUpdateSurgeryCases(ids: string[], status: string) {
   revalidatePath("/surgery")
 }
 
+export async function bulkDeleteSurgeryCases(ids: string[]) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  await (prisma as any).surgeryCase.deleteMany({
+    where: { id: { in: ids } },
+  })
+
+  revalidatePath("/surgery")
+}
+
 export async function deleteSurgeryCase(id: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")

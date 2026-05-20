@@ -2,9 +2,9 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
-import { Phone, FileText, ChevronDown, Loader2 } from "lucide-react"
+import { Phone, FileText, ChevronDown, Loader2, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { bulkUpdateSurgeryCases } from "@/app/actions/surgery"
+import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 
 const STATUS_COLORS: Record<string, string> = {
@@ -99,6 +99,15 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
     })
   }
 
+  function bulkDelete() {
+    if (!confirm(`Delete ${selected.size} case${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return
+    startTransition(async () => {
+      await bulkDeleteSurgeryCases(Array.from(selected))
+      clearSelection()
+      router.refresh()
+    })
+  }
+
   function fmt(d: string | Date | null | undefined) {
     if (!d) return "—"
     return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
@@ -138,6 +147,14 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
               </div>
             )}
           </div>
+          <button
+            onClick={bulkDelete}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 h-7 px-3 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
           <button onClick={clearSelection} className="ml-auto text-white/60 hover:text-white text-xs transition-colors">
             Clear
           </button>
