@@ -1,8 +1,8 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
-import { Stethoscope, CheckCircle2, Calendar, Clock, XCircle, AlertTriangle, Phone, BarChart2 } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { Stethoscope, CheckCircle2, Calendar, Clock, XCircle, AlertTriangle, Phone, BarChart2, ChevronDown, Check, X } from "lucide-react"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 
 const STATUS_COLORS: Record<string, string> = {
@@ -52,6 +52,10 @@ interface Props {
   currentRange: string
   currentFrom?: string
   currentTo?: string
+  facilityFilter: string[]
+  providerFilter: string[]
+  allFacilities: string[]
+  allProviders: string[]
 }
 
 function KpiCard({
@@ -88,19 +92,113 @@ function BarRow({ label, count, max, color }: { label: string; count: number; ma
   )
 }
 
+function MultiSelectDropdown({
+  label,
+  options,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  label: string
+  options: string[]
+  selected: string[]
+  onToggle: (v: string) => void
+  onClear: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
+  const filtered = options.filter((o) => o.toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-sm font-medium transition-colors ${
+          selected.length > 0
+            ? "bg-zinc-900 text-white border-zinc-900"
+            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+        }`}
+      >
+        {label}
+        {selected.length > 0 && (
+          <span className="ml-1 px-1.5 py-0.5 rounded-md bg-white/20 text-xs font-semibold">
+            {selected.length}
+          </span>
+        )}
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1.5 left-0 z-50 bg-white border border-zinc-200 rounded-xl shadow-xl w-56 overflow-hidden">
+          <div className="p-2 border-b border-zinc-100">
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search..."
+              className="w-full px-2 py-1 text-sm rounded-md border border-zinc-200 outline-none focus:border-zinc-400"
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-slate-400">No results</p>
+            ) : (
+              filtered.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => onToggle(opt)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-zinc-50 text-left"
+                >
+                  <span className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${selected.includes(opt) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300"}`}>
+                    {selected.includes(opt) && <Check className="h-2.5 w-2.5 text-white" />}
+                  </span>
+                  <span className="truncate">{opt}</span>
+                </button>
+              ))
+            )}
+          </div>
+          {selected.length > 0 && (
+            <div className="border-t border-zinc-100 p-2">
+              <button onClick={onClear} className="w-full text-xs text-slate-500 hover:text-slate-700 py-1 transition-colors">
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SurgeryReportsClient({
   kpis, monthlyData, statusMap, facilitiesData, providersData, diagnosisData, callOutcomes,
   currentRange, currentFrom, currentTo,
+  facilityFilter, providerFilter, allFacilities, allProviders,
 }: Props) {
   const router = useRouter()
   const [range, setRange] = useState(currentRange)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
+  const [facilities, setFacilities] = useState<string[]>(facilityFilter)
+  const [providers, setProviders] = useState<string[]>(providerFilter)
 
-  function buildUrl(r: string, from?: string, to?: string) {
+  function buildUrl(r: string, from?: string, to?: string, facs?: string[], provs?: string[]) {
     const p = new URLSearchParams()
     if (from && to) { p.set("from", from); p.set("to", to); p.set("range", "custom") }
     else p.set("range", r)
+    const facList = facs ?? facilities
+    const provList = provs ?? providers
+    facList.forEach((f) => p.append("facility", f))
+    provList.forEach((pv) => p.append("provider", pv))
     return `/surgery/reports?${p.toString()}`
   }
 
@@ -114,6 +212,30 @@ export default function SurgeryReportsClient({
     if (!customFrom || !customTo) return
     router.push(buildUrl("custom", customFrom, customTo))
   }
+
+  function toggleFacility(v: string) {
+    const next = facilities.includes(v) ? facilities.filter((f) => f !== v) : [...facilities, v]
+    setFacilities(next)
+    router.push(buildUrl(range === "custom" ? "custom" : range, customFrom || undefined, customTo || undefined, next, providers))
+  }
+
+  function clearFacilities() {
+    setFacilities([])
+    router.push(buildUrl(range === "custom" ? "custom" : range, customFrom || undefined, customTo || undefined, [], providers))
+  }
+
+  function toggleProvider(v: string) {
+    const next = providers.includes(v) ? providers.filter((p) => p !== v) : [...providers, v]
+    setProviders(next)
+    router.push(buildUrl(range === "custom" ? "custom" : range, customFrom || undefined, customTo || undefined, facilities, next))
+  }
+
+  function clearProviders() {
+    setProviders([])
+    router.push(buildUrl(range === "custom" ? "custom" : range, customFrom || undefined, customTo || undefined, facilities, []))
+  }
+
+  const hasEntityFilter = facilities.length > 0 || providers.length > 0
 
   const maxMonthly = Math.max(...monthlyData.map((m) => m.count), 1)
   const maxFacility = Math.max(...facilitiesData.map((f) => f.count), 1)
@@ -159,6 +281,54 @@ export default function SurgeryReportsClient({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Entity filters row */}
+      <div className="flex flex-wrap items-center gap-2">
+        {allFacilities.length > 0 && (
+          <MultiSelectDropdown
+            label="Facility"
+            options={allFacilities}
+            selected={facilities}
+            onToggle={toggleFacility}
+            onClear={clearFacilities}
+          />
+        )}
+        {allProviders.length > 0 && (
+          <MultiSelectDropdown
+            label="Ordering Provider"
+            options={allProviders}
+            selected={providers}
+            onToggle={toggleProvider}
+            onClear={clearProviders}
+          />
+        )}
+
+        {/* Active filter chips */}
+        {facilities.map((f) => (
+          <span key={f} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-xs font-medium">
+            {f}
+            <button onClick={() => toggleFacility(f)} className="text-zinc-400 hover:text-zinc-700 transition-colors">
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        {providers.map((p) => (
+          <span key={p} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-xs font-medium">
+            {p}
+            <button onClick={() => toggleProvider(p)} className="text-zinc-400 hover:text-zinc-700 transition-colors">
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        {hasEntityFilter && (
+          <button
+            onClick={() => { clearFacilities(); clearProviders() }}
+            className="text-xs text-slate-400 hover:text-slate-600 transition-colors ml-1"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* KPI Cards */}
