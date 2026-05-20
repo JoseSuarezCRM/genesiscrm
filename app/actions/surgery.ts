@@ -5,16 +5,58 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CallOutcome } from "@prisma/client"
 
-export async function getSurgeryCases() {
+export interface SurgeryFilters {
+  search?: string
+  statuses?: string[]
+  statusMode?: "any" | "none"
+  from?: string
+  to?: string
+  page?: number
+}
+
+const PAGE_SIZE = 20
+
+export async function getSurgeryCases(filters: SurgeryFilters = {}) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
-  return (prisma as any).surgeryCase.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      _count: { select: { callAttempts: true, documents: true } },
-    },
-  })
+  const { search, statuses = [], statusMode = "any", from, to, page = 1 } = filters
+  const skip = (page - 1) * PAGE_SIZE
+
+  const where: Record<string, unknown> = {}
+
+  if (statuses.length > 0) {
+    where.status = statusMode === "none" ? { notIn: statuses } : { in: statuses }
+  }
+
+  if (from || to) {
+    where.creationDate = {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to ? { lte: new Date(to) } : {}),
+    }
+  }
+
+  if (search?.trim()) {
+    where.OR = [
+      { patientName: { contains: search.trim(), mode: "insensitive" } },
+      { mrn: { contains: search.trim(), mode: "insensitive" } },
+    ]
+  }
+
+  const [cases, total] = await Promise.all([
+    (prisma as any).surgeryCase.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: PAGE_SIZE,
+      skip,
+      include: {
+        _count: { select: { callAttempts: true, documents: true } },
+      },
+    }),
+    (prisma as any).surgeryCase.count({ where }),
+  ])
+
+  return { cases, total, page, pageSize: PAGE_SIZE }
 }
 
 export async function getSurgeryCase(id: string) {
