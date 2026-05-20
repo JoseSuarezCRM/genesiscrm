@@ -922,6 +922,7 @@ model SurgeryCase {
   creationDate      DateTime?
   status            SurgeryStatus  @default(NEW)
   patientName       String
+  orderingProvider  String?
   diagnosis         String?
   clearanceRequired String?
   ctRequired        String?

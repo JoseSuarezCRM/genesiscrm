@@ -43,7 +43,7 @@ export async function getSurgeryCases(filters: SurgeryFilters = {}) {
     ]
   }
 
-  const [cases, total] = await Promise.all([
+  const [cases, total, allMatchingIds] = await Promise.all([
     (prisma as any).surgeryCase.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -54,9 +54,16 @@ export async function getSurgeryCases(filters: SurgeryFilters = {}) {
       },
     }),
     (prisma as any).surgeryCase.count({ where }),
+    (prisma as any).surgeryCase.findMany({ where, select: { id: true }, orderBy: { createdAt: "desc" } }),
   ])
 
-  return { cases, total, page, pageSize: PAGE_SIZE }
+  return {
+    cases,
+    total,
+    allMatchingIds: (allMatchingIds as { id: string }[]).map((r) => r.id),
+    page,
+    pageSize: PAGE_SIZE,
+  }
 }
 
 export async function getSurgeryCase(id: string) {
@@ -104,6 +111,18 @@ export async function updateSurgeryCase(
   })
 
   revalidatePath(`/surgery/${id}`)
+  revalidatePath("/surgery")
+}
+
+export async function bulkUpdateSurgeryCases(ids: string[], status: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  await (prisma as any).surgeryCase.updateMany({
+    where: { id: { in: ids } },
+    data: { status },
+  })
+
   revalidatePath("/surgery")
 }
 

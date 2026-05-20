@@ -84,6 +84,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
         <CardContent className="space-y-3 text-sm">
           <Row label="Patient Name" value={surgeryCase.patientName} />
           <Row label="MRN" value={surgeryCase.mrn} />
+          <Row label="Ordering Provider" value={surgeryCase.orderingProvider} />
           <Row label="Diagnosis" value={surgeryCase.diagnosis} />
           <Row label="Creation Date" value={formatDate(surgeryCase.creationDate)} />
           <Row label="Expires" value={formatDate(surgeryCase.expires)} />

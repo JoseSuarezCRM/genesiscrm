@@ -217,6 +217,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
               value={clearanceRequired}
               onChange={setClearanceRequired}
               options={[
+                { value: "Not Required", label: "Not Required" },
                 { value: "Medical Clearance", label: "Medical Clearance" },
                 { value: "Secondary Clearance", label: "Secondary Clearance" },
                 { value: "Dental Clearance", label: "Dental Clearance" },
@@ -243,7 +244,21 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <InputField label="Facility" value={facility} onChange={setFacility} />
+            <SelectField
+              label="Facility"
+              value={facility}
+              onChange={setFacility}
+              options={[
+                { value: "Glen Oaks Hospital",                        label: "Glen Oaks Hospital" },
+                { value: "Humboldt Park Hospital",                    label: "Humboldt Park Hospital" },
+                { value: "Mercy Aurora Hospital",                     label: "Mercy Aurora Hospital" },
+                { value: "Good Samaritan Hospital",                   label: "Good Samaritan Hospital" },
+                { value: "Oak Brook Surgical Center",                 label: "Oak Brook Surgical Center" },
+                { value: "Aiden Center For Day Surgery",              label: "Aiden Center For Day Surgery" },
+                { value: "Fullerton-Kimball Medical & Surgical Center", label: "Fullerton-Kimball Medical & Surgical Center" },
+                { value: "Illinois Masonic Hospital",                 label: "Illinois Masonic Hospital" },
+              ]}
+            />
             <InputField label="Procedure" value={procedure} onChange={setProcedure} />
             <InputField label="Surgery Date" value={surgeryDate} type="date" onChange={setSurgeryDate} />
           </div>

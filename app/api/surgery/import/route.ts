@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
           ),
           status: "NEW",
           patientName,
+          orderingProvider: findCol(row, "ordering provider", "orderingprovider", "ordering dr", "ordering physician", "provider") || null,
           diagnosis: diagnosis || null,
           createdById: session.user.id,
         },
