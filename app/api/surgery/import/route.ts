@@ -11,7 +11,12 @@ function findCol(row: Record<string, unknown>, ...names: string[]): string {
   const keys = Object.keys(row)
   for (const name of names) {
     const match = keys.find((k) => normalizeKey(k) === normalizeKey(name))
-    if (match !== undefined) return String(row[match] ?? "").trim()
+    if (match !== undefined) {
+      const val = row[match]
+      // Excel may parse large numeric MRNs as floats — convert to integer string
+      if (typeof val === "number") return String(Math.round(val))
+      return String(val ?? "").trim()
+    }
   }
   return ""
 }
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
   const errors: string[] = []
 
   for (const row of rows) {
-    const patientName = findCol(row, "patient name", "patientname", "patient", "name", "full name")
+    const patientName = findCol(row, "pt name", "ptname", "patient name", "patientname", "patient", "name", "full name")
     if (!patientName) {
       errors.push(`Skipped row: no patient name found`)
       continue
