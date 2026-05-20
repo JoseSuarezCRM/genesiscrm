@@ -90,6 +90,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [surgeryDate, setSurgeryDate] = useState(
     surgeryCase.surgeryDate ? new Date(surgeryCase.surgeryDate).toISOString().slice(0, 10) : ""
   )
+  const [email, setEmail] = useState(surgeryCase.email ?? "")
   const [notes, setNotes] = useState(surgeryCase.notes ?? "")
 
   // Call tracker
@@ -120,6 +121,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         facility: facility || null,
         procedure: procedure || null,
         surgeryDate: surgeryDate || null,
+        email: email || null,
         notes: notes || null,
       })
       setSaved(true)
@@ -244,6 +246,9 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
             <InputField label="Facility" value={facility} onChange={setFacility} />
             <InputField label="Procedure" value={procedure} onChange={setProcedure} />
             <InputField label="Surgery Date" value={surgeryDate} type="date" onChange={setSurgeryDate} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <InputField label="Patient Email" value={email} type="email" onChange={setEmail} />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Notes</label>

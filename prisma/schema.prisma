@@ -929,6 +929,7 @@ model SurgeryCase {
   facility          String?
   procedure         String?
   surgeryDate       DateTime?
+  email             String?
   notes             String?
   createdById       String?
   createdBy         User?          @relation("SurgeryCaseCreatedBy", fields: [createdById], references: [id])

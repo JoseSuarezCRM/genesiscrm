@@ -86,6 +86,7 @@ export async function updateSurgeryCase(
     facility?: string | null
     procedure?: string | null
     surgeryDate?: string | null
+    email?: string | null
     notes?: string | null
   }
 ) {
