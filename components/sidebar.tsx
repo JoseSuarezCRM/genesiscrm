@@ -54,7 +54,8 @@ const schedulingItems = [
 ]
 
 const surgeryItems = [
-  { href: "/surgery", label: "Surgery Cases", icon: Stethoscope },
+  { href: "/surgery",         label: "Surgery Cases",   icon: Stethoscope },
+  { href: "/surgery/reports", label: "Surgery Reports", icon: BarChart2 },
 ]
 
 const adminItems = [
