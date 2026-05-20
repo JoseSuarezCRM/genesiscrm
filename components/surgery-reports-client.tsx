@@ -243,7 +243,7 @@ export default function SurgeryReportsClient({
   const maxDiagnosis = Math.max(...diagnosisData.map((d) => d.count), 1)
   const totalCalls = callOutcomes.reduce((s, o) => s + o.count, 0)
 
-  const allStatuses = ["NEW", "SCHEDULED", "PENDING_CONFIRMATION", "PENDING_CLEARANCE", "CANCELED", "COMPLETED"]
+  const allStatuses = ["NEW", "PENDING_CLEARANCE", "PENDING_CONFIRMATION", "SCHEDULED", "CANCELED", "COMPLETED"]
   const maxStatus = Math.max(...allStatuses.map((s) => statusMap[s] ?? 0), 1)
 
   return (

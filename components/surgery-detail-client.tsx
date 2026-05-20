@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 
 const MAX_CALLS = 4
 
-const STATUS_OPTIONS = ["NEW", "SCHEDULED", "PENDING_CONFIRMATION", "PENDING_CLEARANCE", "CANCELED", "COMPLETED"]
+const STATUS_OPTIONS = ["NEW", "PENDING_CLEARANCE", "PENDING_CONFIRMATION", "SCHEDULED", "CANCELED", "COMPLETED"]
 const STATUS_COLORS: Record<string, string> = {
   NEW: "bg-zinc-100 text-zinc-700 border-zinc-200",
   SCHEDULED: "bg-blue-100 text-blue-700 border-blue-200",

@@ -6,9 +6,9 @@ import { Search, ChevronDown, X, Check, Calendar } from "lucide-react"
 
 const STATUS_OPTIONS = [
   { id: "NEW",                  label: "New" },
-  { id: "SCHEDULED",            label: "Scheduled" },
-  { id: "PENDING_CONFIRMATION", label: "Pending Confirmation" },
   { id: "PENDING_CLEARANCE",    label: "Pending Clearance" },
+  { id: "PENDING_CONFIRMATION", label: "Pending Confirmation" },
+  { id: "SCHEDULED",            label: "Scheduled" },
   { id: "CANCELED",             label: "Canceled" },
   { id: "COMPLETED",            label: "Completed" },
 ]
