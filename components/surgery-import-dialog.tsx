@@ -2,16 +2,25 @@
 
 import { useState, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Upload, X, FileSpreadsheet, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { Upload, X, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, SkipForward } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
+type ImportResult = {
+  imported: number
+  duplicates: number
+  errors: string[]
+  total: number
+}
 
 export default function SurgeryImportDialog() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [importing, startImport] = useTransition()
-  const [result, setResult] = useState<{ imported: number; duplicates: number; errors: string[]; total: number } | null>(null)
+  const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState("")
+  const [activeTab, setActiveTab] = useState<"created" | "skipped">("created")
   const fileRef = useRef<HTMLInputElement>(null)
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -32,6 +41,7 @@ export default function SurgeryImportDialog() {
         const json = await res.json()
         if (!res.ok) { setError(json.error ?? "Import failed"); return }
         setResult(json)
+        setActiveTab(json.imported > 0 ? "created" : "skipped")
         router.refresh()
       } catch {
         setError("Network error — please try again.")
@@ -55,30 +65,33 @@ export default function SurgeryImportDialog() {
       </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+            {/* Header — fixed */}
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h2 className="text-base font-semibold text-slate-900">Import Surgery Cases</h2>
               <button onClick={handleClose} className="text-slate-400 hover:text-slate-700 transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              {/* Format info */}
-              <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 space-y-1.5">
-                <p className="font-medium text-slate-800">Supported file formats: .xlsx, .xls, .csv</p>
-                <p>Expected columns (case-insensitive):</p>
-                <ul className="list-disc list-inside space-y-0.5 text-slate-500 text-xs">
-                  <li>Patient Name <span className="text-red-500">*required</span></li>
-                  <li>MRN</li>
-                  <li>Expires</li>
-                  <li>Creation Date</li>
-                  <li>Diagnosis</li>
-                </ul>
-                <p className="text-xs text-slate-400 pt-1">Status defaults to <strong>New</strong> for all imported rows.</p>
-              </div>
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Format info — only when no result yet */}
+              {!result && (
+                <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 space-y-1.5">
+                  <p className="font-medium text-slate-800">Supported file formats: .xlsx, .xls, .csv</p>
+                  <p>Expected columns (case-insensitive):</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-slate-500 text-xs">
+                    <li>Pt Name / Patient Name <span className="text-red-500">*required</span></li>
+                    <li>MRN <span className="text-red-500">*required</span></li>
+                    <li>Diagnosis</li>
+                    <li>Expires</li>
+                    <li>Creation Date</li>
+                  </ul>
+                  <p className="text-xs text-slate-400 pt-1">Status defaults to <strong>New</strong>. Rows with the same MRN + Diagnosis are skipped.</p>
+                </div>
+              )}
 
               {/* File picker */}
               {!result && (
@@ -110,7 +123,7 @@ export default function SurgeryImportDialog() {
                 </div>
               )}
 
-              {/* Error */}
+              {/* Fatal error */}
               {error && (
                 <div className="flex items-start gap-2 text-red-600 text-sm bg-red-50 rounded-xl p-3">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -118,34 +131,75 @@ export default function SurgeryImportDialog() {
                 </div>
               )}
 
-              {/* Result */}
+              {/* Result with tabs */}
               {result && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-xl p-3">
-                    <CheckCircle className="h-5 w-5 shrink-0" />
-                    <div className="text-sm font-medium">
-                      Imported {result.imported} of {result.total} rows successfully.
-                      {result.duplicates > 0 && (
-                        <span className="block text-xs font-normal text-green-600 mt-0.5">
-                          {result.duplicates} duplicate{result.duplicates !== 1 ? "s" : ""} skipped (same MRN + diagnosis already exists).
-                        </span>
+                  {/* Summary line */}
+                  <div className="flex items-center gap-2 text-slate-700 bg-slate-50 rounded-xl p-3 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+                    <span>
+                      <strong>{result.imported}</strong> created, <strong>{result.errors.length}</strong> skipped
+                      {" "}out of <strong>{result.total}</strong> rows
+                    </span>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="border rounded-xl overflow-hidden">
+                    <div className="flex border-b bg-slate-50">
+                      <button
+                        onClick={() => setActiveTab("created")}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors",
+                          activeTab === "created"
+                            ? "bg-white text-slate-900 border-b-2 border-blue-600"
+                            : "text-slate-500 hover:text-slate-700"
+                        )}
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        Created ({result.imported})
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("skipped")}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors",
+                          activeTab === "skipped"
+                            ? "bg-white text-slate-900 border-b-2 border-blue-600"
+                            : "text-slate-500 hover:text-slate-700"
+                        )}
+                      >
+                        <SkipForward className="h-3.5 w-3.5" />
+                        Skipped ({result.errors.length})
+                      </button>
+                    </div>
+
+                    <div className="p-3 min-h-[80px] max-h-[260px] overflow-y-auto">
+                      {activeTab === "created" ? (
+                        result.imported === 0 ? (
+                          <p className="text-sm text-slate-400 text-center py-4">No cases were imported.</p>
+                        ) : (
+                          <p className="text-sm text-green-700">
+                            {result.imported} case{result.imported !== 1 ? "s" : ""} successfully added to Surgery.
+                          </p>
+                        )
+                      ) : (
+                        result.errors.length === 0 ? (
+                          <p className="text-sm text-slate-400 text-center py-4">No rows were skipped.</p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {result.errors.map((e, i) => (
+                              <li key={i} className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5">{e}</li>
+                            ))}
+                          </ul>
+                        )
                       )}
                     </div>
                   </div>
-                  {result.errors.length > 0 && (
-                    <div className="bg-amber-50 rounded-xl p-3 space-y-1">
-                      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Skipped rows:</p>
-                      {result.errors.map((e, i) => (
-                        <p key={i} className="text-xs text-amber-600">{e}</p>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t bg-slate-50">
+            {/* Footer — fixed */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t bg-slate-50 shrink-0">
               <button
                 onClick={handleClose}
                 className="px-4 py-2 text-sm text-zinc-600 border border-zinc-200 rounded-lg hover:border-zinc-400 transition-all"
