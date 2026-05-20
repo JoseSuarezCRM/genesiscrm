@@ -4,7 +4,18 @@ import { prisma } from "@/lib/prisma"
 import SurgeryReportsClient from "@/components/surgery-reports-client"
 
 interface PageProps {
-  searchParams: { range?: string; from?: string; to?: string }
+  searchParams: {
+    range?: string
+    from?: string
+    to?: string
+    facility?: string | string[]
+    provider?: string | string[]
+  }
+}
+
+function toArray(val: string | string[] | undefined): string[] {
+  if (!val) return []
+  return Array.isArray(val) ? val : [val]
 }
 
 function resolveRange(range?: string, from?: string, to?: string): { start: Date; end: Date } {
@@ -29,7 +40,15 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
   if (!session) redirect("/login")
 
   const { start, end } = resolveRange(searchParams.range, searchParams.from, searchParams.to)
-  const where = { createdAt: { gte: start, lte: end } }
+  const facilityFilter = toArray(searchParams.facility)
+  const providerFilter = toArray(searchParams.provider)
+
+  const entityFilter = {
+    ...(facilityFilter.length > 0 ? { facility: { in: facilityFilter } } : {}),
+    ...(providerFilter.length > 0 ? { orderingProvider: { in: providerFilter } } : {}),
+  }
+  const where = { createdAt: { gte: start, lte: end }, ...entityFilter }
+
   const today = new Date()
   const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
 
@@ -42,6 +61,8 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
     callOutcomes,
     expiringSoon,
     totalEver,
+    allFacilities,
+    allProviders,
   ] = await Promise.all([
     (prisma as any).surgeryCase.findMany({
       where,
@@ -79,11 +100,25 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
     }),
     (prisma as any).surgeryCase.count({
       where: {
+        ...entityFilter,
         expires: { gte: today, lte: in30Days },
         status: { notIn: ["COMPLETED", "CANCELED"] },
       },
     }),
-    (prisma as any).surgeryCase.count(),
+    (prisma as any).surgeryCase.count({ where: entityFilter }),
+    // Dropdown options — all distinct values ever, not scoped to date range
+    (prisma as any).surgeryCase.findMany({
+      where: { facility: { not: null } },
+      distinct: ["facility"],
+      select: { facility: true },
+      orderBy: { facility: "asc" },
+    }),
+    (prisma as any).surgeryCase.findMany({
+      where: { orderingProvider: { not: null } },
+      distinct: ["orderingProvider"],
+      select: { orderingProvider: true },
+      orderBy: { orderingProvider: "asc" },
+    }),
   ])
 
   // Monthly breakdown (last 6 months by createdAt)
@@ -110,7 +145,6 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
   const pendingConfirmation = statusMap["PENDING_CONFIRMATION"] ?? 0
   const canceled = statusMap["CANCELED"] ?? 0
   const newCount = statusMap["NEW"] ?? 0
-
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0
 
   return (
@@ -125,6 +159,10 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
       currentRange={searchParams.range ?? "last_6m"}
       currentFrom={searchParams.from}
       currentTo={searchParams.to}
+      facilityFilter={facilityFilter}
+      providerFilter={providerFilter}
+      allFacilities={(allFacilities as { facility: string }[]).map((f) => f.facility)}
+      allProviders={(allProviders as { orderingProvider: string }[]).map((p) => p.orderingProvider)}
     />
   )
 }
