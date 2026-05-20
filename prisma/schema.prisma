@@ -155,8 +155,11 @@ model User {
   smsMessages           SmsMessage[]
   teamMemberships       TeamMember[]
   directEmails          DirectEmail[]
-  savedReports          SavedReport[]  @relation("SavedReportCreatedBy")
-  dashboards            Dashboard[]    @relation("DashboardCreatedBy")
+  savedReports          SavedReport[]        @relation("SavedReportCreatedBy")
+  dashboards            Dashboard[]          @relation("DashboardCreatedBy")
+  surgeryCases          SurgeryCase[]        @relation("SurgeryCaseCreatedBy")
+  surgeryCallAttempts   SurgeryCallAttempt[] @relation("SurgeryCallAttemptCalledBy")
+  surgeryDocuments      SurgeryDocument[]    @relation("SurgeryDocumentUploadedBy")
 }
 
 model Team {
@@ -897,5 +900,67 @@ model DashboardReport {
   savedReport   SavedReport  @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
 
   @@id([dashboardId, savedReportId])
+}
+
+// ─── Surgery ──────────────────────────────────────────────────────────────────
+
+enum SurgeryStatus {
+  NEW
+  SCHEDULED
+  PENDING_CONFIRMATION
+  PENDING_CLEARANCE
+  CANCELED
+  COMPLETED
+}
+
+model SurgeryCase {
+  id                String         @id @default(cuid())
+  mrn               String?
+  expires           DateTime?
+  creationDate      DateTime?
+  status            SurgeryStatus  @default(NEW)
+  patientName       String
+  diagnosis         String?
+  clearanceRequired String?
+  ctRequired        String?
+  glp1              String?
+  facility          String?
+  procedure         String?
+  surgeryDate       DateTime?
+  notes             String?
+  createdById       String?
+  createdBy         User?          @relation("SurgeryCaseCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  callAttempts      SurgeryCallAttempt[]
+  documents         SurgeryDocument[]
+}
+
+model SurgeryCallAttempt {
+  id          String       @id @default(cuid())
+  caseId      String
+  case        SurgeryCase  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  calledById  String?
+  calledBy    User?        @relation("SurgeryCallAttemptCalledBy", fields: [calledById], references: [id])
+  outcome     CallOutcome  @default(NO_ANSWER)
+  notes       String?
+  createdAt   DateTime     @default(now())
+
+  @@index([caseId])
+}
+
+model SurgeryDocument {
+  id           String      @id @default(cuid())
+  caseId       String
+  case         SurgeryCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileUrl      String
+  fileSize     Int?
+  contentType  String?
+  uploadedById String?
+  uploadedBy   User?       @relation("SurgeryDocumentUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime    @default(now())
+
+  @@index([caseId])
 }
 

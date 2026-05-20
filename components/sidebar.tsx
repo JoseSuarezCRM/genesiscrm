@@ -28,6 +28,7 @@ import {
   MessageCircle,
   CalendarRange,
   UsersRound,
+  Stethoscope,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -50,6 +51,10 @@ const appointmentItems = [
 const schedulingItems = [
   { href: "/scheduler",       label: "Weekly Schedule", icon: CalendarRange },
   { href: "/scheduler/staff", label: "Staff Roster",    icon: UsersRound },
+]
+
+const surgeryItems = [
+  { href: "/surgery", label: "Surgery Cases", icon: Stethoscope },
 ]
 
 const adminItems = [
@@ -260,6 +265,16 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
             pathname={pathname}
             collapsed={collapsed}
             defaultOpen={false}
+          />
+        )}
+
+        {can("NAV_SURGERY") && (
+          <NavSection
+            title="Surgery"
+            items={surgeryItems}
+            pathname={pathname}
+            collapsed={collapsed}
+            defaultOpen
           />
         )}
 
