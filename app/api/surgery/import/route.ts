@@ -20,12 +20,16 @@ function parseExcelDate(val: unknown): Date | null {
   if (!val) return null
   if (val instanceof Date) return val
   if (typeof val === "number") {
-    // Excel serial date
     const d = XLSX.SSF.parse_date_code(val)
     if (d) return new Date(d.y, d.m - 1, d.d)
   }
   const d = new Date(String(val))
   return isNaN(d.getTime()) ? null : d
+}
+
+// Compound dedup key: MRN + normalized diagnosis
+function dedupKey(mrn: string, diagnosis: string) {
+  return `${mrn.toLowerCase().trim()}|${diagnosis.toLowerCase().trim()}`
 }
 
 export async function POST(req: NextRequest) {
@@ -48,7 +52,22 @@ export async function POST(req: NextRequest) {
 
   if (rows.length === 0) return NextResponse.json({ error: "File has no data rows" }, { status: 400 })
 
+  // Build set of existing MRN+Diagnosis pairs for dedup
+  const existing = await (prisma as any).surgeryCase.findMany({
+    select: { mrn: true, diagnosis: true },
+  }) as { mrn: string | null; diagnosis: string | null }[]
+
+  const existingKeys = new Set(
+    existing
+      .filter((r) => r.mrn)
+      .map((r) => dedupKey(r.mrn!, r.diagnosis ?? ""))
+  )
+
+  // Also track keys seen within this file to catch in-file duplicates
+  const seenKeys = new Set<string>()
+
   let imported = 0
+  let duplicates = 0
   const errors: string[] = []
 
   for (const row of rows) {
@@ -58,10 +77,21 @@ export async function POST(req: NextRequest) {
       continue
     }
 
+    const mrn = findCol(row, "mrn", "medical record number", "patient mrn")
+    const diagnosis = findCol(row, "diagnosis", "dx", "icd", "diagnosis code")
+    const key = dedupKey(mrn, diagnosis)
+
+    if (existingKeys.has(key) || seenKeys.has(key)) {
+      duplicates++
+      errors.push(`"${patientName}" (MRN: ${mrn}, Dx: ${diagnosis || "—"}): duplicate — skipped`)
+      continue
+    }
+    seenKeys.add(key)
+
     try {
       await (prisma as any).surgeryCase.create({
         data: {
-          mrn: findCol(row, "mrn", "medical record number", "patient mrn") || null,
+          mrn: mrn || null,
           expires: parseExcelDate(
             row[Object.keys(row).find((k) => normalizeKey(k) === "expires" || normalizeKey(k) === "expiration" || normalizeKey(k) === "expiry") ?? ""]
           ),
@@ -70,7 +100,7 @@ export async function POST(req: NextRequest) {
           ),
           status: "NEW",
           patientName,
-          diagnosis: findCol(row, "diagnosis", "dx", "icd", "diagnosis code") || null,
+          diagnosis: diagnosis || null,
           createdById: session.user.id,
         },
       })
@@ -80,5 +110,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ imported, errors, total: rows.length })
+  return NextResponse.json({ imported, duplicates, errors, total: rows.length })
 }

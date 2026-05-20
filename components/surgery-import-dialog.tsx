@@ -10,7 +10,7 @@ export default function SurgeryImportDialog() {
   const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [importing, startImport] = useTransition()
-  const [result, setResult] = useState<{ imported: number; errors: string[]; total: number } | null>(null)
+  const [result, setResult] = useState<{ imported: number; duplicates: number; errors: string[]; total: number } | null>(null)
   const [error, setError] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -123,9 +123,14 @@ export default function SurgeryImportDialog() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-xl p-3">
                     <CheckCircle className="h-5 w-5 shrink-0" />
-                    <span className="text-sm font-medium">
+                    <div className="text-sm font-medium">
                       Imported {result.imported} of {result.total} rows successfully.
-                    </span>
+                      {result.duplicates > 0 && (
+                        <span className="block text-xs font-normal text-green-600 mt-0.5">
+                          {result.duplicates} duplicate{result.duplicates !== 1 ? "s" : ""} skipped (same MRN + diagnosis already exists).
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {result.errors.length > 0 && (
                     <div className="bg-amber-50 rounded-xl p-3 space-y-1">
