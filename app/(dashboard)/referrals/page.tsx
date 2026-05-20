@@ -240,7 +240,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
           >
             All
           </Link>
-          {pipelines.map((p) => (
+          {(pipelines as any[]).map((p) => (
             <Link
               key={p.id}
               href={pipelineTabHref(p.id)}
@@ -267,12 +267,12 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm">
         <Suspense fallback={null}>
           <ReferralFilters
-            practices={practices.map((p) => ({ id: p.id, label: p.name }))}
-            doctors={allDoctors.map((d) => ({
+            practices={(practices as any[]).map((p) => ({ id: p.id, label: p.name }))}
+            doctors={(allDoctors as any[]).map((d) => ({
               id: d.id,
               label: d.title ? `${d.name}, ${d.title}` : d.name,
             }))}
-            tags={allTags.map((t) => ({ id: t.id, label: t.name, color: t.color }))}
+            tags={(allTags as any[]).map((t) => ({ id: t.id, label: t.name, color: t.color }))}
             incompleteCount={incompleteCount}
             currentSearch={searchParams.search}
             currentStatuses={statuses}
