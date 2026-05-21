@@ -133,7 +133,9 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   return (
     <ReportsClient
       kpis={{ total, completed, scheduled, pending, conversionRate, scheduleRate, totalEver }}
-      monthlyData={monthlyData}
+      rawDates={allInRange.map((r) => r.referralDate.toISOString())}
+      rangeStart={fromStr}
+      rangeEnd={toStr}
       statusCountMap={statusCountMap}
       statusColors={STATUS_COLORS}
       statusLabels={STATUS_LABELS}

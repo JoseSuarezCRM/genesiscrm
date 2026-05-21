@@ -6,6 +6,82 @@ import Link from "next/link"
 import { ReferralStatus } from "@prisma/client"
 import { Users, CheckCircle2, Calendar, Clock, TrendingUp, BarChart2, ChevronRight, ChevronDown, Check, Building2, User } from "lucide-react"
 
+type Granularity = "daily" | "weekly" | "monthly" | "yearly"
+
+interface Bucket {
+  label: string
+  count: number
+  fromStr: string
+  toStr: string
+}
+
+function computeBuckets(rawDates: string[], gran: Granularity, start: Date, end: Date): Bucket[] {
+  const dates = rawDates.map((d) => new Date(d))
+  const buckets: Bucket[] = []
+
+  if (gran === "daily") {
+    const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    while (cur <= endDay) {
+      const bs = new Date(cur)
+      const be = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), 23, 59, 59)
+      buckets.push({
+        label: bs.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        count: dates.filter((d) => d >= bs && d <= be).length,
+        fromStr: bs.toISOString().slice(0, 10),
+        toStr: be.toISOString().slice(0, 10),
+      })
+      cur.setDate(cur.getDate() + 1)
+    }
+  } else if (gran === "weekly") {
+    const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const dow = cur.getDay()
+    cur.setDate(cur.getDate() - (dow === 0 ? 6 : dow - 1))
+    while (cur <= end) {
+      const bs = new Date(cur)
+      const be = new Date(cur)
+      be.setDate(be.getDate() + 6)
+      be.setHours(23, 59, 59)
+      buckets.push({
+        label: bs.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        count: dates.filter((d) => d >= bs && d <= be).length,
+        fromStr: bs.toISOString().slice(0, 10),
+        toStr: be.toISOString().slice(0, 10),
+      })
+      cur.setDate(cur.getDate() + 7)
+    }
+  } else if (gran === "monthly") {
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1)
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1)
+    while (cur <= endMonth) {
+      const bs = new Date(cur)
+      const be = new Date(cur.getFullYear(), cur.getMonth() + 1, 0, 23, 59, 59)
+      buckets.push({
+        label: bs.toLocaleString("default", { month: "short", year: "2-digit" }),
+        count: dates.filter((d) => d >= bs && d <= be).length,
+        fromStr: bs.toISOString().slice(0, 10),
+        toStr: be.toISOString().slice(0, 10),
+      })
+      cur.setMonth(cur.getMonth() + 1)
+    }
+  } else {
+    const cur = new Date(start.getFullYear(), 0, 1)
+    while (cur.getFullYear() <= end.getFullYear()) {
+      const bs = new Date(cur)
+      const be = new Date(cur.getFullYear(), 11, 31, 23, 59, 59)
+      buckets.push({
+        label: String(bs.getFullYear()),
+        count: dates.filter((d) => d >= bs && d <= be).length,
+        fromStr: bs.toISOString().slice(0, 10),
+        toStr: be.toISOString().slice(0, 10),
+      })
+      cur.setFullYear(cur.getFullYear() + 1)
+    }
+  }
+
+  return buckets
+}
+
 interface Props {
   kpis: {
     total: number
@@ -16,7 +92,9 @@ interface Props {
     scheduleRate: number
     totalEver: number
   }
-  monthlyData: { label: string; year: number; month: number; count: number }[]
+  rawDates: string[]
+  rangeStart: string
+  rangeEnd: string
   statusCountMap: Record<string, number>
   statusColors: Record<string, string>
   statusLabels: Record<string, string>
@@ -48,7 +126,9 @@ const RANGE_OPTIONS = [
 
 export default function ReportsClient({
   kpis,
-  monthlyData,
+  rawDates,
+  rangeStart,
+  rangeEnd,
   statusCountMap,
   statusColors,
   statusLabels,
@@ -71,6 +151,7 @@ export default function ReportsClient({
   const [range, setRange] = useState(currentRange)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
+  const [granularity, setGranularity] = useState<Granularity>("monthly")
 
   function buildUrl(r: string, from?: string, to?: string, pids?: string[], dids?: string[], plids?: string[]) {
     const p = new URLSearchParams()
@@ -127,7 +208,6 @@ export default function ReportsClient({
     ? filterDoctors.filter((d) => practiceIds.includes(d.practiceId))
     : filterDoctors
 
-  const maxMonthly = Math.max(...monthlyData.map((m) => m.count), 1)
   const maxStatus = Math.max(...Object.values(statusCountMap), 1)
   const maxPractice = Math.max(...practicesData.map((p) => p.count), 1)
   const maxProvider = Math.max(...providersData.map((p) => p.count), 1)
@@ -269,31 +349,29 @@ export default function ReportsClient({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Monthly Volume */}
-        <div className="bg-white border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Monthly Volume</h2>
-          <div className="space-y-2.5">
-            {monthlyData.map(({ label, year, month, count }) => {
-              const mFrom = `${year}-${String(month).padStart(2, "0")}-01`
-              const lastDay = new Date(year, month, 0).getDate()
-              const mTo = `${year}-${String(month).padStart(2, "0")}-${lastDay}`
-              return (
-                <Link key={label} href={`/referrals?from=${mFrom}&to=${mTo}${practiceParams}${doctorParams}${pipelineParams}`} className="flex items-center gap-3 group">
-                  <span className="text-xs text-slate-500 w-12 shrink-0">{label}</span>
-                  <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
-                    <div
-                      className="h-6 bg-blue-500 group-hover:bg-blue-600 rounded-full flex items-center px-2 transition-all"
-                      style={{ width: `${Math.max((count / maxMonthly) * 100, count > 0 ? 8 : 0)}%` }}
-                    >
-                      {count > 0 && <span className="text-xs text-white font-medium">{count}</span>}
-                    </div>
-                  </div>
-                  {count === 0 && <span className="text-xs text-slate-400">0</span>}
-                  <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-500 shrink-0" />
-                </Link>
-              )
-            })}
+        {/* Volume Line Chart */}
+        <div className="bg-white border rounded-xl p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-slate-700">Referral Volume</h2>
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+              {(["daily", "weekly", "monthly", "yearly"] as Granularity[]).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setGranularity(g)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors capitalize ${
+                    granularity === g ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
           </div>
+          <LineChart
+            buckets={computeBuckets(rawDates, granularity, new Date(rangeStart), new Date(rangeEnd + "T23:59:59"))}
+            filterParams={`${practiceParams}${doctorParams}${pipelineParams}`}
+            onNavigate={(from, to) => router.push(`/referrals?from=${from}&to=${to}${practiceParams}${doctorParams}${pipelineParams}`)}
+          />
         </div>
 
         {/* Status Breakdown */}
@@ -397,6 +475,132 @@ export default function ReportsClient({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Line Chart ───────────────────────────────────────────────────────────────
+
+function LineChart({
+  buckets,
+  onNavigate,
+}: {
+  buckets: Bucket[]
+  filterParams: string
+  onNavigate: (from: string, to: string) => void
+}) {
+  const [hovered, setHovered] = useState<number | null>(null)
+  const n = buckets.length
+
+  if (n === 0) return <p className="text-sm text-slate-400 py-8 text-center">No data in this period.</p>
+
+  const W = 600, H = 200
+  const padL = 44, padR = 16, padT = 16, padB = 36
+  const cW = W - padL - padR
+  const cH = H - padT - padB
+  const maxCount = Math.max(...buckets.map((b) => b.count), 1)
+
+  function xp(i: number) { return padL + (n <= 1 ? cW / 2 : (i / (n - 1)) * cW) }
+  function yp(c: number) { return padT + cH - (c / maxCount) * cH }
+
+  const pts = buckets.map((b, i) => `${xp(i)},${yp(b.count)}`).join(" ")
+  const area = [
+    `M ${xp(0)} ${padT + cH}`,
+    ...buckets.map((b, i) => `L ${xp(i)} ${yp(b.count)}`),
+    `L ${xp(n - 1)} ${padT + cH}`,
+    "Z",
+  ].join(" ")
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => ({
+    y: padT + cH - t * cH,
+    label: Math.round(t * maxCount),
+  }))
+
+  const maxLabels = Math.min(n, 10)
+  const labelIndices = new Set<number>()
+  if (n <= maxLabels) {
+    for (let i = 0; i < n; i++) labelIndices.add(i)
+  } else {
+    for (let k = 0; k < maxLabels; k++) {
+      labelIndices.add(Math.round((k * (n - 1)) / (maxLabels - 1)))
+    }
+  }
+
+  const bw = n > 1 ? cW / (n - 1) : cW
+  const hb = hovered !== null ? buckets[hovered] : null
+
+  return (
+    <div className="relative select-none">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        style={{ height: 200 }}
+        onMouseLeave={() => setHovered(null)}
+      >
+        <defs>
+          <linearGradient id="lineAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Y-axis grid + labels */}
+        {yTicks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} y1={t.y} x2={W - padR} y2={t.y} stroke="#f1f5f9" strokeWidth="1" />
+            <text x={padL - 6} y={t.y + 4} textAnchor="end" fill="#94a3b8" fontSize="9">{t.label}</text>
+          </g>
+        ))}
+
+        {/* Area fill */}
+        <path d={area} fill="url(#lineAreaGrad)" />
+
+        {/* Line */}
+        <polyline points={pts} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Dots */}
+        {buckets.map((b, i) => (
+          <circle key={i} cx={xp(i)} cy={yp(b.count)} r={hovered === i ? 4.5 : 2.5}
+            fill={hovered === i ? "#2563eb" : "#3b82f6"} stroke="white" strokeWidth="1.5" />
+        ))}
+
+        {/* Hover vertical line */}
+        {hovered !== null && (
+          <line x1={xp(hovered)} y1={padT} x2={xp(hovered)} y2={padT + cH}
+            stroke="#3b82f6" strokeWidth="1" strokeDasharray="3,2" opacity="0.4" />
+        )}
+
+        {/* Hover capture rects */}
+        {buckets.map((b, i) => (
+          <rect key={i} x={xp(i) - bw / 2} y={padT} width={bw} height={cH}
+            fill="transparent" style={{ cursor: "pointer" }}
+            onMouseEnter={() => setHovered(i)}
+            onClick={() => onNavigate(b.fromStr, b.toStr)}
+          />
+        ))}
+
+        {/* X-axis labels */}
+        {buckets.map((b, i) =>
+          labelIndices.has(i) ? (
+            <text key={i} x={xp(i)} y={H - 6} textAnchor="middle" fill="#94a3b8" fontSize="9">{b.label}</text>
+          ) : null
+        )}
+      </svg>
+
+      {/* Floating tooltip */}
+      {hb !== null && hovered !== null && (
+        <div
+          className="absolute pointer-events-none bg-slate-900 text-white text-xs rounded-lg px-2.5 py-1.5 shadow-lg whitespace-nowrap z-10"
+          style={{
+            left: `${(xp(hovered) / W) * 100}%`,
+            top: `${(yp(hb.count) / H) * 100}%`,
+            transform: "translate(-50%, calc(-100% - 8px))",
+          }}
+        >
+          <p className="font-semibold">{hb.count} referral{hb.count !== 1 ? "s" : ""}</p>
+          <p className="text-white/60 text-[10px]">{hb.label}</p>
+        </div>
+      )}
     </div>
   )
 }
