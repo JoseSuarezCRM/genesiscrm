@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useTransition, useRef } from "react"
+import { useState, useTransition, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
+import { Phone, Trash2, Upload, FileText, X, Loader2, Check, ChevronDown } from "lucide-react"
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,6 +72,99 @@ function InputField({
   )
 }
 
+function MultiCheckField({
+  label, value, options, onChange,
+}: {
+  label: string
+  value: string
+  options: string[]
+  onChange: (v: string) => void
+}) {
+  const selected = value ? value.split(",").map((s) => s.trim()).filter(Boolean) : []
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
+  function toggle(opt: string) {
+    const next = selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt]
+    onChange(next.join(","))
+  }
+
+  return (
+    <div className="flex flex-col gap-1" ref={ref}>
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="relative h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors flex items-center justify-between gap-2 text-left"
+      >
+        <span className="truncate text-slate-700">
+          {selected.length === 0 ? <span className="text-slate-400">— Not set —</span> : selected.join(", ")}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden min-w-[200px]">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => toggle(opt)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-zinc-50 text-left transition-colors"
+            >
+              <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${selected.includes(opt) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300"}`}>
+                {selected.includes(opt) && <Check className="h-2.5 w-2.5 text-white" />}
+              </span>
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReferralField({
+  presets, selectVal, otherVal, onSelectChange, onOtherChange,
+}: {
+  presets: string[]
+  selectVal: string
+  otherVal: string
+  onSelectChange: (v: string) => void
+  onOtherChange: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Referral Source</label>
+      <select
+        value={selectVal}
+        onChange={(e) => onSelectChange(e.target.value)}
+        className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
+      >
+        <option value="">— Not set —</option>
+        {presets.map((p) => <option key={p} value={p}>{p}</option>)}
+        <option value="Other">Other</option>
+      </select>
+      {selectVal === "Other" && (
+        <input
+          type="text"
+          value={otherVal}
+          onChange={(e) => onOtherChange(e.target.value)}
+          placeholder="Specify source..."
+          className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
+        />
+      )}
+    </div>
+  )
+}
+
 export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -85,13 +178,22 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [clearanceRequired, setClearanceRequired] = useState(surgeryCase.clearanceRequired ?? "")
   const [ctRequired, setCtRequired] = useState(surgeryCase.ctRequired ?? "")
   const [glp1, setGlp1] = useState(surgeryCase.glp1 ?? "")
-  const [facility, setFacility] = useState(surgeryCase.facility ?? "")
+  const [dme, setDme] = useState(surgeryCase.dme ?? "")
+  const referralPresets = ["LCHC","PCC","VNA","PIC","AHC","ZocDoc","Molina","Meridian","Aetna Better Health","JenCare","GFH","Advocate","OSH","Aunt Martha's","Esperanza","Access","Rush","Mercy","Google","GOSM Website"]
+  const storedReferral = surgeryCase.referral ?? ""
+  const initIsOther = storedReferral !== "" && !referralPresets.includes(storedReferral)
+  const [referralSelect, setReferralSelect] = useState(initIsOther ? "Other" : storedReferral)
+  const [referralOther, setReferralOther] = useState(initIsOther ? storedReferral : "")
+  const facility_ = surgeryCase.facility ?? ""
+  const [facility, setFacility] = useState(facility_)
   const [procedure, setProcedure] = useState(surgeryCase.procedure ?? "")
   const [surgeryDate, setSurgeryDate] = useState(
     surgeryCase.surgeryDate ? new Date(surgeryCase.surgeryDate).toISOString().slice(0, 10) : ""
   )
   const [email, setEmail] = useState(surgeryCase.email ?? "")
   const [notes, setNotes] = useState(surgeryCase.notes ?? "")
+
+  const referralValue = referralSelect === "Other" ? referralOther : referralSelect
 
   // Call tracker
   const [callOutcome, setCallOutcome] = useState("NO_ANSWER")
@@ -118,6 +220,8 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         clearanceRequired: clearanceRequired || null,
         ctRequired: ctRequired || null,
         glp1: glp1 || null,
+        dme: dme || null,
+        referral: referralValue || null,
         facility: facility || null,
         procedure: procedure || null,
         surgeryDate: surgeryDate || null,
@@ -212,16 +316,11 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <SelectField
+            <MultiCheckField
               label="Clearance Required"
               value={clearanceRequired}
               onChange={setClearanceRequired}
-              options={[
-                { value: "Not Required", label: "Not Required" },
-                { value: "Medical Clearance", label: "Medical Clearance" },
-                { value: "Secondary Clearance", label: "Secondary Clearance" },
-                { value: "Dental Clearance", label: "Dental Clearance" },
-              ]}
+              options={["Not Required", "Medical Clearance", "Secondary Clearance", "Dental Clearance"]}
             />
             <SelectField
               label="CT Required"
@@ -245,24 +344,41 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <SelectField
+              label="DME"
+              value={dme}
+              onChange={setDme}
+              options={[
+                { value: "Incomplete", label: "Incomplete" },
+                { value: "Ordered", label: "Ordered" },
+                { value: "Requested", label: "Requested" },
+              ]}
+            />
+            <ReferralField
+              presets={referralPresets}
+              selectVal={referralSelect}
+              otherVal={referralOther}
+              onSelectChange={setReferralSelect}
+              onOtherChange={setReferralOther}
+            />
+            <SelectField
               label="Facility"
               value={facility}
               onChange={setFacility}
               options={[
-                { value: "Glen Oaks Hospital",                        label: "Glen Oaks Hospital" },
-                { value: "Humboldt Park Hospital",                    label: "Humboldt Park Hospital" },
-                { value: "Mercy Aurora Hospital",                     label: "Mercy Aurora Hospital" },
-                { value: "Good Samaritan Hospital",                   label: "Good Samaritan Hospital" },
-                { value: "Oak Brook Surgical Center",                 label: "Oak Brook Surgical Center" },
-                { value: "Aiden Center For Day Surgery",              label: "Aiden Center For Day Surgery" },
+                { value: "Glen Oaks Hospital",                          label: "Glen Oaks Hospital" },
+                { value: "Humboldt Park Hospital",                      label: "Humboldt Park Hospital" },
+                { value: "Mercy Aurora Hospital",                       label: "Mercy Aurora Hospital" },
+                { value: "Good Samaritan Hospital",                     label: "Good Samaritan Hospital" },
+                { value: "Oak Brook Surgical Center",                   label: "Oak Brook Surgical Center" },
+                { value: "Aiden Center For Day Surgery",                label: "Aiden Center For Day Surgery" },
                 { value: "Fullerton-Kimball Medical & Surgical Center", label: "Fullerton-Kimball Medical & Surgical Center" },
-                { value: "Illinois Masonic Hospital",                 label: "Illinois Masonic Hospital" },
+                { value: "Illinois Masonic Hospital",                   label: "Illinois Masonic Hospital" },
               ]}
             />
-            <InputField label="Procedure" value={procedure} onChange={setProcedure} />
-            <InputField label="Surgery Date" value={surgeryDate} type="date" onChange={setSurgeryDate} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <InputField label="Procedure" value={procedure} onChange={setProcedure} />
+            <InputField label="Surgery Date" value={surgeryDate} type="date" onChange={setSurgeryDate} />
             <InputField label="Patient Email" value={email} type="email" onChange={setEmail} />
           </div>
           <div className="flex flex-col gap-1">

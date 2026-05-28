@@ -90,6 +90,8 @@ export async function updateSurgeryCase(
     clearanceRequired?: string | null
     ctRequired?: string | null
     glp1?: string | null
+    dme?: string | null
+    referral?: string | null
     facility?: string | null
     procedure?: string | null
     surgeryDate?: string | null

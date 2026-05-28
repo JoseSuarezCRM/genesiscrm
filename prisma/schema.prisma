@@ -927,6 +927,8 @@ model SurgeryCase {
   clearanceRequired String?
   ctRequired        String?
   glp1              String?
+  dme               String?
+  referral          String?
   facility          String?
   procedure         String?
   surgeryDate       DateTime?
