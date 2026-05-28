@@ -26,6 +26,96 @@ const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
   ANSWERED: { label: "Answered", color: "text-green-600" },
 }
 
+const PROCEDURE_DATA: Record<string, Record<string, string[]>> = {
+  "Horner, Nolan": {
+    Shoulder: [
+      "AC Joint Reconstruction", "Bankart Repair", "Latarjet", "Pec Repair",
+      "Reverse Total Shoulder Arthroplasty", "Rotator Cuff Debridement", "Rotator Cuff Repair",
+      "Shoulder Arthroscopy and Biceps Tenodesis", "Shoulder Manipulation/Lysis of Adhesions",
+      "Total Shoulder Arthroplasty", "Proximal Humerus Post-Op Instructions",
+    ],
+    Knee: [
+      "ACL Reconstruction with Meniscus Repair", "ACL Reconstruction without Meniscus Repair",
+      "ACL Reconstruction with MCL Reconstruction", "ACL/PCL Repair, possible ORIF Discharge",
+      "Knee Arthroscopy - Meniscal Repair", "Partial Meniscectomy/Debridement",
+      "OCD Fixation or Drilling", "MUA Knee", "Patellar Tendon Repair", "MPFL",
+    ],
+    "Hand & Elbow": [
+      "Carpal Tunnel Release", "Trigger Finger", "Cubital Tunnel Release", "Ganglion Cyst Excision",
+      "Distal Biceps Repair", "Elbow Dislocation", "Lateral Medial Epicondyle Debridement Repair",
+      "Tricep Reconstruction/Repair", "UCL Recon", "UCL Rehab non op",
+    ],
+    Trauma: [
+      "Achilles Repair", "Proximal Hamstring Repair", "Upper Extremity ORIF",
+      "Humeral Shaft Post-Op Instructions",
+    ],
+    Other: [
+      "General Post Op-Instructions", "Brostrom Procedure", "Clavicle ORIF", "Hip Arthroscopy",
+      "Lower Extremity Removal", "Lower Extremity ORIF", "QUAD", "OCD Excision", "Troch Bursitis",
+    ],
+  },
+  "Diamond, Matthew": {
+    Ankle: ["Achilles Repair", "ORIF Lower Extremity"],
+    Feet: ["Bunionectomy", "Cheilectomy", "Hammer Toe Arthroplasty", "Lisfranc Pinning"],
+    Other: ["General Post-Op Instructions"],
+  },
+  "Wang, Jonathan": {
+    Knee: ["Partial Meniscectomy/Debridement", "Total Knee Arthroplasty"],
+    Hip: ["Total Hip Arthroplasty"],
+  },
+}
+
+function findProcedureLocation(proc: string): { provider: string; bodyPart: string } {
+  for (const [prov, bodyParts] of Object.entries(PROCEDURE_DATA)) {
+    for (const [bp, procs] of Object.entries(bodyParts)) {
+      if (procs.includes(proc)) return { provider: prov, bodyPart: bp }
+    }
+  }
+  return { provider: "", bodyPart: "" }
+}
+
+function ProcedureField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const init = findProcedureLocation(value)
+  const [provider, setProvider] = useState(init.provider)
+  const [bodyPart, setBodyPart] = useState(init.bodyPart)
+
+  const fieldClass = "h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors w-full"
+
+  function handleProviderChange(p: string) {
+    setProvider(p)
+    setBodyPart("")
+    onChange("")
+  }
+
+  function handleBodyPartChange(bp: string) {
+    setBodyPart(bp)
+    onChange("")
+  }
+
+  const bodyParts = provider ? Object.keys(PROCEDURE_DATA[provider] ?? {}) : []
+  const procedures = provider && bodyPart ? (PROCEDURE_DATA[provider]?.[bodyPart] ?? []) : []
+
+  return (
+    <div className="flex flex-col gap-1 sm:col-span-3">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Procedure</label>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <select value={provider} onChange={(e) => handleProviderChange(e.target.value)} className={fieldClass}>
+          <option value="">— Select provider —</option>
+          {Object.keys(PROCEDURE_DATA).map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={bodyPart} onChange={(e) => handleBodyPartChange(e.target.value)} disabled={!provider} className={fieldClass}>
+          <option value="">— Select body part —</option>
+          {bodyParts.map((bp) => <option key={bp} value={bp}>{bp}</option>)}
+        </select>
+        <select value={value} onChange={(e) => onChange(e.target.value)} disabled={!bodyPart} className={fieldClass}>
+          <option value="">— Select procedure —</option>
+          {procedures.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+}
+
 function SelectField({
   label, value, options, onChange,
 }: {
@@ -377,7 +467,9 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <InputField label="Procedure" value={procedure} onChange={setProcedure} />
+            <ProcedureField value={procedure} onChange={setProcedure} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <InputField label="Surgery Date" value={surgeryDate} type="date" onChange={setSurgeryDate} />
             <InputField label="Patient Email" value={email} type="email" onChange={setEmail} />
           </div>
