@@ -968,3 +968,45 @@ model SurgeryDocument {
   @@index([caseId])
 }
 
+model MarketingCategory {
+  id        String          @id @default(cuid())
+  name      String
+  order     Int             @default(0)
+  createdAt DateTime        @default(now())
+  items     MarketingItem[]
+}
+
+model MarketingItem {
+  id          String            @id @default(cuid())
+  categoryId  String
+  category    MarketingCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  fileUrl     String
+  fileName    String
+  createdAt   DateTime          @default(now())
+  orders      MarketingOrder[]
+
+  @@index([categoryId])
+}
+
+model MarketingOrder {
+  id        String        @id @default(cuid())
+  itemId    String
+  item      MarketingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  name      String
+  email     String
+  quantity  Int
+  address   String
+  status    String        @default("PENDING")
+  createdAt DateTime      @default(now())
+
+  @@index([itemId])
+  @@index([status])
+}
+
+model MarketingConfig {
+  id          String @id @default("singleton")
+  notifyEmail String @default("")
+}
+

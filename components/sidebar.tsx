@@ -67,6 +67,7 @@ const adminItems = [
   { href: "/settings/reconcile",  label: "Appt Reconciliation",icon: RefreshCw },
   { href: "/settings/org-rules",  label: "Org Name Rules",     icon: Building2 },
   { href: "/settings/pipelines",  label: "Pipelines",          icon: LayoutDashboard },
+  { href: "/settings/marketing",  label: "Marketing Materials", icon: Send },
 ]
 
 interface SidebarProps {
