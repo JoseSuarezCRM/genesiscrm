@@ -6,7 +6,9 @@ import { Phone, X, ChevronDown, Loader2 } from "lucide-react"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate, formatPhone } from "@/lib/utils"
 import { moveReferralsToPipeline } from "@/app/actions/referrals"
+import { bulkAddTag, bulkRemoveTag } from "@/app/actions/tags"
 import { useRouter } from "next/navigation"
+import { Tag as TagIcon } from "lucide-react"
 
 interface Pipeline {
   id: string
@@ -36,17 +38,22 @@ interface Referral {
 interface Props {
   referrals: Referral[]
   pipelines: Pipeline[]
+  allTags: Tag[]
   listUrl: string
   total: number
   allMatchingIds: string[]
 }
 
-export default function ReferralTable({ referrals, pipelines, listUrl, total, allMatchingIds }: Props) {
+export default function ReferralTable({ referrals, pipelines, allTags, listUrl, total, allMatchingIds }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [allPagesSelected, setAllPagesSelected] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [tagAddOpen, setTagAddOpen] = useState(false)
+  const [tagRemoveOpen, setTagRemoveOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const menuRef = useRef<HTMLDivElement>(null)
+  const tagAddRef = useRef<HTMLDivElement>(null)
+  const tagRemoveRef = useRef<HTMLDivElement>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
@@ -61,16 +68,29 @@ export default function ReferralTable({ referrals, pipelines, listUrl, total, al
     }
   }, [someChecked])
 
-  // Close pipeline menu on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
     }
     if (menuOpen) document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [menuOpen])
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (tagAddRef.current && !tagAddRef.current.contains(e.target as Node)) setTagAddOpen(false)
+    }
+    if (tagAddOpen) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [tagAddOpen])
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (tagRemoveRef.current && !tagRemoveRef.current.contains(e.target as Node)) setTagRemoveOpen(false)
+    }
+    if (tagRemoveOpen) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [tagRemoveOpen])
 
   function toggleAll() {
     if (allPageChecked) {
@@ -105,6 +125,22 @@ export default function ReferralTable({ referrals, pipelines, listUrl, total, al
       await moveReferralsToPipeline(Array.from(selected), pipelineId)
       clearSelection()
       setMenuOpen(false)
+      router.refresh()
+    })
+  }
+
+  function addTag(tagId: string) {
+    startTransition(async () => {
+      await bulkAddTag(Array.from(selected), tagId)
+      setTagAddOpen(false)
+      router.refresh()
+    })
+  }
+
+  function removeTag(tagId: string) {
+    startTransition(async () => {
+      await bulkRemoveTag(Array.from(selected), tagId)
+      setTagRemoveOpen(false)
       router.refresh()
     })
   }
@@ -264,10 +300,7 @@ export default function ReferralTable({ referrals, pipelines, listUrl, total, al
                     onClick={() => moveTo(p.id)}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
                   >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: p.color }}
-                    />
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                     {p.name}
                   </button>
                 ))}
@@ -282,6 +315,68 @@ export default function ReferralTable({ referrals, pipelines, listUrl, total, al
               </div>
             )}
           </div>
+
+          {allTags.length > 0 && (
+            <>
+              <div className="w-px h-4 bg-slate-600" />
+
+              {/* Add tag */}
+              <div className="relative" ref={tagAddRef}>
+                <button
+                  onClick={() => { setTagAddOpen((v) => !v); setTagRemoveOpen(false) }}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <TagIcon className="h-3.5 w-3.5" />
+                  Add tag
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {tagAddOpen && (
+                  <div className="absolute bottom-full mb-2 left-0 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Add tag to selected</p>
+                    {allTags.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => addTag(t.id)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Remove tag */}
+              <div className="relative" ref={tagRemoveRef}>
+                <button
+                  onClick={() => { setTagRemoveOpen((v) => !v); setTagAddOpen(false) }}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <TagIcon className="h-3.5 w-3.5" />
+                  Remove tag
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {tagRemoveOpen && (
+                  <div className="absolute bottom-full mb-2 left-0 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Remove tag from selected</p>
+                    {allTags.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => removeTag(t.id)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           <button
             onClick={() => setSelected(new Set())}

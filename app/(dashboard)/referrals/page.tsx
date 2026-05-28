@@ -292,7 +292,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
 
       {/* Table */}
       <div className="bg-white border rounded-lg overflow-hidden">
-        <ReferralTable referrals={referrals} pipelines={pipelines} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
+        <ReferralTable referrals={referrals} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
 
         {/* Pagination */}
         {totalPages > 1 && (

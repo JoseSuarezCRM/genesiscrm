@@ -71,6 +71,23 @@ export async function deleteTag(id: string) {
   revalidatePath("/activities")
 }
 
+export async function bulkAddTag(referralIds: string[], tagId: string) {
+  await requireAuth()
+  await prisma.referralTag.createMany({
+    data: referralIds.map((referralId) => ({ referralId, tagId })),
+    skipDuplicates: true,
+  })
+  revalidatePath("/referrals")
+}
+
+export async function bulkRemoveTag(referralIds: string[], tagId: string) {
+  await requireAuth()
+  await prisma.referralTag.deleteMany({
+    where: { referralId: { in: referralIds }, tagId },
+  })
+  revalidatePath("/referrals")
+}
+
 export async function setReferralTags(referralId: string, tagIds: string[]) {
   const session = await requireAuth()
 
