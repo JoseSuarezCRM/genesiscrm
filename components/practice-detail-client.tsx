@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Pencil, Trash2, Plus, Loader2, Check, MapPin, User, Phone, Mail, ExternalLink, X } from "lucide-react"
+import { Pencil, Trash2, Plus, Loader2, Check, MapPin, User, ExternalLink, ChevronRight } from "lucide-react"
 import {
   updatePractice, deleteLocation, createLocation, updateLocation,
   createDoctor, updateDoctor, deleteDoctor,
 } from "@/app/actions/referring-doctors"
 import { PhoneInput } from "@/components/ui/phone-input"
+import { StatusBadge } from "@/components/status-badge"
+import { formatDate } from "@/lib/utils"
 import Link from "next/link"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -33,6 +35,15 @@ interface Doctor {
   locations: { location: { id: string; name: string } }[]
 }
 
+interface Referral {
+  id: string
+  patientFirstName: string
+  patientLastName: string
+  referralDate: string | Date
+  status: string
+  referringDoctor: { id: string; name: string; title: string | null } | null
+}
+
 interface Practice {
   id: string
   name: string
@@ -45,23 +56,18 @@ interface Practice {
 
 interface Props {
   practice: Practice
+  referrals: Referral[]
   isAdmin: boolean
 }
 
 const PROVIDER_TITLES = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Other"]
-
-// ─── Shared input styles ───────────────────────────────────────────────────────
-
 const inputCls = "h-9 w-full px-3 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:border-zinc-400 bg-white transition-colors"
 const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 
 // ─── Section card ─────────────────────────────────────────────────────────────
 
 function SectionCard({ title, count, children, action }: {
-  title: string
-  count?: number
-  children: React.ReactNode
-  action?: React.ReactNode
+  title: string; count?: number; children: React.ReactNode; action?: React.ReactNode
 }) {
   return (
     <div className="bg-white border rounded-xl overflow-hidden">
@@ -72,34 +78,26 @@ function SectionCard({ title, count, children, action }: {
         </div>
         {action}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="divide-y divide-zinc-100">{children}</div>
     </div>
   )
 }
 
-// ─── Inline form helpers ───────────────────────────────────────────────────────
+// ─── Inline save form ─────────────────────────────────────────────────────────
 
 function InlineForm({ onCancel, onSubmit, isPending, children }: {
-  onCancel: () => void
-  onSubmit: (e: React.FormEvent) => void
-  isPending: boolean
-  children: React.ReactNode
+  onCancel: () => void; onSubmit: (e: React.FormEvent) => void
+  isPending: boolean; children: React.ReactNode
 }) {
   return (
-    <form onSubmit={onSubmit} className="border border-zinc-200 rounded-xl p-4 space-y-3 bg-slate-50">
+    <form onSubmit={onSubmit} className="p-4 space-y-3 bg-slate-50 border-b border-zinc-200">
       {children}
       <div className="flex gap-2 pt-1">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1.5"
-        >
-          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          Save
+        <button type="submit" disabled={isPending}
+          className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1.5">
+          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Save
         </button>
-        <button type="button" onClick={onCancel} className="h-8 px-3 text-sm text-zinc-500 hover:text-zinc-800 transition-colors">
-          Cancel
-        </button>
+        <button type="button" onClick={onCancel} className="h-8 px-3 text-sm text-zinc-500 hover:text-zinc-800 transition-colors">Cancel</button>
       </div>
     </form>
   )
@@ -107,7 +105,7 @@ function InlineForm({ onCancel, onSubmit, isPending, children }: {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export default function PracticeDetailClient({ practice, isAdmin }: Props) {
+export default function PracticeDetailClient({ practice, referrals, isAdmin }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -118,20 +116,19 @@ export default function PracticeDetailClient({ practice, isAdmin }: Props) {
   const [pracFax, setPracFax] = useState(practice.fax ?? "")
   const [pracAddress, setPracAddress] = useState(practice.address ?? "")
 
-  // Location states
+  // Location
   const [addingLocation, setAddingLocation] = useState(false)
   const [editingLocId, setEditingLocId] = useState<string | null>(null)
   const [locForm, setLocForm] = useState({ name: "", phone: "", fax: "", address: "" })
 
-  // Doctor states
+  // Doctor
   const [addingDoctor, setAddingDoctor] = useState(false)
   const [editingDocId, setEditingDocId] = useState<string | null>(null)
   const [docForm, setDocForm] = useState({ name: "", title: "", npi: "", specialty: "", phone: "", email: "", locationIds: [] as string[] })
 
   function refresh() { router.refresh() }
 
-  // ── Practice ──────────────────────────────────────────────────────────────
-
+  // Practice save
   function savePractice(e: React.FormEvent) {
     e.preventDefault()
     if (!pracName.trim()) return
@@ -142,8 +139,7 @@ export default function PracticeDetailClient({ practice, isAdmin }: Props) {
     })
   }
 
-  // ── Locations ────────────────────────────────────────────────────────────
-
+  // Location saves
   function startEditLoc(loc: Location) {
     setEditingLocId(loc.id)
     setLocForm({ name: loc.name, phone: loc.phone ?? "", fax: loc.fax ?? "", address: loc.address ?? "" })
@@ -154,13 +150,8 @@ export default function PracticeDetailClient({ practice, isAdmin }: Props) {
     e.preventDefault()
     if (!locForm.name.trim()) return
     startTransition(async () => {
-      if (editingLocId) {
-        await updateLocation(editingLocId, locForm)
-        setEditingLocId(null)
-      } else {
-        await createLocation({ ...locForm, practiceId: practice.id })
-        setAddingLocation(false)
-      }
+      if (editingLocId) { await updateLocation(editingLocId, locForm); setEditingLocId(null) }
+      else { await createLocation({ ...locForm, practiceId: practice.id }); setAddingLocation(false) }
       setLocForm({ name: "", phone: "", fax: "", address: "" })
       refresh()
     })
@@ -170,45 +161,23 @@ export default function PracticeDetailClient({ practice, isAdmin }: Props) {
     if (!confirm("Delete this location?")) return
     startTransition(async () => {
       const r = await deleteLocation(id) as any
-      if (r?.error) alert(r.error)
-      else refresh()
+      if (r?.error) alert(r.error); else refresh()
     })
   }
 
-  // ── Doctors ──────────────────────────────────────────────────────────────
-
+  // Doctor saves
   function startEditDoc(doc: Doctor) {
     setEditingDocId(doc.id)
-    setDocForm({
-      name: doc.name,
-      title: doc.title ?? "",
-      npi: doc.npi ?? "",
-      specialty: doc.specialty ?? "",
-      phone: doc.phone ?? "",
-      email: doc.email ?? "",
-      locationIds: doc.locations.map((l) => l.location.id),
-    })
+    setDocForm({ name: doc.name, title: doc.title ?? "", npi: doc.npi ?? "", specialty: doc.specialty ?? "", phone: doc.phone ?? "", email: doc.email ?? "", locationIds: doc.locations.map((l) => l.location.id) })
     setAddingDoctor(false)
-  }
-
-  function toggleDocLoc(id: string) {
-    setDocForm((f) => ({
-      ...f,
-      locationIds: f.locationIds.includes(id) ? f.locationIds.filter((x) => x !== id) : [...f.locationIds, id],
-    }))
   }
 
   function saveDoctor(e: React.FormEvent) {
     e.preventDefault()
     if (!docForm.name.trim()) return
     startTransition(async () => {
-      if (editingDocId) {
-        await updateDoctor(editingDocId, { ...docForm, practiceId: practice.id })
-        setEditingDocId(null)
-      } else {
-        await createDoctor({ ...docForm, practiceId: practice.id })
-        setAddingDoctor(false)
-      }
+      if (editingDocId) { await updateDoctor(editingDocId, { ...docForm, practiceId: practice.id }); setEditingDocId(null) }
+      else { await createDoctor({ ...docForm, practiceId: practice.id }); setAddingDoctor(false) }
       setDocForm({ name: "", title: "", npi: "", specialty: "", phone: "", email: "", locationIds: [] })
       refresh()
     })
@@ -218,12 +187,16 @@ export default function PracticeDetailClient({ practice, isAdmin }: Props) {
     if (!confirm("Delete this provider?")) return
     startTransition(async () => {
       const r = await deleteDoctor(id) as any
-      if (r?.error) alert(r.error)
-      else refresh()
+      if (r?.error) alert(r.error); else refresh()
     })
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const addBtn = (label: string, onClick: () => void) => (
+    <button onClick={onClick}
+      className="flex items-center gap-1 h-7 px-2.5 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all">
+      <Plus className="h-3.5 w-3.5" />{label}
+    </button>
+  )
 
   return (
     <div className="space-y-6">
@@ -231,192 +204,141 @@ export default function PracticeDetailClient({ practice, isAdmin }: Props) {
       {/* ── Practice Info ── */}
       <SectionCard
         title="Practice Information"
-        action={isAdmin && !editingPractice ? (
-          <button onClick={() => setEditingPractice(true)} className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-zinc-700 rounded-lg transition-colors">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        ) : undefined}
+        action={isAdmin && !editingPractice
+          ? <button onClick={() => setEditingPractice(true)} className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-zinc-700 rounded-lg transition-colors"><Pencil className="h-3.5 w-3.5" /></button>
+          : undefined}
       >
         {editingPractice ? (
           <InlineForm onCancel={() => setEditingPractice(false)} onSubmit={savePractice} isPending={isPending}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className={labelCls}>Practice Name *</label><input value={pracName} onChange={(e) => setPracName(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Name *</label><input value={pracName} onChange={(e) => setPracName(e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Phone</label><PhoneInput value={pracPhone} onChange={setPracPhone} /></div>
               <div><label className={labelCls}>Fax</label><input value={pracFax} onChange={(e) => setPracFax(e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Address</label><input value={pracAddress} onChange={(e) => setPracAddress(e.target.value)} className={inputCls} /></div>
             </div>
           </InlineForm>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-8 text-sm">
+          <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-3 text-sm">
             <InfoRow label="Phone" value={practice.phone} />
             <InfoRow label="Fax" value={practice.fax} />
-            <InfoRow label="Address" value={practice.address} span />
+            <InfoRow label="Address" value={practice.address} />
           </div>
         )}
       </SectionCard>
 
       {/* ── Locations ── */}
-      <SectionCard
-        title="Locations"
-        count={practice.locations.length}
-        action={isAdmin ? (
-          <button
-            onClick={() => { setAddingLocation((v) => !v); setEditingLocId(null); setLocForm({ name: "", phone: "", fax: "", address: "" }) }}
-            className="flex items-center gap-1 h-7 px-2.5 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add
-          </button>
-        ) : undefined}
-      >
-        <div className="space-y-3">
-          {addingLocation && (
-            <InlineForm onCancel={() => setAddingLocation(false)} onSubmit={saveLocation} isPending={isPending}>
-              <LocationFormFields form={locForm} onChange={setLocForm} />
-            </InlineForm>
-          )}
-
-          {practice.locations.length === 0 && !addingLocation && (
-            <p className="text-sm text-slate-400">No locations yet.</p>
-          )}
-
-          {practice.locations.map((loc) => (
-            <div key={loc.id}>
-              {editingLocId === loc.id ? (
-                <InlineForm onCancel={() => setEditingLocId(null)} onSubmit={saveLocation} isPending={isPending}>
-                  <LocationFormFields form={locForm} onChange={setLocForm} />
-                </InlineForm>
-              ) : (
-                <div className="flex items-start justify-between gap-4 p-3 rounded-xl border border-zinc-100 hover:border-zinc-200 transition-colors">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-800 text-sm">{loc.name}</p>
-                      {loc.address && <p className="text-xs text-slate-500 truncate">{loc.address}</p>}
-                      <div className="flex gap-3 mt-0.5">
-                        {loc.phone && <span className="text-xs text-slate-400">{loc.phone}</span>}
-                        {loc.fax && <span className="text-xs text-slate-400">fax {loc.fax}</span>}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-slate-400 mr-1">{loc._count.referrals} ref</span>
-                    {isAdmin && (
-                      <>
-                        <button onClick={() => startEditLoc(loc)} className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-zinc-700 rounded-lg transition-colors"><Pencil className="h-3 w-3" /></button>
-                        <button onClick={() => deleteLoc(loc.id)} className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-red-500 rounded-lg transition-colors"><Trash2 className="h-3 w-3" /></button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      <SectionCard title="Locations" count={practice.locations.length}
+        action={isAdmin ? addBtn("Add", () => { setAddingLocation((v) => !v); setEditingLocId(null); setLocForm({ name: "", phone: "", fax: "", address: "" }) }) : undefined}>
+        {addingLocation && (
+          <InlineForm onCancel={() => setAddingLocation(false)} onSubmit={saveLocation} isPending={isPending}>
+            <LocationFormFields form={locForm} onChange={setLocForm} />
+          </InlineForm>
+        )}
+        {practice.locations.length === 0 && !addingLocation && (
+          <p className="px-5 py-4 text-sm text-slate-400">No locations yet.</p>
+        )}
+        {practice.locations.map((loc) => (
+          <div key={loc.id}>
+            {editingLocId === loc.id ? (
+              <InlineForm onCancel={() => setEditingLocId(null)} onSubmit={saveLocation} isPending={isPending}>
+                <LocationFormFields form={locForm} onChange={setLocForm} />
+              </InlineForm>
+            ) : (
+              <div className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
+                <MapPin className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                <span className="flex-1 text-sm text-slate-700 truncate">{loc.name}</span>
+                <span className="text-xs text-slate-400 shrink-0">{loc._count.referrals} ref</span>
+                {isAdmin && (
+                  <>
+                    <button onClick={() => startEditLoc(loc)} className="h-7 w-7 flex items-center justify-center text-zinc-300 hover:text-zinc-700 rounded transition-colors"><Pencil className="h-3 w-3" /></button>
+                    <button onClick={() => deleteLoc(loc.id)} className="h-7 w-7 flex items-center justify-center text-zinc-300 hover:text-red-500 rounded transition-colors"><Trash2 className="h-3 w-3" /></button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
       </SectionCard>
 
       {/* ── Providers ── */}
-      <SectionCard
-        title="Providers"
-        count={practice.doctors.length}
-        action={isAdmin ? (
-          <button
-            onClick={() => { setAddingDoctor((v) => !v); setEditingDocId(null); setDocForm({ name: "", title: "", npi: "", specialty: "", phone: "", email: "", locationIds: [] }) }}
-            className="flex items-center gap-1 h-7 px-2.5 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add
-          </button>
-        ) : undefined}
-      >
-        <div className="space-y-3">
-          {addingDoctor && (
-            <InlineForm onCancel={() => setAddingDoctor(false)} onSubmit={saveDoctor} isPending={isPending}>
-              <DoctorFormFields form={docForm} onChange={setDocForm} locations={practice.locations} onToggleLoc={toggleDocLoc} />
-            </InlineForm>
-          )}
+      <SectionCard title="Providers" count={practice.doctors.length}
+        action={isAdmin ? addBtn("Add", () => { setAddingDoctor((v) => !v); setEditingDocId(null); setDocForm({ name: "", title: "", npi: "", specialty: "", phone: "", email: "", locationIds: [] }) }) : undefined}>
+        {addingDoctor && (
+          <InlineForm onCancel={() => setAddingDoctor(false)} onSubmit={saveDoctor} isPending={isPending}>
+            <DoctorFormFields form={docForm} onChange={setDocForm} locations={practice.locations} onToggleLoc={(id) => setDocForm((f) => ({ ...f, locationIds: f.locationIds.includes(id) ? f.locationIds.filter((x) => x !== id) : [...f.locationIds, id] }))} />
+          </InlineForm>
+        )}
+        {practice.doctors.length === 0 && !addingDoctor && (
+          <p className="px-5 py-4 text-sm text-slate-400">No providers yet.</p>
+        )}
+        {practice.doctors.map((doc) => (
+          <div key={doc.id}>
+            {editingDocId === doc.id ? (
+              <InlineForm onCancel={() => setEditingDocId(null)} onSubmit={saveDoctor} isPending={isPending}>
+                <DoctorFormFields form={docForm} onChange={setDocForm} locations={practice.locations} onToggleLoc={(id) => setDocForm((f) => ({ ...f, locationIds: f.locationIds.includes(id) ? f.locationIds.filter((x) => x !== id) : [...f.locationIds, id] }))} />
+              </InlineForm>
+            ) : (
+              <div className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
+                <User className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                <Link href={`/referring-doctors/${doc.id}`} className="flex-1 text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors truncate flex items-center gap-1.5">
+                  {doc.title ? `${doc.name}, ${doc.title}` : doc.name}
+                  <ExternalLink className="h-3 w-3 text-slate-300 shrink-0" />
+                </Link>
+                {doc.specialty && <span className="text-xs text-slate-400 hidden sm:block shrink-0 truncate max-w-[140px]">{doc.specialty}</span>}
+                <span className="text-xs text-slate-400 shrink-0">{doc._count.referrals} ref</span>
+                {isAdmin && (
+                  <>
+                    <button onClick={() => startEditDoc(doc)} className="h-7 w-7 flex items-center justify-center text-zinc-300 hover:text-zinc-700 rounded transition-colors"><Pencil className="h-3 w-3" /></button>
+                    <button onClick={() => deleteDoc(doc.id)} className="h-7 w-7 flex items-center justify-center text-zinc-300 hover:text-red-500 rounded transition-colors"><Trash2 className="h-3 w-3" /></button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </SectionCard>
 
-          {practice.doctors.length === 0 && !addingDoctor && (
-            <p className="text-sm text-slate-400">No providers yet.</p>
-          )}
-
-          {practice.doctors.map((doc) => (
-            <div key={doc.id}>
-              {editingDocId === doc.id ? (
-                <InlineForm onCancel={() => setEditingDocId(null)} onSubmit={saveDoctor} isPending={isPending}>
-                  <DoctorFormFields form={docForm} onChange={setDocForm} locations={practice.locations} onToggleLoc={toggleDocLoc} />
-                </InlineForm>
-              ) : (
-                <div className="flex items-start justify-between gap-4 p-3 rounded-xl border border-zinc-100 hover:border-zinc-200 transition-colors">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <User className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Link href={`/referring-doctors/${doc.id}`} className="font-medium text-slate-800 text-sm hover:text-blue-600 transition-colors">
-                          {doc.title ? `${doc.name}, ${doc.title}` : doc.name}
-                        </Link>
-                        <ExternalLink className="h-3 w-3 text-slate-300" />
-                      </div>
-                      {doc.specialty && <p className="text-xs text-slate-500">{doc.specialty}</p>}
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {doc.phone && (
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-400">
-                            <Phone className="h-3 w-3" />{doc.phone}
-                          </span>
-                        )}
-                        {doc.email && (
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-400">
-                            <Mail className="h-3 w-3" />{doc.email}
-                          </span>
-                        )}
-                      </div>
-                      {doc.locations.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {doc.locations.map((l) => (
-                            <span key={l.location.id} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                              <MapPin className="h-2.5 w-2.5" />{l.location.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-slate-400 mr-1">{doc._count.referrals} ref</span>
-                    {isAdmin && (
-                      <>
-                        <button onClick={() => startEditDoc(doc)} className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-zinc-700 rounded-lg transition-colors"><Pencil className="h-3 w-3" /></button>
-                        <button onClick={() => deleteDoc(doc.id)} className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-red-500 rounded-lg transition-colors"><Trash2 className="h-3 w-3" /></button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      {/* ── Referrals ── */}
+      <SectionCard title="Referrals" count={referrals.length}>
+        {referrals.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-slate-400">No referrals yet.</p>
+        ) : (
+          referrals.map((r) => (
+            <Link key={r.id} href={`/referrals/${r.id}`}
+              className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 transition-colors group">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors truncate">
+                  {r.patientFirstName} {r.patientLastName}
+                </p>
+                {r.referringDoctor && (
+                  <p className="text-xs text-slate-400 truncate">
+                    {r.referringDoctor.title ? `${r.referringDoctor.name}, ${r.referringDoctor.title}` : r.referringDoctor.name}
+                  </p>
+                )}
+              </div>
+              <span className="text-xs text-slate-400 shrink-0">{formatDate(r.referralDate)}</span>
+              <StatusBadge status={r.status as any} />
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+            </Link>
+          ))
+        )}
       </SectionCard>
     </div>
   )
 }
 
-// ─── Sub-form field sets ───────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function InfoRow({ label, value, span }: { label: string; value: string | null | undefined; span?: boolean }) {
+function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <div className={span ? "sm:col-span-2" : ""}>
-      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
+    <div>
+      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{label}</p>
       <p className="text-slate-800 mt-0.5">{value ?? <span className="text-slate-400">—</span>}</p>
     </div>
   )
 }
 
-function LocationFormFields({
-  form, onChange,
-}: {
-  form: { name: string; phone: string; fax: string; address: string }
-  onChange: (f: any) => void
-}) {
+function LocationFormFields({ form, onChange }: { form: { name: string; phone: string; fax: string; address: string }; onChange: (f: any) => void }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div><label className={labelCls}>Location Name *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} placeholder="Main Office" /></div>
@@ -427,18 +349,14 @@ function LocationFormFields({
   )
 }
 
-function DoctorFormFields({
-  form, onChange, locations, onToggleLoc,
-}: {
+function DoctorFormFields({ form, onChange, locations, onToggleLoc }: {
   form: { name: string; title: string; npi: string; specialty: string; phone: string; email: string; locationIds: string[] }
-  onChange: (f: any) => void
-  locations: Location[]
-  onToggleLoc: (id: string) => void
+  onChange: (f: any) => void; locations: Location[]; onToggleLoc: (id: string) => void
 }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label className={labelCls}>Name *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} placeholder="Sarah Johnson" /></div>
+        <div><label className={labelCls}>Name *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} /></div>
         <div>
           <label className={labelCls}>Title</label>
           <select value={form.title} onChange={(e) => onChange((f: any) => ({ ...f, title: e.target.value }))} className={inputCls}>
@@ -456,16 +374,8 @@ function DoctorFormFields({
           <label className={labelCls}>Locations</label>
           <div className="flex flex-wrap gap-2 mt-1">
             {locations.map((l) => (
-              <button
-                key={l.id}
-                type="button"
-                onClick={() => onToggleLoc(l.id)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                  form.locationIds.includes(l.id)
-                    ? "bg-zinc-900 text-white border-zinc-900"
-                    : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
-                }`}
-              >
+              <button key={l.id} type="button" onClick={() => onToggleLoc(l.id)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${form.locationIds.includes(l.id) ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
                 {form.locationIds.includes(l.id) && <Check className="h-3 w-3" />}
                 {l.name}
               </button>

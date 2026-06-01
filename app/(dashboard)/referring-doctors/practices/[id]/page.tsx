@@ -11,23 +11,38 @@ export default async function PracticeDetailPage({ params }: Props) {
   const session = await auth()
   const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
 
-  const practice = await prisma.referringPractice.findUnique({
-    where: { id: params.id },
-    include: {
-      _count: { select: { referrals: true } },
-      locations: {
-        orderBy: { name: "asc" },
-        include: { _count: { select: { referrals: true } } },
-      },
-      doctors: {
-        orderBy: { name: "asc" },
-        include: {
-          _count: { select: { referrals: true } },
-          locations: { include: { location: { select: { id: true, name: true } } } },
+  const [practice, referrals] = await Promise.all([
+    prisma.referringPractice.findUnique({
+      where: { id: params.id },
+      include: {
+        _count: { select: { referrals: true } },
+        locations: {
+          orderBy: { name: "asc" },
+          include: { _count: { select: { referrals: true } } },
+        },
+        doctors: {
+          orderBy: { name: "asc" },
+          include: {
+            _count: { select: { referrals: true } },
+            locations: { include: { location: { select: { id: true, name: true } } } },
+          },
         },
       },
-    },
-  })
+    }),
+    prisma.referral.findMany({
+      where: { referringPracticeId: params.id },
+      orderBy: { referralDate: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        patientFirstName: true,
+        patientLastName: true,
+        referralDate: true,
+        status: true,
+        referringDoctor: { select: { id: true, name: true, title: true } },
+      },
+    }),
+  ])
 
   if (!practice) notFound()
 
@@ -42,9 +57,10 @@ export default async function PracticeDetailPage({ params }: Props) {
           <h1 className="text-2xl font-bold text-slate-900">{practice.name}</h1>
           <span className="text-sm text-slate-400">{practice._count.referrals} referral{practice._count.referrals !== 1 ? "s" : ""}</span>
         </div>
+        {practice.phone && <p className="text-sm text-slate-500 mt-0.5">{practice.phone}</p>}
       </div>
 
-      <PracticeDetailClient practice={practice as any} isAdmin={isAdmin} />
+      <PracticeDetailClient practice={practice as any} referrals={referrals as any} isAdmin={isAdmin} />
     </div>
   )
 }
