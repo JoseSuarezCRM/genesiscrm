@@ -69,7 +69,7 @@ const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-
 function SectionCard({ title, count, children, action }: {
   title: string; count?: number; children: React.ReactNode; action?: React.ReactNode
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   return (
     <div className="bg-white border rounded-xl overflow-hidden">
       <div className="flex items-center gap-2 px-5 py-3.5 border-b border-zinc-100 bg-zinc-50">
