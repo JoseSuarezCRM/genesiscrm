@@ -188,7 +188,7 @@ function MultiCheckField({
   }
 
   return (
-    <div className="flex flex-col gap-1" ref={ref}>
+    <div className="relative flex flex-col gap-1" ref={ref}>
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
       <button
         type="button"
