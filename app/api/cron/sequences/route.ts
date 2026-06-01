@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import twilio from "twilio"
 import { sendEmail } from "@/lib/graph-mailer"
-
-function getTwilio() {
-  return twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!)
-}
+import { sendSMS, toE164 } from "@/lib/twilio"
 
 function resolveBody(template: string, referral: {
   patientFirstName: string
@@ -78,11 +74,7 @@ export async function GET(req: NextRequest) {
           skipped++
           continue
         }
-        await getTwilio().messages.create({
-          body,
-          from: process.env.TWILIO_PHONE!,
-          to: referral.patientPhone,
-        })
+        await sendSMS(referral.patientPhone, body, referral.id)
       } else {
         // EMAIL
         if (!referral.patientEmail) {
