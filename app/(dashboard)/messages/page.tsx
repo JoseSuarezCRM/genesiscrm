@@ -9,10 +9,11 @@ export default async function MessagesPage() {
   const threads = await prisma.smsThread.findMany({
     orderBy: { lastMessageAt: "desc" },
     include: {
+      referral: { select: { id: true, patientFirstName: true, patientLastName: true } },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
-        select: { body: true, direction: true, createdAt: true },
+        include: { sentBy: { select: { name: true, email: true } } },
       },
     },
   })
@@ -36,7 +37,7 @@ export default async function MessagesPage() {
         </p>
       </div>
       <div className="flex-1 min-h-0">
-        <SmsInbox initialThreads={serialized} isAdmin={isAdmin} />
+        <SmsInbox initialThreads={serialized as any} isAdmin={isAdmin} />
       </div>
     </div>
   )

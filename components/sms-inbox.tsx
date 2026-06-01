@@ -4,12 +4,12 @@ import { useState, useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Send, MessageSquare, Plus, X, Phone, Trash2,
-  ChevronRight, Circle, ExternalLink, Search,
+  ExternalLink, Search, Link2, Unlink, Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   sendSms, createThread, markThreadRead, deleteThread,
-  getMessages, getThreads,
+  getMessages, getThreads, linkThreadToReferral, searchReferralsForSms,
 } from "@/app/actions/sms"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -18,9 +18,15 @@ interface Thread {
   phone: string
   contactName: string | null
   referralId: string | null
+  referral: { id: string; patientFirstName: string; patientLastName: string } | null
   unreadCount: number
   lastMessageAt: string
-  messages: { body: string; direction: string; createdAt: string }[]
+  messages: {
+    body: string
+    direction: string
+    createdAt: string
+    sentBy: { name: string | null; email: string } | null
+  }[]
 }
 
 interface Message {
@@ -106,9 +112,92 @@ function NewThreadModal({ onClose, onCreated }: { onClose: () => void; onCreated
   )
 }
 
+// ── Link Referral Modal ────────────────────────────────────────────────────
+interface ReferralResult {
+  id: string
+  patientFirstName: string
+  patientLastName: string
+  patientMrn: string | null
+  patientPhone: string | null
+  status: string
+  referralDate: string | Date
+}
+
+function LinkReferralModal({
+  threadId, onClose, onLinked,
+}: {
+  threadId: string
+  onClose: () => void
+  onLinked: (r: { id: string; patientFirstName: string; patientLastName: string }) => void
+}) {
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState<ReferralResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [, startT] = useTransition()
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      const res = await searchReferralsForSms(query) as ReferralResult[]
+      setResults(res)
+      setSearching(false)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  function handleSelect(r: ReferralResult) {
+    startT(async () => {
+      await linkThreadToReferral(threadId, r.id)
+      onLinked({ id: r.id, patientFirstName: r.patientFirstName, patientLastName: r.patientLastName })
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-800">Link to Referral</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by patient name, phone, or MRN..."
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 animate-spin" />}
+        </div>
+        <div className="max-h-64 overflow-y-auto space-y-1">
+          {results.length === 0 && query.trim() && !searching && (
+            <p className="text-sm text-slate-400 text-center py-4">No referrals found.</p>
+          )}
+          {results.map((r) => (
+            <button key={r.id} onClick={() => handleSelect(r)}
+              className="w-full flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-left transition-colors">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800">{r.patientFirstName} {r.patientLastName}</p>
+                <div className="flex gap-2 text-xs text-slate-400 mt-0.5">
+                  {r.patientMrn && <span>MRN: {r.patientMrn}</span>}
+                  {r.patientPhone && <span>{r.patientPhone}</span>}
+                </div>
+              </div>
+              <span className="text-xs text-slate-400 shrink-0 mt-0.5">
+                {new Date(r.referralDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function SmsInbox({ initialThreads, isAdmin }: Props) {
-  const router = useRouter()
   const [threads, setThreads] = useState<Thread[]>(initialThreads)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -116,8 +205,9 @@ export default function SmsInbox({ initialThreads, isAdmin }: Props) {
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState("")
   const [showNew, setShowNew] = useState(false)
+  const [showLinkReferral, setShowLinkReferral] = useState(false)
   const [search, setSearch] = useState("")
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -251,6 +341,18 @@ export default function SmsInbox({ initialThreads, isAdmin }: Props) {
           onCreated={handleThreadCreated}
         />
       )}
+      {showLinkReferral && activeThread && (
+        <LinkReferralModal
+          onClose={() => setShowLinkReferral(false)}
+          onLinked={(referral) => {
+            setThreads((prev) => prev.map((t) =>
+              t.id === activeThread.id ? { ...t, referralId: referral.id, referral } : t
+            ))
+            setShowLinkReferral(false)
+          }}
+          threadId={activeThread.id}
+        />
+      )}
 
       <div className="flex h-full overflow-hidden rounded-xl border border-slate-200 bg-white">
 
@@ -326,7 +428,7 @@ export default function SmsInbox({ initialThreads, isAdmin }: Props) {
                       <div className="flex items-center justify-between mt-0.5">
                         <p className={cn("text-xs truncate", t.unreadCount > 0 ? "text-slate-700" : "text-slate-400")}>
                           {lastMsg
-                            ? `${lastMsg.direction === "OUTBOUND" ? "You: " : ""}${lastMsg.body}`
+                            ? `${lastMsg.direction === "OUTBOUND" ? `${lastMsg.sentBy?.name ?? lastMsg.sentBy?.email ?? "You"}: ` : ""}${lastMsg.body}`
                             : "No messages yet"}
                         </p>
                         {t.unreadCount > 0 && (
@@ -365,13 +467,36 @@ export default function SmsInbox({ initialThreads, isAdmin }: Props) {
                   <div className="flex items-center gap-2 text-xs text-slate-400">
                     <Phone className="h-3 w-3" />
                     <span>{activeThread.phone}</span>
-                    {activeThread.referralId && (
-                      <a
-                        href={`/referrals/${activeThread.referralId}`}
-                        className="flex items-center gap-0.5 text-blue-500 hover:underline"
+                    {activeThread.referral ? (
+                      <span className="flex items-center gap-1">
+                        <a
+                          href={`/referrals/${activeThread.referral.id}`}
+                          className="flex items-center gap-0.5 text-blue-500 hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {activeThread.referral.patientFirstName} {activeThread.referral.patientLastName}
+                        </a>
+                        <button
+                          onClick={() => {
+                            startTransition(async () => {
+                              await linkThreadToReferral(activeThread.id, null)
+                              setThreads((prev) => prev.map((t) => t.id === activeThread.id ? { ...t, referralId: null, referral: null } : t))
+                            })
+                          }}
+                          className="text-slate-300 hover:text-red-400 transition-colors"
+                          title="Unlink referral"
+                        >
+                          <Unlink className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setShowLinkReferral(true)}
+                        className="flex items-center gap-0.5 text-slate-400 hover:text-blue-500 transition-colors"
+                        title="Link to a referral"
                       >
-                        <ExternalLink className="h-3 w-3" /> Referral
-                      </a>
+                        <Link2 className="h-3 w-3" /> Link referral
+                      </button>
                     )}
                   </div>
                 </div>

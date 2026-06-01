@@ -26,7 +26,12 @@ export async function getThreads() {
   return prisma.smsThread.findMany({
     orderBy: { lastMessageAt: "desc" },
     include: {
-      messages: { orderBy: { createdAt: "desc" }, take: 1 },
+      referral: { select: { id: true, patientFirstName: true, patientLastName: true } },
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: { sentBy: { select: { name: true, email: true } } },
+      },
     },
   })
 }
@@ -122,6 +127,49 @@ export async function sendSms(
   } catch (e: any) {
     return { success: false, error: e?.message ?? "Failed to send SMS." }
   }
+}
+
+export async function linkThreadToReferral(threadId: string, referralId: string | null) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+
+  await prisma.smsThread.update({
+    where: { id: threadId },
+    data: { referralId: referralId || null },
+  })
+
+  revalidatePath("/messages")
+  return { success: true }
+}
+
+export async function searchReferralsForSms(query: string) {
+  const session = await auth()
+  if (!session?.user) return []
+
+  const q = query.trim()
+  if (!q) return []
+
+  return prisma.referral.findMany({
+    where: {
+      OR: [
+        { patientFirstName: { contains: q, mode: "insensitive" } },
+        { patientLastName: { contains: q, mode: "insensitive" } },
+        { patientMrn: { contains: q, mode: "insensitive" } },
+        { patientPhone: { contains: q, mode: "insensitive" } },
+      ],
+    },
+    select: {
+      id: true,
+      patientFirstName: true,
+      patientLastName: true,
+      patientMrn: true,
+      patientPhone: true,
+      status: true,
+      referralDate: true,
+    },
+    orderBy: { referralDate: "desc" },
+    take: 15,
+  })
 }
 
 export async function deleteThread(threadId: string) {
