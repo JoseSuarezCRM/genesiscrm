@@ -109,6 +109,9 @@ interface Props {
   practiceIds: string[]
   doctorIds: string[]
   pipelineIds: string[]
+  practiceMode: "any" | "none"
+  doctorMode: "any" | "none"
+  pipelineMode: "any" | "none"
   filterPractices: { id: string; name: string }[]
   filterDoctors: { id: string; label: string; practiceId: string }[]
   filterPipelines: { id: string; name: string; color: string }[]
@@ -143,6 +146,9 @@ export default function ReportsClient({
   practiceIds,
   doctorIds,
   pipelineIds,
+  practiceMode: initialPracticeMode,
+  doctorMode: initialDoctorMode,
+  pipelineMode: initialPipelineMode,
   filterPractices,
   filterDoctors,
   filterPipelines,
@@ -152,18 +158,33 @@ export default function ReportsClient({
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
   const [granularity, setGranularity] = useState<Granularity>("monthly")
+  const [practiceMode, setPracticeMode] = useState<"any" | "none">(initialPracticeMode)
+  const [doctorMode, setDoctorMode] = useState<"any" | "none">(initialDoctorMode)
+  const [pipelineMode, setPipelineMode] = useState<"any" | "none">(initialPipelineMode)
 
-  function buildUrl(r: string, from?: string, to?: string, pids?: string[], dids?: string[], plids?: string[]) {
+  function buildUrl(
+    r: string, from?: string, to?: string,
+    pids?: string[], dids?: string[], plids?: string[],
+    pm?: "any" | "none", dm?: "any" | "none", plm?: "any" | "none"
+  ) {
     const p = new URLSearchParams()
     if (from && to) { p.set("from", from); p.set("to", to); p.set("range", "custom") }
     else p.set("range", r)
     pids?.forEach((id) => p.append("practiceId", id))
     dids?.forEach((id) => p.append("doctorId", id))
     plids?.forEach((id) => p.append("pipelineId", id))
+    const pMode = pm ?? practiceMode
+    const dMode = dm ?? doctorMode
+    const plMode = plm ?? pipelineMode
+    if (pMode !== "any") p.set("practiceMode", pMode)
+    if (dMode !== "any") p.set("doctorMode", dMode)
+    if (plMode !== "any") p.set("pipelineMode", plMode)
     return `/reports?${p.toString()}`
   }
 
   const currentRangeStr = range === "custom" ? "custom" : range
+  const fromArg = customFrom || undefined
+  const toArg = customTo || undefined
 
   function applyRange(r: string) {
     setRange(r)
@@ -178,29 +199,44 @@ export default function ReportsClient({
 
   function togglePractice(id: string) {
     const next = practiceIds.includes(id) ? practiceIds.filter((x) => x !== id) : [...practiceIds, id]
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, next, doctorIds, pipelineIds))
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, next, doctorIds, pipelineIds))
   }
 
   function toggleDoctor(id: string) {
     const next = doctorIds.includes(id) ? doctorIds.filter((x) => x !== id) : [...doctorIds, id]
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, next, pipelineIds))
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, practiceIds, next, pipelineIds))
   }
 
   function togglePipeline(id: string) {
     const next = pipelineIds.includes(id) ? pipelineIds.filter((x) => x !== id) : [...pipelineIds, id]
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, doctorIds, next))
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, practiceIds, doctorIds, next))
   }
 
   function clearPractices() {
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, [], doctorIds, pipelineIds))
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, [], doctorIds, pipelineIds, "any"))
   }
 
   function clearDoctors() {
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, [], pipelineIds))
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, practiceIds, [], pipelineIds, undefined, "any"))
   }
 
   function clearPipelines() {
-    router.push(buildUrl(currentRangeStr, customFrom || undefined, customTo || undefined, practiceIds, doctorIds, []))
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, practiceIds, doctorIds, [], undefined, undefined, "any"))
+  }
+
+  function changePracticeMode(m: "any" | "none") {
+    setPracticeMode(m)
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, practiceIds, doctorIds, pipelineIds, m))
+  }
+
+  function changeDoctorMode(m: "any" | "none") {
+    setDoctorMode(m)
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, practiceIds, doctorIds, pipelineIds, undefined, m))
+  }
+
+  function changePipelineMode(m: "any" | "none") {
+    setPipelineMode(m)
+    router.push(buildUrl(currentRangeStr, fromArg, toArg, practiceIds, doctorIds, pipelineIds, undefined, undefined, m))
   }
 
   // When practices are selected, scope provider dropdown to those practices
@@ -273,6 +309,8 @@ export default function ReportsClient({
           onToggle={togglePractice}
           onClear={clearPractices}
           searchable={filterPractices.length > 8}
+          mode={practiceMode}
+          onModeChange={changePracticeMode}
         />
         <MultiSelectDropdown
           label="Provider"
@@ -282,6 +320,8 @@ export default function ReportsClient({
           onToggle={toggleDoctor}
           onClear={clearDoctors}
           searchable={visibleDoctors.length > 8}
+          mode={doctorMode}
+          onModeChange={changeDoctorMode}
         />
         {filterPipelines.length > 0 && (
           <MultiSelectDropdown
@@ -291,6 +331,8 @@ export default function ReportsClient({
             selected={pipelineIds}
             onToggle={togglePipeline}
             onClear={clearPipelines}
+            mode={pipelineMode}
+            onModeChange={changePipelineMode}
           />
         )}
         {(practiceIds.length > 0 || doctorIds.length > 0 || pipelineIds.length > 0) && (
@@ -615,6 +657,8 @@ function MultiSelectDropdown({
   onToggle,
   onClear,
   searchable,
+  mode,
+  onModeChange,
 }: {
   label: string
   icon?: React.ReactNode
@@ -623,12 +667,15 @@ function MultiSelectDropdown({
   onToggle: (id: string) => void
   onClear: () => void
   searchable?: boolean
+  mode?: "any" | "none"
+  onModeChange?: (m: "any" | "none") => void
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const isExclude = mode === "none"
   const filtered = searchable && search.trim()
     ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
     : options
@@ -654,7 +701,9 @@ function MultiSelectDropdown({
       <button
         onClick={() => setOpen(!open)}
         className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all select-none ${
-          active
+          active && isExclude
+            ? "bg-rose-600 text-white border-rose-600 hover:bg-rose-700"
+            : active
             ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
             : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
         }`}
@@ -663,7 +712,7 @@ function MultiSelectDropdown({
         <span>{label}</span>
         {active && (
           <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-white/20 text-xs font-bold tabular-nums">
-            {selected.length}
+            {isExclude ? "≠" : ""}{selected.length}
           </span>
         )}
         <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
@@ -671,6 +720,22 @@ function MultiSelectDropdown({
 
       {open && (
         <div className="absolute top-full mt-2 left-0 z-50 min-w-[200px] max-w-[280px] bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden">
+          {onModeChange && (
+            <div className="flex items-center gap-1 p-2 border-b border-zinc-100">
+              <button
+                onClick={() => onModeChange("any")}
+                className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${!isExclude ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}
+              >
+                Any of
+              </button>
+              <button
+                onClick={() => onModeChange("none")}
+                className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${isExclude ? "bg-rose-600 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}
+              >
+                None of
+              </button>
+            </div>
+          )}
           {searchable && (
             <div className="px-2 pt-2 pb-1">
               <input
@@ -693,7 +758,9 @@ function MultiSelectDropdown({
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors"
                 >
                   <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
-                    selected.includes(opt.id) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300"
+                    selected.includes(opt.id)
+                      ? isExclude ? "bg-rose-600 border-rose-600" : "bg-zinc-900 border-zinc-900"
+                      : "border-zinc-300"
                   }`}>
                     {selected.includes(opt.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                   </span>

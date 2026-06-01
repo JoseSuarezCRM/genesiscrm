@@ -11,6 +11,9 @@ interface PageProps {
     practiceId?: string | string[]
     doctorId?: string | string[]
     pipelineId?: string | string[]
+    practiceMode?: string
+    doctorMode?: string
+    pipelineMode?: string
   }
 }
 
@@ -54,11 +57,14 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const practiceIds = toArray(searchParams.practiceId)
   const doctorIds = toArray(searchParams.doctorId)
   const pipelineIds = toArray(searchParams.pipelineId)
+  const practiceMode = searchParams.practiceMode === "none" ? "none" : "any"
+  const doctorMode = searchParams.doctorMode === "none" ? "none" : "any"
+  const pipelineMode = searchParams.pipelineMode === "none" ? "none" : "any"
 
   const entityFilter = {
-    ...(practiceIds.length > 0 ? { referringPracticeId: { in: practiceIds } } : {}),
-    ...(doctorIds.length > 0 ? { referringDoctorId: { in: doctorIds } } : {}),
-    ...(pipelineIds.length > 0 ? { pipelineId: { in: pipelineIds } } : {}),
+    ...(practiceIds.length > 0 ? { referringPracticeId: practiceMode === "none" ? { notIn: practiceIds } : { in: practiceIds } } : {}),
+    ...(doctorIds.length > 0 ? { referringDoctorId: doctorMode === "none" ? { notIn: doctorIds } : { in: doctorIds } } : {}),
+    ...(pipelineIds.length > 0 ? { pipelineId: pipelineMode === "none" ? { notIn: pipelineIds } : { in: pipelineIds } } : {}),
   }
   const where = { referralDate: { gte: start, lte: end }, ...entityFilter }
 
@@ -150,6 +156,9 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       practiceIds={practiceIds}
       doctorIds={doctorIds}
       pipelineIds={pipelineIds}
+      practiceMode={practiceMode}
+      doctorMode={doctorMode}
+      pipelineMode={pipelineMode}
       filterPractices={filterPractices}
       filterDoctors={filterDoctors.map((d) => ({ id: d.id, label: d.title ? `${d.name}, ${d.title}` : d.name, practiceId: d.practiceId }))}
       filterPipelines={(filterPipelines as { id: string; name: string; color: string }[]) ?? []}
