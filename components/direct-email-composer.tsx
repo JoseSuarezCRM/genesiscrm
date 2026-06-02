@@ -251,10 +251,10 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
             </>
           )}
 
-          <div className="px-4 py-2 flex items-center gap-2">
-            <span className="text-xs text-slate-400 w-8 shrink-0">From</span>
+          <div className="px-4 py-2 flex items-center gap-2 bg-slate-50">
+            <span className="text-xs font-medium text-slate-500 w-10 shrink-0">From</span>
             <select value={fromSender} onChange={e => setFromSender(e.target.value)}
-              className="flex-1 border-0 shadow-none text-sm bg-transparent focus:outline-none text-slate-700">
+              className="flex-1 h-8 px-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:border-slate-400">
               <option value="referrals">Referrals@genesisortho.com</option>
               <option value="surgery">surgery@genesisortho.com</option>
               <option value="tpl">tpl@genesisortho.com</option>
