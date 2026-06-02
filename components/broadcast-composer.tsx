@@ -77,6 +77,7 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
   const [selectedProviderPracticeId, setSelectedProviderPracticeId] = useState("")
 
   // Compose
+  const [fromSender, setFromSender] = useState("referrals")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [scheduledAt, setScheduledAt] = useState("")
@@ -134,6 +135,7 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
       const result = await createBroadcast({
         subject,
         body,
+        fromSender,
         filters: buildFilters(),
         scheduledAt: scheduledAt || null,
       })
@@ -331,6 +333,15 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
           </div>
         )}
 
+        <div>
+          <Label className="mb-1.5 block text-sm">From *</Label>
+          <select value={fromSender} onChange={(e) => setFromSender(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+            <option value="referrals">Referrals@genesisortho.com</option>
+            <option value="surgery">surgery@genesisortho.com</option>
+            <option value="tpl">tpl@genesisortho.com</option>
+          </select>
+        </div>
         <div>
           <Label htmlFor="subject" className="mb-1.5 block text-sm">Subject *</Label>
           <Input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Your upcoming appointment at Genesis Ortho" />

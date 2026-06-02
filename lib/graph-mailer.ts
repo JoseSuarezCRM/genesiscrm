@@ -1,12 +1,27 @@
 /**
  * Microsoft Graph API email sender (OAuth2 client credentials).
- * Requires an Azure App Registration with Mail.Send application permission.
- * Env vars: MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_FROM_EMAIL
+ * Single Azure App Registration with Mail.Send permission on all three mailboxes.
+ * Env vars: MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET
+ *           MS_FROM_EMAIL          (referrals sender, default)
+ *           MS_SURGERY_FROM_EMAIL  (surgery sender)
+ *           MS_TPL_FROM_EMAIL      (TPL sender)
  */
 
-const FROM_EMAIL = process.env.MS_FROM_EMAIL ?? "Referrals@genesisortho.com"
+export type EmailSender = "referrals" | "surgery" | "tpl"
 
-// Simple in-process token cache — reuses the token until 60s before expiry
+export const EMAIL_SENDER_OPTIONS: { value: EmailSender; label: string }[] = [
+  { value: "referrals", label: "Referrals@genesisortho.com" },
+  { value: "surgery",   label: "surgery@genesisortho.com" },
+  { value: "tpl",       label: "tpl@genesisortho.com" },
+]
+
+const SENDER_EMAILS: Record<EmailSender, string> = {
+  referrals: process.env.MS_FROM_EMAIL          ?? "Referrals@genesisortho.com",
+  surgery:   process.env.MS_SURGERY_FROM_EMAIL  ?? "surgery@genesisortho.com",
+  tpl:       process.env.MS_TPL_FROM_EMAIL      ?? "tpl@genesisortho.com",
+}
+
+// Single token cache — same Azure app for all three mailboxes
 let cachedToken: { value: string; expiresAt: number } | null = null
 
 async function getAccessToken(): Promise<string> {
@@ -53,9 +68,10 @@ export async function sendEmail(
   to: string | string[],
   subject: string,
   html: string,
-  options?: { cc?: string[]; bcc?: string[] }
+  options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender }
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const fromEmail = SENDER_EMAILS[options?.sender ?? "referrals"]
     const token = await getAccessToken()
     const toList = Array.isArray(to) ? to : [to]
     const toRecipients = toList.map(a => ({ emailAddress: { address: a } }))
@@ -63,7 +79,7 @@ export async function sendEmail(
     const bccRecipients = (options?.bcc ?? []).map(a => ({ emailAddress: { address: a } }))
 
     const res = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(FROM_EMAIL)}/sendMail`,
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}/sendMail`,
       {
         method: "POST",
         headers: {
@@ -77,7 +93,7 @@ export async function sendEmail(
             toRecipients,
             ...(ccRecipients.length ? { ccRecipients } : {}),
             ...(bccRecipients.length ? { bccRecipients } : {}),
-            from: { emailAddress: { address: FROM_EMAIL, name: "Genesis Ortho CRM" } },
+            from: { emailAddress: { address: fromEmail, name: "Genesis Ortho" } },
           },
           saveToSentItems: true,
         }),

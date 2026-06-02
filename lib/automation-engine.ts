@@ -299,7 +299,7 @@ async function executeAction(
     const bccEmails = await resolveRecipientList(cfg.bcc)
 
     if (toEmails.length) {
-      await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails })
+      await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails, sender: (cfg.sender as any) || "referrals" })
     }
   }
 

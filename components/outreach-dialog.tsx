@@ -55,6 +55,7 @@ export default function OutreachDialog({ referral }: Props) {
   const [channel, setChannel] = useState<Channel>(
     referral.patientPhone ? "SMS" : "EMAIL"
   )
+  const [fromSender, setFromSender] = useState("referrals")
   const [subject, setSubject] = useState("")
   const [message, setMessage] = useState("")
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle")
@@ -104,7 +105,8 @@ export default function OutreachDialog({ referral }: Props) {
       referral.id,
       channel,
       message.trim(),
-      showEmailFields ? subject.trim() : undefined
+      showEmailFields ? subject.trim() : undefined,
+      showEmailFields ? fromSender : undefined
     )
 
     if (result.error) {
@@ -187,6 +189,19 @@ export default function OutreachDialog({ referral }: Props) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* From — email only */}
+          {showEmailFields && (
+            <div>
+              <Label className="mb-2 block">From</Label>
+              <select value={fromSender} onChange={(e) => setFromSender(e.target.value)} disabled={status === "sending" || status === "success"}
+                className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <option value="referrals">Referrals@genesisortho.com</option>
+                <option value="surgery">surgery@genesisortho.com</option>
+                <option value="tpl">tpl@genesisortho.com</option>
+              </select>
             </div>
           )}
 

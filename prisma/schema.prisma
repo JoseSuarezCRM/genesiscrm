@@ -403,6 +403,7 @@ model EmailBroadcast {
   id             String                   @id @default(cuid())
   subject        String
   body           String
+  fromSender     String                   @default("referrals")
   status         BroadcastStatus          @default(DRAFT)
   scheduledAt    DateTime?
   sentAt         DateTime?
@@ -713,6 +714,7 @@ model SequenceStep {
   channel    StepChannel
   subject    String?
   body       String
+  fromSender String            @default("referrals")
   runs       SequenceStepRun[]
   createdAt  DateTime          @default(now())
 

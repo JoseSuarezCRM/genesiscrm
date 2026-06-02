@@ -143,17 +143,31 @@ function StepCard({
             </div>
           </div>
 
-          {/* Subject (email only) */}
+          {/* From + Subject (email only) */}
           {step.channel === "EMAIL" && (
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">Subject</label>
-              <input
-                value={step.subject}
-                onChange={(e) => onUpdate({ ...step, subject: e.target.value })}
-                placeholder="e.g. Your appointment at Genesis Ortho"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            <>
+              <div>
+                <label className="text-xs font-medium text-slate-500 block mb-1">From</label>
+                <select
+                  value={(step as any).fromSender || "referrals"}
+                  onChange={(e) => onUpdate({ ...step, fromSender: e.target.value } as any)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="referrals">Referrals@genesisortho.com</option>
+                  <option value="surgery">surgery@genesisortho.com</option>
+                  <option value="tpl">tpl@genesisortho.com</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 block mb-1">Subject</label>
+                <input
+                  value={step.subject}
+                  onChange={(e) => onUpdate({ ...step, subject: e.target.value })}
+                  placeholder="e.g. Your appointment at Genesis Ortho"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </>
           )}
 
           {/* Body */}

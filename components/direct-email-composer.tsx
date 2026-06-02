@@ -197,6 +197,7 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
   const [cc, setCc] = useState<string[]>([])
   const [bcc, setBcc] = useState<string[]>([])
   const [showCcBcc, setShowCcBcc] = useState(false)
+  const [fromSender, setFromSender] = useState("referrals")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -209,7 +210,7 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
     setError(null)
     setSuccess(false)
     startTransition(async () => {
-      const result = await sendDirectEmail({ to, cc, bcc, subject, body })
+      const result = await sendDirectEmail({ to, cc, bcc, subject, body, sender: fromSender as any })
       if (result.success) {
         setSuccess(true)
         setTo([]); setCc([]); setBcc([]); setSubject(""); setBody("")
@@ -249,6 +250,16 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
               </div>
             </>
           )}
+
+          <div className="px-4 py-2 flex items-center gap-2">
+            <span className="text-xs text-slate-400 w-8 shrink-0">From</span>
+            <select value={fromSender} onChange={e => setFromSender(e.target.value)}
+              className="flex-1 border-0 shadow-none text-sm bg-transparent focus:outline-none text-slate-700">
+              <option value="referrals">Referrals@genesisortho.com</option>
+              <option value="surgery">surgery@genesisortho.com</option>
+              <option value="tpl">tpl@genesisortho.com</option>
+            </select>
+          </div>
 
           <div className="px-4 py-2">
             <Input

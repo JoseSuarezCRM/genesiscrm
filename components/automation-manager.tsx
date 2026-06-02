@@ -812,6 +812,17 @@ function ActionConfigFields({
           </div>
         )}
 
+        {/* From */}
+        <div>
+          <label className="text-xs font-medium text-slate-600 block mb-1">From</label>
+          <select value={(config.sender as string) || "referrals"} onChange={e => set("sender", e.target.value)}
+            className="w-full border rounded-md px-3 py-2 text-sm bg-white">
+            <option value="referrals">Referrals@genesisortho.com</option>
+            <option value="surgery">surgery@genesisortho.com</option>
+            <option value="tpl">tpl@genesisortho.com</option>
+          </select>
+        </div>
+
         {/* Subject */}
         <div>
           <div className="flex items-center justify-between mb-1">

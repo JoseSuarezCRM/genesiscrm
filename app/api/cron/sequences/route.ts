@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
-import { sendSMS, toE164 } from "@/lib/twilio"
+import { sendSMS } from "@/lib/twilio"
 
 function resolveBody(template: string, referral: {
   patientFirstName: string
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         const subject = step.subject
           ? resolveBody(step.subject, referral)
           : `Message from Genesis Ortho`
-        await sendEmail(referral.patientEmail, subject, `<p>${body.replace(/\n/g, "<br/>")}</p>`)
+        await sendEmail(referral.patientEmail, subject, `<p>${body.replace(/\n/g, "<br/>")}</p>`, { sender: (step as any).fromSender || "referrals" })
       }
 
       await prisma.sequenceStepRun.update({

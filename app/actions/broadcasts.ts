@@ -91,6 +91,7 @@ export async function previewBroadcastRecipients(filters: BroadcastFilters) {
 export async function createBroadcast(data: {
   subject: string
   body: string
+  fromSender?: string
   filters: BroadcastFilters
   scheduledAt?: string | null
 }) {
@@ -101,10 +102,11 @@ export async function createBroadcast(data: {
 
   const status = data.scheduledAt ? BroadcastStatus.SCHEDULED : BroadcastStatus.SENDING
 
-  const broadcast = await prisma.emailBroadcast.create({
+  const broadcast = await (prisma as any).emailBroadcast.create({
     data: {
       subject: data.subject,
       body: data.body,
+      fromSender: data.fromSender || "referrals",
       status,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       recipientCount: recipients.length,
@@ -143,7 +145,7 @@ export async function sendBroadcastEmails(broadcastId: string) {
   let failedCount = 0
 
   for (const recipient of broadcast.recipients) {
-    const result = await sendEmail(recipient.email, broadcast.subject, broadcast.body.replace(/\n/g, "<br>"))
+    const result = await sendEmail(recipient.email, broadcast.subject, broadcast.body.replace(/\n/g, "<br>"), { sender: (broadcast as any).fromSender || "referrals" })
     await prisma.emailBroadcastRecipient.update({
       where: { id: recipient.id },
       data: {
