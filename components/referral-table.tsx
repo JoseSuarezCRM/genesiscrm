@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Phone, X, ChevronDown, Loader2 } from "lucide-react"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate, formatPhone } from "@/lib/utils"
-import { moveReferralsToPipeline } from "@/app/actions/referrals"
+import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
 import { bulkAddTag, bulkRemoveTag } from "@/app/actions/tags"
 import { useRouter } from "next/navigation"
 import { Tag as TagIcon } from "lucide-react"
@@ -50,10 +50,12 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
   const [menuOpen, setMenuOpen] = useState(false)
   const [tagAddOpen, setTagAddOpen] = useState(false)
   const [tagRemoveOpen, setTagRemoveOpen] = useState(false)
+  const [statusOpen, setStatusOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const menuRef = useRef<HTMLDivElement>(null)
   const tagAddRef = useRef<HTMLDivElement>(null)
   const tagRemoveRef = useRef<HTMLDivElement>(null)
+  const statusRef = useRef<HTMLDivElement>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
@@ -91,6 +93,14 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
     if (tagRemoveOpen) document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [tagRemoveOpen])
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false)
+    }
+    if (statusOpen) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [statusOpen])
 
   function toggleAll() {
     if (allPageChecked) {
@@ -141,6 +151,15 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
     startTransition(async () => {
       await bulkRemoveTag(Array.from(selected), tagId)
       setTagRemoveOpen(false)
+      router.refresh()
+    })
+  }
+
+  function changeStatus(status: string) {
+    startTransition(async () => {
+      await bulkUpdateStatus(Array.from(selected), status as any)
+      setStatusOpen(false)
+      clearSelection()
       router.refresh()
     })
   }
@@ -377,6 +396,41 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
               </div>
             </>
           )}
+
+          <div className="w-px h-4 bg-slate-600" />
+
+          {/* Change status */}
+          <div className="relative" ref={statusRef}>
+            <button
+              onClick={() => { setStatusOpen((v) => !v); setMenuOpen(false); setTagAddOpen(false); setTagRemoveOpen(false) }}
+              disabled={isPending}
+              className="flex items-center gap-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+            >
+              Change status
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {statusOpen && (
+              <div className="absolute bottom-full mb-2 left-0 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
+                <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Set status for selected</p>
+                {[
+                  { value: "NEW", label: "New" },
+                  { value: "READY_FOR_CALL", label: "Ready for Call" },
+                  { value: "CONTACTED", label: "Contacted" },
+                  { value: "SCHEDULED", label: "Scheduled" },
+                  { value: "COMPLETED", label: "Completed" },
+                  { value: "NO_SHOW", label: "No Show" },
+                ].map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => changeStatus(s.value)}
+                    className="w-full flex items-center px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             onClick={() => setSelected(new Set())}

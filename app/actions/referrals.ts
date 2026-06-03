@@ -325,6 +325,20 @@ export async function moveReferralsToPipeline(ids: string[], pipelineId: string 
   return { success: true, count: ids.length }
 }
 
+export async function bulkUpdateStatus(ids: string[], status: ReferralStatus) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  await prisma.referral.updateMany({
+    where: { id: { in: ids } },
+    data: { status },
+  })
+
+  revalidatePath("/referrals")
+  revalidatePath("/")
+  return { success: true, count: ids.length }
+}
+
 export async function assignReferral(referralId: string, assignedToId: string | null) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
