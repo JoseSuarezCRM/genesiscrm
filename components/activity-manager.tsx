@@ -335,21 +335,128 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
   )
 }
 
+// ─── Create Provider Modal ────────────────────────────────────────────────────
+
+const PROVIDER_TITLES = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Other"]
+
+function CreateProviderModal({ initialName, practiceId, locations, onClose, onCreate }: {
+  initialName: string
+  practiceId: string
+  locations: { id: string; name: string }[]
+  onClose: () => void
+  onCreate: (provider: { id: string; label: string; name: string; title: string | null }) => void
+}) {
+  const [name, setName] = useState(initialName)
+  const [title, setTitle] = useState("")
+  const [npi, setNpi] = useState("")
+  const [specialty, setSpecialty] = useState("")
+  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [locationIds, setLocationIds] = useState<string[]>([])
+  const [isPending, startTransition] = useTransition()
+  const [err, setErr] = useState("")
+
+  function toggleLoc(id: string) {
+    setLocationIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) { setErr("Name is required"); return }
+    startTransition(async () => {
+      const res = await createDoctor({ name, title, npi, specialty, phone, email, practiceId, locationIds })
+      if (!res || res.error || !res.id) { setErr("Failed to create provider"); return }
+      onCreate({ id: res.id!, label: name + (title ? `, ${title}` : ""), name, title: title || null })
+    })
+  }
+
+  const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-400 bg-white"
+  const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h2 className="text-base font-semibold text-slate-800">Create Provider</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="h-4 w-4" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          {err && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{err}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 sm:col-span-1">
+              <label className={labelCls}>Name *</label>
+              <input value={name} onChange={e => { setName(e.target.value); setErr("") }} className={inputCls} placeholder="Sarah Johnson" />
+            </div>
+            <div>
+              <label className={labelCls}>Title</label>
+              <select value={title} onChange={e => setTitle(e.target.value)} className={inputCls}>
+                <option value="">— None —</option>
+                {PROVIDER_TITLES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>NPI</label>
+            <input value={npi} onChange={e => setNpi(e.target.value)} className={inputCls} placeholder="1234567890" maxLength={10} />
+          </div>
+          <div>
+            <label className={labelCls}>Specialty</label>
+            <input value={specialty} onChange={e => setSpecialty(e.target.value)} className={inputCls} placeholder="Internal Medicine" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} placeholder="(312) 555-0100" />
+            </div>
+            <div>
+              <label className={labelCls}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="dr@clinic.com" />
+            </div>
+          </div>
+          {locations.length > 0 && (
+            <div>
+              <label className={labelCls}>Locations</label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {locations.map(l => (
+                  <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${locationIds.includes(l.id) ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
+                    {locationIds.includes(l.id) && <Check className="h-3 w-3" />}
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2 pt-2">
+            <button type="submit" disabled={isPending}
+              className="flex-1 h-9 bg-zinc-900 text-white rounded-lg text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-2">
+              {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Create Provider
+            </button>
+            <button type="button" onClick={onClose} className="h-9 px-4 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg transition-colors">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Multi-select provider picker ────────────────────────────────────────────
 
-function ProviderPicker({ options, selected, onToggle, onQuickCreate }: {
+function ProviderPicker({ options, selected, onToggle, onOpenCreateForm }: {
   options: { id: string; label: string; sub?: string }[]
   selected: string[]; onToggle: (id: string) => void
-  onQuickCreate?: (name: string) => Promise<{ id: string; label: string } | null>
+  onOpenCreateForm?: (name: string) => void
 }) {
   const [q, setQ] = useState("")
-  const [creating, setCreating] = useState(false)
   const filtered = options.filter(o =>
     o.label.toLowerCase().includes(q.toLowerCase()) ||
     (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
   )
   const hasExact = filtered.some(o => o.label.toLowerCase() === q.trim().toLowerCase())
-  const canCreate = !!onQuickCreate && q.trim().length > 0 && !hasExact
+  const canCreate = !!onOpenCreateForm && q.trim().length > 0 && !hasExact
 
   return (
     <div className="border border-slate-200 rounded-md bg-white overflow-hidden">
@@ -381,17 +488,10 @@ function ProviderPicker({ options, selected, onToggle, onQuickCreate }: {
           <li className={cn("border-t border-slate-100", filtered.length > 0 ? "mt-1" : "")}>
             <button
               type="button"
-              disabled={creating}
-              onMouseDown={async (e) => {
-                e.preventDefault()
-                setCreating(true)
-                const result = await onQuickCreate!(q.trim())
-                setCreating(false)
-                if (result) { onToggle(result.id); setQ("") }
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-50"
+              onMouseDown={e => { e.preventDefault(); onOpenCreateForm!(q.trim()); setQ("") }}
+              className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2"
             >
-              {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              <Plus className="h-3 w-3" />
               Create "{q.trim()}"
             </button>
           </li>
@@ -441,6 +541,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [extraLocations, setExtraLocations] = useState<{ id: string; name: string; practiceId: string }[]>([])
   const [extraDoctors, setExtraDoctors] = useState<{ id: string; name: string; title: string | null; practiceId: string; practiceName: string }[]>([])
 
+  // Create provider modal
+  const [createProviderModal, setCreateProviderModal] = useState<{ open: boolean; initialName: string }>({ open: false, initialName: "" })
+
   const allPractices = useMemo(() => [...practices, ...extraPractices.map(p => ({ ...p, locations: [], doctors: [] }))], [practices, extraPractices])
 
   const practiceOptions = allPractices.map(p => ({ id: p.id, label: p.name }))
@@ -486,13 +589,16 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     return { id: res.id!, label: name }
   }
 
-  async function handleCreateProvider(name: string): Promise<{ id: string; label: string } | null> {
-    if (!form.practiceId) { setError("Select an organization first to create a provider."); return null }
+  function handleOpenCreateProvider(name: string) {
+    if (!form.practiceId) { setError("Select an organization first to create a provider."); return }
+    setCreateProviderModal({ open: true, initialName: name })
+  }
+
+  function handleProviderCreated(provider: { id: string; label: string; name: string; title: string | null }) {
     const practiceName = allPractices.find(p => p.id === form.practiceId)?.name ?? ""
-    const res = await createDoctor({ name, practiceId: form.practiceId, title: "", npi: "", specialty: "", phone: "", email: "", locationIds: [] })
-    if (!res || res.error || !res.id) return null
-    setExtraDoctors(prev => [...prev, { id: res.id!, name, title: null, practiceId: form.practiceId, practiceName }])
-    return { id: res.id!, label: name }
+    setExtraDoctors(prev => [...prev, { id: provider.id, name: provider.name, title: provider.title, practiceId: form.practiceId, practiceName }])
+    set("providerIds", [...form.providerIds, provider.id])
+    setCreateProviderModal({ open: false, initialName: "" })
   }
 
   function openNew() {
@@ -731,7 +837,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 onToggle={id => set("providerIds", form.providerIds.includes(id)
                   ? form.providerIds.filter(x => x !== id) : [...form.providerIds, id]
                 )}
-                onQuickCreate={form.practiceId ? handleCreateProvider : undefined} />
+                onOpenCreateForm={form.practiceId ? handleOpenCreateProvider : undefined} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Selected Providers</label>
@@ -820,6 +926,16 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {createProviderModal.open && (
+        <CreateProviderModal
+          initialName={createProviderModal.initialName}
+          practiceId={form.practiceId}
+          locations={allPractices.find(p => p.id === form.practiceId)?.locations ?? []}
+          onClose={() => setCreateProviderModal({ open: false, initialName: "" })}
+          onCreate={handleProviderCreated}
+        />
+      )}
     </>
   )
 }
