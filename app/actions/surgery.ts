@@ -87,7 +87,9 @@ export async function updateSurgeryCase(
   id: string,
   data: {
     status?: string
-    clearanceRequired?: string | null
+    medicalClearance?: string | null
+    secondaryClearance?: string | null
+    dentalClearance?: string | null
     ctRequired?: string | null
     glp1?: string | null
     dme?: string | null

@@ -926,7 +926,9 @@ model SurgeryCase {
   patientName       String
   orderingProvider  String?
   diagnosis         String?
-  clearanceRequired String?
+  medicalClearance   String?
+  secondaryClearance String?
+  dentalClearance    String?
   ctRequired        String?
   glp1              String?
   dme               String?

@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useTransition, useRef, useEffect } from "react"
+import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Phone, Trash2, Upload, FileText, X, Loader2, Check, ChevronDown } from "lucide-react"
+import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -162,64 +162,6 @@ function InputField({
   )
 }
 
-function MultiCheckField({
-  label, value, options, onChange,
-}: {
-  label: string
-  value: string
-  options: string[]
-  onChange: (v: string) => void
-}) {
-  const selected = value ? value.split(",").map((s) => s.trim()).filter(Boolean) : []
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    if (open) document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [open])
-
-  function toggle(opt: string) {
-    const next = selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt]
-    onChange(next.join(","))
-  }
-
-  return (
-    <div className="relative flex flex-col gap-1" ref={ref}>
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="relative h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors flex items-center justify-between gap-2 text-left"
-      >
-        <span className="truncate text-slate-700">
-          {selected.length === 0 ? <span className="text-slate-400">— Not set —</span> : selected.join(", ")}
-        </span>
-        <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden min-w-[200px]">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => toggle(opt)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-zinc-50 text-left transition-colors"
-            >
-              <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${selected.includes(opt) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300"}`}>
-                {selected.includes(opt) && <Check className="h-2.5 w-2.5 text-white" />}
-              </span>
-              {opt}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function ReferralField({
   presets, selectVal, otherVal, onSelectChange, onOtherChange,
@@ -265,7 +207,9 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   // Manual fields form
   const [saving, startSave] = useTransition()
   const [saved, setSaved] = useState(false)
-  const [clearanceRequired, setClearanceRequired] = useState(surgeryCase.clearanceRequired ?? "")
+  const [medicalClearance, setMedicalClearance] = useState((surgeryCase as any).medicalClearance ?? "")
+  const [secondaryClearance, setSecondaryClearance] = useState((surgeryCase as any).secondaryClearance ?? "")
+  const [dentalClearance, setDentalClearance] = useState((surgeryCase as any).dentalClearance ?? "")
   const [ctRequired, setCtRequired] = useState(surgeryCase.ctRequired ?? "")
   const [glp1, setGlp1] = useState(surgeryCase.glp1 ?? "")
   const [dme, setDme] = useState(surgeryCase.dme ?? "")
@@ -307,7 +251,9 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   function handleSave() {
     startSave(async () => {
       await updateSurgeryCase(surgeryCase.id, {
-        clearanceRequired: clearanceRequired || null,
+        medicalClearance: medicalClearance || null,
+        secondaryClearance: secondaryClearance || null,
+        dentalClearance: dentalClearance || null,
         ctRequired: ctRequired || null,
         glp1: glp1 || null,
         dme: dme || null,
@@ -406,12 +352,45 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <MultiCheckField
-              label="Clearance Required"
-              value={clearanceRequired}
-              onChange={setClearanceRequired}
-              options={["Not Required", "Medical Clearance", "Secondary Clearance", "Dental Clearance"]}
+            <SelectField
+              label="Medical Clearance"
+              value={medicalClearance}
+              onChange={setMedicalClearance}
+              options={[
+                { value: "Not required", label: "Not required" },
+                { value: "Arrangements to be made", label: "Arrangements to be made" },
+                { value: "Scheduled", label: "Scheduled" },
+                { value: "Awaiting clearance documents", label: "Awaiting clearance documents" },
+                { value: "Completed, on file", label: "Completed, on file" },
+              ]}
             />
+            <SelectField
+              label="Secondary Clearance"
+              value={secondaryClearance}
+              onChange={setSecondaryClearance}
+              options={[
+                { value: "Not required", label: "Not required" },
+                { value: "Arrangements to be made", label: "Arrangements to be made" },
+                { value: "Scheduled", label: "Scheduled" },
+                { value: "Awaiting clearance documents", label: "Awaiting clearance documents" },
+                { value: "Completed, on file", label: "Completed, on file" },
+              ]}
+            />
+            <SelectField
+              label="Dental Clearance"
+              value={dentalClearance}
+              onChange={setDentalClearance}
+              options={[
+                { value: "Not required", label: "Not required" },
+                { value: "Arrangements to be made", label: "Arrangements to be made" },
+                { value: "Scheduled", label: "Scheduled" },
+                { value: "Awaiting clearance documents", label: "Awaiting clearance documents" },
+                { value: "Treatment required", label: "Treatment required" },
+                { value: "Completed, on file", label: "Completed, on file" },
+              ]}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SelectField
               label="CT Required"
               value={ctRequired}
