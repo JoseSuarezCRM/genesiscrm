@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useTransition, useMemo } from "react"
-import { createPortal } from "react-dom"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
@@ -340,11 +339,11 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
 
 const PROVIDER_TITLE_OPTIONS = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Custom..."]
 
-function CreateProviderModal({ initialName, practiceId, locations, onClose, onCreate }: {
+function InlineCreateProvider({ initialName, practiceId, locations, onCancel, onCreate }: {
   initialName: string
   practiceId: string
   locations: { id: string; name: string }[]
-  onClose: () => void
+  onCancel: () => void
   onCreate: (provider: { id: string; label: string; name: string; title: string | null }) => void
 }) {
   const [name, setName] = useState(initialName)
@@ -378,79 +377,73 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
   const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-400 bg-white"
   const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 
-  const modal = (
-    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h2 className="text-base font-semibold text-slate-800">Create Provider</h2>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="h-4 w-4" /></button>
+  return (
+    <div className="border border-blue-200 rounded-xl bg-blue-50/50 p-4 space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">New Provider</p>
+        <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X className="h-3.5 w-3.5" /></button>
+      </div>
+      {err && <p className="text-xs text-red-600 bg-red-50 px-2 py-1.5 rounded-lg border border-red-100">{err}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={labelCls}>Name *</label>
+          <input value={name} onChange={e => { setName(e.target.value); setErr("") }} className={inputCls} placeholder="Sarah Johnson" />
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          {err && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{err}</p>}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 sm:col-span-1">
-              <label className={labelCls}>Name *</label>
-              <input value={name} onChange={e => { setName(e.target.value); setErr("") }} className={inputCls} placeholder="Sarah Johnson" />
-            </div>
-            <div>
-              <label className={labelCls}>Title</label>
-              <select value={titleSelect} onChange={e => setTitleSelect(e.target.value)} className={inputCls}>
-                <option value="">— None —</option>
-                {PROVIDER_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              {isCustomTitle && (
-                <input value={titleCustom} onChange={e => setTitleCustom(e.target.value)}
-                  className={inputCls + " mt-2"} placeholder="e.g. Director of Care Coordination" autoFocus />
-              )}
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>NPI</label>
-            <input value={npi} onChange={e => setNpi(e.target.value)} className={inputCls} placeholder="1234567890" maxLength={10} />
-          </div>
-          <div>
-            <label className={labelCls}>Specialty</label>
-            <input value={specialty} onChange={e => setSpecialty(e.target.value)} className={inputCls} placeholder="Internal Medicine" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Phone</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} placeholder="(312) 555-0100" />
-            </div>
-            <div>
-              <label className={labelCls}>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="dr@clinic.com" />
-            </div>
-          </div>
-          {locations.length > 0 && (
-            <div>
-              <label className={labelCls}>Locations</label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {locations.map(l => (
-                  <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${locationIds.includes(l.id) ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
-                    {locationIds.includes(l.id) && <Check className="h-3 w-3" />}
-                    {l.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+        <div>
+          <label className={labelCls}>Title</label>
+          <select value={titleSelect} onChange={e => setTitleSelect(e.target.value)} className={inputCls}>
+            <option value="">— None —</option>
+            {PROVIDER_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {isCustomTitle && (
+            <input value={titleCustom} onChange={e => setTitleCustom(e.target.value)}
+              className={inputCls + " mt-1.5"} placeholder="e.g. Director of Care Coordination" autoFocus />
           )}
-          <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={isPending}
-              className="flex-1 h-9 bg-zinc-900 text-white rounded-lg text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-2">
-              {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Create Provider
-            </button>
-            <button type="button" onClick={onClose} className="h-9 px-4 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg transition-colors">
-              Cancel
-            </button>
+        </div>
+        <div>
+          <label className={labelCls}>NPI</label>
+          <input value={npi} onChange={e => setNpi(e.target.value)} className={inputCls} placeholder="1234567890" maxLength={10} />
+        </div>
+        <div>
+          <label className={labelCls}>Specialty</label>
+          <input value={specialty} onChange={e => setSpecialty(e.target.value)} className={inputCls} placeholder="Internal Medicine" />
+        </div>
+        <div>
+          <label className={labelCls}>Phone</label>
+          <input value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} placeholder="(312) 555-0100" />
+        </div>
+        <div>
+          <label className={labelCls}>Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="dr@clinic.com" />
+        </div>
+      </div>
+      {locations.length > 0 && (
+        <div>
+          <label className={labelCls}>Locations</label>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {locations.map(l => (
+              <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border transition-colors ${locationIds.includes(l.id) ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
+                {locationIds.includes(l.id) && <Check className="h-2.5 w-2.5" />}
+                {l.name}
+              </button>
+            ))}
           </div>
-        </form>
+        </div>
+      )}
+      <div className="flex gap-2 pt-1">
+        <button type="button" onClick={handleSubmit as any} disabled={isPending}
+          className="flex-1 h-8 bg-zinc-900 text-white rounded-lg text-xs font-semibold hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+          Create & Add
+        </button>
+        <button type="button" onClick={onCancel}
+          className="h-8 px-3 text-xs text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg bg-white transition-colors">
+          Cancel
+        </button>
       </div>
     </div>
   )
-  return typeof document !== "undefined" ? createPortal(modal, document.body) : null
 }
 
 // ─── Multi-select provider picker ────────────────────────────────────────────
@@ -847,6 +840,15 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   ? form.providerIds.filter(x => x !== id) : [...form.providerIds, id]
                 )}
                 onOpenCreateForm={form.practiceId ? handleOpenCreateProvider : undefined} />
+              {createProviderModal.open && (
+                <InlineCreateProvider
+                  initialName={createProviderModal.initialName}
+                  practiceId={form.practiceId}
+                  locations={allPractices.find(p => p.id === form.practiceId)?.locations ?? []}
+                  onCancel={() => setCreateProviderModal({ open: false, initialName: "" })}
+                  onCreate={handleProviderCreated}
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Selected Providers</label>
@@ -936,15 +938,6 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         </DialogContent>
       </Dialog>
 
-      {createProviderModal.open && (
-        <CreateProviderModal
-          initialName={createProviderModal.initialName}
-          practiceId={form.practiceId}
-          locations={allPractices.find(p => p.id === form.practiceId)?.locations ?? []}
-          onClose={() => setCreateProviderModal({ open: false, initialName: "" })}
-          onCreate={handleProviderCreated}
-        />
-      )}
     </>
   )
 }
