@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Plus, Loader2, Trash2, Pencil, Search, X, CalendarDays,
   Building2, MapPin, User, ChevronDown, Tag, Check, Save,
-  Globe, Users, UserCog,
+  Globe, Users, UserCog, Lock,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -727,6 +727,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [newViewName, setNewViewName] = useState("")
   const [showSaveForm, setShowSaveForm] = useState(false)
   const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
+  const [editAccessId, setEditAccessId] = useState<string | null>(null)
+  const [editAccessValue, setEditAccessValue] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
+  const [savingAccess, setSavingAccess] = useState(false)
 
   const allPractices = useMemo(() => [...practices, ...extraPractices.map(p => ({ ...p, locations: [], doctors: [] }))], [practices, extraPractices])
 
@@ -924,6 +927,30 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     setSavingView(false)
   }
 
+  function openEditAccess(view: SavedView) {
+    setEditAccessValue({
+      visibility: view.visibility ?? "PRIVATE",
+      teamId: view.teamId ?? null,
+      sharedUserIds: view.sharedUserIds ?? [],
+    })
+    setEditAccessId(prev => prev === view.id ? null : view.id)
+  }
+
+  async function handleSaveAccess(view: SavedView) {
+    setSavingAccess(true)
+    const res = await updateActivityView(view.id, view.filters, editAccessValue) as any
+    if (res?.success) {
+      setSavedViews(prev => prev.map(v => v.id === view.id ? {
+        ...v,
+        visibility: editAccessValue.visibility,
+        teamId: editAccessValue.teamId,
+        sharedUserIds: editAccessValue.sharedUserIds,
+      } : v))
+    }
+    setSavingAccess(false)
+    setEditAccessId(null)
+  }
+
   async function handleDeleteView(id: string) {
     await deleteActivityView(id)
     setSavedViews(prev => prev.filter(v => v.id !== id))
@@ -997,25 +1024,52 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           All
         </button>
         {savedViews.map(view => (
-          <div key={view.id} className={`inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden ${
-            activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
-          }`}>
-            <button className={`pl-3 h-full ${view.isOwner === false ? "pr-3" : "pr-2"}`} onClick={() => applyView(view)}>
-              {view.name}
-              {view.visibility && view.visibility !== "PRIVATE" && (
-                <span className="ml-1.5 opacity-60" title={view.visibility === "EVERYONE" ? "Shared with everyone" : view.visibility === "TEAM" ? "Shared with team" : "Shared with specific people"}>
-                  {view.visibility === "EVERYONE" ? <Globe className="inline h-3 w-3" /> : view.visibility === "TEAM" ? <Users className="inline h-3 w-3" /> : <UserCog className="inline h-3 w-3" />}
-                </span>
-              )}
-            </button>
-            {view.isOwner !== false && (
-              <button
-                onClick={() => handleDeleteView(view.id)}
-                title="Delete view"
-                className={`pr-2 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
-              >
-                <X className="h-3 w-3" />
+          <div key={view.id} className="relative">
+            <div className={`inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden ${
+              activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+            }`}>
+              <button className={`pl-3 h-full ${view.isOwner === false ? "pr-3" : "pr-1.5"}`} onClick={() => applyView(view)}>
+                {view.name}
+                {view.isOwner === false && view.visibility && view.visibility !== "PRIVATE" && (
+                  <span className="ml-1.5 opacity-60" title={view.visibility === "EVERYONE" ? "Shared with everyone" : view.visibility === "TEAM" ? "Shared with team" : "Shared with specific people"}>
+                    {view.visibility === "EVERYONE" ? <Globe className="inline h-3 w-3" /> : view.visibility === "TEAM" ? <Users className="inline h-3 w-3" /> : <UserCog className="inline h-3 w-3" />}
+                  </span>
+                )}
               </button>
+              {view.isOwner !== false && (
+                <>
+                  <button
+                    onClick={() => openEditAccess(view)}
+                    title="Manage who can see this"
+                    className={`px-1 h-full transition-colors ${activeViewId === view.id ? "opacity-70 hover:opacity-100" : "text-zinc-400 hover:text-zinc-700"}`}
+                  >
+                    {view.visibility === "EVERYONE" ? <Globe className="h-3.5 w-3.5" /> : view.visibility === "TEAM" ? <Users className="h-3.5 w-3.5" /> : view.visibility === "CUSTOM" ? <UserCog className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteView(view.id)}
+                    title="Delete view"
+                    className={`pr-2 pl-0.5 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </>
+              )}
+            </div>
+            {editAccessId === view.id && (
+              <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
+                <ViewAccessSelector value={editAccessValue} onChange={setEditAccessValue} users={shareUsers} teams={shareTeams} />
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => handleSaveAccess(view)} disabled={savingAccess}
+                    className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    {savingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    Save access
+                  </button>
+                  <button onClick={() => setEditAccessId(null)}
+                    className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">
+                    Cancel
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         ))}
