@@ -483,6 +483,20 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                 Top refs
               </button>
             </div>
+            {/* Save-changes to active view — always visible, grayed when no changes */}
+            <button
+              onClick={handleUpdateProviderView}
+              disabled={!viewDirty || savingView}
+              title={viewDirty ? "Save changes to current view" : "No unsaved changes"}
+              className={cn(
+                "inline-flex items-center justify-center h-8 w-8 rounded-lg border transition-colors",
+                viewDirty
+                  ? "border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100"
+                  : "border-slate-200 bg-white text-slate-300 cursor-not-allowed"
+              )}
+            >
+              {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            </button>
             {/* Column selector */}
             <div className="relative" ref={colMenuRef}>
               <button
@@ -574,21 +588,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
               </button>
             </div>
           ))}
-          {/* Save-changes button — always visible, grayed when no unsaved changes */}
-          <button
-            onClick={handleUpdateProviderView}
-            disabled={!viewDirty || savingView}
-            title={viewDirty ? "Save changes to current view" : "No unsaved changes"}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-sm font-medium transition-colors",
-              viewDirty
-                ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                : "border-zinc-200 bg-white text-zinc-300 cursor-not-allowed"
-            )}
-          >
-            {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save changes
-          </button>
           {showSaveForm ? (
             <div className="flex items-center gap-1.5">
               <input

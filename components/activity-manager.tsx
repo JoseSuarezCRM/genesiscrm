@@ -996,20 +996,6 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             </button>
           </div>
         ))}
-        {/* Save-changes button — always visible, grayed when no unsaved changes */}
-        <button
-          onClick={handleUpdateView}
-          disabled={!viewDirty || savingView}
-          title={viewDirty ? "Save changes to current view" : "No unsaved changes"}
-          className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-sm font-medium transition-colors ${
-            viewDirty
-              ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-              : "border-zinc-200 bg-white text-zinc-300 cursor-not-allowed"
-          }`}
-        >
-          {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          Save changes
-        </button>
         {showSaveForm ? (
           <div className="flex items-center gap-1.5">
             <input
@@ -1037,6 +1023,19 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <Plus className="h-3.5 w-3.5" /> Save view
           </button>
         )}
+        {/* Save-changes button — pushed to far right, grayed when no unsaved changes */}
+        <button
+          onClick={handleUpdateView}
+          disabled={!viewDirty || savingView}
+          title={viewDirty ? "Save changes to current view" : "No unsaved changes"}
+          className={`ml-auto inline-flex items-center justify-center h-8 w-8 rounded-lg border transition-colors ${
+            viewDirty
+              ? "border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100"
+              : "border-zinc-200 bg-white text-zinc-300 cursor-not-allowed"
+          }`}
+        >
+          {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+        </button>
       </div>
 
       {/* ── Filter bar ── */}
