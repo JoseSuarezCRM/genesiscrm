@@ -564,26 +564,31 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           </button>
           {savedViews.map(view => (
             <div key={view.id} className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden", activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
-              <button className="pl-3 pr-1.5 h-full" onClick={() => applyProviderView(view)}>{view.name}</button>
-              {activeViewId === view.id && viewDirty && (
-                <button
-                  onClick={handleUpdateProviderView}
-                  disabled={savingView}
-                  title="Save changes to this view"
-                  className="px-1 h-full text-amber-300 hover:text-amber-200 disabled:opacity-50"
-                >
-                  {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                </button>
-              )}
+              <button className="pl-3 pr-2 h-full" onClick={() => applyProviderView(view)}>{view.name}</button>
               <button
                 onClick={() => handleDeleteProviderView(view.id)}
                 title="Delete view"
-                className={cn("pr-2 pl-0.5 h-full transition-colors", activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500")}
+                className={cn("pr-2 h-full transition-colors", activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500")}
               >
                 <X className="h-3 w-3" />
               </button>
             </div>
           ))}
+          {/* Save-changes button — always visible, grayed when no unsaved changes */}
+          <button
+            onClick={handleUpdateProviderView}
+            disabled={!viewDirty || savingView}
+            title={viewDirty ? "Save changes to current view" : "No unsaved changes"}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-sm font-medium transition-colors",
+              viewDirty
+                ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                : "border-zinc-200 bg-white text-zinc-300 cursor-not-allowed"
+            )}
+          >
+            {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save changes
+          </button>
           {showSaveForm ? (
             <div className="flex items-center gap-1.5">
               <input
