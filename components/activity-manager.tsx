@@ -840,15 +840,6 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   ? form.providerIds.filter(x => x !== id) : [...form.providerIds, id]
                 )}
                 onOpenCreateForm={form.practiceId ? handleOpenCreateProvider : undefined} />
-              {createProviderModal.open && (
-                <InlineCreateProvider
-                  initialName={createProviderModal.initialName}
-                  practiceId={form.practiceId}
-                  locations={allPractices.find(p => p.id === form.practiceId)?.locations ?? []}
-                  onCancel={() => setCreateProviderModal({ open: false, initialName: "" })}
-                  onCreate={handleProviderCreated}
-                />
-              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Selected Providers</label>
@@ -869,6 +860,17 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 }
               </div>
             </div>
+            {createProviderModal.open && (
+              <div className="col-span-2">
+                <InlineCreateProvider
+                  initialName={createProviderModal.initialName}
+                  practiceId={form.practiceId}
+                  locations={allPractices.find(p => p.id === form.practiceId)?.locations ?? []}
+                  onCancel={() => setCreateProviderModal({ open: false, initialName: "" })}
+                  onCreate={handleProviderCreated}
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Next Step</label>
               <Input value={form.nextStep} onChange={e => set("nextStep", e.target.value)} placeholder="e.g. Follow up in 2 weeks" />
