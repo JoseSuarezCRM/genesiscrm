@@ -1039,22 +1039,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               )}
             </button>
             {view.isOwner !== false && (
-              <>
-                <button
-                  onClick={() => openEditAccess(view)}
-                  title="Manage who can see this"
-                  className={`px-1 h-full transition-colors ${editAccessId === view.id ? "text-amber-500" : activeViewId === view.id ? "opacity-70 hover:opacity-100" : "text-zinc-400 hover:text-zinc-700"}`}
-                >
-                  {view.visibility === "EVERYONE" ? <Globe className="h-3.5 w-3.5" /> : view.visibility === "TEAM" ? <Users className="h-3.5 w-3.5" /> : view.visibility === "CUSTOM" ? <UserCog className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                </button>
-                <button
-                  onClick={() => handleDeleteView(view.id)}
-                  title="Delete view"
-                  className={`pr-2 pl-0.5 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </>
+              <button
+                onClick={() => handleDeleteView(view.id)}
+                title="Delete view"
+                className={`pr-2 pl-0.5 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
             )}
           </div>
         ))}
@@ -1089,7 +1080,25 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </div>
             </div>
           )}
-          {/* Edit-access popover for the owned view whose icon was clicked */}
+        </div>
+
+        {/* Access button — manages who can see the active view */}
+        <div className="relative">
+          <button
+            onClick={() => { if (activeView && activeView.isOwner !== false) openEditAccess(activeView) }}
+            disabled={!activeView || activeView.isOwner === false}
+            title={activeView ? (activeView.isOwner === false ? "You can't change access for a view you don't own" : "Manage who can see this view") : "Select a view to manage access"}
+            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-sm font-medium transition-colors ${
+              editAccessId
+                ? "border-amber-300 bg-amber-50 text-amber-700"
+                : activeView && activeView.isOwner !== false
+                ? "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400"
+                : "border-zinc-200 bg-white text-zinc-300 cursor-not-allowed"
+            }`}
+          >
+            {activeView?.visibility === "EVERYONE" ? <Globe className="h-3.5 w-3.5" /> : activeView?.visibility === "TEAM" ? <Users className="h-3.5 w-3.5" /> : activeView?.visibility === "CUSTOM" ? <UserCog className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+            Access
+          </button>
           {editAccessView && (
             <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
               <p className="text-xs text-slate-500">Editing access for <span className="font-semibold text-slate-700">{editAccessView.name}</span></p>
