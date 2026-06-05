@@ -7,14 +7,14 @@ import {
   createLocation, updateLocation, deleteLocation, mergeLocation,
   createDoctor, updateDoctor, deleteDoctor, mergeDoctor,
 } from "@/app/actions/referring-doctors"
-import { createProviderView, deleteProviderView } from "@/app/actions/provider-views"
+import { createProviderView, updateProviderView, deleteProviderView } from "@/app/actions/provider-views"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -361,6 +361,26 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     setSavingView(false)
   }
 
+  // Does the current state differ from the active view's saved config?
+  const activeView = savedViews.find(v => v.id === activeViewId)
+  const viewDirty = !!activeView && (
+    activeView.config.sort !== providerSort ||
+    activeView.config.search !== search ||
+    activeView.config.columns.length !== visibleCols.length ||
+    !activeView.config.columns.every(c => visibleCols.includes(c))
+  )
+
+  async function handleUpdateProviderView() {
+    if (!activeView) return
+    setSavingView(true)
+    const config = { columns: visibleCols, sort: providerSort, search }
+    const res = await updateProviderView(activeView.id, config) as any
+    if (res?.success) {
+      setSavedViews(prev => prev.map(v => v.id === activeView.id ? { ...v, config } : v))
+    }
+    setSavingView(false)
+  }
+
   async function handleDeleteProviderView(id: string) {
     await deleteProviderView(id)
     setSavedViews(prev => prev.filter(v => v.id !== id))
@@ -544,10 +564,21 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           </button>
           {savedViews.map(view => (
             <div key={view.id} className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden", activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
-              <button className="pl-3 pr-2 h-full" onClick={() => applyProviderView(view)}>{view.name}</button>
+              <button className="pl-3 pr-1.5 h-full" onClick={() => applyProviderView(view)}>{view.name}</button>
+              {activeViewId === view.id && viewDirty && (
+                <button
+                  onClick={handleUpdateProviderView}
+                  disabled={savingView}
+                  title="Save changes to this view"
+                  className="px-1 h-full text-amber-300 hover:text-amber-200 disabled:opacity-50"
+                >
+                  {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                </button>
+              )}
               <button
                 onClick={() => handleDeleteProviderView(view.id)}
-                className={cn("pr-2 h-full transition-colors", activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500")}
+                title="Delete view"
+                className={cn("pr-2 pl-0.5 h-full transition-colors", activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500")}
               >
                 <X className="h-3 w-3" />
               </button>

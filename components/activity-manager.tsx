@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
-import { createActivityView, deleteActivityView } from "@/app/actions/activity-views"
+import { createActivityView, updateActivityView, deleteActivityView } from "@/app/actions/activity-views"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import {
   Plus, Loader2, Trash2, Pencil, Search, X, CalendarDays,
-  Building2, MapPin, User, ChevronDown, Tag, Check,
+  Building2, MapPin, User, ChevronDown, Tag, Check, Save,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -877,6 +877,39 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     setSavingView(false)
   }
 
+  // Current filter state, for comparison + saving
+  const currentFilters = {
+    search, dateFrom, dateTo, activeTagIds,
+    filterPracticeIds, filterPracticeMode,
+    filterLocationIds, filterLocationMode,
+    filterProviderIds, filterProviderMode,
+  }
+
+  const activeView = savedViews.find(v => v.id === activeViewId)
+  const sameSet = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every(x => b.includes(x))
+  const viewDirty = !!activeView && (
+    activeView.filters.search !== search ||
+    activeView.filters.dateFrom !== dateFrom ||
+    activeView.filters.dateTo !== dateTo ||
+    activeView.filters.filterPracticeMode !== filterPracticeMode ||
+    activeView.filters.filterLocationMode !== filterLocationMode ||
+    activeView.filters.filterProviderMode !== filterProviderMode ||
+    !sameSet(activeView.filters.activeTagIds, activeTagIds) ||
+    !sameSet(activeView.filters.filterPracticeIds, filterPracticeIds) ||
+    !sameSet(activeView.filters.filterLocationIds, filterLocationIds) ||
+    !sameSet(activeView.filters.filterProviderIds, filterProviderIds)
+  )
+
+  async function handleUpdateView() {
+    if (!activeView) return
+    setSavingView(true)
+    const res = await updateActivityView(activeView.id, currentFilters) as any
+    if (res?.success) {
+      setSavedViews(prev => prev.map(v => v.id === activeView.id ? { ...v, filters: currentFilters } : v))
+    }
+    setSavingView(false)
+  }
+
   async function handleDeleteView(id: string) {
     await deleteActivityView(id)
     setSavedViews(prev => prev.filter(v => v.id !== id))
@@ -953,10 +986,21 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           <div key={view.id} className={`inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden ${
             activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
           }`}>
-            <button className="pl-3 pr-2 h-full" onClick={() => applyView(view)}>{view.name}</button>
+            <button className="pl-3 pr-1.5 h-full" onClick={() => applyView(view)}>{view.name}</button>
+            {activeViewId === view.id && viewDirty && (
+              <button
+                onClick={handleUpdateView}
+                disabled={savingView}
+                title="Save changes to this view"
+                className="px-1 h-full text-amber-300 hover:text-amber-200 disabled:opacity-50"
+              >
+                {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              </button>
+            )}
             <button
               onClick={() => handleDeleteView(view.id)}
-              className={`pr-2 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
+              title="Delete view"
+              className={`pr-2 pl-0.5 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
             >
               <X className="h-3 w-3" />
             </button>

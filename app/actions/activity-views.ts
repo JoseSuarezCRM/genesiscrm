@@ -36,6 +36,17 @@ export async function createActivityView(name: string, filters: ViewFilters) {
   return { success: true, id: view.id }
 }
 
+export async function updateActivityView(id: string, filters: ViewFilters) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  await (prisma as any).activityView.update({
+    where: { id, userId: (session.user as any).id },
+    data: { filters },
+  })
+  revalidatePath("/activities")
+  return { success: true }
+}
+
 export async function deleteActivityView(id: string) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }

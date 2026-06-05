@@ -29,6 +29,17 @@ export async function createProviderView(name: string, config: ProviderViewConfi
   return { success: true, id: view.id }
 }
 
+export async function updateProviderView(id: string, config: ProviderViewConfig) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  await (prisma as any).providerView.update({
+    where: { id, userId: (session.user as any).id },
+    data: { config },
+  })
+  revalidatePath("/referring-doctors")
+  return { success: true }
+}
+
 export async function deleteProviderView(id: string) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
