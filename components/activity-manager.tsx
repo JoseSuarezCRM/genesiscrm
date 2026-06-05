@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useMemo } from "react"
+import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
@@ -272,6 +272,18 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
   const [creating, setCreating] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQ("")
+      }
+    }
+    if (open) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
   const filtered = options.filter(o =>
     o.label.toLowerCase().includes(q.toLowerCase()) ||
     (o.sub && o.sub.toLowerCase().includes(q.toLowerCase()))
@@ -281,7 +293,7 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
   const canCreate = !!onQuickCreate && q.trim().length > 0 && !hasExact
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-md bg-white text-sm text-left hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
         <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
