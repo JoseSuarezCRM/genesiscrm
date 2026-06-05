@@ -1,19 +1,20 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useRef, useEffect } from "react"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
   createPractice, updatePractice, deletePractice, mergePractice,
   createLocation, updateLocation, deleteLocation, mergeLocation,
   createDoctor, updateDoctor, deleteDoctor, mergeDoctor,
 } from "@/app/actions/referring-doctors"
+import { createProviderView, deleteProviderView } from "@/app/actions/provider-views"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2 } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -31,10 +32,33 @@ type PracticeWithRelations = ReferringPractice & {
   _count: { referrals: number }
 }
 
+interface SavedProviderView {
+  id: string
+  name: string
+  config: { columns: string[]; sort: "name" | "referrals"; search: string }
+}
+
 interface Props {
   practices: PracticeWithRelations[]
   isAdmin: boolean
+  currentUserId: string
+  savedViews: SavedProviderView[]
 }
+
+// ─── Provider table columns ─────────────────────────────────────────────────────
+
+const PROVIDER_COLUMNS: { key: string; label: string }[] = [
+  { key: "title", label: "Title" },
+  { key: "specialty", label: "Specialty" },
+  { key: "practice", label: "Practice" },
+  { key: "npi", label: "NPI" },
+  { key: "phone", label: "Phone" },
+  { key: "email", label: "Email" },
+  { key: "locations", label: "Locations" },
+  { key: "referrals", label: "Referrals" },
+]
+
+const DEFAULT_PROVIDER_COLUMNS = ["title", "specialty", "practice", "npi", "referrals"]
 
 // ─── Field wrapper ─────────────────────────────────────────────────────────────
 
@@ -285,7 +309,7 @@ function SearchablePicker({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function PracticeManager({ practices, isAdmin }: Props) {
+export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
@@ -293,6 +317,55 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
   const [tab, setTab] = useState<"practices" | "providers">("practices")
   const [providerSort, setProviderSort] = useState<"name" | "referrals">("name")
   const [addProviderOpen, setAddProviderOpen] = useState(false)
+
+  // Provider table columns + saved views
+  const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_PROVIDER_COLUMNS)
+  const [colMenuOpen, setColMenuOpen] = useState(false)
+  const colMenuRef = useRef<HTMLDivElement>(null)
+  const [savedViews, setSavedViews] = useState<SavedProviderView[]>(initialSavedViews)
+  const [activeViewId, setActiveViewId] = useState<string | null>(null)
+  const [showSaveForm, setShowSaveForm] = useState(false)
+  const [newViewName, setNewViewName] = useState("")
+  const [savingView, setSavingView] = useState(false)
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false)
+    }
+    if (colMenuOpen) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [colMenuOpen])
+
+  function toggleCol(key: string) {
+    setVisibleCols(prev => prev.includes(key) ? prev.filter(c => c !== key) : [...prev, key])
+  }
+
+  function applyProviderView(view: SavedProviderView) {
+    setVisibleCols(view.config.columns ?? DEFAULT_PROVIDER_COLUMNS)
+    setProviderSort(view.config.sort ?? "name")
+    setSearch(view.config.search ?? "")
+    setActiveViewId(view.id)
+  }
+
+  async function handleSaveProviderView() {
+    if (!newViewName.trim()) return
+    setSavingView(true)
+    const config = { columns: visibleCols, sort: providerSort, search }
+    const res = await createProviderView(newViewName.trim(), config) as any
+    if (res?.success) {
+      setSavedViews(prev => [...prev, { id: res.id, name: newViewName.trim(), config }])
+      setActiveViewId(res.id)
+    }
+    setNewViewName("")
+    setShowSaveForm(false)
+    setSavingView(false)
+  }
+
+  async function handleDeleteProviderView(id: string) {
+    await deleteProviderView(id)
+    setSavedViews(prev => prev.filter(v => v.id !== id))
+    if (activeViewId === id) setActiveViewId(null)
+  }
 
   const [addPracticeOpen, setAddPracticeOpen] = useState(false)
   const [editPractice, setEditPractice] = useState<PracticeWithRelations | null>(null)
@@ -390,6 +463,33 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
                 Top refs
               </button>
             </div>
+            {/* Column selector */}
+            <div className="relative" ref={colMenuRef}>
+              <button
+                onClick={() => setColMenuOpen(v => !v)}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 transition-colors"
+              >
+                <Columns3 className="h-3.5 w-3.5" />
+                Columns
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </button>
+              {colMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 z-50 w-48 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden py-1">
+                  {PROVIDER_COLUMNS.map(col => (
+                    <button
+                      key={col.key}
+                      onClick={() => toggleCol(col.key)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-zinc-900 border-zinc-900" : "border-slate-300")}>
+                        {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                      </span>
+                      <span className="text-slate-700">{col.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {isAdmin && (
               <Dialog open={addProviderOpen} onOpenChange={setAddProviderOpen}>
                 <DialogTrigger asChild>
@@ -433,6 +533,56 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
         )}
       </div>
 
+      {/* ── Views bar (providers only) ─────────────────────────────────────── */}
+      {tab === "providers" && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => { setActiveViewId(null); setVisibleCols(DEFAULT_PROVIDER_COLUMNS) }}
+            className={cn("h-8 px-3 rounded-lg text-sm font-medium border transition-all", !activeViewId ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}
+          >
+            Default
+          </button>
+          {savedViews.map(view => (
+            <div key={view.id} className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden", activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+              <button className="pl-3 pr-2 h-full" onClick={() => applyProviderView(view)}>{view.name}</button>
+              <button
+                onClick={() => handleDeleteProviderView(view.id)}
+                className={cn("pr-2 h-full transition-colors", activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500")}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          {showSaveForm ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={newViewName}
+                onChange={e => setNewViewName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleSaveProviderView(); if (e.key === "Escape") setShowSaveForm(false) }}
+                placeholder="View name..."
+                className="h-8 px-3 text-sm border border-zinc-300 rounded-lg outline-none focus:border-zinc-500 w-40"
+              />
+              <button onClick={handleSaveProviderView} disabled={savingView || !newViewName.trim()}
+                className="h-8 px-3 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1">
+                {savingView ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                Save
+              </button>
+              <button onClick={() => { setShowSaveForm(false); setNewViewName("") }} className="h-8 px-2 text-zinc-400 hover:text-zinc-700">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowSaveForm(true)}
+              className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 transition-all flex items-center gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" /> Save view
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Providers tab ──────────────────────────────────────────────────── */}
       {tab === "providers" && (() => {
         const q = search.toLowerCase().trim()
@@ -444,38 +594,73 @@ export default function PracticeManager({ practices, isAdmin }: Props) {
               d.npi?.includes(q)
             )
           : allProviders
+        const shows = (key: string) => visibleCols.includes(key)
         return (
-          <div className="space-y-2">
+          <div className="bg-white border rounded-lg overflow-hidden">
             {filtered.length === 0 ? (
-              <div className="bg-white border rounded-lg px-6 py-10 text-center text-slate-400">
+              <div className="px-6 py-10 text-center text-slate-400">
                 {q ? `No providers matching "${search}"` : "No providers yet."}
               </div>
-            ) : filtered.map((d) => (
-              <div key={d.id} className="flex items-center gap-3 bg-white border rounded-lg px-4 py-3">
-                <User className="h-4 w-4 text-slate-400 shrink-0" />
-                <Link href={`/referring-doctors/${d.id}`} className="font-medium text-blue-600 hover:underline min-w-0 truncate flex items-center gap-1 shrink-0">
-                  {(d as any).title && <span className="text-slate-500 font-normal">{(d as any).title}</span>}
-                  {d.name}
-                  <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
-                </Link>
-                {d.specialty && <span className="text-xs text-slate-400 hidden md:block shrink-0">{d.specialty}</span>}
-                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md truncate hidden sm:block">
-                  {d.practiceName}
-                </span>
-                {d.npi && <span className="text-xs text-slate-400 font-mono hidden lg:block shrink-0">NPI {d.npi}</span>}
-                <span className="text-xs text-slate-400 shrink-0 ml-auto">{d._count.referrals} ref.</span>
-                {isAdmin && (
-                  <div className="flex gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditDoctor({ doc: d, practice: d.practice })}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:bg-red-50" disabled={isPending} onClick={() => run(() => deleteDoctor(d.id))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                )}
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <th className="px-4 py-2.5 font-semibold">Name</th>
+                      {shows("title") && <th className="px-4 py-2.5 font-semibold">Title</th>}
+                      {shows("specialty") && <th className="px-4 py-2.5 font-semibold">Specialty</th>}
+                      {shows("practice") && <th className="px-4 py-2.5 font-semibold">Practice</th>}
+                      {shows("npi") && <th className="px-4 py-2.5 font-semibold">NPI</th>}
+                      {shows("phone") && <th className="px-4 py-2.5 font-semibold">Phone</th>}
+                      {shows("email") && <th className="px-4 py-2.5 font-semibold">Email</th>}
+                      {shows("locations") && <th className="px-4 py-2.5 font-semibold">Locations</th>}
+                      {shows("referrals") && <th className="px-4 py-2.5 font-semibold text-right">Referrals</th>}
+                      {isAdmin && <th className="px-4 py-2.5 font-semibold text-right w-20"></th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filtered.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-2.5">
+                          <Link href={`/referring-doctors/${d.id}`} className="font-medium text-blue-600 hover:underline inline-flex items-center gap-1">
+                            {d.name}
+                            <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
+                          </Link>
+                        </td>
+                        {shows("title") && <td className="px-4 py-2.5 text-slate-500">{(d as any).title || "—"}</td>}
+                        {shows("specialty") && <td className="px-4 py-2.5 text-slate-500">{d.specialty || "—"}</td>}
+                        {shows("practice") && (
+                          <td className="px-4 py-2.5">
+                            <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{d.practiceName}</span>
+                          </td>
+                        )}
+                        {shows("npi") && <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{d.npi || "—"}</td>}
+                        {shows("phone") && <td className="px-4 py-2.5 text-slate-500">{(d as any).phone || "—"}</td>}
+                        {shows("email") && <td className="px-4 py-2.5 text-slate-500 truncate max-w-[200px]">{(d as any).email || "—"}</td>}
+                        {shows("locations") && (
+                          <td className="px-4 py-2.5 text-slate-500 text-xs">
+                            {d.locations?.length ? d.locations.map((l) => l.location.name).join(", ") : "—"}
+                          </td>
+                        )}
+                        {shows("referrals") && <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">{d._count.referrals}</td>}
+                        {isAdmin && (
+                          <td className="px-4 py-2.5">
+                            <div className="flex gap-1 justify-end">
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditDoctor({ doc: d, practice: d.practice })}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:bg-red-50" disabled={isPending} onClick={() => run(() => deleteDoctor(d.id))}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            )}
           </div>
         )
       })()}
