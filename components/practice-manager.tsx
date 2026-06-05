@@ -540,6 +540,41 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
             >
               {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             </button>
+            {/* Access — manage who can see the active view */}
+            <div className="relative">
+              <button
+                onClick={() => { if (activeView && activeView.isOwner !== false) openEditAccess(activeView) }}
+                disabled={!activeView || activeView.isOwner === false}
+                title={activeView ? (activeView.isOwner === false ? "You can't change access for a view you don't own" : "Manage who can see this view") : "Select a view to manage access"}
+                className={cn(
+                  "inline-flex items-center justify-center h-8 w-8 rounded-lg border transition-colors",
+                  editAccessId
+                    ? "border-amber-300 bg-amber-50 text-amber-600"
+                    : activeView && activeView.isOwner !== false
+                    ? "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    : "border-slate-200 bg-white text-slate-300 cursor-not-allowed"
+                )}
+              >
+                {activeView?.visibility === "EVERYONE" ? <Globe className="h-3.5 w-3.5" /> : activeView?.visibility === "TEAM" ? <Users className="h-3.5 w-3.5" /> : activeView?.visibility === "CUSTOM" ? <UserCog className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+              </button>
+              {editAccessView && (
+                <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
+                  <p className="text-xs text-slate-500">Editing access for <span className="font-semibold text-slate-700">{editAccessView.name}</span></p>
+                  <ViewAccessSelector value={editAccessValue} onChange={setEditAccessValue} users={shareUsers} teams={shareTeams} />
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => handleSaveAccess(editAccessView)} disabled={savingAccess}
+                      className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                      {savingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      Save access
+                    </button>
+                    <button onClick={() => setEditAccessId(null)}
+                      className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             {/* Column selector */}
             <div className="relative" ref={colMenuRef}>
               <button
@@ -665,43 +700,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                     Save view
                   </button>
                   <button onClick={() => { setShowSaveForm(false); setNewViewName("") }}
-                    className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Access button — manages who can see the active view */}
-          <div className="relative">
-            <button
-              onClick={() => { if (activeView && activeView.isOwner !== false) openEditAccess(activeView) }}
-              disabled={!activeView || activeView.isOwner === false}
-              title={activeView ? (activeView.isOwner === false ? "You can't change access for a view you don't own" : "Manage who can see this view") : "Select a view to manage access"}
-              className={cn(
-                "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-sm font-medium transition-colors",
-                editAccessId
-                  ? "border-amber-300 bg-amber-50 text-amber-700"
-                  : activeView && activeView.isOwner !== false
-                  ? "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
-                  : "border-slate-200 bg-white text-slate-300 cursor-not-allowed"
-              )}
-            >
-              {activeView?.visibility === "EVERYONE" ? <Globe className="h-3.5 w-3.5" /> : activeView?.visibility === "TEAM" ? <Users className="h-3.5 w-3.5" /> : activeView?.visibility === "CUSTOM" ? <UserCog className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-              Access
-            </button>
-            {editAccessView && (
-              <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
-                <p className="text-xs text-slate-500">Editing access for <span className="font-semibold text-slate-700">{editAccessView.name}</span></p>
-                <ViewAccessSelector value={editAccessValue} onChange={setEditAccessValue} users={shareUsers} teams={shareTeams} />
-                <div className="flex gap-2 pt-1">
-                  <button onClick={() => handleSaveAccess(editAccessView)} disabled={savingAccess}
-                    className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
-                    {savingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                    Save access
-                  </button>
-                  <button onClick={() => setEditAccessId(null)}
                     className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">
                     Cancel
                   </button>
