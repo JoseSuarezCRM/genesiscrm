@@ -541,9 +541,9 @@ function emptyForm() {
   }
 }
 
-const FLYER_OPTIONS = [
-  "Genesis Ortho General", "Hip & Knee Replacement", "Sports Medicine",
-  "Spine Care", "Foot & Ankle", "Hand & Wrist", "Physical Therapy", "Other",
+const ACTIVITY_TYPES: { value: string; color: string; bg: string; border: string }[] = [
+  { value: "Presentation", color: "text-violet-700", bg: "bg-violet-100", border: "border-violet-300" },
+  { value: "Lunch",        color: "text-emerald-700", bg: "bg-emerald-100", border: "border-emerald-300" },
 ]
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -806,7 +806,12 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
                   {a.nextStep && <span><span className="font-medium text-slate-600">Next:</span> {a.nextStep}</span>}
                   {a.frontDesk && <span><span className="font-medium text-slate-600">Front desk:</span> {a.frontDesk}</span>}
-                  {a.flyer && <span><span className="font-medium text-slate-600">Flyer:</span> {a.flyer}</span>}
+                  {a.flyer && (() => {
+                    const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
+                    return t
+                      ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t.bg} ${t.color} ${t.border}`}>{t.value}</span>
+                      : <span><span className="font-medium text-slate-600">Type:</span> {a.flyer}</span>
+                  })()}
                 </div>
 
                 {a.tags.length > 0 && (
@@ -912,12 +917,23 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               <Input value={form.frontDesk} onChange={e => set("frontDesk", e.target.value)} placeholder="e.g. Maria" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Flyer</label>
-              <select value={form.flyer} onChange={e => set("flyer", e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">— Select Flyer —</option>
-                {FLYER_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
+              <label className="text-sm font-medium text-slate-700">Activity Type</label>
+              <div className="flex gap-2">
+                {ACTIVITY_TYPES.map(t => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => set("flyer", form.flyer === t.value ? "" : t.value)}
+                    className={`flex-1 h-9 rounded-lg border text-sm font-medium transition-all ${
+                      form.flyer === t.value
+                        ? `${t.bg} ${t.color} ${t.border}`
+                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    {t.value}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Tags */}
