@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition, useMemo } from "react"
+import { createPortal } from "react-dom"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
@@ -377,9 +378,9 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
   const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-400 bg-white"
   const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onMouseDown={e => e.stopPropagation()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
+  const modal = (
+    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h2 className="text-base font-semibold text-slate-800">Create Provider</h2>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="h-4 w-4" /></button>
@@ -449,6 +450,7 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
       </div>
     </div>
   )
+  return typeof document !== "undefined" ? createPortal(modal, document.body) : null
 }
 
 // ─── Multi-select provider picker ────────────────────────────────────────────
@@ -590,7 +592,6 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   async function handleCreateLocation(name: string): Promise<{ id: string; label: string } | null> {
     if (!form.practiceId) { setError("Select an organization first to create a location."); return null }
-    const practiceName = allPractices.find(p => p.id === form.practiceId)?.name ?? ""
     const res = await createLocation({ name, practiceId: form.practiceId, phone: "", fax: "", address: "" })
     if (!res || res.error || !res.id) return null
     setExtraLocations(prev => [...prev, { id: res.id!, name, practiceId: form.practiceId }])
