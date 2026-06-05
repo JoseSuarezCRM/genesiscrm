@@ -635,18 +635,22 @@ function FilterDropdown({ label, options, selected, onToggle, onClear, mode, onM
 
 // ─── Expandable notes ────────────────────────────────────────────────────────
 
-const NOTE_CLAMP_THRESHOLD = 160 // chars before showing "Show more"
-
 function ExpandableNotes({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false)
-  const isLong = text.length > NOTE_CLAMP_THRESHOLD
+  const [clamped, setClamped] = useState(false)
+  const ref = useRef<HTMLParagraphElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (el) setClamped(el.scrollHeight > el.clientHeight + 1)
+  }, [text])
 
   return (
     <div>
-      <p className={`text-sm text-slate-600 whitespace-pre-wrap ${!expanded && isLong ? "line-clamp-2" : ""}`}>
+      <p ref={ref} className={`text-sm text-slate-600 whitespace-pre-wrap ${!expanded ? "line-clamp-2" : ""}`}>
         {text}
       </p>
-      {isLong && (
+      {(clamped || expanded) && (
         <button
           type="button"
           onClick={() => setExpanded(v => !v)}
