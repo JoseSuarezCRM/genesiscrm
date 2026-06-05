@@ -504,6 +504,32 @@ function ProviderPicker({ options, selected, onToggle, onOpenCreateForm }: {
   )
 }
 
+// ─── Expandable notes ────────────────────────────────────────────────────────
+
+const NOTE_CLAMP_THRESHOLD = 160 // chars before showing "Show more"
+
+function ExpandableNotes({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = text.length > NOTE_CLAMP_THRESHOLD
+
+  return (
+    <div>
+      <p className={`text-sm text-slate-600 whitespace-pre-wrap ${!expanded && isLong ? "line-clamp-2" : ""}`}>
+        {text}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="text-xs text-blue-500 hover:text-blue-700 mt-0.5 font-medium transition-colors"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Form helpers ─────────────────────────────────────────────────────────────
 
 function emptyForm() {
@@ -796,7 +822,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   </div>
                 )}
 
-                {a.notes && <p className="text-sm text-slate-600 line-clamp-2">{a.notes}</p>}
+                {a.notes && <ExpandableNotes text={a.notes} />}
                 <p className="text-xs text-slate-400">Logged by {a.createdBy.name ?? a.createdBy.email}</p>
               </div>
 
