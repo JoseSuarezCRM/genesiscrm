@@ -337,7 +337,7 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
 
 // ─── Create Provider Modal ────────────────────────────────────────────────────
 
-const PROVIDER_TITLES = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Other"]
+const PROVIDER_TITLE_OPTIONS = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Custom..."]
 
 function CreateProviderModal({ initialName, practiceId, locations, onClose, onCreate }: {
   initialName: string
@@ -347,7 +347,8 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
   onCreate: (provider: { id: string; label: string; name: string; title: string | null }) => void
 }) {
   const [name, setName] = useState(initialName)
-  const [title, setTitle] = useState("")
+  const [titleSelect, setTitleSelect] = useState("")
+  const [titleCustom, setTitleCustom] = useState("")
   const [npi, setNpi] = useState("")
   const [specialty, setSpecialty] = useState("")
   const [phone, setPhone] = useState("")
@@ -355,6 +356,9 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
   const [locationIds, setLocationIds] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
   const [err, setErr] = useState("")
+
+  const isCustomTitle = titleSelect === "Custom..."
+  const finalTitle = isCustomTitle ? titleCustom.trim() : titleSelect
 
   function toggleLoc(id: string) {
     setLocationIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -364,9 +368,9 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
     e.preventDefault()
     if (!name.trim()) { setErr("Name is required"); return }
     startTransition(async () => {
-      const res = await createDoctor({ name, title, npi, specialty, phone, email, practiceId, locationIds })
+      const res = await createDoctor({ name, title: finalTitle, npi, specialty, phone, email, practiceId, locationIds })
       if (!res || res.error || !res.id) { setErr("Failed to create provider"); return }
-      onCreate({ id: res.id!, label: name + (title ? `, ${title}` : ""), name, title: title || null })
+      onCreate({ id: res.id!, label: name + (finalTitle ? `, ${finalTitle}` : ""), name, title: finalTitle || null })
     })
   }
 
@@ -374,11 +378,11 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
   const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4" onMouseDown={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h2 className="text-base font-semibold text-slate-800">Create Provider</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="h-4 w-4" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-3">
           {err && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{err}</p>}
@@ -389,10 +393,14 @@ function CreateProviderModal({ initialName, practiceId, locations, onClose, onCr
             </div>
             <div>
               <label className={labelCls}>Title</label>
-              <select value={title} onChange={e => setTitle(e.target.value)} className={inputCls}>
+              <select value={titleSelect} onChange={e => setTitleSelect(e.target.value)} className={inputCls}>
                 <option value="">— None —</option>
-                {PROVIDER_TITLES.map(t => <option key={t} value={t}>{t}</option>)}
+                {PROVIDER_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
+              {isCustomTitle && (
+                <input value={titleCustom} onChange={e => setTitleCustom(e.target.value)}
+                  className={inputCls + " mt-2"} placeholder="e.g. Director of Care Coordination" autoFocus />
+              )}
             </div>
           </div>
           <div>
