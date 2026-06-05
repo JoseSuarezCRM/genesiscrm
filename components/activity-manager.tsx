@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
 import { createActivityView, updateActivityView, deleteActivityView } from "@/app/actions/activity-views"
+import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Plus, Loader2, Trash2, Pencil, Search, X, CalendarDays,
   Building2, MapPin, User, ChevronDown, Tag, Check, Save,
+  Globe, Users, UserCog,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -54,6 +56,10 @@ interface SavedView {
     filterProviderIds: string[]
     filterProviderMode: "any" | "none"
   }
+  visibility?: Visibility
+  teamId?: string | null
+  sharedUserIds?: string[]
+  isOwner?: boolean
 }
 
 interface Props {
@@ -63,6 +69,8 @@ interface Props {
   allTags: TagObj[]
   currentUserId: string
   savedViews: SavedView[]
+  shareUsers: ShareUser[]
+  shareTeams: ShareTeam[]
 }
 
 // ─── Color palette ────────────────────────────────────────────────────────────
@@ -681,7 +689,7 @@ const ACTIVITY_TYPES: { value: string; color: string; bg: string; border: string
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags, savedViews: initialSavedViews }: Props) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, savedViews: initialSavedViews, shareUsers, shareTeams }: Props) {
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
@@ -718,6 +726,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [savingView, setSavingView] = useState(false)
   const [newViewName, setNewViewName] = useState("")
   const [showSaveForm, setShowSaveForm] = useState(false)
+  const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
 
   const allPractices = useMemo(() => [...practices, ...extraPractices.map(p => ({ ...p, locations: [], doctors: [] }))], [practices, extraPractices])
 
@@ -866,13 +875,18 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       filterLocationIds, filterLocationMode,
       filterProviderIds, filterProviderMode,
     }
-    const res = await createActivityView(newViewName.trim(), filters) as any
+    const res = await createActivityView(newViewName.trim(), filters, newViewAccess) as any
     if (res?.success) {
-      const newView: SavedView = { id: res.id, name: newViewName.trim(), filters }
+      const newView: SavedView = {
+        id: res.id, name: newViewName.trim(), filters,
+        visibility: newViewAccess.visibility, teamId: newViewAccess.teamId,
+        sharedUserIds: newViewAccess.sharedUserIds, isOwner: true,
+      }
       setSavedViews(prev => [...prev, newView])
       setActiveViewId(res.id)
     }
     setNewViewName("")
+    setNewViewAccess({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
     setShowSaveForm(false)
     setSavingView(false)
   }
@@ -887,7 +901,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   const activeView = savedViews.find(v => v.id === activeViewId)
   const sameSet = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every(x => b.includes(x))
-  const viewDirty = !!activeView && (
+  const viewDirty = !!activeView && activeView.isOwner !== false && (
     activeView.filters.search !== search ||
     activeView.filters.dateFrom !== dateFrom ||
     activeView.filters.dateTo !== dateTo ||
@@ -986,43 +1000,57 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           <div key={view.id} className={`inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden ${
             activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
           }`}>
-            <button className="pl-3 pr-2 h-full" onClick={() => applyView(view)}>{view.name}</button>
-            <button
-              onClick={() => handleDeleteView(view.id)}
-              title="Delete view"
-              className={`pr-2 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
-            >
-              <X className="h-3 w-3" />
+            <button className={`pl-3 h-full ${view.isOwner === false ? "pr-3" : "pr-2"}`} onClick={() => applyView(view)}>
+              {view.name}
+              {view.visibility && view.visibility !== "PRIVATE" && (
+                <span className="ml-1.5 opacity-60" title={view.visibility === "EVERYONE" ? "Shared with everyone" : view.visibility === "TEAM" ? "Shared with team" : "Shared with specific people"}>
+                  {view.visibility === "EVERYONE" ? <Globe className="inline h-3 w-3" /> : view.visibility === "TEAM" ? <Users className="inline h-3 w-3" /> : <UserCog className="inline h-3 w-3" />}
+                </span>
+              )}
             </button>
+            {view.isOwner !== false && (
+              <button
+                onClick={() => handleDeleteView(view.id)}
+                title="Delete view"
+                className={`pr-2 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
         ))}
-        {showSaveForm ? (
-          <div className="flex items-center gap-1.5">
-            <input
-              autoFocus
-              value={newViewName}
-              onChange={e => setNewViewName(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleSaveView(); if (e.key === "Escape") setShowSaveForm(false) }}
-              placeholder="View name..."
-              className="h-8 px-3 text-sm border border-zinc-300 rounded-lg outline-none focus:border-zinc-500 w-40"
-            />
-            <button onClick={handleSaveView} disabled={savingView || !newViewName.trim()}
-              className="h-8 px-3 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1">
-              {savingView ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-              Save
-            </button>
-            <button onClick={() => { setShowSaveForm(false); setNewViewName("") }} className="h-8 px-2 text-zinc-400 hover:text-zinc-700">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : (
+        <div className="relative">
           <button
-            onClick={() => setShowSaveForm(true)}
+            onClick={() => setShowSaveForm(v => !v)}
             className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 transition-all flex items-center gap-1.5"
           >
             <Plus className="h-3.5 w-3.5" /> Save view
           </button>
-        )}
+          {showSaveForm && (
+            <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
+              <input
+                autoFocus
+                value={newViewName}
+                onChange={e => setNewViewName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleSaveView(); if (e.key === "Escape") setShowSaveForm(false) }}
+                placeholder="View name..."
+                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400"
+              />
+              <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
+              <div className="flex gap-2 pt-1">
+                <button onClick={handleSaveView} disabled={savingView || !newViewName.trim()}
+                  className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  Save view
+                </button>
+                <button onClick={() => { setShowSaveForm(false); setNewViewName("") }}
+                  className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         {/* Save-changes button — pushed to far right, grayed when no unsaved changes */}
         <button
           onClick={handleUpdateView}

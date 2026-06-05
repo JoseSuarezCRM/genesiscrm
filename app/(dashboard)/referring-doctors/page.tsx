@@ -2,13 +2,14 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
+import { getViewShareOptions } from "@/app/actions/view-share-options"
 
 export default async function ReferringDoctorsPage() {
   const session = await auth()
   const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
   const currentUserId = (session?.user as any)?.id ?? ""
 
-  const [practices, savedViews] = await Promise.all([
+  const [practices, savedViews, shareOptions] = await Promise.all([
     prisma.referringPractice.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -39,6 +40,7 @@ export default async function ReferringDoctorsPage() {
       },
     }),
     getProviderViews(),
+    getViewShareOptions(),
   ])
 
   // Merge direct doctors + cross-org doctors (linked via locations), deduplicated
@@ -70,6 +72,8 @@ export default async function ReferringDoctorsPage() {
         isAdmin={isAdmin}
         currentUserId={currentUserId}
         savedViews={savedViews as any}
+        shareUsers={shareOptions.users as any}
+        shareTeams={shareOptions.teams as any}
       />
     </div>
   )

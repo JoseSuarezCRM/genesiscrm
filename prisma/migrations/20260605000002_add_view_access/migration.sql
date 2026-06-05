@@ -1,0 +1,7 @@
+ALTER TABLE "ProviderView" ADD COLUMN "visibility" TEXT NOT NULL DEFAULT 'PRIVATE';
+ALTER TABLE "ProviderView" ADD COLUMN "teamId" TEXT;
+ALTER TABLE "ProviderView" ADD COLUMN "sharedUserIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
+
+ALTER TABLE "ActivityView" ADD COLUMN "visibility" TEXT NOT NULL DEFAULT 'PRIVATE';
+ALTER TABLE "ActivityView" ADD COLUMN "teamId" TEXT;
+ALTER TABLE "ActivityView" ADD COLUMN "sharedUserIds" TEXT[] DEFAULT ARRAY[]::TEXT[];

@@ -8,13 +8,14 @@ import {
   createDoctor, updateDoctor, deleteDoctor, mergeDoctor,
 } from "@/app/actions/referring-doctors"
 import { createProviderView, updateProviderView, deleteProviderView } from "@/app/actions/provider-views"
+import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save, Globe, Users, UserCog } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -36,6 +37,10 @@ interface SavedProviderView {
   id: string
   name: string
   config: { columns: string[]; sort: "name" | "referrals"; search: string }
+  visibility?: Visibility
+  teamId?: string | null
+  sharedUserIds?: string[]
+  isOwner?: boolean
 }
 
 interface Props {
@@ -43,6 +48,8 @@ interface Props {
   isAdmin: boolean
   currentUserId: string
   savedViews: SavedProviderView[]
+  shareUsers: ShareUser[]
+  shareTeams: ShareTeam[]
 }
 
 // ─── Provider table columns ─────────────────────────────────────────────────────
@@ -309,7 +316,7 @@ function SearchablePicker({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews }: Props) {
+export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
@@ -327,6 +334,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const [showSaveForm, setShowSaveForm] = useState(false)
   const [newViewName, setNewViewName] = useState("")
   const [savingView, setSavingView] = useState(false)
+  const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -351,19 +359,24 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     if (!newViewName.trim()) return
     setSavingView(true)
     const config = { columns: visibleCols, sort: providerSort, search }
-    const res = await createProviderView(newViewName.trim(), config) as any
+    const res = await createProviderView(newViewName.trim(), config, newViewAccess) as any
     if (res?.success) {
-      setSavedViews(prev => [...prev, { id: res.id, name: newViewName.trim(), config }])
+      setSavedViews(prev => [...prev, {
+        id: res.id, name: newViewName.trim(), config,
+        visibility: newViewAccess.visibility, teamId: newViewAccess.teamId,
+        sharedUserIds: newViewAccess.sharedUserIds, isOwner: true,
+      }])
       setActiveViewId(res.id)
     }
     setNewViewName("")
+    setNewViewAccess({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
     setShowSaveForm(false)
     setSavingView(false)
   }
 
   // Does the current state differ from the active view's saved config?
   const activeView = savedViews.find(v => v.id === activeViewId)
-  const viewDirty = !!activeView && (
+  const viewDirty = !!activeView && activeView.isOwner !== false && (
     activeView.config.sort !== providerSort ||
     activeView.config.search !== search ||
     activeView.config.columns.length !== visibleCols.length ||
@@ -578,43 +591,57 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           </button>
           {savedViews.map(view => (
             <div key={view.id} className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden", activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
-              <button className="pl-3 pr-2 h-full" onClick={() => applyProviderView(view)}>{view.name}</button>
-              <button
-                onClick={() => handleDeleteProviderView(view.id)}
-                title="Delete view"
-                className={cn("pr-2 h-full transition-colors", activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500")}
-              >
-                <X className="h-3 w-3" />
+              <button className={cn("pl-3 h-full", view.isOwner === false ? "pr-3" : "pr-2")} onClick={() => applyProviderView(view)}>
+                {view.name}
+                {view.visibility && view.visibility !== "PRIVATE" && (
+                  <span className="ml-1.5 opacity-60" title={view.visibility === "EVERYONE" ? "Shared with everyone" : view.visibility === "TEAM" ? "Shared with team" : "Shared with specific people"}>
+                    {view.visibility === "EVERYONE" ? <Globe className="inline h-3 w-3" /> : view.visibility === "TEAM" ? <Users className="inline h-3 w-3" /> : <UserCog className="inline h-3 w-3" />}
+                  </span>
+                )}
               </button>
+              {view.isOwner !== false && (
+                <button
+                  onClick={() => handleDeleteProviderView(view.id)}
+                  title="Delete view"
+                  className={cn("pr-2 h-full transition-colors", activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500")}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
           ))}
-          {showSaveForm ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                autoFocus
-                value={newViewName}
-                onChange={e => setNewViewName(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleSaveProviderView(); if (e.key === "Escape") setShowSaveForm(false) }}
-                placeholder="View name..."
-                className="h-8 px-3 text-sm border border-zinc-300 rounded-lg outline-none focus:border-zinc-500 w-40"
-              />
-              <button onClick={handleSaveProviderView} disabled={savingView || !newViewName.trim()}
-                className="h-8 px-3 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1">
-                {savingView ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                Save
-              </button>
-              <button onClick={() => { setShowSaveForm(false); setNewViewName("") }} className="h-8 px-2 text-zinc-400 hover:text-zinc-700">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
+          <div className="relative">
             <button
-              onClick={() => setShowSaveForm(true)}
+              onClick={() => setShowSaveForm(v => !v)}
               className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 transition-all flex items-center gap-1.5"
             >
               <Plus className="h-3.5 w-3.5" /> Save view
             </button>
-          )}
+            {showSaveForm && (
+              <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
+                <input
+                  autoFocus
+                  value={newViewName}
+                  onChange={e => setNewViewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSaveProviderView(); if (e.key === "Escape") setShowSaveForm(false) }}
+                  placeholder="View name..."
+                  className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400"
+                />
+                <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
+                <div className="flex gap-2 pt-1">
+                  <button onClick={handleSaveProviderView} disabled={savingView || !newViewName.trim()}
+                    className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    Save view
+                  </button>
+                  <button onClick={() => { setShowSaveForm(false); setNewViewName("") }}
+                    className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

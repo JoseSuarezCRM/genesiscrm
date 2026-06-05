@@ -3,11 +3,12 @@ import { auth } from "@/lib/auth"
 import ActivityManager from "@/components/activity-manager"
 import { listActivityTags } from "@/app/actions/tags"
 import { getActivityViews } from "@/app/actions/activity-views"
+import { getViewShareOptions } from "@/app/actions/view-share-options"
 
 export default async function ActivitiesPage() {
   const session = await auth()
 
-  const [activities, practices, allTags, savedViews] = await Promise.all([
+  const [activities, practices, allTags, savedViews, shareOptions] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { date: "desc" },
       include: {
@@ -41,6 +42,7 @@ export default async function ActivitiesPage() {
     }),
     listActivityTags(),
     getActivityViews(),
+    getViewShareOptions(),
   ])
 
   const allDoctors = practices.flatMap((p) =>
@@ -70,6 +72,8 @@ export default async function ActivitiesPage() {
         allTags={allTags as any}
         currentUserId={session!.user.id}
         savedViews={savedViews as any}
+        shareUsers={shareOptions.users as any}
+        shareTeams={shareOptions.teams as any}
       />
     </div>
   )
