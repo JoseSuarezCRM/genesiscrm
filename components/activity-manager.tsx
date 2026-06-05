@@ -516,6 +516,104 @@ function ProviderPicker({ options, selected, onToggle, onOpenCreateForm }: {
   )
 }
 
+// ─── Filter dropdown ─────────────────────────────────────────────────────────
+
+function FilterDropdown({ label, options, selected, onToggle, onClear, mode, onModeChange }: {
+  label: string
+  options: { id: string; label: string }[]
+  selected: string[]
+  onToggle: (id: string) => void
+  onClear: () => void
+  mode: "any" | "none"
+  onModeChange: (m: "any" | "none") => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState("")
+  const ref = useRef<HTMLDivElement>(null)
+  const active = selected.length > 0
+  const isExclude = mode === "none"
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQ("") }
+    }
+    if (open) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
+  const filtered = q.trim()
+    ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase()))
+    : options
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all select-none ${
+          active && isExclude
+            ? "bg-rose-600 text-white border-rose-600 hover:bg-rose-700"
+            : active
+            ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
+            : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
+        }`}
+      >
+        <span>{label}</span>
+        {active && (
+          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-white/20 text-xs font-bold tabular-nums">
+            {isExclude ? "≠" : ""}{selected.length}
+          </span>
+        )}
+        <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+      </button>
+
+      {open && (
+        <div className="absolute top-full mt-2 left-0 z-50 min-w-[220px] bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden">
+          {/* Any of / None of */}
+          <div className="flex items-center gap-1 p-2 border-b border-zinc-100">
+            <button onClick={() => onModeChange("any")}
+              className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${!isExclude ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}>
+              Any of
+            </button>
+            <button onClick={() => onModeChange("none")}
+              className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${isExclude ? "bg-rose-600 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}>
+              None of
+            </button>
+          </div>
+          {options.length > 6 && (
+            <div className="px-2 pt-2 pb-1">
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder={`Search ${label.toLowerCase()}...`}
+                className="w-full h-7 px-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg outline-none focus:border-zinc-400" />
+            </div>
+          )}
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filtered.map(opt => (
+              <button key={opt.id} onClick={() => onToggle(opt.id)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
+                <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
+                  selected.includes(opt.id)
+                    ? isExclude ? "bg-rose-600 border-rose-600" : "bg-zinc-900 border-zinc-900"
+                    : "border-zinc-300"
+                }`}>
+                  {selected.includes(opt.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                </span>
+                <span className="text-zinc-800 truncate">{opt.label}</span>
+              </button>
+            ))}
+          </div>
+          {selected.length > 0 && (
+            <div className="border-t border-zinc-100 px-3 py-1.5">
+              <button onClick={() => { onClear(); setOpen(false) }} className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors">
+                Clear selection
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Expandable notes ────────────────────────────────────────────────────────
 
 const NOTE_CLAMP_THRESHOLD = 160 // chars before showing "Show more"
@@ -572,6 +670,12 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   // Filters
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [filterPracticeIds, setFilterPracticeIds] = useState<string[]>([])
+  const [filterPracticeMode, setFilterPracticeMode] = useState<"any" | "none">("any")
+  const [filterLocationIds, setFilterLocationIds] = useState<string[]>([])
+  const [filterLocationMode, setFilterLocationMode] = useState<"any" | "none">("any")
+  const [filterProviderIds, setFilterProviderIds] = useState<string[]>([])
+  const [filterProviderMode, setFilterProviderMode] = useState<"any" | "none">("any")
   const [activeTagIds, setActiveTagIds] = useState<string[]>([])
 
   // Merged tag registry (allTags + any newly created during this session)
@@ -701,6 +805,25 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     setActiveTagIds(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
   }
 
+  // Unique filter options derived from activities
+  const filterPracticeOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    activities.forEach(a => { if (a.practice) map.set(a.practice.id, a.practice.name) })
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [activities])
+
+  const filterLocationOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    activities.forEach(a => { if (a.location) map.set(a.location.id, a.location.name) })
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [activities])
+
+  const filterProviderOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    activities.forEach(a => a.providers.forEach(p => map.set(p.doctor.id, p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : ""))))
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [activities])
+
   const filtered = useMemo(() => {
     return activities.filter(a => {
       const q = search.toLowerCase()
@@ -715,11 +838,26 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       if (dateFrom && new Date(a.date) < new Date(dateFrom + "T00:00:00")) return false
       if (dateTo && new Date(a.date) > new Date(dateTo + "T23:59:59")) return false
       if (activeTagIds.length > 0 && !activeTagIds.every(id => a.tags.some(t => t.id === id))) return false
+      if (filterPracticeIds.length > 0) {
+        const match = a.practice ? filterPracticeIds.includes(a.practice.id) : false
+        if (filterPracticeMode === "any" ? !match : match) return false
+      }
+      if (filterLocationIds.length > 0) {
+        const match = a.location ? filterLocationIds.includes(a.location.id) : false
+        if (filterLocationMode === "any" ? !match : match) return false
+      }
+      if (filterProviderIds.length > 0) {
+        const match = a.providers.some(p => filterProviderIds.includes(p.doctor.id))
+        if (filterProviderMode === "any" ? !match : match) return false
+      }
       return true
     })
-  }, [activities, search, dateFrom, dateTo, activeTagIds])
+  }, [activities, search, dateFrom, dateTo, activeTagIds,
+      filterPracticeIds, filterPracticeMode, filterLocationIds, filterLocationMode,
+      filterProviderIds, filterProviderMode])
 
-  const hasFilters = search || dateFrom || dateTo || activeTagIds.length > 0
+  const hasFilters = search || dateFrom || dateTo || activeTagIds.length > 0 ||
+    filterPracticeIds.length > 0 || filterLocationIds.length > 0 || filterProviderIds.length > 0
 
   return (
     <>
@@ -738,8 +876,35 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <label className="text-xs text-slate-500 whitespace-nowrap">To</label>
             <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36 text-sm" />
           </div>
+          <FilterDropdown
+            label="Practice"
+            options={filterPracticeOptions}
+            selected={filterPracticeIds}
+            onToggle={id => setFilterPracticeIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+            onClear={() => setFilterPracticeIds([])}
+            mode={filterPracticeMode}
+            onModeChange={setFilterPracticeMode}
+          />
+          <FilterDropdown
+            label="Location"
+            options={filterLocationOptions}
+            selected={filterLocationIds}
+            onToggle={id => setFilterLocationIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+            onClear={() => setFilterLocationIds([])}
+            mode={filterLocationMode}
+            onModeChange={setFilterLocationMode}
+          />
+          <FilterDropdown
+            label="Provider"
+            options={filterProviderOptions}
+            selected={filterProviderIds}
+            onToggle={id => setFilterProviderIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+            onClear={() => setFilterProviderIds([])}
+            mode={filterProviderMode}
+            onModeChange={setFilterProviderMode}
+          />
           {hasFilters && (
-            <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setActiveTagIds([]) }}
+            <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setActiveTagIds([]); setFilterPracticeIds([]); setFilterLocationIds([]); setFilterProviderIds([]) }}
               className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-slate-100">
               <X className="h-3.5 w-3.5" /> Clear
             </button>
