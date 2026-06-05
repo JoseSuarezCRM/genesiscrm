@@ -157,6 +157,7 @@ model User {
   smsMessages           SmsMessage[]
   teamMemberships       TeamMember[]
   directEmails          DirectEmail[]
+  activityViews         ActivityView[]
   savedReports          SavedReport[]        @relation("SavedReportCreatedBy")
   dashboards            Dashboard[]          @relation("DashboardCreatedBy")
   surgeryCases          SurgeryCase[]        @relation("SurgeryCaseCreatedBy")
@@ -527,6 +528,17 @@ model Activity {
   @@index([practiceId])
   @@index([locationId])
   @@index([createdAt])
+}
+
+model ActivityView {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filters   Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model DirectEmail {

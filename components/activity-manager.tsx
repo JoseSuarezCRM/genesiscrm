@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
+import { createActivityView, deleteActivityView } from "@/app/actions/activity-views"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
@@ -38,12 +39,30 @@ interface ActivityRow {
   createdBy: { name: string | null; email: string }
 }
 
+interface SavedView {
+  id: string
+  name: string
+  filters: {
+    search: string
+    dateFrom: string
+    dateTo: string
+    activeTagIds: string[]
+    filterPracticeIds: string[]
+    filterPracticeMode: "any" | "none"
+    filterLocationIds: string[]
+    filterLocationMode: "any" | "none"
+    filterProviderIds: string[]
+    filterProviderMode: "any" | "none"
+  }
+}
+
 interface Props {
   activities: ActivityRow[]
   practices: Practice[]
   allDoctors: Doctor[]
   allTags: TagObj[]
   currentUserId: string
+  savedViews: SavedView[]
 }
 
 // ─── Color palette ────────────────────────────────────────────────────────────
@@ -658,7 +677,7 @@ const ACTIVITY_TYPES: { value: string; color: string; bg: string; border: string
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags }: Props) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, savedViews: initialSavedViews }: Props) {
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
@@ -688,6 +707,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   // Create provider modal
   const [createProviderModal, setCreateProviderModal] = useState<{ open: boolean; initialName: string }>({ open: false, initialName: "" })
+
+  // Saved views
+  const [savedViews, setSavedViews] = useState<SavedView[]>(initialSavedViews)
+  const [activeViewId, setActiveViewId] = useState<string | null>(null)
+  const [savingView, setSavingView] = useState(false)
+  const [newViewName, setNewViewName] = useState("")
+  const [showSaveForm, setShowSaveForm] = useState(false)
 
   const allPractices = useMemo(() => [...practices, ...extraPractices.map(p => ({ ...p, locations: [], doctors: [] }))], [practices, extraPractices])
 
@@ -805,6 +831,54 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     setActiveTagIds(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
   }
 
+  function applyView(view: SavedView) {
+    const f = view.filters
+    setSearch(f.search ?? "")
+    setDateFrom(f.dateFrom ?? "")
+    setDateTo(f.dateTo ?? "")
+    setActiveTagIds(f.activeTagIds ?? [])
+    setFilterPracticeIds(f.filterPracticeIds ?? [])
+    setFilterPracticeMode(f.filterPracticeMode ?? "any")
+    setFilterLocationIds(f.filterLocationIds ?? [])
+    setFilterLocationMode(f.filterLocationMode ?? "any")
+    setFilterProviderIds(f.filterProviderIds ?? [])
+    setFilterProviderMode(f.filterProviderMode ?? "any")
+    setActiveViewId(view.id)
+  }
+
+  function clearView() {
+    setSearch(""); setDateFrom(""); setDateTo(""); setActiveTagIds([])
+    setFilterPracticeIds([]); setFilterLocationIds([]); setFilterProviderIds([])
+    setFilterPracticeMode("any"); setFilterLocationMode("any"); setFilterProviderMode("any")
+    setActiveViewId(null)
+  }
+
+  async function handleSaveView() {
+    if (!newViewName.trim()) return
+    setSavingView(true)
+    const filters = {
+      search, dateFrom, dateTo, activeTagIds,
+      filterPracticeIds, filterPracticeMode,
+      filterLocationIds, filterLocationMode,
+      filterProviderIds, filterProviderMode,
+    }
+    const res = await createActivityView(newViewName.trim(), filters) as any
+    if (res?.success) {
+      const newView: SavedView = { id: res.id, name: newViewName.trim(), filters }
+      setSavedViews(prev => [...prev, newView])
+      setActiveViewId(res.id)
+    }
+    setNewViewName("")
+    setShowSaveForm(false)
+    setSavingView(false)
+  }
+
+  async function handleDeleteView(id: string) {
+    await deleteActivityView(id)
+    setSavedViews(prev => prev.filter(v => v.id !== id))
+    if (activeViewId === id) clearView()
+  }
+
   // Unique filter options derived from activities
   const filterPracticeOptions = useMemo(() => {
     const map = new Map<string, string>()
@@ -861,6 +935,58 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   return (
     <>
+      {/* ── Views bar ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={clearView}
+          className={`h-8 px-3 rounded-lg text-sm font-medium border transition-all ${
+            !activeViewId ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+          }`}
+        >
+          All
+        </button>
+        {savedViews.map(view => (
+          <div key={view.id} className={`inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden ${
+            activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+          }`}>
+            <button className="pl-3 pr-2 h-full" onClick={() => applyView(view)}>{view.name}</button>
+            <button
+              onClick={() => handleDeleteView(view.id)}
+              className={`pr-2 h-full transition-colors ${activeViewId === view.id ? "hover:text-zinc-300" : "hover:text-red-500"}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+        {showSaveForm ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              autoFocus
+              value={newViewName}
+              onChange={e => setNewViewName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleSaveView(); if (e.key === "Escape") setShowSaveForm(false) }}
+              placeholder="View name..."
+              className="h-8 px-3 text-sm border border-zinc-300 rounded-lg outline-none focus:border-zinc-500 w-40"
+            />
+            <button onClick={handleSaveView} disabled={savingView || !newViewName.trim()}
+              className="h-8 px-3 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1">
+              {savingView ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              Save
+            </button>
+            <button onClick={() => { setShowSaveForm(false); setNewViewName("") }} className="h-8 px-2 text-zinc-400 hover:text-zinc-700">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowSaveForm(true)}
+            className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 transition-all flex items-center gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" /> Save view
+          </button>
+        )}
+      </div>
+
       {/* ── Filter bar ── */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
