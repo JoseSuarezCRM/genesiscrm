@@ -46,19 +46,33 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json(
+      { error: "Attachment storage isn't configured (BLOB_READ_WRITE_TOKEN missing)." },
+      { status: 500 }
+    )
+  }
+
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
   const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
 
-  // Public access so the mailer can fetch the bytes when sending (immediate or scheduled).
-  const blob = await put(`email-attachments/${uniqueName}`, file, {
-    access: "public",
-    contentType: file.type || "application/octet-stream",
-  })
+  try {
+    // Public access so the mailer can fetch the bytes when sending (immediate or scheduled).
+    const blob = await put(`email-attachments/${uniqueName}`, file, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: file.type || "application/octet-stream",
+    })
 
-  return NextResponse.json({
-    name: file.name,
-    contentType: file.type || "application/octet-stream",
-    url: blob.url,
-    size: file.size,
-  })
+    return NextResponse.json({
+      name: file.name,
+      contentType: file.type || "application/octet-stream",
+      url: blob.url,
+      size: file.size,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[EMAIL_ATTACHMENT_UPLOAD]", message)
+    return NextResponse.json({ error: `Upload failed: ${message}` }, { status: 500 })
+  }
 }

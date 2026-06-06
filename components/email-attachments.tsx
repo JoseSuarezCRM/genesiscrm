@@ -37,11 +37,16 @@ export function EmailAttachments({ value, onChange, compact }: {
         const fd = new FormData()
         fd.append("file", file)
         const res = await fetch("/api/email-attachments/upload", { method: "POST", body: fd })
-        const data = await res.json()
-        if (!res.ok) { setError(data.error ?? "Upload failed"); continue }
+        const text = await res.text()
+        let data: any = {}
+        try { data = text ? JSON.parse(text) : {} } catch { /* non-JSON (e.g. HTML error page) */ }
+        if (!res.ok) {
+          setError(data.error ?? `Upload failed (HTTP ${res.status})`)
+          continue
+        }
         added.push(data as AttachmentRef)
-      } catch {
-        setError("Upload failed")
+      } catch (e) {
+        setError(`Upload failed: ${e instanceof Error ? e.message : "network error"}`)
       }
     }
     if (added.length) onChange([...value, ...added])
