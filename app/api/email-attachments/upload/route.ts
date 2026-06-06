@@ -57,10 +57,9 @@ export async function POST(req: NextRequest) {
   const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
 
   try {
-    // Public access so the mailer can fetch the bytes when sending (immediate or scheduled).
+    // Private store — the mailer fetches the bytes with the Blob token when sending.
     const blob = await put(`email-attachments/${uniqueName}`, file, {
-      access: "public",
-      addRandomSuffix: true,
+      access: "private",
       contentType: file.type || "application/octet-stream",
     })
 

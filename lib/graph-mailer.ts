@@ -76,9 +76,11 @@ export interface EmailAttachment {
 // is intended for modestly-sized files (PDFs, images). Larger files are skipped.
 async function buildGraphAttachments(attachments: EmailAttachment[]): Promise<any[]> {
   const out: any[] = []
+  // Private Blob store requires the token in the Authorization header to read bytes.
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN
   for (const att of attachments) {
     try {
-      const res = await fetch(att.url)
+      const res = await fetch(att.url, blobToken ? { headers: { Authorization: `Bearer ${blobToken}` } } : undefined)
       if (!res.ok) { console.error("[GRAPH_MAIL] attachment fetch failed", att.url); continue }
       const buf = Buffer.from(await res.arrayBuffer())
       out.push({
