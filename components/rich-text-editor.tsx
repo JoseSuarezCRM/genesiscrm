@@ -42,15 +42,8 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
   const [, force] = useState(0)
   const [tokenMenuOpen, setTokenMenuOpen] = useState(false)
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
-  const tokenMenuRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (tokenMenuRef.current && !tokenMenuRef.current.contains(e.target as Node)) { setTokenMenuOpen(false); setActiveGroup(null) }
-    }
-    if (tokenMenuOpen) document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [tokenMenuOpen])
+  function closeTokenMenu() { setTokenMenuOpen(false); setActiveGroup(null) }
 
   // Sync external value into the editor without clobbering the caret while typing.
   useEffect(() => {
@@ -146,7 +139,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
           return (
             <>
               <div className="w-px h-5 bg-slate-200 mx-1" />
-              <div className="relative" ref={tokenMenuRef}>
+              <div className="relative">
                 <button
                   type="button"
                   title="Insert personalization field"
@@ -165,6 +158,9 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                   const flat = groups.length === 1 && !groups[0].group
                   const current = groups.find(g => g.group === activeGroup)
                   return (
+                    <>
+                    {/* Transparent backdrop closes the menu on any outside click */}
+                    <div className="fixed inset-0 z-40" onMouseDown={e => { e.preventDefault(); closeTokenMenu() }} />
                     <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1">
                       {flat || current ? (
                         <>
@@ -203,6 +199,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                         ))
                       )}
                     </div>
+                    </>
                   )
                 })()}
               </div>
