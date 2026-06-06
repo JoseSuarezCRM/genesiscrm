@@ -12,6 +12,8 @@ export interface SequenceStepInput {
   channel: StepChannel
   subject?: string
   body: string
+  fromSender?: string
+  attachments?: { name: string; contentType: string; url: string; size?: number }[]
 }
 
 export interface SequenceFilters {
@@ -68,6 +70,8 @@ export async function createSequence(
             channel: s.channel,
             subject: s.subject?.trim() || null,
             body: s.body.trim(),
+            fromSender: s.fromSender || "referrals",
+            attachments: (s.attachments ?? []) as any,
           })),
         },
       },

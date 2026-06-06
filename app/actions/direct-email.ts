@@ -2,8 +2,13 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { sendEmail, type EmailSender } from "@/lib/graph-mailer"
+import { sendEmail, type EmailSender, type EmailAttachment } from "@/lib/graph-mailer"
 import { revalidatePath } from "next/cache"
+
+// Body may already be HTML (from the rich text editor); only convert newlines for legacy plain text.
+function toHtml(body: string) {
+  return /<[a-z][\s\S]*>/i.test(body) ? body : body.replace(/\n/g, "<br>")
+}
 
 export async function sendDirectEmail(input: {
   to: string[]
@@ -12,6 +17,7 @@ export async function sendDirectEmail(input: {
   subject: string
   body: string
   sender?: EmailSender
+  attachments?: EmailAttachment[]
 }): Promise<{ success: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { success: false, error: "Unauthorized" }
@@ -20,11 +26,11 @@ export async function sendDirectEmail(input: {
   if (!input.subject.trim()) return { success: false, error: "Subject is required." }
   if (!input.body.trim()) return { success: false, error: "Body is required." }
 
-  const html = input.body.replace(/\n/g, "<br>")
-  const result = await sendEmail(input.to, input.subject, html, {
+  const result = await sendEmail(input.to, input.subject, toHtml(input.body), {
     cc: input.cc,
     bcc: input.bcc,
     sender: input.sender || "referrals",
+    attachments: input.attachments,
   })
 
   await prisma.directEmail.create({

@@ -13,6 +13,8 @@ import {
   createSequence, updateSequence, deleteSequence, toggleSequenceActive,
   SequenceInput, SequenceStepInput,
 } from "@/app/actions/sequences"
+import { RichTextEditor } from "@/components/rich-text-editor"
+import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,8 @@ interface StepDraft {
   channel: StepChannel
   subject: string
   body: string
+  fromSender?: string
+  attachments?: AttachmentRef[]
 }
 
 interface SequenceData {
@@ -167,6 +171,10 @@ function StepCard({
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 block mb-1">Attachments</label>
+                <EmailAttachments value={step.attachments ?? []} onChange={(a) => onUpdate({ ...step, attachments: a })} compact />
+              </div>
             </>
           )}
 
@@ -187,13 +195,17 @@ function StepCard({
                 ))}
               </div>
             </div>
-            <textarea
-              value={step.body}
-              onChange={(e) => onUpdate({ ...step, body: e.target.value })}
-              rows={3}
-              placeholder="Hi {patient_first_name}, this is Genesis Ortho…"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
+            {step.channel === "EMAIL" ? (
+              <RichTextEditor value={step.body} onChange={(html) => onUpdate({ ...step, body: html })} minHeight={120} placeholder="Hi {patient_first_name}, this is Genesis Ortho…" />
+            ) : (
+              <textarea
+                value={step.body}
+                onChange={(e) => onUpdate({ ...step, body: e.target.value })}
+                rows={3}
+                placeholder="Hi {patient_first_name}, this is Genesis Ortho…"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            )}
           </div>
         </div>
       )}

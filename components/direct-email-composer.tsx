@@ -4,7 +4,8 @@ import { useState, useTransition, useRef, useEffect } from "react"
 import { sendDirectEmail } from "@/app/actions/direct-email"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { RichTextEditor } from "@/components/rich-text-editor"
+import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import { Send, X, Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Clock } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -181,9 +182,10 @@ function SentEmailRow({ email }: { email: SentEmail }) {
           {email.error && (
             <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{email.error}</p>
           )}
-          <div className="text-sm text-slate-700 whitespace-pre-wrap border border-slate-200 rounded-lg bg-white px-3 py-2">
-            {email.body}
-          </div>
+          <div
+            className="text-sm text-slate-700 border border-slate-200 rounded-lg bg-white px-3 py-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-blue-600 [&_a]:underline whitespace-pre-wrap"
+            dangerouslySetInnerHTML={{ __html: email.body }}
+          />
         </div>
       )}
     </div>
@@ -200,6 +202,7 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
   const [fromSender, setFromSender] = useState("referrals")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
+  const [attachments, setAttachments] = useState<AttachmentRef[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -210,10 +213,10 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
     setError(null)
     setSuccess(false)
     startTransition(async () => {
-      const result = await sendDirectEmail({ to, cc, bcc, subject, body, sender: fromSender as any })
+      const result = await sendDirectEmail({ to, cc, bcc, subject, body, sender: fromSender as any, attachments })
       if (result.success) {
         setSuccess(true)
-        setTo([]); setCc([]); setBcc([]); setSubject(""); setBody("")
+        setTo([]); setCc([]); setBcc([]); setSubject(""); setBody(""); setAttachments([])
         setTimeout(() => setSuccess(false), 4000)
       } else {
         setError(result.error ?? "Failed to send.")
@@ -271,13 +274,11 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
           </div>
 
           <div className="px-4 py-2">
-            <Textarea
-              value={body}
-              onChange={e => setBody(e.target.value)}
-              placeholder="Write your message…"
-              rows={8}
-              className="border-0 shadow-none px-0 text-sm focus-visible:ring-0 resize-none placeholder:text-slate-400"
-            />
+            <RichTextEditor value={body} onChange={setBody} minHeight={180} />
+          </div>
+
+          <div className="px-4 py-2">
+            <EmailAttachments value={attachments} onChange={setAttachments} />
           </div>
         </div>
 

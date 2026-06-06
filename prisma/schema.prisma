@@ -406,6 +406,7 @@ model EmailBroadcast {
   subject        String
   body           String
   fromSender     String                   @default("referrals")
+  attachments    Json                     @default("[]")
   status         BroadcastStatus          @default(DRAFT)
   scheduledAt    DateTime?
   sentAt         DateTime?
@@ -741,11 +742,12 @@ model SequenceStep {
   sequence   Sequence          @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
   order      Int
   delayDays  Int               @default(0)
-  channel    StepChannel
-  subject    String?
-  body       String
-  fromSender String            @default("referrals")
-  runs       SequenceStepRun[]
+  channel     StepChannel
+  subject     String?
+  body        String
+  fromSender  String            @default("referrals")
+  attachments Json              @default("[]")
+  runs        SequenceStepRun[]
   createdAt  DateTime          @default(now())
 
   @@index([sequenceId, order])

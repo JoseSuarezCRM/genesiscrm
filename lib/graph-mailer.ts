@@ -64,11 +64,41 @@ async function getAccessToken(): Promise<string> {
   return cachedToken.value
 }
 
+// An attachment reference: a file already uploaded to Blob storage.
+export interface EmailAttachment {
+  name: string
+  contentType: string
+  url: string
+}
+
+// Fetch each attachment URL and convert to a Graph fileAttachment (base64).
+// Graph's simple sendMail supports a total message size up to ~3-4 MB, so this
+// is intended for modestly-sized files (PDFs, images). Larger files are skipped.
+async function buildGraphAttachments(attachments: EmailAttachment[]): Promise<any[]> {
+  const out: any[] = []
+  for (const att of attachments) {
+    try {
+      const res = await fetch(att.url)
+      if (!res.ok) { console.error("[GRAPH_MAIL] attachment fetch failed", att.url); continue }
+      const buf = Buffer.from(await res.arrayBuffer())
+      out.push({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: att.name,
+        contentType: att.contentType || "application/octet-stream",
+        contentBytes: buf.toString("base64"),
+      })
+    } catch (e) {
+      console.error("[GRAPH_MAIL] attachment error", att.url, e)
+    }
+  }
+  return out
+}
+
 export async function sendEmail(
   to: string | string[],
   subject: string,
   html: string,
-  options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender }
+  options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender; attachments?: EmailAttachment[] }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const fromEmail = SENDER_EMAILS[options?.sender ?? "referrals"]
@@ -77,6 +107,9 @@ export async function sendEmail(
     const toRecipients = toList.map(a => ({ emailAddress: { address: a } }))
     const ccRecipients = (options?.cc ?? []).map(a => ({ emailAddress: { address: a } }))
     const bccRecipients = (options?.bcc ?? []).map(a => ({ emailAddress: { address: a } }))
+    const attachments = options?.attachments?.length
+      ? await buildGraphAttachments(options.attachments)
+      : []
 
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}/sendMail`,
@@ -93,6 +126,7 @@ export async function sendEmail(
             toRecipients,
             ...(ccRecipients.length ? { ccRecipients } : {}),
             ...(bccRecipients.length ? { bccRecipients } : {}),
+            ...(attachments.length ? { attachments } : {}),
             from: { emailAddress: { address: fromEmail, name: "Genesis Ortho" } },
           },
           saveToSentItems: true,

@@ -2,9 +2,14 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { sendEmail } from "@/lib/graph-mailer"
+import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
 import { BroadcastStatus, OutreachStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
+
+// Body may already be HTML (rich text editor); only convert newlines for legacy plain text.
+function toHtml(body: string) {
+  return /<[a-z][\s\S]*>/i.test(body) ? body : body.replace(/\n/g, "<br>")
+}
 
 export interface BroadcastFilters {
   recipientTypes: ("PATIENT" | "PROVIDER")[]
@@ -92,6 +97,7 @@ export async function createBroadcast(data: {
   subject: string
   body: string
   fromSender?: string
+  attachments?: EmailAttachment[]
   filters: BroadcastFilters
   scheduledAt?: string | null
 }) {
@@ -107,6 +113,7 @@ export async function createBroadcast(data: {
       subject: data.subject,
       body: data.body,
       fromSender: data.fromSender || "referrals",
+      attachments: (data.attachments ?? []) as object,
       status,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       recipientCount: recipients.length,
@@ -144,8 +151,12 @@ export async function sendBroadcastEmails(broadcastId: string) {
   let sentCount = 0
   let failedCount = 0
 
+  const broadcastAttachments = ((broadcast as any).attachments ?? []) as EmailAttachment[]
   for (const recipient of broadcast.recipients) {
-    const result = await sendEmail(recipient.email, broadcast.subject, broadcast.body.replace(/\n/g, "<br>"), { sender: (broadcast as any).fromSender || "referrals" })
+    const result = await sendEmail(recipient.email, broadcast.subject, toHtml(broadcast.body), {
+      sender: (broadcast as any).fromSender || "referrals",
+      attachments: broadcastAttachments,
+    })
     await prisma.emailBroadcastRecipient.update({
       where: { id: recipient.id },
       data: {

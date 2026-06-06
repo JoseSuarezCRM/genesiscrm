@@ -13,6 +13,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
+import { RichTextEditor } from "@/components/rich-text-editor"
+import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   Select,
   SelectContent,
@@ -58,6 +60,7 @@ export default function OutreachDialog({ referral }: Props) {
   const [fromSender, setFromSender] = useState("referrals")
   const [subject, setSubject] = useState("")
   const [message, setMessage] = useState("")
+  const [attachments, setAttachments] = useState<AttachmentRef[]>([])
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle")
   const [errorMsg, setErrorMsg] = useState("")
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
@@ -85,6 +88,7 @@ export default function OutreachDialog({ referral }: Props) {
       setStatus("idle")
       setMessage("")
       setSubject("")
+      setAttachments([])
       setErrorMsg("")
     }
   }
@@ -106,7 +110,8 @@ export default function OutreachDialog({ referral }: Props) {
       channel,
       message.trim(),
       showEmailFields ? subject.trim() : undefined,
-      showEmailFields ? fromSender : undefined
+      showEmailFields ? fromSender : undefined,
+      showEmailFields ? attachments : undefined
     )
 
     if (result.error) {
@@ -229,15 +234,27 @@ export default function OutreachDialog({ referral }: Props) {
                 </span>
               )}
             </Label>
-            <Textarea
-              id="message"
-              rows={6}
-              placeholder="Type your message or load a template above..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              disabled={status === "sending" || status === "success"}
-            />
+            {channel === "EMAIL" ? (
+              <RichTextEditor value={message} onChange={setMessage} minHeight={140} placeholder="Type your message or load a template above..." />
+            ) : (
+              <Textarea
+                id="message"
+                rows={6}
+                placeholder="Type your message or load a template above..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={status === "sending" || status === "success"}
+              />
+            )}
           </div>
+
+          {/* Attachments (email only) */}
+          {showEmailFields && (
+            <div>
+              <Label className="mb-2 block">Attachments</Label>
+              <EmailAttachments value={attachments} onChange={setAttachments} />
+            </div>
+          )}
 
           {/* Status feedback */}
           {status === "error" && (

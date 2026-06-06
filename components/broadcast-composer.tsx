@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RichTextEditor } from "@/components/rich-text-editor"
+import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   Select,
   SelectContent,
@@ -80,6 +81,7 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
   const [fromSender, setFromSender] = useState("referrals")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
+  const [attachments, setAttachments] = useState<AttachmentRef[]>([])
   const [scheduledAt, setScheduledAt] = useState("")
 
   // Preview
@@ -136,6 +138,7 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
         subject,
         body,
         fromSender,
+        attachments,
         filters: buildFilters(),
         scheduledAt: scheduledAt || null,
       })
@@ -352,7 +355,12 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
             Body *
             <span className="text-slate-400 font-normal ml-2 text-xs">Use {`{{firstName}}`}, {`{{appointmentDate}}`}, {`{{practiceName}}`} as placeholders</span>
           </Label>
-          <Textarea id="body" rows={8} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message here..." />
+          <RichTextEditor value={body} onChange={setBody} minHeight={180} />
+        </div>
+
+        <div>
+          <Label className="mb-1.5 block text-sm">Attachments</Label>
+          <EmailAttachments value={attachments} onChange={setAttachments} />
         </div>
       </section>
 

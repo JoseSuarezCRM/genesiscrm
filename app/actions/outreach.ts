@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { sendSMS } from "@/lib/twilio"
-import { sendEmail } from "@/lib/graph-mailer"
+import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
 import {
   AuditAction,
   OutreachChannel,
@@ -27,7 +27,8 @@ export async function sendManualOutreach(
   channel: ManualChannel,
   message: string,
   subject?: string,
-  sender?: string
+  sender?: string,
+  attachments?: EmailAttachment[]
 ): Promise<{ success?: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
@@ -52,8 +53,12 @@ export async function sendManualOutreach(
 
   if ((channel === "EMAIL" || channel === "BOTH") && referral.patientEmail) {
     const emailSubject = subject?.trim() || "Message from Genesis Ortho"
-    const html = message.replace(/\n/g, "<br>")
-    const result = await sendEmail(referral.patientEmail, emailSubject, `<p>${html}</p>`, { sender: (sender as any) || "referrals" })
+    // Message may already be HTML (rich text editor) or plain text (SMS/BOTH textarea).
+    const html = /<[a-z][\s\S]*>/i.test(message) ? message : `<p>${message.replace(/\n/g, "<br>")}</p>`
+    const result = await sendEmail(referral.patientEmail, emailSubject, html, {
+      sender: (sender as any) || "referrals",
+      attachments,
+    })
     results.push({ ...result, channel: OutreachChannel.EMAIL, recipient: referral.patientEmail })
   }
 

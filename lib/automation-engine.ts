@@ -247,7 +247,10 @@ async function executeAction(
   if (automation.actionType === AutomationAction.SEND_EMAIL) {
     const subject = resolveTemplate((cfg.subject as string) || "Automation notification", vars)
     const bodyText = resolveTemplate((cfg.body as string) || "", vars)
-    const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${bodyText.replace(/\n/g, "<br/>")}</div>`
+    // Body may already be HTML (rich text editor); only convert newlines for legacy plain text.
+    const inner = /<[a-z][\s\S]*>/i.test(bodyText) ? bodyText : bodyText.replace(/\n/g, "<br/>")
+    const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${inner}</div>`
+    const emailAttachments = (Array.isArray(cfg.attachments) ? cfg.attachments : []) as any
 
     const resolveRecipientList = async (list: unknown): Promise<string[]> => {
       const emailSet = new Set<string>()
@@ -299,7 +302,7 @@ async function executeAction(
     const bccEmails = await resolveRecipientList(cfg.bcc)
 
     if (toEmails.length) {
-      await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails, sender: (cfg.sender as any) || "referrals" })
+      await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails, sender: (cfg.sender as any) || "referrals", attachments: emailAttachments })
     }
   }
 

@@ -12,6 +12,8 @@ import {
 } from "@/app/actions/automations"
 import { Zap, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Play, ChevronDown, ChevronUp, Info, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { RichTextEditor } from "@/components/rich-text-editor"
+import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -766,10 +768,10 @@ function ActionConfigFields({
     return (
       <div className="space-y-3">
         {/* From */}
-        <div>
-          <label className="text-xs font-medium text-slate-600 block mb-1">From</label>
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <label className="text-xs font-semibold text-blue-700 block mb-1.5">From (sender email)</label>
           <select value={(config.sender as string) || "referrals"} onChange={e => set("sender", e.target.value)}
-            className="w-full border rounded-md px-3 py-2 text-sm bg-white">
+            className="w-full border border-blue-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500">
             <option value="referrals">Referrals@genesisortho.com</option>
             <option value="surgery">surgery@genesisortho.com</option>
             <option value="tpl">tpl@genesisortho.com</option>
@@ -859,9 +861,22 @@ function ActionConfigFields({
               ))}
             </div>
           )}
-          <textarea rows={4} className="w-full border rounded-md px-3 py-2 text-sm resize-none"
-            placeholder={"e.g. Hi,\n\nA new referral for {patient_name} was received from {practice_name}."}
-            value={(config.body as string) || ""} onChange={e => set("body", e.target.value)} />
+          <RichTextEditor
+            value={(config.body as string) || ""}
+            onChange={html => set("body", html)}
+            minHeight={140}
+            placeholder="e.g. Hi, A new referral for {patient_name} was received from {practice_name}."
+          />
+        </div>
+
+        {/* Attachments */}
+        <div>
+          <label className="text-xs font-medium text-slate-600 block mb-1.5">Attachments</label>
+          <EmailAttachments
+            value={(config.attachments as AttachmentRef[]) ?? []}
+            onChange={next => set("attachments", next)}
+            compact
+          />
         </div>
       </div>
     )

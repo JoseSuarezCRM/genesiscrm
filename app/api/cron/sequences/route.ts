@@ -85,7 +85,12 @@ export async function GET(req: NextRequest) {
         const subject = step.subject
           ? resolveBody(step.subject, referral)
           : `Message from Genesis Ortho`
-        await sendEmail(referral.patientEmail, subject, `<p>${body.replace(/\n/g, "<br/>")}</p>`, { sender: (step as any).fromSender || "referrals" })
+        // Body may already be HTML (rich text editor); only wrap plain text.
+        const html = /<[a-z][\s\S]*>/i.test(body) ? body : `<p>${body.replace(/\n/g, "<br/>")}</p>`
+        await sendEmail(referral.patientEmail, subject, html, {
+          sender: (step as any).fromSender || "referrals",
+          attachments: ((step as any).attachments ?? []) as any,
+        })
       }
 
       await prisma.sequenceStepRun.update({
