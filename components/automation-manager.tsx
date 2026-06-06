@@ -12,7 +12,7 @@ import {
 } from "@/app/actions/automations"
 import { Zap, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Play, ChevronDown, ChevronUp, Info, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { RichTextEditor } from "@/components/rich-text-editor"
+import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -866,6 +866,7 @@ function ActionConfigFields({
             onChange={html => set("body", html)}
             minHeight={140}
             placeholder="e.g. Hi, A new referral for {patient_name} was received from {practice_name}."
+            tokens={tokensFromStrings(TEMPLATE_VARS)}
           />
         </div>
 

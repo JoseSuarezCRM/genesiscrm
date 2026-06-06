@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
+import { PERSONALIZATION_GROUPS } from "@/lib/personalization"
 import {
   Select,
   SelectContent,
@@ -355,7 +356,7 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
             Body *
             <span className="text-slate-400 font-normal ml-2 text-xs">Use {`{{firstName}}`}, {`{{appointmentDate}}`}, {`{{practiceName}}`} as placeholders</span>
           </Label>
-          <RichTextEditor value={body} onChange={setBody} minHeight={180} />
+          <RichTextEditor value={body} onChange={setBody} minHeight={180} tokenGroups={PERSONALIZATION_GROUPS} />
         </div>
 
         <div>

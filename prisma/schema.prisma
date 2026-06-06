@@ -431,6 +431,7 @@ model EmailBroadcastRecipient {
   email       String
   name        String
   type        BroadcastRecipientType
+  data        Json                   @default("{}") // personalization values for this recipient
   status      OutreachStatus         @default(SENT)
   error       String?
   sentAt      DateTime?

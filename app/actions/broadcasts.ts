@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth"
 import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
 import { BroadcastStatus, OutreachStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
+import { substitutePersonalization, splitName } from "@/lib/personalization"
+import { format } from "date-fns"
 
 // Body may already be HTML (rich text editor); only convert newlines for legacy plain text.
 function toHtml(body: string) {
@@ -30,11 +32,18 @@ async function requireAuth() {
   return session
 }
 
+export interface BroadcastRecipient {
+  email: string
+  name: string
+  type: "PATIENT" | "PROVIDER"
+  data: Record<string, string>
+}
+
 // Preview recipients matching the given filters (no DB writes)
-export async function previewBroadcastRecipients(filters: BroadcastFilters) {
+export async function previewBroadcastRecipients(filters: BroadcastFilters): Promise<BroadcastRecipient[]> {
   await requireAuth()
 
-  const recipients: { email: string; name: string; type: "PATIENT" | "PROVIDER" }[] = []
+  const recipients: BroadcastRecipient[] = []
 
   if (filters.recipientTypes.includes("PATIENT")) {
     const where: Record<string, unknown> = {
@@ -52,7 +61,12 @@ export async function previewBroadcastRecipients(filters: BroadcastFilters) {
 
     const referrals = await prisma.referral.findMany({
       where,
-      select: { patientFirstName: true, patientLastName: true, patientEmail: true },
+      select: {
+        patientFirstName: true, patientLastName: true, patientEmail: true,
+        appointmentDate: true, insuranceProvider: true,
+        referringPractice: { select: { name: true } },
+        referringDoctor: { select: { name: true } },
+      },
       distinct: ["patientEmail"],
     })
 
@@ -62,6 +76,16 @@ export async function previewBroadcastRecipients(filters: BroadcastFilters) {
           email: r.patientEmail,
           name: `${r.patientFirstName} ${r.patientLastName}`,
           type: "PATIENT",
+          data: {
+            firstName: r.patientFirstName ?? "",
+            lastName: r.patientLastName ?? "",
+            fullName: `${r.patientFirstName} ${r.patientLastName}`.trim(),
+            email: r.patientEmail,
+            appointmentDate: r.appointmentDate ? format(r.appointmentDate, "MMMM d, yyyy") : "",
+            insurance: r.insuranceProvider ?? "",
+            practiceName: r.referringPractice?.name ?? "",
+            providerName: r.referringDoctor?.name ?? "",
+          },
         })
       }
     }
@@ -73,12 +97,33 @@ export async function previewBroadcastRecipients(filters: BroadcastFilters) {
 
     const providers = await prisma.referringDoctor.findMany({
       where,
-      select: { name: true, email: true },
+      select: {
+        name: true, email: true, title: true, specialty: true, npi: true, phone: true,
+        practice: { select: { name: true } },
+        locations: { select: { location: { select: { name: true } } }, take: 1 },
+      },
     })
 
     for (const p of providers) {
       if (p.email) {
-        recipients.push({ email: p.email, name: p.name, type: "PROVIDER" })
+        const { firstName, lastName } = splitName(p.name)
+        recipients.push({
+          email: p.email,
+          name: p.name,
+          type: "PROVIDER",
+          data: {
+            firstName,
+            lastName,
+            fullName: p.name,
+            email: p.email,
+            title: p.title ?? "",
+            specialty: p.specialty ?? "",
+            npi: p.npi ?? "",
+            phone: p.phone ?? "",
+            practiceName: p.practice?.name ?? "",
+            location: p.locations[0]?.location?.name ?? "",
+          },
+        })
       }
     }
   }
@@ -124,6 +169,7 @@ export async function createBroadcast(data: {
           email: r.email,
           name: r.name,
           type: r.type,
+          data: r.data as object,
           status: OutreachStatus.SENT, // will be updated after actual send
         })),
       },
@@ -153,7 +199,10 @@ export async function sendBroadcastEmails(broadcastId: string) {
 
   const broadcastAttachments = ((broadcast as any).attachments ?? []) as EmailAttachment[]
   for (const recipient of broadcast.recipients) {
-    const result = await sendEmail(recipient.email, broadcast.subject, toHtml(broadcast.body), {
+    const data = ((recipient as any).data ?? {}) as Record<string, string>
+    const subject = substitutePersonalization(broadcast.subject, data)
+    const body = substitutePersonalization(broadcast.body, data)
+    const result = await sendEmail(recipient.email, subject, toHtml(body), {
       sender: (broadcast as any).fromSender || "referrals",
       attachments: broadcastAttachments,
     })

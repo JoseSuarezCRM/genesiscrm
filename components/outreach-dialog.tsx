@@ -15,6 +15,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
+
+// Patient-context fields available when emailing a referral's patient.
+const OUTREACH_TOKENS = [
+  { label: "First name", value: "{{firstName}}" },
+  { label: "Last name", value: "{{lastName}}" },
+  { label: "Full name", value: "{{fullName}}" },
+  { label: "Appointment date", value: "{{appointmentDate}}" },
+  { label: "Insurance", value: "{{insurance}}" },
+  { label: "Referring practice", value: "{{practiceName}}" },
+  { label: "Referring provider", value: "{{providerName}}" },
+]
 import {
   Select,
   SelectContent,
@@ -235,7 +246,7 @@ export default function OutreachDialog({ referral }: Props) {
               )}
             </Label>
             {channel === "EMAIL" ? (
-              <RichTextEditor value={message} onChange={setMessage} minHeight={140} placeholder="Type your message or load a template above..." />
+              <RichTextEditor value={message} onChange={setMessage} minHeight={140} placeholder="Type your message or load a template above..." tokens={OUTREACH_TOKENS} />
             ) : (
               <Textarea
                 id="message"

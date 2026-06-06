@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { sendSMS } from "@/lib/twilio"
 import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
+import { substitutePersonalization } from "@/lib/personalization"
 import {
   AuditAction,
   OutreachChannel,
@@ -37,12 +38,27 @@ export async function sendManualOutreach(
     where: { id: referralId },
     select: {
       patientFirstName: true,
+      patientLastName: true,
       patientPhone: true,
       patientEmail: true,
+      appointmentDate: true,
+      insuranceProvider: true,
+      referringPractice: { select: { name: true } },
+      referringDoctor: { select: { name: true } },
     },
   })
 
   if (!referral) return { error: "Referral not found" }
+
+  const personalization: Record<string, string> = {
+    firstName: referral.patientFirstName ?? "",
+    lastName: referral.patientLastName ?? "",
+    fullName: `${referral.patientFirstName ?? ""} ${referral.patientLastName ?? ""}`.trim(),
+    appointmentDate: referral.appointmentDate ? format(referral.appointmentDate, "MMMM d, yyyy") : "",
+    insurance: referral.insuranceProvider ?? "",
+    practiceName: referral.referringPractice?.name ?? "",
+    providerName: referral.referringDoctor?.name ?? "",
+  }
 
   const results: { success: boolean; channel: OutreachChannel; recipient: string; error?: string }[] = []
 
@@ -52,9 +68,10 @@ export async function sendManualOutreach(
   }
 
   if ((channel === "EMAIL" || channel === "BOTH") && referral.patientEmail) {
-    const emailSubject = subject?.trim() || "Message from Genesis Ortho"
+    const emailSubject = substitutePersonalization(subject?.trim() || "Message from Genesis Ortho", personalization)
+    const resolved = substitutePersonalization(message, personalization)
     // Message may already be HTML (rich text editor) or plain text (SMS/BOTH textarea).
-    const html = /<[a-z][\s\S]*>/i.test(message) ? message : `<p>${message.replace(/\n/g, "<br>")}</p>`
+    const html = /<[a-z][\s\S]*>/i.test(resolved) ? resolved : `<p>${resolved.replace(/\n/g, "<br>")}</p>`
     const result = await sendEmail(referral.patientEmail, emailSubject, html, {
       sender: (sender as any) || "referrals",
       attachments,
