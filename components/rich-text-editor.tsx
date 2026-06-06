@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import {
   Bold, Italic, Underline, List, ListOrdered, Link2, Heading2,
   Strikethrough, RemoveFormatting, Braces, ChevronDown, ChevronLeft, ChevronRight,
@@ -42,8 +43,25 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
   const [, force] = useState(0)
   const [tokenMenuOpen, setTokenMenuOpen] = useState(false)
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
+  const fieldsBtnRef = useRef<HTMLButtonElement>(null)
+  const [menuPos, setMenuPos] = useState<{ left: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, top: 0, maxHeight: 320 })
 
   function closeTokenMenu() { setTokenMenuOpen(false); setActiveGroup(null) }
+
+  function toggleTokenMenu() {
+    if (tokenMenuOpen) { closeTokenMenu(); return }
+    const r = fieldsBtnRef.current?.getBoundingClientRect()
+    if (r) {
+      const below = window.innerHeight - r.bottom
+      const above = r.top
+      const openUp = below < 260 && above > below
+      setMenuPos(openUp
+        ? { left: r.left, bottom: window.innerHeight - r.top + 4, maxHeight: above - 16 }
+        : { left: r.left, top: r.bottom + 4, maxHeight: below - 16 })
+    }
+    setActiveGroup(null)
+    setTokenMenuOpen(true)
+  }
 
   // Sync external value into the editor without clobbering the caret while typing.
   useEffect(() => {
@@ -139,36 +157,39 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
           return (
             <>
               <div className="w-px h-5 bg-slate-200 mx-1" />
-              <div className="relative">
-                <button
-                  type="button"
-                  title="Insert personalization field"
-                  onMouseDown={e => { e.preventDefault(); setTokenMenuOpen(o => !o); setActiveGroup(null) }}
-                  className={cn(
-                    "h-7 px-1.5 flex items-center gap-1 rounded-md text-xs font-medium transition-colors",
-                    tokenMenuOpen ? "bg-zinc-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                  )}
-                >
-                  <Braces className="h-3.5 w-3.5" />
-                  Fields
-                  <ChevronDown className="h-3 w-3 opacity-60" />
-                </button>
-                {tokenMenuOpen && (() => {
-                  // Single unnamed group (flat tokens) → show tokens directly.
-                  const flat = groups.length === 1 && !groups[0].group
-                  const current = groups.find(g => g.group === activeGroup)
-                  return (
-                    <>
+              <button
+                ref={fieldsBtnRef}
+                type="button"
+                title="Insert personalization field"
+                onMouseDown={e => { e.preventDefault(); toggleTokenMenu() }}
+                className={cn(
+                  "h-7 px-1.5 flex items-center gap-1 rounded-md text-xs font-medium transition-colors",
+                  tokenMenuOpen ? "bg-zinc-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                )}
+              >
+                <Braces className="h-3.5 w-3.5" />
+                Fields
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+              {tokenMenuOpen && typeof document !== "undefined" && createPortal((() => {
+                // Single unnamed group (flat tokens) → show tokens directly.
+                const flat = groups.length === 1 && !groups[0].group
+                const current = groups.find(g => g.group === activeGroup)
+                return (
+                  <>
                     {/* Transparent backdrop closes the menu on any outside click */}
-                    <div className="fixed inset-0 z-40" onMouseDown={e => { e.preventDefault(); closeTokenMenu() }} />
-                    <div className="absolute left-0 top-full mt-1 z-50 w-56 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1">
+                    <div className="fixed inset-0 z-[998]" onMouseDown={e => { e.preventDefault(); closeTokenMenu() }} />
+                    <div
+                      className="fixed z-[999] w-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1"
+                      style={{ left: menuPos.left, top: menuPos.top, bottom: menuPos.bottom, maxHeight: menuPos.maxHeight }}
+                    >
                       {flat || current ? (
                         <>
                           {!flat && (
                             <button
                               type="button"
                               onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setActiveGroup(null) }}
-                              className="w-full text-left px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 border-b border-slate-100 mb-1"
+                              className="w-full text-left px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 border-b border-slate-100 mb-1 sticky top-0 bg-white"
                             >
                               <ChevronLeft className="h-3.5 w-3.5" /> {current!.group}
                             </button>
@@ -199,10 +220,9 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                         ))
                       )}
                     </div>
-                    </>
-                  )
-                })()}
-              </div>
+                  </>
+                )
+              })(), document.body)}
             </>
           )
         })()}
