@@ -171,7 +171,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                           {!flat && (
                             <button
                               type="button"
-                              onMouseDown={e => { e.preventDefault(); setActiveGroup(null) }}
+                              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setActiveGroup(null) }}
                               className="w-full text-left px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 border-b border-slate-100 mb-1"
                             >
                               <ChevronLeft className="h-3.5 w-3.5" /> {current!.group}
@@ -181,7 +181,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                             <button
                               key={t.value}
                               type="button"
-                              onMouseDown={e => { e.preventDefault(); insertToken(t.value) }}
+                              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertToken(t.value) }}
                               className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between gap-2"
                             >
                               <span className="text-sm text-slate-700">{t.label}</span>
@@ -194,7 +194,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                           <button
                             key={g.group}
                             type="button"
-                            onMouseDown={e => { e.preventDefault(); setActiveGroup(g.group) }}
+                            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setActiveGroup(g.group) }}
                             className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between gap-2"
                           >
                             <span className="text-sm font-medium text-slate-700">{g.group}</span>
