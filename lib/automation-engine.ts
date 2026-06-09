@@ -157,13 +157,95 @@ async function fetchReferralForEngine(referralId: string) {
 
 // ─── Action executor ──────────────────────────────────────────────────────────
 
+// Evaluate a single condition rule against a referral (reuses the operator set).
+function evaluateRule(referral: ReferralForConditions, cond: Condition): boolean {
+  const condVal = cond.value ?? ""
+  const condValLower = condVal.toLowerCase()
+  switch (cond.field) {
+    case "practiceId":
+      if (cond.op === "eq") return referral.referringPracticeId === condVal
+      if (cond.op === "ne") return referral.referringPracticeId !== condVal
+      if (cond.op === "empty") return referral.referringPracticeId === null
+      return true
+    case "locationId":
+      if (cond.op === "eq") return referral.referringLocationId === condVal
+      if (cond.op === "ne") return referral.referringLocationId !== condVal
+      if (cond.op === "empty") return referral.referringLocationId === null
+      return true
+    case "assignedToId":
+      if (cond.op === "eq") return referral.assignedToId === condVal
+      if (cond.op === "ne") return referral.assignedToId !== condVal
+      if (cond.op === "unassigned") return referral.assignedToId === null
+      return true
+    case "status":
+      if (cond.op === "eq") return referral.status === condVal
+      if (cond.op === "ne") return referral.status !== condVal
+      return true
+    case "insuranceProvider": {
+      const ip = (referral.insuranceProvider ?? "").toLowerCase()
+      if (cond.op === "contains") return ip.includes(condValLower)
+      if (cond.op === "eq") return ip === condValLower
+      if (cond.op === "empty") return !referral.insuranceProvider
+      return true
+    }
+    case "tagId": {
+      const hasTag = referral.tags.some(t => t.tagId === condVal)
+      if (cond.op === "has") return hasTag
+      if (cond.op === "not_has") return !hasTag
+      return true
+    }
+    default:
+      return true
+  }
+}
+
+interface AutomationFlow {
+  match?: "all" | "any"
+  rules?: Condition[]
+  then?: { type: AutomationAction; config: Record<string, unknown> }[]
+  else?: { type: AutomationAction; config: Record<string, unknown> }[]
+}
+
+// Top-level executor: branch (if/else) when a flow is configured, else single action.
 async function executeAction(
-  automation: { id: string; actionType: AutomationAction; actionConfig: unknown },
+  automation: { id: string; actionType: AutomationAction; actionConfig: unknown; flow?: unknown },
   referralId: string | null,
   vars: TemplateVars,
   triggeredByUserId?: string
 ): Promise<void> {
-  const cfg = automation.actionConfig as Record<string, unknown>
+  const flow = automation.flow as AutomationFlow | null | undefined
+  if (flow && (flow.then?.length || flow.else?.length)) {
+    let passed = true
+    const rules = flow.rules ?? []
+    if (rules.length && referralId) {
+      const ref = await fetchReferralForEngine(referralId)
+      if (ref) {
+        const r = ref as unknown as ReferralForConditions
+        passed = (flow.match === "any")
+          ? rules.some(c => evaluateRule(r, c))
+          : rules.every(c => evaluateRule(r, c))
+      } else {
+        passed = false
+      }
+    }
+    const branch = passed ? (flow.then ?? []) : (flow.else ?? [])
+    for (const action of branch) {
+      await runSingleAction(action.type, action.config ?? {}, referralId, vars, triggeredByUserId)
+    }
+    return
+  }
+  await runSingleAction(automation.actionType, automation.actionConfig as Record<string, unknown>, referralId, vars, triggeredByUserId)
+}
+
+// Runs one action of the given type with its config.
+async function runSingleAction(
+  actionType: AutomationAction,
+  cfg: Record<string, unknown>,
+  referralId: string | null,
+  vars: TemplateVars,
+  triggeredByUserId?: string
+): Promise<void> {
+  const automation = { actionType } // local alias so existing `automation.actionType` checks still read
 
   if (automation.actionType === AutomationAction.CREATE_TASK) {
     const title = resolveTemplate((cfg.title as string) || "Automation task", vars)

@@ -488,6 +488,7 @@ model Automation {
   triggerConfig Json              @default("{}")
   actionType    AutomationAction
   actionConfig  Json              @default("{}")
+  flow          Json?             // if/else branch: { match, rules[], then[], else[] }; null = single action
   createdById   String
   createdBy     User              @relation(fields: [createdById], references: [id])
   createdAt     DateTime          @default(now())

@@ -26,9 +26,19 @@ interface Automation {
   triggerConfig: Record<string, unknown>
   actionType: AutomationAction
   actionConfig: Record<string, unknown>
+  flow: Record<string, unknown> | null
   createdAt: Date
   createdBy: { name: string | null; email: string }
   _count: { runs: number }
+}
+
+// A single action inside a branch list
+interface FlowAction { type: AutomationAction; config: Record<string, unknown> }
+interface AutomationFlow {
+  match: "all" | "any"
+  rules: Condition[]
+  then: FlowAction[]
+  else: FlowAction[]
 }
 
 interface User { id: string; name: string | null; email: string }
@@ -886,6 +896,59 @@ function ActionConfigFields({
   return null
 }
 
+// ─── Ordered list of actions (used by each branch of an if/else flow) ──────────
+
+function ActionList({ actions, onChange, users, tags, emptyLabel }: {
+  actions: FlowAction[]
+  onChange: (next: FlowAction[]) => void
+  users: User[]; tags: Tag[]
+  emptyLabel: string
+}) {
+  function add() {
+    onChange([...actions, { type: "CREATE_TASK", config: emptyActionConfig("CREATE_TASK") }])
+  }
+  function removeAt(i: number) {
+    onChange(actions.filter((_, idx) => idx !== i))
+  }
+  function setType(i: number, type: AutomationAction) {
+    onChange(actions.map((a, idx) => idx === i ? { type, config: emptyActionConfig(type) } : a))
+  }
+  function setConfig(i: number, config: Record<string, unknown>) {
+    onChange(actions.map((a, idx) => idx === i ? { ...a, config } : a))
+  }
+
+  return (
+    <div className="space-y-2">
+      {actions.length === 0 && (
+        <p className="text-xs text-slate-400 italic">{emptyLabel}</p>
+      )}
+      {actions.map((a, i) => (
+        <div key={i} className="border border-slate-200 rounded-lg p-3 space-y-2 bg-white">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-400 w-4 shrink-0">{i + 1}</span>
+            <select
+              className="flex-1 border rounded-md px-2 py-1.5 text-sm"
+              value={a.type}
+              onChange={e => setType(i, e.target.value as AutomationAction)}
+            >
+              {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(t => (
+                <option key={t} value={t}>{ACTION_LABELS[t]}</option>
+              ))}
+            </select>
+            <button type="button" onClick={() => removeAt(i)} className="text-slate-400 hover:text-red-500 shrink-0" title="Remove action">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <ActionConfigFields type={a.type} config={a.config} onChange={cfg => setConfig(i, cfg)} users={users} tags={tags} />
+        </div>
+      ))}
+      <button type="button" onClick={add} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+        <Plus className="h-3 w-3" /> Add action
+      </button>
+    </div>
+  )
+}
+
 // ─── Automation form dialog ───────────────────────────────────────────────────
 
 function AutomationDialog({
@@ -903,6 +966,11 @@ function AutomationDialog({
   const [triggerConfig, setTriggerConfig] = useState<Record<string, unknown>>(editing?.triggerConfig ?? emptyTriggerConfig("REFERRAL_CREATED"))
   const [actionType, setActionType] = useState<AutomationAction>(editing?.actionType ?? "CREATE_TASK")
   const [actionConfig, setActionConfig] = useState<Record<string, unknown>>(editing?.actionConfig ?? emptyActionConfig("CREATE_TASK"))
+  const editingFlow = (editing?.flow ?? null) as AutomationFlow | null
+  const [mode, setMode] = useState<"single" | "branch">(editingFlow ? "branch" : "single")
+  const [flow, setFlow] = useState<AutomationFlow>(editingFlow ?? {
+    match: "all", rules: [], then: [], else: [],
+  })
   const [error, setError] = useState("")
 
   if (!open) return null
@@ -919,12 +987,19 @@ function AutomationDialog({
 
   function handleSubmit() {
     if (!name.trim()) { setError("Name is required"); return }
+    if (mode === "branch" && flow.then.length === 0 && flow.else.length === 0) {
+      setError("Add at least one action to the Then or Else branch"); return
+    }
     setError("")
+    // When branching, actionType/actionConfig are unused by the engine — keep a valid
+    // value (first then-action's type) to satisfy the non-null column.
+    const effectiveActionType = mode === "branch" ? (flow.then[0]?.type ?? flow.else[0]?.type ?? "CREATE_TASK") : actionType
+    const effectiveFlow = mode === "branch" ? (flow as unknown as Record<string, unknown>) : null
     startTransition(async () => {
       if (editing) {
-        await updateAutomation(editing.id, { name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType, actionConfig, isActive: editing.isActive })
+        await updateAutomation(editing.id, { name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow, isActive: editing.isActive })
       } else {
-        await createAutomation({ name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType, actionConfig })
+        await createAutomation({ name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow })
       }
       onClose(true)
     })
@@ -966,18 +1041,84 @@ function AutomationDialog({
             />
           </div>
 
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold shrink-0">A</div>
-              <h3 className="text-sm font-semibold text-slate-700">ACTION — Do this</h3>
+          {/* Connector */}
+          <div className="flex justify-center"><div className="w-px h-4 bg-slate-200" /></div>
+
+          {/* Mode toggle */}
+          <div className="flex items-center gap-2 justify-center">
+            <div className="inline-flex bg-slate-100 rounded-lg p-0.5">
+              <button type="button" onClick={() => setMode("single")}
+                className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors", mode === "single" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                Single action
+              </button>
+              <button type="button" onClick={() => setMode("branch")}
+                className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors", mode === "branch" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                If / Else branch
+              </button>
             </div>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={actionType} onChange={e => handleActionChange(e.target.value as AutomationAction)}>
-              {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(a => (
-                <option key={a} value={a}>{ACTION_LABELS[a]}</option>
-              ))}
-            </select>
-            <ActionConfigFields type={actionType} config={actionConfig} onChange={setActionConfig} users={users} tags={tags} />
           </div>
+
+          {mode === "single" ? (
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold shrink-0">A</div>
+                <h3 className="text-sm font-semibold text-slate-700">ACTION — Do this</h3>
+              </div>
+              <select className="w-full border rounded-md px-3 py-2 text-sm" value={actionType} onChange={e => handleActionChange(e.target.value as AutomationAction)}>
+                {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(a => (
+                  <option key={a} value={a}>{ACTION_LABELS[a]}</option>
+                ))}
+              </select>
+              <ActionConfigFields type={actionType} config={actionConfig} onChange={setActionConfig} users={users} tags={tags} />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* IF card */}
+              <div className="border border-violet-200 rounded-lg p-4 space-y-3 bg-violet-50/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-600 text-xs font-bold shrink-0">IF</div>
+                    <h3 className="text-sm font-semibold text-slate-700">When these conditions are met</h3>
+                  </div>
+                  <div className="inline-flex bg-white border border-slate-200 rounded-md p-0.5 text-xs">
+                    <button type="button" onClick={() => setFlow({ ...flow, match: "all" })}
+                      className={cn("px-2 py-0.5 rounded font-medium", flow.match === "all" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match all</button>
+                    <button type="button" onClick={() => setFlow({ ...flow, match: "any" })}
+                      className={cn("px-2 py-0.5 rounded font-medium", flow.match === "any" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match any</button>
+                  </div>
+                </div>
+                <ConditionsBuilder
+                  conditions={flow.rules}
+                  onChange={rules => setFlow({ ...flow, rules })}
+                  users={users} practices={practices} locations={locations} tags={tags}
+                />
+              </div>
+
+              <div className="flex justify-center"><div className="w-px h-4 bg-slate-200" /></div>
+
+              {/* THEN card */}
+              <div className="border border-emerald-200 rounded-lg p-4 space-y-3 bg-emerald-50/40">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center px-2 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold shrink-0">THEN</div>
+                  <h3 className="text-sm font-semibold text-slate-700">Do this</h3>
+                </div>
+                <ActionList actions={flow.then} onChange={then => setFlow({ ...flow, then })} users={users} tags={tags}
+                  emptyLabel="No actions yet — add what should happen when conditions match." />
+              </div>
+
+              <div className="flex justify-center"><div className="w-px h-4 bg-slate-200" /></div>
+
+              {/* ELSE card */}
+              <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50/60">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center px-2 h-6 rounded-full bg-slate-200 text-slate-600 text-xs font-bold shrink-0">ELSE</div>
+                  <h3 className="text-sm font-semibold text-slate-700">Otherwise do this <span className="text-slate-400 font-normal">(optional)</span></h3>
+                </div>
+                <ActionList actions={flow.else} onChange={els => setFlow({ ...flow, else: els })} users={users} tags={tags}
+                  emptyLabel="No else actions — nothing happens when conditions don't match." />
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
