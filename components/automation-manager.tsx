@@ -1401,6 +1401,13 @@ function AutomationRow({
   const triggerColor = TRIGGER_COLORS[auto.triggerType] ?? "bg-slate-100 text-slate-700"
   const triggerLabel = TRIGGER_LABELS[auto.triggerType] ?? auto.triggerType
 
+  // Determine automation mode
+  const graph = (auto.graph ?? null) as AutomationGraph | null
+  const flow = (auto.flow ?? null) as AutomationFlow | null
+  const isVisual = graph && graph.rootId
+  const isBranch = !isVisual && flow && (flow.then?.length || flow.else?.length)
+  const stepCount = isVisual ? Object.keys(graph.nodes).length : 0
+
   return (
     <div className={cn("border rounded-lg bg-white transition-all", !auto.isActive && "opacity-60")}>
       <div className="flex items-start gap-3 p-4">
@@ -1425,9 +1432,19 @@ function AutomationRow({
               {triggerLabel}
             </span>
             <span className="text-xs text-slate-400">→</span>
-            <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", ACTION_COLORS[auto.actionType])}>
-              {ACTION_LABELS[auto.actionType]}
-            </span>
+            {isVisual ? (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 flex items-center gap-1">
+                <GitBranch className="h-3 w-3" /> Visual flow ({stepCount} steps)
+              </span>
+            ) : isBranch ? (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">
+                If / Else
+              </span>
+            ) : (
+              <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", ACTION_COLORS[auto.actionType])}>
+                {ACTION_LABELS[auto.actionType]}
+              </span>
+            )}
             <span className="text-xs text-slate-400 ml-auto">{auto._count.runs} run{auto._count.runs !== 1 ? "s" : ""}</span>
           </div>
         </div>
