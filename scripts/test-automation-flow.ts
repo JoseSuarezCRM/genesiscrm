@@ -4,7 +4,7 @@ import {
   evaluateRule, flowConditionPasses, selectBranch,
   type ReferralForConditions, type AutomationFlow,
 } from "../lib/automation-conditions"
-import { resolveGraphActions, isValidGraph, type AutomationGraph } from "../lib/automation-graph"
+import { resolveGraphActions, isValidGraph, insertAt, deleteNode, type AutomationGraph } from "../lib/automation-graph"
 
 let passed = 0
 let failed = 0
@@ -102,6 +102,19 @@ const cyclic: AutomationGraph = {
 }
 assert("cycle terminates (no infinite loop)", resolveGraphActions(cyclic, base).map(a => a.type), ["ADD_TAG", "SEND_SMS"])
 assert("dangling pointer → invalid", isValidGraph({ rootId: "1", nodes: { "1": { id: "1", kind: "action", actionType: "ADD_TAG", config: {}, next: "missing" } } }), false)
+
+console.log("\ngraph editing:")
+// start: A → null. Insert B after A → A → B → null
+let g2: AutomationGraph = { rootId: "a", nodes: { a: { id: "a", kind: "action", actionType: "ADD_TAG", config: {}, next: null } } }
+g2 = insertAt(g2, { kind: "after", nodeId: "a" }, { id: "b", kind: "action", actionType: "SEND_SMS", config: {}, next: null })
+assert("insert after A → [A,B]", resolveGraphActions(g2, base).map(a => a.type), ["ADD_TAG", "SEND_SMS"])
+// insert at root → C → A → B
+g2 = insertAt(g2, { kind: "root" }, { id: "c", kind: "action", actionType: "ASSIGN_REFERRAL", config: {}, next: null })
+assert("insert at root → [C,A,B]", resolveGraphActions(g2, base).map(a => a.type), ["ASSIGN_REFERRAL", "ADD_TAG", "SEND_SMS"])
+// delete A → C → B
+g2 = deleteNode(g2, "a")
+assert("delete A → [C,B]", resolveGraphActions(g2, base).map(a => a.type), ["ASSIGN_REFERRAL", "SEND_SMS"])
+assert("graph still valid after edits", isValidGraph(g2), true)
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)

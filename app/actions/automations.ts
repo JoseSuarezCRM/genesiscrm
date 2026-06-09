@@ -14,6 +14,7 @@ export async function createAutomation(data: {
   actionType: AutomationAction
   actionConfig: Record<string, unknown>
   flow?: Record<string, unknown> | null
+  graph?: Record<string, unknown> | null
 }) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
@@ -27,6 +28,7 @@ export async function createAutomation(data: {
       actionType: data.actionType,
       actionConfig: data.actionConfig as any,
       flow: (data.flow ?? undefined) as any,
+      graph: (data.graph ?? undefined) as any,
       createdById: session.user.id,
     },
   })
@@ -43,6 +45,7 @@ export async function updateAutomation(id: string, data: {
   actionType: AutomationAction
   actionConfig: Record<string, unknown>
   flow?: Record<string, unknown> | null
+  graph?: Record<string, unknown> | null
   isActive: boolean
 }) {
   const session = await auth()
@@ -58,6 +61,7 @@ export async function updateAutomation(id: string, data: {
       actionType: data.actionType,
       actionConfig: data.actionConfig as any,
       flow: (data.flow ?? null) as any,
+      graph: (data.graph ?? null) as any,
       isActive: data.isActive,
     },
   })

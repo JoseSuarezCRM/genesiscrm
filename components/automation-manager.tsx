@@ -10,10 +10,14 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Play, ChevronDown, ChevronUp, Info, X } from "lucide-react"
+import { Zap, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Play, ChevronDown, ChevronUp, Info, X, GitBranch, Flag } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
+import {
+  type AutomationGraph, type GraphNode, type Slot,
+  newNodeId, insertAt, deleteNode, updateNode, legacyToGraph,
+} from "@/lib/automation-graph"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +31,7 @@ interface Automation {
   actionType: AutomationAction
   actionConfig: Record<string, unknown>
   flow: Record<string, unknown> | null
+  graph: Record<string, unknown> | null
   createdAt: Date
   createdBy: { name: string | null; email: string }
   _count: { runs: number }
@@ -949,6 +954,205 @@ function ActionList({ actions, onChange, users, tags, emptyLabel }: {
   )
 }
 
+// ─── Visual flow canvas ───────────────────────────────────────────────────────
+
+function actionSummary(type: AutomationAction, config: Record<string, unknown>): string {
+  if (type === "CREATE_TASK" && config.title) return `Create task: ${config.title}`
+  if (type === "SEND_EMAIL" && config.subject) return `Send email: ${config.subject}`
+  if (type === "SEND_SMS") return "Send SMS"
+  if (type === "ADD_TAG") return "Add tag"
+  if (type === "UPDATE_REFERRAL_STATUS" && config.status) return `Set status: ${config.status}`
+  if (type === "ASSIGN_REFERRAL") return "Assign referral"
+  if (type === "SEND_NOTIFICATION") return "Send notification"
+  return ACTION_LABELS[type] ?? type
+}
+
+// vertical connector line
+function Connector() {
+  return <div className="flex justify-center"><div className="w-px h-5 bg-slate-300" /></div>
+}
+
+// "+" insert control with a small action/branch menu
+function InsertButton({ onAddAction, onAddBranch }: { onAddAction: () => void; onAddBranch: () => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="flex justify-center relative">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-6 h-6 rounded-full border border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-500 flex items-center justify-center shadow-sm">
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
+          <div className="absolute top-7 z-50 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-40">
+            <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddAction() }}
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
+              <Zap className="h-3.5 w-3.5 text-blue-500" /> Action
+            </button>
+            <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddBranch() }}
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
+              <GitBranch className="h-3.5 w-3.5 text-violet-500" /> If / Else
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function FlowCanvas({ graph, onChange, onEditNode }: {
+  graph: AutomationGraph
+  onChange: (g: AutomationGraph) => void
+  onEditNode: (id: string) => void
+}) {
+  function addAction(slot: Slot) {
+    const id = newNodeId()
+    onChange(insertAt(graph, slot, { id, kind: "action", actionType: "CREATE_TASK", config: emptyActionConfig("CREATE_TASK"), next: null }))
+    onEditNode(id)
+  }
+  function addBranch(slot: Slot) {
+    const id = newNodeId()
+    onChange(insertAt(graph, slot, { id, kind: "branch", match: "all", rules: [], thenNext: null, elseNext: null }))
+    onEditNode(id)
+  }
+
+  function renderSlot(slot: Slot, depth = 0): React.ReactNode {
+    if (depth > 50) return null // safety
+    const startId = slot.kind === "root" ? graph.rootId
+      : slot.kind === "after" ? (graph.nodes[slot.nodeId] as any)?.next
+      : slot.kind === "then" ? (graph.nodes[slot.nodeId] as any)?.thenNext
+      : (graph.nodes[slot.nodeId] as any)?.elseNext
+
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddBranch={() => addBranch(slot)} />
+
+    if (!startId || !graph.nodes[startId]) {
+      return (
+        <div className="flex flex-col items-center">
+          {insert}
+          <Connector />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-400 text-xs font-medium">
+            <Flag className="h-3 w-3" /> End
+          </div>
+        </div>
+      )
+    }
+
+    const node = graph.nodes[startId]
+    return (
+      <div className="flex flex-col items-center">
+        {insert}
+        <Connector />
+        {node.kind === "action" ? (
+          <>
+            <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              color="blue" icon={<Zap className="h-3.5 w-3.5" />} title={actionSummary(node.actionType as AutomationAction, node.config)} />
+            {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
+          </>
+        ) : (
+          <>
+            <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              color="violet" icon={<GitBranch className="h-3.5 w-3.5" />}
+              title={`If ${node.rules.length} condition${node.rules.length === 1 ? "" : "s"} (match ${node.match})`} />
+            <Connector />
+            <div className="grid grid-cols-2 gap-6 items-start">
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Then</span>
+                {renderSlot({ kind: "then", nodeId: node.id }, depth + 1)}
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Else</span>
+                {renderSlot({ kind: "else", nodeId: node.id }, depth + 1)}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto py-2">
+      <div className="flex flex-col items-center min-w-fit">
+        {/* Trigger node at the top */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-amber-300 bg-amber-50 text-amber-800 text-sm font-semibold">
+          <Zap className="h-4 w-4" /> Trigger
+        </div>
+        {renderSlot({ kind: "root" })}
+      </div>
+    </div>
+  )
+}
+
+function NodeChip({ title, icon, color, onClick, onDelete }: {
+  title: string; icon: React.ReactNode; color: "blue" | "violet"
+  onClick: () => void; onDelete: () => void
+}) {
+  return (
+    <div className={cn(
+      "group relative inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm cursor-pointer hover:shadow transition-shadow min-w-[180px] max-w-[260px]",
+      color === "blue" ? "border-blue-200" : "border-violet-200"
+    )} onClick={onClick}>
+      <span className={cn("shrink-0", color === "blue" ? "text-blue-500" : "text-violet-500")}>{icon}</span>
+      <span className="text-sm text-slate-700 truncate flex-1">{title}</span>
+      <button type="button" onClick={e => { e.stopPropagation(); onDelete() }}
+        className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 transition-opacity">
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations }: {
+  node: GraphNode
+  onSave: (n: GraphNode) => void
+  onClose: () => void
+  users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
+}) {
+  const [draft, setDraft] = useState<GraphNode>(node)
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="text-sm font-semibold text-slate-800">{draft.kind === "branch" ? "Edit branch (if/else)" : "Edit action"}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          {draft.kind === "action" ? (
+            <>
+              <select className="w-full border rounded-md px-3 py-2 text-sm"
+                value={draft.actionType}
+                onChange={e => { const t = e.target.value as AutomationAction; setDraft({ ...draft, actionType: t, config: emptyActionConfig(t) }) }}>
+                {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
+              </select>
+              <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Conditions</span>
+                <div className="inline-flex bg-slate-100 rounded-md p-0.5 text-xs">
+                  <button type="button" onClick={() => setDraft({ ...draft, match: "all" })}
+                    className={cn("px-2 py-0.5 rounded font-medium", draft.match === "all" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match all</button>
+                  <button type="button" onClick={() => setDraft({ ...draft, match: "any" })}
+                    className={cn("px-2 py-0.5 rounded font-medium", draft.match === "any" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match any</button>
+                </div>
+              </div>
+              <ConditionsBuilder conditions={draft.rules} onChange={rules => setDraft({ ...draft, rules })}
+                users={users} practices={practices} locations={locations} tags={tags} />
+            </>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 p-4 border-t">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
+          <button onClick={() => onSave(draft)} className="px-3 py-1.5 text-sm bg-zinc-900 text-white rounded-md hover:bg-zinc-800">Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Automation form dialog ───────────────────────────────────────────────────
 
 function AutomationDialog({
@@ -967,10 +1171,15 @@ function AutomationDialog({
   const [actionType, setActionType] = useState<AutomationAction>(editing?.actionType ?? "CREATE_TASK")
   const [actionConfig, setActionConfig] = useState<Record<string, unknown>>(editing?.actionConfig ?? emptyActionConfig("CREATE_TASK"))
   const editingFlow = (editing?.flow ?? null) as AutomationFlow | null
-  const [mode, setMode] = useState<"single" | "branch">(editingFlow ? "branch" : "single")
+  const editingGraph = (editing?.graph ?? null) as AutomationGraph | null
+  const [mode, setMode] = useState<"single" | "branch" | "visual">(editingGraph ? "visual" : editingFlow ? "branch" : "single")
   const [flow, setFlow] = useState<AutomationFlow>(editingFlow ?? {
     match: "all", rules: [], then: [], else: [],
   })
+  const [graph, setGraph] = useState<AutomationGraph>(
+    editingGraph ?? (editing ? legacyToGraph({ actionType: editing.actionType, actionConfig: editing.actionConfig, flow: editingFlow }) : { rootId: null, nodes: {} })
+  )
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [error, setError] = useState("")
 
   if (!open) return null
@@ -990,24 +1199,34 @@ function AutomationDialog({
     if (mode === "branch" && flow.then.length === 0 && flow.else.length === 0) {
       setError("Add at least one action to the Then or Else branch"); return
     }
+    if (mode === "visual" && !graph.rootId) {
+      setError("Add at least one step to the flow"); return
+    }
     setError("")
-    // When branching, actionType/actionConfig are unused by the engine — keep a valid
-    // value (first then-action's type) to satisfy the non-null column.
-    const effectiveActionType = mode === "branch" ? (flow.then[0]?.type ?? flow.else[0]?.type ?? "CREATE_TASK") : actionType
+    // actionType/actionConfig are unused by the engine when flow/graph is set —
+    // keep a valid enum to satisfy the non-null column.
+    const firstGraphAction = graph.rootId ? graph.nodes[graph.rootId] : null
+    const effectiveActionType =
+      mode === "visual" ? ((firstGraphAction && firstGraphAction.kind === "action" ? firstGraphAction.actionType : "CREATE_TASK") as AutomationAction)
+      : mode === "branch" ? (flow.then[0]?.type ?? flow.else[0]?.type ?? "CREATE_TASK")
+      : actionType
     const effectiveFlow = mode === "branch" ? (flow as unknown as Record<string, unknown>) : null
+    const effectiveGraph = mode === "visual" ? (graph as unknown as Record<string, unknown>) : null
     startTransition(async () => {
       if (editing) {
-        await updateAutomation(editing.id, { name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow, isActive: editing.isActive })
+        await updateAutomation(editing.id, { name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow, graph: effectiveGraph, isActive: editing.isActive })
       } else {
-        await createAutomation({ name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow })
+        await createAutomation({ name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow, graph: effectiveGraph })
       }
       onClose(true)
     })
   }
 
+  const editingNode = editingNodeId ? graph.nodes[editingNodeId] : null
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className={cn("bg-white rounded-xl shadow-xl w-full max-h-[90vh] overflow-y-auto transition-[max-width]", mode === "visual" ? "max-w-4xl" : "max-w-2xl")}>
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="text-base font-semibold text-slate-900">{editing ? "Edit Automation" : "New Automation Rule"}</h2>
           <button onClick={() => onClose()} className="text-slate-400 hover:text-slate-600 text-lg leading-none">&times;</button>
@@ -1055,10 +1274,18 @@ function AutomationDialog({
                 className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors", mode === "branch" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
                 If / Else branch
               </button>
+              <button type="button" onClick={() => { if (mode !== "visual" && !graph.rootId) setGraph(legacyToGraph({ actionType, actionConfig, flow: mode === "branch" ? flow : null })); setMode("visual") }}
+                className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors", mode === "visual" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                Visual flow
+              </button>
             </div>
           </div>
 
-          {mode === "single" ? (
+          {mode === "visual" ? (
+            <div className="border rounded-lg p-4 bg-slate-50/50">
+              <FlowCanvas graph={graph} onChange={setGraph} onEditNode={setEditingNodeId} />
+            </div>
+          ) : mode === "single" ? (
             <div className="border rounded-lg p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold shrink-0">A</div>
@@ -1130,6 +1357,15 @@ function AutomationDialog({
           </button>
         </div>
       </div>
+
+      {editingNode && (
+        <NodeEditModal
+          node={editingNode}
+          onClose={() => setEditingNodeId(null)}
+          onSave={(n) => { setGraph(updateNode(graph, n)); setEditingNodeId(null) }}
+          users={users} tags={tags} practices={practices} locations={locations}
+        />
+      )}
     </div>
   )
 }
