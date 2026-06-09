@@ -3,6 +3,7 @@ import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } fro
 import { sendEmail } from "@/lib/graph-mailer"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
+import { evaluateRule as evalRule, selectBranch, type AutomationFlow as PureFlow } from "@/lib/automation-conditions"
 
 // ─── Template variable resolution ─────────────────────────────────────────────
 
@@ -157,54 +158,8 @@ async function fetchReferralForEngine(referralId: string) {
 
 // ─── Action executor ──────────────────────────────────────────────────────────
 
-// Evaluate a single condition rule against a referral (reuses the operator set).
-function evaluateRule(referral: ReferralForConditions, cond: Condition): boolean {
-  const condVal = cond.value ?? ""
-  const condValLower = condVal.toLowerCase()
-  switch (cond.field) {
-    case "practiceId":
-      if (cond.op === "eq") return referral.referringPracticeId === condVal
-      if (cond.op === "ne") return referral.referringPracticeId !== condVal
-      if (cond.op === "empty") return referral.referringPracticeId === null
-      return true
-    case "locationId":
-      if (cond.op === "eq") return referral.referringLocationId === condVal
-      if (cond.op === "ne") return referral.referringLocationId !== condVal
-      if (cond.op === "empty") return referral.referringLocationId === null
-      return true
-    case "assignedToId":
-      if (cond.op === "eq") return referral.assignedToId === condVal
-      if (cond.op === "ne") return referral.assignedToId !== condVal
-      if (cond.op === "unassigned") return referral.assignedToId === null
-      return true
-    case "status":
-      if (cond.op === "eq") return referral.status === condVal
-      if (cond.op === "ne") return referral.status !== condVal
-      return true
-    case "insuranceProvider": {
-      const ip = (referral.insuranceProvider ?? "").toLowerCase()
-      if (cond.op === "contains") return ip.includes(condValLower)
-      if (cond.op === "eq") return ip === condValLower
-      if (cond.op === "empty") return !referral.insuranceProvider
-      return true
-    }
-    case "tagId": {
-      const hasTag = referral.tags.some(t => t.tagId === condVal)
-      if (cond.op === "has") return hasTag
-      if (cond.op === "not_has") return !hasTag
-      return true
-    }
-    default:
-      return true
-  }
-}
-
-interface AutomationFlow {
-  match?: "all" | "any"
-  rules?: Condition[]
-  then?: { type: AutomationAction; config: Record<string, unknown> }[]
-  else?: { type: AutomationAction; config: Record<string, unknown> }[]
-}
+// keep a reference so the import is used even though selectBranch wraps it
+void evalRule
 
 // Top-level executor: branch (if/else) when a flow is configured, else single action.
 async function executeAction(
@@ -213,24 +168,20 @@ async function executeAction(
   vars: TemplateVars,
   triggeredByUserId?: string
 ): Promise<void> {
-  const flow = automation.flow as AutomationFlow | null | undefined
+  const flow = automation.flow as PureFlow | null | undefined
   if (flow && (flow.then?.length || flow.else?.length)) {
-    let passed = true
+    // Resolve which branch runs. With no rules the THEN branch runs; if rules
+    // exist but we have no referral context, conditions can't pass → ELSE.
     const rules = flow.rules ?? []
-    if (rules.length && referralId) {
-      const ref = await fetchReferralForEngine(referralId)
-      if (ref) {
-        const r = ref as unknown as ReferralForConditions
-        passed = (flow.match === "any")
-          ? rules.some(c => evaluateRule(r, c))
-          : rules.every(c => evaluateRule(r, c))
-      } else {
-        passed = false
-      }
+    let branch = flow.then ?? []
+    if (rules.length) {
+      const ref = referralId ? await fetchReferralForEngine(referralId) : null
+      branch = ref
+        ? selectBranch(ref as unknown as Parameters<typeof selectBranch>[0], flow)
+        : (flow.else ?? [])
     }
-    const branch = passed ? (flow.then ?? []) : (flow.else ?? [])
     for (const action of branch) {
-      await runSingleAction(action.type, action.config ?? {}, referralId, vars, triggeredByUserId)
+      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId)
     }
     return
   }
