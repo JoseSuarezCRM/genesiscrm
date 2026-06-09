@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
+import { PERSONALIZATION_GROUPS } from "@/lib/personalization"
 import { Send, X, Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Clock } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -274,7 +275,7 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
           </div>
 
           <div className="px-4 py-2">
-            <RichTextEditor value={body} onChange={setBody} minHeight={180} />
+            <RichTextEditor value={body} onChange={setBody} minHeight={180} tokenGroups={PERSONALIZATION_GROUPS} />
           </div>
 
           <div className="px-4 py-2">
