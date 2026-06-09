@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/graph-mailer"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { evaluateRule as evalRule, selectBranch, type AutomationFlow as PureFlow } from "@/lib/automation-conditions"
+import { resolveGraphActions, type AutomationGraph } from "@/lib/automation-graph"
 
 // ─── Template variable resolution ─────────────────────────────────────────────
 
@@ -161,13 +162,23 @@ async function fetchReferralForEngine(referralId: string) {
 // keep a reference so the import is used even though selectBranch wraps it
 void evalRule
 
-// Top-level executor: branch (if/else) when a flow is configured, else single action.
+// Top-level executor: graph (visual flow) → flow (if/else) → single action.
 async function executeAction(
-  automation: { id: string; actionType: AutomationAction; actionConfig: unknown; flow?: unknown },
+  automation: { id: string; actionType: AutomationAction; actionConfig: unknown; flow?: unknown; graph?: unknown },
   referralId: string | null,
   vars: TemplateVars,
   triggeredByUserId?: string
 ): Promise<void> {
+  const graph = automation.graph as AutomationGraph | null | undefined
+  if (graph && graph.rootId && graph.nodes) {
+    const ref = referralId ? await fetchReferralForEngine(referralId) : null
+    const actions = resolveGraphActions(graph, ref ? (ref as unknown as Parameters<typeof resolveGraphActions>[1]) : null)
+    for (const action of actions) {
+      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId)
+    }
+    return
+  }
+
   const flow = automation.flow as PureFlow | null | undefined
   if (flow && (flow.then?.length || flow.else?.length)) {
     // Resolve which branch runs. With no rules the THEN branch runs; if rules

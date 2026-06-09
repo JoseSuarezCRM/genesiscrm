@@ -489,6 +489,7 @@ model Automation {
   actionType    AutomationAction
   actionConfig  Json              @default("{}")
   flow          Json?             // if/else branch: { match, rules[], then[], else[] }; null = single action
+  graph         Json?             // visual flow graph: { rootId, nodes }; takes precedence when set
   createdById   String
   createdBy     User              @relation(fields: [createdById], references: [id])
   createdAt     DateTime          @default(now())

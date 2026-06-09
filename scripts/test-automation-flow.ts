@@ -4,6 +4,7 @@ import {
   evaluateRule, flowConditionPasses, selectBranch,
   type ReferralForConditions, type AutomationFlow,
 } from "../lib/automation-conditions"
+import { resolveGraphActions, isValidGraph, type AutomationGraph } from "../lib/automation-graph"
 
 let passed = 0
 let failed = 0
@@ -63,6 +64,44 @@ assert("conditions met → THEN", selectBranch(base, flowAll), THEN)
 assert("conditions not met → ELSE", selectBranch({ ...base, status: "COMPLETED" }, flowAll), ELSE)
 assert("no rules → THEN", selectBranch(base, { then: THEN, else: ELSE }), THEN)
 assert("not met, no ELSE → empty", selectBranch({ ...base, status: "COMPLETED" }, { match: "all", rules: [{ field: "status", op: "eq", value: "NEW" }], then: THEN }), [])
+
+console.log("\ngraph traversal:")
+// trigger → A(action) → branch(status=NEW) ? then: B : else: C → end
+const graph: AutomationGraph = {
+  rootId: "a",
+  nodes: {
+    a: { id: "a", kind: "action", actionType: "ADD_TAG", config: { tagId: "t1" }, next: "br" },
+    br: { id: "br", kind: "branch", match: "all", rules: [{ field: "status", op: "eq", value: "NEW" }], thenNext: "b", elseNext: "c" },
+    b: { id: "b", kind: "action", actionType: "SEND_EMAIL", config: { subject: "then-email" }, next: null },
+    c: { id: "c", kind: "action", actionType: "CREATE_TASK", config: { title: "else-task" }, next: null },
+  },
+}
+assert("valid graph", isValidGraph(graph), true)
+assert("NEW → A then B", resolveGraphActions(graph, base).map(a => a.type), ["ADD_TAG", "SEND_EMAIL"])
+assert("COMPLETED → A then C", resolveGraphActions(graph, { ...base, status: "COMPLETED" }).map(a => a.type), ["ADD_TAG", "CREATE_TASK"])
+assert("no referral → A then ELSE", resolveGraphActions(graph, null).map(a => a.type), ["ADD_TAG", "CREATE_TASK"])
+
+// linear multi-step: A → B → C → end
+const linear: AutomationGraph = {
+  rootId: "1",
+  nodes: {
+    "1": { id: "1", kind: "action", actionType: "ADD_TAG", config: {}, next: "2" },
+    "2": { id: "2", kind: "action", actionType: "ASSIGN_REFERRAL", config: {}, next: "3" },
+    "3": { id: "3", kind: "action", actionType: "SEND_SMS", config: {}, next: null },
+  },
+}
+assert("linear runs all in order", resolveGraphActions(linear, base).map(a => a.type), ["ADD_TAG", "ASSIGN_REFERRAL", "SEND_SMS"])
+
+// cycle guard: A → B → A
+const cyclic: AutomationGraph = {
+  rootId: "1",
+  nodes: {
+    "1": { id: "1", kind: "action", actionType: "ADD_TAG", config: {}, next: "2" },
+    "2": { id: "2", kind: "action", actionType: "SEND_SMS", config: {}, next: "1" },
+  },
+}
+assert("cycle terminates (no infinite loop)", resolveGraphActions(cyclic, base).map(a => a.type), ["ADD_TAG", "SEND_SMS"])
+assert("dangling pointer → invalid", isValidGraph({ rootId: "1", nodes: { "1": { id: "1", kind: "action", actionType: "ADD_TAG", config: {}, next: "missing" } } }), false)
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
