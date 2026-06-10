@@ -51,13 +51,13 @@ export default function NotificationBell({ initialNotifications }: Props) {
   }
 
   return (
-    <div ref={panelRef} className="fixed top-4 right-4 z-50">
+    <div ref={panelRef} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
         title="Notifications"
         className={cn(
-          "relative flex items-center justify-center w-9 h-9 rounded-full bg-white border shadow-sm hover:shadow-md transition-shadow text-slate-600 hover:text-slate-900",
-          open && "ring-2 ring-blue-400"
+          "relative flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors",
+          open && "bg-slate-100 text-slate-700"
         )}
       >
         <Bell className="h-4 w-4" />
@@ -69,7 +69,7 @@ export default function NotificationBell({ initialNotifications }: Props) {
       </button>
 
       {open && (
-        <div className="absolute top-11 right-0 bg-white border rounded-xl shadow-xl w-80 max-h-[420px] flex flex-col">
+        <div className="absolute top-12 right-0 bg-white border border-slate-200 rounded-xl shadow-lg w-80 max-h-[420px] flex flex-col z-50">
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <p className="text-sm font-semibold text-slate-800">Notifications</p>
             {unreadCount > 0 && (
