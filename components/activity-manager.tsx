@@ -6,6 +6,7 @@ import { createActivityView, updateActivityView, deleteActivityView } from "@/ap
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
+import SelectedProvidersCard from "@/components/selected-providers-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -1341,6 +1342,18 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 }
               </div>
             </div>
+
+            {/* Provider Details Card */}
+            {form.providerIds.length > 0 && (
+              <div className="col-span-2">
+                <SelectedProvidersCard
+                  selectedDoctors={form.providerIds
+                    .map(id => combinedDoctors.find(d => d.id === id))
+                    .filter((d): d is typeof combinedDoctors[0] => !!d)
+                  }
+                />
+              </div>
+            )}
             {createProviderModal.open && (
               <div className="col-span-2">
                 <InlineCreateProvider
