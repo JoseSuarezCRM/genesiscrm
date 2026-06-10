@@ -1,26 +1,23 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import { Trash2, Settings } from "lucide-react"
-import Link from "next/link"
 import BackButton from "@/components/back-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
-import { formatDate, formatPhone } from "@/lib/utils"
-import { ReferralStatus } from "@prisma/client"
-import { STATUS_LABELS } from "@/lib/utils"
-import { updateReferralStatus, deleteReferral } from "@/app/actions/referrals"
+import { formatDate } from "@/lib/utils"
+import { auth } from "@/lib/auth"
+import { deleteReferral } from "@/app/actions/referrals"
 import DocumentUpload from "@/components/document-upload"
 import DocumentList from "@/components/document-list"
 import EditReferralDialog from "@/components/edit-referral-dialog"
 import ReferralNotesEditor from "@/components/referral-notes-editor"
 import OutreachDialog from "@/components/outreach-dialog"
-import TagSelector from "@/components/tag-selector"
 import CallTracker from "@/components/call-tracker"
-import ReferralAssignee from "@/components/referral-assignee"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
-import { getCardLayout } from "@/app/actions/card-layouts"
+import { getCardLayout, getCardLayouts } from "@/app/actions/card-layouts"
+import ReferralDetailLeftColumn from "@/components/referral-detail-left-column"
 import ReferralDetailRightColumn from "@/components/referral-detail-right-column"
 
 interface Props {
@@ -28,25 +25,10 @@ interface Props {
   searchParams: { from?: string }
 }
 
-function PropertyRow({ label, value, href }: { label: string; value: string | null | undefined; href?: string }) {
-  const content = <span className="text-sm text-slate-900 text-right">{value ?? "—"}</span>
-
-  return (
-    <div className="flex justify-between gap-4 py-2.5 border-b border-slate-100 last:border-0">
-      <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
-      {href ? (
-        <Link href={href} className="text-sm text-blue-600 hover:text-blue-700 hover:underline text-right">
-          {value ?? "—"}
-        </Link>
-      ) : (
-        content
-      )}
-    </div>
-  )
-}
-
-
 export default async function ReferralDetailPage({ params, searchParams }: Props) {
+  const session = await auth()
+  const isAdmin = (session?.user as any)?.role === "ADMIN"
+
   const referral = await prisma.referral.findUnique({
     where: { id: params.id },
     include: {
@@ -71,7 +53,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
 
   if (!referral) notFound()
 
-  const [allTags, users, practices, pipelines, customProperties, referralCardLayout, practiceCardLayout, providerCardLayout] = await Promise.all([
+  const [allTags, users, practices, pipelines, customProperties, referralCardLayout, practiceCardLayout, providerCardLayout, leftCards] = await Promise.all([
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.referringPractice.findMany({
@@ -92,6 +74,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
     getCardLayout("REFERRAL", "Referral"),
     getCardLayout("REFERRAL", "Practice"),
     getCardLayout("REFERRAL", "Provider"),
+    getCardLayouts("REFERRAL", "LEFT"),
   ])
 
   return (
@@ -123,70 +106,15 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
 
       {/* Three-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)]">
-        {/* LEFT: Properties Sidebar */}
+        {/* LEFT: Properties Sidebar (customizable cards) */}
         <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
-          {/* Status & Tags */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-1.5">
-                {Object.values(ReferralStatus).map((s) => (
-                  <form key={s} action={async () => { "use server"; await updateReferralStatus(referral.id, s) }}>
-                    <Button size="sm" variant={referral.status === s ? "default" : "outline"} type="submit" className="w-full text-xs">
-                      {STATUS_LABELS[s]}
-                    </Button>
-                  </form>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Assignee */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Assigned To</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ReferralAssignee referralId={referral.id} assignedTo={referral.assignedTo} users={users} />
-            </CardContent>
-          </Card>
-
-          {/* Tags */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Tags</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TagSelector referralId={referral.id} allTags={allTags} selectedTagIds={referral.tags.map((t) => t.tagId)} />
-            </CardContent>
-          </Card>
-
-          {/* Patient Properties */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Patient</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-0">
-              <PropertyRow label="MRN" value={(referral as any).genesisMrn} />
-              <PropertyRow label="DOB" value={formatDate(referral.patientDob)} />
-              <PropertyRow label="Phone" value={formatPhone(referral.patientPhone)} />
-              <PropertyRow label="Email" value={referral.patientEmail} />
-            </CardContent>
-          </Card>
-
-          {/* Referral Source Properties */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Source</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-0">
-              <PropertyRow label="Practice" value={referral.referringPractice?.name} />
-              <PropertyRow label="Provider" value={referral.referringDoctor ? [(referral.referringDoctor as any).title, referral.referringDoctor.name].filter(Boolean).join(" ") : referral.referringDoctorName} />
-              <PropertyRow label="NPI" value={referral.referringNpi ?? (referral.referringDoctor as any)?.npi} />
-            </CardContent>
-          </Card>
+          <ReferralDetailLeftColumn
+            referral={referral}
+            users={users}
+            allTags={allTags}
+            leftCards={leftCards as any}
+            isAdmin={isAdmin}
+          />
 
           {/* Custom Properties */}
           {customProperties.length > 0 && (
@@ -271,6 +199,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           referralCardLayout={referralCardLayout}
           practiceCardLayout={practiceCardLayout}
           providerCardLayout={providerCardLayout}
+          isAdmin={isAdmin}
         />
       </div>
     </div>

@@ -1,12 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useTransition } from "react"
 import Link from "next/link"
-import { Settings } from "lucide-react"
+import { Settings, SlidersHorizontal } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { STATUS_LABELS } from "@/lib/utils"
 import { ReferralStatus } from "@prisma/client"
 import CardCustomizationModal from "@/components/card-customization-modal"
+import { setCardVisibility } from "@/app/actions/card-layouts"
 import { formatDate, formatPhone } from "@/lib/utils"
 
 interface CardLayout {
@@ -22,10 +32,86 @@ interface Props {
   referralCardLayout: CardLayout
   practiceCardLayout: CardLayout
   providerCardLayout: CardLayout
+  isAdmin: boolean
 }
 
 function getFieldValue(obj: any, path: string): any {
   return path.split(".").reduce((curr, prop) => curr?.[prop], obj)
+}
+
+function CardsVisibilityModal({
+  open,
+  onOpenChange,
+  layouts,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  layouts: CardLayout[]
+  onSaved: (visibility: Record<string, boolean>) => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [visibility, setVisibility] = useState<Record<string, boolean>>(
+    Object.fromEntries(layouts.map((l) => [l.cardName, l.visible !== false]))
+  )
+
+  const handleSave = () => {
+    startTransition(async () => {
+      for (const layout of layouts) {
+        const next = visibility[layout.cardName]
+        if (next !== (layout.visible !== false)) {
+          await setCardVisibility(
+            layout.entityType as any,
+            layout.cardName,
+            layout.title,
+            next
+          )
+        }
+      }
+      onSaved(visibility)
+      onOpenChange(false)
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Associated Cards</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-4">
+          <p className="text-xs text-slate-500">
+            Choose which cards appear in this column on all referrals.
+          </p>
+          {layouts.map((layout) => (
+            <div key={layout.cardName} className="flex items-center gap-2">
+              <Checkbox
+                id={`card-visible-${layout.cardName}`}
+                checked={visibility[layout.cardName]}
+                onCheckedChange={(checked) =>
+                  setVisibility((prev) => ({ ...prev, [layout.cardName]: checked === true }))
+                }
+              />
+              <label
+                htmlFor={`card-visible-${layout.cardName}`}
+                className="text-sm text-slate-700 cursor-pointer flex-1"
+              >
+                {layout.title}
+              </label>
+            </div>
+          ))}
+        </div>
+        <DialogFooter className="border-t pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isPending}>
+            {isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export default function ReferralDetailRightColumn({
@@ -33,8 +119,10 @@ export default function ReferralDetailRightColumn({
   referralCardLayout,
   practiceCardLayout,
   providerCardLayout,
+  isAdmin,
 }: Props) {
   const [customizationOpen, setCustomizationOpen] = useState(false)
+  const [cardsModalOpen, setCardsModalOpen] = useState(false)
   const [editingCardName, setEditingCardName] = useState<string | null>(null)
   const [layouts, setLayouts] = useState([
     referralCardLayout,
@@ -114,18 +202,32 @@ export default function ReferralDetailRightColumn({
   return (
     <>
       <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
+        {isAdmin && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setCardsModalOpen(true)}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+              title="Choose which cards appear"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" /> Customize cards
+            </button>
+          </div>
+        )}
+
         {/* Referral Info Card */}
         {currentReferralLayout.visible !== false && (
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentReferralLayout.title}</CardTitle>
-              <button
-                onClick={() => handleOpenCustomization("Referral")}
-                className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Customize card"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleOpenCustomization("Referral")}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Customize card"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              )}
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {currentReferralLayout.fields.length > 0 ? (
@@ -178,13 +280,15 @@ export default function ReferralDetailRightColumn({
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentPracticeLayout.title}</CardTitle>
-              <button
-                onClick={() => handleOpenCustomization("Practice")}
-                className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Customize card"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleOpenCustomization("Practice")}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Customize card"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              )}
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {!referral.referringPractice ? (
@@ -233,13 +337,15 @@ export default function ReferralDetailRightColumn({
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentProviderLayout.title}</CardTitle>
-              <button
-                onClick={() => handleOpenCustomization("Provider")}
-                className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Customize card"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleOpenCustomization("Provider")}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Customize card"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              )}
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {!referral.referringDoctor ? (
@@ -296,6 +402,20 @@ export default function ReferralDetailRightColumn({
           </Card>
         )}
       </div>
+
+      {/* Card visibility modal */}
+      {cardsModalOpen && (
+        <CardsVisibilityModal
+          open={cardsModalOpen}
+          onOpenChange={setCardsModalOpen}
+          layouts={layouts}
+          onSaved={(visibility) =>
+            setLayouts((prev) =>
+              prev.map((l) => ({ ...l, visible: visibility[l.cardName] }))
+            )
+          }
+        />
+      )}
 
       {/* Customization Modal */}
       {editingCardName && (

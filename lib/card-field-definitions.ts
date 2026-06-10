@@ -72,6 +72,28 @@ export const cardFieldDefinitions: Record<EntityType, Record<string, CardFieldDe
   },
 }
 
+// Properties available for custom cards in the left sidebar of the referral detail page.
+// Widget fields (status, assignedTo, tags) render interactive controls; the rest render values.
+export const referralLeftFieldPool: { id: string; label: string }[] = [
+  { id: "status", label: "Status" },
+  { id: "assignedTo", label: "Assigned To" },
+  { id: "tags", label: "Tags" },
+  { id: "mrn", label: "MRN" },
+  { id: "dob", label: "Date of Birth" },
+  { id: "patientPhone", label: "Patient Phone" },
+  { id: "patientEmail", label: "Patient Email" },
+  { id: "practice", label: "Practice" },
+  { id: "provider", label: "Provider" },
+  { id: "npi", label: "NPI" },
+  { id: "location", label: "Location" },
+  { id: "insurance", label: "Insurance" },
+  { id: "pipeline", label: "Pipeline" },
+  { id: "referralDate", label: "Referral Date" },
+  { id: "appointmentDate", label: "Appointment Date" },
+  { id: "createdBy", label: "Created By" },
+  { id: "createdAt", label: "Created Date" },
+]
+
 // Get all card names for an entity type
 export function getCardNamesForEntity(entityType: EntityType): string[] {
   return Object.keys(cardFieldDefinitions[entityType] || {})

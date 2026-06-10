@@ -177,6 +177,8 @@ model CardLayout {
   cardName         String
   title            String
   fields           String[]                   @default([])
+  section          String                     @default("RIGHT") // LEFT (properties sidebar) or RIGHT (associated objects)
+  visible          Boolean                    @default(true)
   order            Int                        @default(0)
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
