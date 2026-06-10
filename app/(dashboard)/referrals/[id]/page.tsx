@@ -275,9 +275,9 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {referralCardLayout.fields.length > 0 ? (
-                referralCardLayout.fields.map((fieldId) => {
+                referralCardLayout.fields.map((fieldId: string) => {
                   const fieldMap: Record<string, { label: string; path: string; formatter?: (val: any) => string }> = {
-                    status: { label: "Status", path: "status", formatter: (val) => STATUS_LABELS[val] || val },
+                    status: { label: "Status", path: "status", formatter: (val: any) => (typeof val === 'string' ? STATUS_LABELS[val as ReferralStatus] : val) || val },
                     pipeline: { label: "Pipeline", path: "pipeline.name" },
                     location: { label: "Location", path: "referringLocation.name" },
                     insurance: { label: "Insurance", path: "insuranceProvider" },
@@ -306,8 +306,8 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
                 </a>
               </CardHeader>
               <CardContent className="space-y-0 text-sm">
-                {practiceCardLayout.fields.length > 0 ? (
-                  practiceCardLayout.fields.map((fieldId) => {
+                {practiceCardLayout.fields.length > 0 && referral.referringPractice ? (
+                  practiceCardLayout.fields.map((fieldId: string) => {
                     const fieldMap: Record<string, { label: string; path: string }> = {
                       name: { label: "Name", path: "referringPractice.name" },
                       phone: { label: "Phone", path: "referringPractice.phone" },
@@ -320,12 +320,13 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
                     if (!field) return null
                     const value = getFieldValue(referral, field.path)
                     const formatted = fieldId === "phone" ? formatPhone(value) : value
+                    const practice = referral.referringPractice
                     return (
                       <PropertyRow
                         key={fieldId}
                         label={field.label}
                         value={formatted}
-                        href={fieldId === "name" ? `/practices/${referral.referringPractice.id}` : undefined}
+                        href={fieldId === "name" && practice ? `/practices/${practice.id}` : undefined}
                       />
                     )
                   })
@@ -346,8 +347,8 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
                 </a>
               </CardHeader>
               <CardContent className="space-y-0 text-sm">
-                {providerCardLayout.fields.length > 0 ? (
-                  providerCardLayout.fields.map((fieldId) => {
+                {providerCardLayout.fields.length > 0 && referral.referringDoctor ? (
+                  providerCardLayout.fields.map((fieldId: string) => {
                     const fieldMap: Record<string, { label: string; path: string }> = {
                       name: { label: "Name", path: "referringDoctor.name" },
                       specialty: { label: "Specialty", path: "referringDoctor.specialty" },
@@ -360,12 +361,13 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
                     if (!field) return null
                     const value = getFieldValue(referral, field.path)
                     const formatted = fieldId === "phone" ? formatPhone(value) : value
+                    const doctor = referral.referringDoctor
                     return (
                       <PropertyRow
                         key={fieldId}
                         label={field.label}
                         value={formatted}
-                        href={fieldId === "name" ? `/providers/${referral.referringDoctor.id}` : undefined}
+                        href={fieldId === "name" && doctor ? `/providers/${doctor.id}` : undefined}
                       />
                     )
                   })

@@ -61,7 +61,7 @@ const surgeryItems = [
 
 const adminItems = [
   { href: "/settings/users",        label: "Settings",           icon: Settings },
-  { href: "/settings/custom-properties", label: "Custom Properties", icon: Code2 },
+  { href: "/settings/customization", label: "Custom Properties", icon: Code2 },
   { href: "/settings/card-layouts", label: "Card Layouts",       icon: Code2 },
   { href: "/settings/outreach",     label: "Outreach Templates", icon: MessageSquare },
   { href: "/settings/embed",        label: "Embed Referral Form",icon: Code2 },
