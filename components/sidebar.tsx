@@ -10,7 +10,6 @@ import {
   UserCheck,
   LayoutDashboard,
   LogOut,
-  Settings,
   BarChart2,
   MessageSquare,
   Code2,
@@ -60,7 +59,6 @@ const surgeryItems = [
 ]
 
 const adminItems = [
-  { href: "/settings/users",        label: "Settings",           icon: Settings },
   { href: "/settings/outreach",     label: "Outreach Templates", icon: MessageSquare },
   { href: "/settings/embed",        label: "Embed Referral Form",icon: Code2 },
   { href: "/automations",           label: "Automations",        icon: Zap },
