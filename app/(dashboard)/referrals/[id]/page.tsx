@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import { Trash2, Settings } from "lucide-react"
+import Link from "next/link"
 import BackButton from "@/components/back-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,19 +20,32 @@ import CallTracker from "@/components/call-tracker"
 import ReferralAssignee from "@/components/referral-assignee"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
+import { getCardLayout } from "@/app/actions/card-layouts"
 
 interface Props {
   params: { id: string }
   searchParams: { from?: string }
 }
 
-function PropertyRow({ label, value }: { label: string; value: string | null | undefined }) {
+function PropertyRow({ label, value, href }: { label: string; value: string | null | undefined; href?: string }) {
+  const content = <span className="text-sm text-slate-900 text-right">{value ?? "—"}</span>
+
   return (
     <div className="flex justify-between gap-4 py-2.5 border-b border-slate-100 last:border-0">
       <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
-      <span className="text-sm text-slate-900 text-right">{value ?? "—"}</span>
+      {href ? (
+        <Link href={href} className="text-sm text-blue-600 hover:text-blue-700 hover:underline text-right">
+          {value ?? "—"}
+        </Link>
+      ) : (
+        content
+      )}
     </div>
   )
+}
+
+function getFieldValue(obj: any, path: string): any {
+  return path.split(".").reduce((curr, prop) => curr?.[prop], obj)
 }
 
 export default async function ReferralDetailPage({ params, searchParams }: Props) {
@@ -55,7 +69,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
 
   if (!referral) notFound()
 
-  const [allTags, users, practices, pipelines, customProperties] = await Promise.all([
+  const [allTags, users, practices, pipelines, customProperties, referralCardLayout, practiceCardLayout, providerCardLayout] = await Promise.all([
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.referringPractice.findMany({
@@ -73,6 +87,9 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
     loadCustomPropertiesForDetail("REFERRAL", params.id),
+    getCardLayout("REFERRAL", "Referral"),
+    getCardLayout("REFERRAL", "Practice"),
+    getCardLayout("REFERRAL", "Provider"),
   ])
 
   return (
@@ -251,16 +268,31 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           {/* Referral Info Card */}
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">Referral</CardTitle>
-              <a href="/settings/customization" title="Customize" className="p-1 text-slate-400 hover:text-slate-600">
+              <CardTitle className="text-sm">{referralCardLayout.title}</CardTitle>
+              <a href="/settings/card-layouts" title="Customize" className="p-1 text-slate-400 hover:text-slate-600">
                 <Settings className="h-4 w-4" />
               </a>
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
-              <PropertyRow label="Status" value={STATUS_LABELS[referral.status]} />
-              <PropertyRow label="Pipeline" value={referral.pipeline?.name} />
-              <PropertyRow label="Location" value={referral.referringLocation?.name} />
-              <PropertyRow label="Insurance" value={referral.insuranceProvider} />
+              {referralCardLayout.fields.length > 0 ? (
+                referralCardLayout.fields.map((fieldId) => {
+                  const fieldMap: Record<string, { label: string; path: string; formatter?: (val: any) => string }> = {
+                    status: { label: "Status", path: "status", formatter: (val) => STATUS_LABELS[val] || val },
+                    pipeline: { label: "Pipeline", path: "pipeline.name" },
+                    location: { label: "Location", path: "referringLocation.name" },
+                    insurance: { label: "Insurance", path: "insuranceProvider" },
+                    appointmentDate: { label: "Appointment Date", path: "appointmentDate", formatter: formatDate },
+                    referralDate: { label: "Referral Date", path: "referralDate", formatter: formatDate },
+                  }
+                  const field = fieldMap[fieldId]
+                  if (!field) return null
+                  let value = getFieldValue(referral, field.path)
+                  if (field.formatter) value = field.formatter(value)
+                  return <PropertyRow key={fieldId} label={field.label} value={value} />
+                })
+              ) : (
+                <p className="text-xs text-slate-400 py-2">No fields configured. Click settings to customize.</p>
+              )}
             </CardContent>
           </Card>
 
@@ -268,16 +300,38 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           {referral.referringPractice && (
             <Card>
               <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Practice</CardTitle>
-                <a href="/settings/customization" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
+                <CardTitle className="text-sm">{practiceCardLayout.title}</CardTitle>
+                <a href="/settings/card-layouts" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
                   <Settings className="h-4 w-4" />
                 </a>
               </CardHeader>
               <CardContent className="space-y-0 text-sm">
-                <PropertyRow label="Name" value={referral.referringPractice.name} />
-                <PropertyRow label="Phone" value={formatPhone(referral.referringPractice.phone)} />
-                <PropertyRow label="Fax" value={referral.referringPractice.fax} />
-                <PropertyRow label="Address" value={referral.referringPractice.address} />
+                {practiceCardLayout.fields.length > 0 ? (
+                  practiceCardLayout.fields.map((fieldId) => {
+                    const fieldMap: Record<string, { label: string; path: string }> = {
+                      name: { label: "Name", path: "referringPractice.name" },
+                      phone: { label: "Phone", path: "referringPractice.phone" },
+                      fax: { label: "Fax", path: "referringPractice.fax" },
+                      address: { label: "Address", path: "referringPractice.address" },
+                      city: { label: "City", path: "referringPractice.city" },
+                      state: { label: "State", path: "referringPractice.state" },
+                    }
+                    const field = fieldMap[fieldId]
+                    if (!field) return null
+                    const value = getFieldValue(referral, field.path)
+                    const formatted = fieldId === "phone" ? formatPhone(value) : value
+                    return (
+                      <PropertyRow
+                        key={fieldId}
+                        label={field.label}
+                        value={formatted}
+                        href={fieldId === "name" ? `/practices/${referral.referringPractice.id}` : undefined}
+                      />
+                    )
+                  })
+                ) : (
+                  <p className="text-xs text-slate-400 py-2">No fields configured. Click settings to customize.</p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -286,17 +340,38 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           {referral.referringDoctor && (
             <Card>
               <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Provider</CardTitle>
-                <a href="/settings/customization" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
+                <CardTitle className="text-sm">{providerCardLayout.title}</CardTitle>
+                <a href="/settings/card-layouts" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
                   <Settings className="h-4 w-4" />
                 </a>
               </CardHeader>
               <CardContent className="space-y-0 text-sm">
-                <PropertyRow label="Name" value={referral.referringDoctor.name} />
-                <PropertyRow label="Specialty" value={referral.referringDoctor.specialty} />
-                <PropertyRow label="NPI" value={(referral.referringDoctor as any)?.npi} />
-                <PropertyRow label="Phone" value={formatPhone(referral.referringDoctor.phone)} />
-                <PropertyRow label="Email" value={referral.referringDoctor.email} />
+                {providerCardLayout.fields.length > 0 ? (
+                  providerCardLayout.fields.map((fieldId) => {
+                    const fieldMap: Record<string, { label: string; path: string }> = {
+                      name: { label: "Name", path: "referringDoctor.name" },
+                      specialty: { label: "Specialty", path: "referringDoctor.specialty" },
+                      npi: { label: "NPI", path: "referringDoctor.npi" },
+                      phone: { label: "Phone", path: "referringDoctor.phone" },
+                      email: { label: "Email", path: "referringDoctor.email" },
+                      title: { label: "Title", path: "referringDoctor.title" },
+                    }
+                    const field = fieldMap[fieldId]
+                    if (!field) return null
+                    const value = getFieldValue(referral, field.path)
+                    const formatted = fieldId === "phone" ? formatPhone(value) : value
+                    return (
+                      <PropertyRow
+                        key={fieldId}
+                        label={field.label}
+                        value={formatted}
+                        href={fieldId === "name" ? `/providers/${referral.referringDoctor.id}` : undefined}
+                      />
+                    )
+                  })
+                ) : (
+                  <p className="text-xs text-slate-400 py-2">No fields configured. Click settings to customize.</p>
+                )}
               </CardContent>
             </Card>
           )}

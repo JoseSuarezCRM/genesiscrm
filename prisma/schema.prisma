@@ -171,6 +171,19 @@ model PropertyDisplayConfig {
   @@unique([customPropertyId, entityType])
 }
 
+model CardLayout {
+  id               String                     @id @default(cuid())
+  entityType       CustomPropertyEntityType
+  cardName         String
+  title            String
+  fields           String[]                   @default([])
+  order            Int                        @default(0)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@unique([entityType, cardName])
+}
+
 model User {
   id                    String         @id @default(cuid())
   email                 String         @unique
