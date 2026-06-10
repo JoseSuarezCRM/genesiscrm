@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import Sidebar from "@/components/sidebar"
 import NotificationBell from "@/components/notification-bell"
 import SessionWatcher from "@/components/session-watcher"
+import TopToolbar from "@/components/top-toolbar"
 
 export default async function DashboardLayout({
   children,
@@ -28,9 +29,12 @@ export default async function DashboardLayout({
         userRole={(session.user as any).role ?? "STAFF"}
         userPermissions={(session.user as any).permissions ?? []}
       />
-      <main className="flex-1 overflow-auto bg-white">
-        {children}
-      </main>
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <TopToolbar />
+        <main className="flex-1 overflow-auto bg-white">
+          {children}
+        </main>
+      </div>
       <NotificationBell initialNotifications={notifications} />
       <SessionWatcher />
     </div>
