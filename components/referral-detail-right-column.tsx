@@ -113,7 +113,7 @@ export default function ReferralDetailRightColumn({
 
   return (
     <>
-      <div className="lg:col-span-1 space-y-4">
+      <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
         {/* Referral Info Card */}
         {currentReferralLayout.visible !== false && (
           <Card>

@@ -95,9 +95,9 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
   ])
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 lg:h-full lg:flex lg:flex-col">
       {/* Header */}
-      <div>
+      <div className="shrink-0">
         <BackButton label="Back to Referrals" href={searchParams.from ?? "/referrals"} />
         <div className="flex items-start justify-between gap-4 mt-4">
           <div>
@@ -122,9 +122,9 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
       </div>
 
       {/* Three-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)]">
         {/* LEFT: Properties Sidebar */}
-        <div className="lg:col-span-1 space-y-4">
+        <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
           {/* Status & Tags */}
           <Card>
             <CardHeader className="pb-3">
@@ -205,7 +205,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
         </div>
 
         {/* MIDDLE: Overview & Activities */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6 lg:overflow-y-auto lg:pr-1">
           {/* Overview */}
           <Card>
             <CardHeader>
