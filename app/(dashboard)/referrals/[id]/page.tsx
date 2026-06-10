@@ -246,28 +246,35 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           </Card>
         </div>
 
-        {/* RIGHT: Associated Objects */}
+        {/* RIGHT: Associated Objects (Customizable) */}
         <div className="lg:col-span-1 space-y-4">
-          {/* Referral Info */}
+          {/* Referral Info Card */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Referral Info</CardTitle>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm">Referral</CardTitle>
+              <a href="/settings/customization" title="Customize" className="p-1 text-slate-400 hover:text-slate-600">
+                <Settings className="h-4 w-4" />
+              </a>
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               <PropertyRow label="Status" value={STATUS_LABELS[referral.status]} />
+              <PropertyRow label="Pipeline" value={referral.pipeline?.name} />
               <PropertyRow label="Location" value={referral.referringLocation?.name} />
               <PropertyRow label="Insurance" value={referral.insuranceProvider} />
-              <PropertyRow label="Auth Status" value={referral.authStatus} />
             </CardContent>
           </Card>
 
-          {/* Practice Info */}
+          {/* Practice Info Card - Customizable */}
           {referral.referringPractice && (
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm">Practice</CardTitle>
+                <a href="/settings/customization" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
+                  <Settings className="h-4 w-4" />
+                </a>
               </CardHeader>
               <CardContent className="space-y-0 text-sm">
+                <PropertyRow label="Name" value={referral.referringPractice.name} />
                 <PropertyRow label="Phone" value={formatPhone(referral.referringPractice.phone)} />
                 <PropertyRow label="Fax" value={referral.referringPractice.fax} />
                 <PropertyRow label="Address" value={referral.referringPractice.address} />
@@ -275,14 +282,19 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             </Card>
           )}
 
-          {/* Provider Info */}
+          {/* Provider Info Card - Customizable */}
           {referral.referringDoctor && (
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm">Provider</CardTitle>
+                <a href="/settings/customization" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
+                  <Settings className="h-4 w-4" />
+                </a>
               </CardHeader>
               <CardContent className="space-y-0 text-sm">
+                <PropertyRow label="Name" value={referral.referringDoctor.name} />
                 <PropertyRow label="Specialty" value={referral.referringDoctor.specialty} />
+                <PropertyRow label="NPI" value={(referral.referringDoctor as any)?.npi} />
                 <PropertyRow label="Phone" value={formatPhone(referral.referringDoctor.phone)} />
                 <PropertyRow label="Email" value={referral.referringDoctor.email} />
               </CardContent>
