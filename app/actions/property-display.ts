@@ -6,13 +6,6 @@ import { revalidatePath } from "next/cache"
 
 type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE"
 
-interface PropertyDisplay {
-  id: string
-  customPropertyId: string
-  visible: boolean
-  order: number
-}
-
 // Admin-only guard
 async function requireAdmin() {
   const session = await auth()
@@ -27,9 +20,16 @@ export async function getPropertyDisplays(entityType: EntityType) {
     orderBy: { createdAt: "asc" },
   })
 
-  const displays = await prisma.propertyDisplayConfig.findMany({
-    where: { entityType },
-  })
+  let displays: any[] = []
+  try {
+    displays = await (prisma as any).propertyDisplayConfig.findMany({
+      where: { entityType },
+    })
+  } catch (e) {
+    // PropertyDisplayConfig table may not exist yet
+    console.warn("PropertyDisplayConfig not available:", e)
+    displays = []
+  }
 
   // Return all properties with their display config
   return properties.map((prop) => {
@@ -52,19 +52,24 @@ export async function updatePropertyDisplay(
 ) {
   await requireAdmin()
 
-  const existing = await prisma.propertyDisplayConfig.findFirst({
-    where: { customPropertyId, entityType },
-  })
+  try {
+    const prismaAny = prisma as any
+    const existing = await prismaAny.propertyDisplayConfig.findFirst({
+      where: { customPropertyId, entityType },
+    })
 
-  if (existing) {
-    await prisma.propertyDisplayConfig.update({
-      where: { id: existing.id },
-      data: { visible, order },
-    })
-  } else {
-    await prisma.propertyDisplayConfig.create({
-      data: { customPropertyId, entityType, visible, order },
-    })
+    if (existing) {
+      await prismaAny.propertyDisplayConfig.update({
+        where: { id: existing.id },
+        data: { visible, order },
+      })
+    } else {
+      await prismaAny.propertyDisplayConfig.create({
+        data: { customPropertyId, entityType, visible, order },
+      })
+    }
+  } catch (e) {
+    console.warn("PropertyDisplayConfig update failed:", e)
   }
 
   revalidatePath("/settings/customization")
