@@ -1,15 +1,13 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import Link from "next/link"
-import { Settings, Plus, Trash2, Loader2 } from "lucide-react"
+import { Settings } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { STATUS_LABELS } from "@/lib/utils"
 import { ReferralStatus } from "@prisma/client"
 import CardCustomizationModal from "@/components/card-customization-modal"
 import { formatDate, formatPhone } from "@/lib/utils"
-import { updateReferral } from "@/app/actions/referrals"
 
 interface CardLayout {
   entityType: string
@@ -38,7 +36,6 @@ export default function ReferralDetailRightColumn({
 }: Props) {
   const [customizationOpen, setCustomizationOpen] = useState(false)
   const [editingCardName, setEditingCardName] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
   const [layouts, setLayouts] = useState([
     referralCardLayout,
     practiceCardLayout,
@@ -56,23 +53,24 @@ export default function ReferralDetailRightColumn({
     )
   }
 
-  const handleRemovePractice = () => {
-    startTransition(async () => {
-      await updateReferral(referral.id, { practiceId: undefined })
-    })
-  }
-
-  const handleRemoveProvider = () => {
-    startTransition(async () => {
-      await updateReferral(referral.id, { referringDoctorId: undefined })
-    })
-  }
-
   // Get the current layout for each card
-  const currentReferralLayout = layouts.find((l) => l.cardName === "Referral") || referralCardLayout
-  const currentPracticeLayout = layouts.find((l) => l.cardName === "Practice") || practiceCardLayout
-  const currentProviderLayout = layouts.find((l) => l.cardName === "Provider") || providerCardLayout
-  const currentEditingLayout = layouts.find((l) => l.cardName === editingCardName) || currentReferralLayout
+  const getLayoutByCardName = (cardName: string): CardLayout => {
+    switch (cardName) {
+      case "Referral":
+        return layouts[0] || referralCardLayout
+      case "Practice":
+        return layouts[1] || practiceCardLayout
+      case "Provider":
+        return layouts[2] || providerCardLayout
+      default:
+        return referralCardLayout
+    }
+  }
+
+  const currentReferralLayout = getLayoutByCardName("Referral")
+  const currentPracticeLayout = getLayoutByCardName("Practice")
+  const currentProviderLayout = getLayoutByCardName("Provider")
+  const currentEditingLayout = editingCardName ? getLayoutByCardName(editingCardName) : referralCardLayout
 
   function PropertyRow({
     label,
@@ -169,38 +167,17 @@ export default function ReferralDetailRightColumn({
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentPracticeLayout.title}</CardTitle>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleOpenCustomization("Practice")}
-                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                  title="Customize card"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-                {referral.referringPractice && (
-                  <button
-                    onClick={handleRemovePractice}
-                    disabled={isPending}
-                    className="p-1 text-slate-400 hover:text-red-600 transition-colors"
-                    title="Remove practice"
-                  >
-                    {isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={() => handleOpenCustomization("Practice")}
+                className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Customize card"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {!referral.referringPractice ? (
-                <p className="text-xs text-slate-500 py-3">
-                  No practice assigned.{" "}
-                  <a href="#reassign-panel" className="text-blue-600 hover:text-blue-700 font-medium">
-                    Add one
-                  </a>
-                </p>
+                <p className="text-xs text-slate-400 py-3">No practice assigned</p>
               ) : currentPracticeLayout.fields.length > 0 ? (
                 currentPracticeLayout.fields.map((fieldId: string) => {
                   const fieldMap: Record<string, { label: string; path: string }> = {
@@ -244,38 +221,17 @@ export default function ReferralDetailRightColumn({
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentProviderLayout.title}</CardTitle>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleOpenCustomization("Provider")}
-                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                  title="Customize card"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-                {referral.referringDoctor && (
-                  <button
-                    onClick={handleRemoveProvider}
-                    disabled={isPending}
-                    className="p-1 text-slate-400 hover:text-red-600 transition-colors"
-                    title="Remove provider"
-                  >
-                    {isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={() => handleOpenCustomization("Provider")}
+                className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Customize card"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {!referral.referringDoctor ? (
-                <p className="text-xs text-slate-500 py-3">
-                  No provider assigned.{" "}
-                  <a href="#reassign-panel" className="text-blue-600 hover:text-blue-700 font-medium">
-                    Add one
-                  </a>
-                </p>
+                <p className="text-xs text-slate-400 py-3">No provider assigned</p>
               ) : currentProviderLayout.fields.length > 0 ? (
                 currentProviderLayout.fields.map((fieldId: string) => {
                   const fieldMap: Record<string, { label: string; path: string }> = {

@@ -22,7 +22,6 @@ import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { getCardLayout } from "@/app/actions/card-layouts"
 import ReferralDetailRightColumn from "@/components/referral-detail-right-column"
-import ReferralReassignPanel from "@/components/referral-reassign-panel"
 
 interface Props {
   params: { id: string }
@@ -116,16 +115,6 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             </form>
           </div>
         </div>
-      </div>
-
-      {/* Reassign Practice/Provider */}
-      <div id="reassign-panel">
-        <ReferralReassignPanel
-          referralId={referral.id}
-          currentPracticeId={referral.referringPractice?.id || null}
-          currentProviderId={referral.referringDoctor?.id || null}
-          practices={practices as any}
-        />
       </div>
 
       {/* Three-Column Layout */}
