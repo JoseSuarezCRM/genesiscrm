@@ -11,12 +11,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Eye, EyeOff } from "lucide-react"
-import { cn } from "@/lib/utils"
-import {
-  getCardNamesForEntity,
-  getAvailableFieldsForCard,
-} from "@/lib/card-field-definitions"
+import { getAvailableFieldsForCard } from "@/lib/card-field-definitions"
 
 interface CardLayout {
   entityType: string
@@ -57,13 +52,9 @@ export default function CardCustomizationModal({
 
   const handleSave = () => {
     startTransition(async () => {
-      await updateCardLayout(
-        entityType,
-        layout.cardName,
-        layout.title,
-        layout.fields
-      )
-      onUpdate?.(layout)
+      const title = layout.title || cardName
+      await updateCardLayout(entityType, cardName, title, layout.fields)
+      onUpdate?.({ ...layout, entityType, cardName, title })
       onOpenChange(false)
     })
   }

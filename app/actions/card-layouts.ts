@@ -16,13 +16,13 @@ async function requireAdmin() {
 
 export async function getCardLayout(entityType: EntityType, cardName: string) {
   try {
-    const layout = await (prisma as any).cardLayout.findUnique({
+    const layout = await prisma.cardLayout.findUnique({
       where: { entityType_cardName: { entityType, cardName } },
     })
-    return layout || { fields: [], title: cardName }
+    return layout || { entityType, cardName, title: cardName, fields: [] }
   } catch (e) {
     console.warn("CardLayout query failed:", e)
-    return { fields: [], title: cardName }
+    return { entityType, cardName, title: cardName, fields: [] }
   }
 }
 
@@ -34,25 +34,11 @@ export async function updateCardLayout(
 ) {
   await requireAdmin()
 
-  try {
-    const prismaAny = prisma as any
-    const existing = await prismaAny.cardLayout.findUnique({
-      where: { entityType_cardName: { entityType, cardName } },
-    })
-
-    if (existing) {
-      await prismaAny.cardLayout.update({
-        where: { id: existing.id },
-        data: { title, fields },
-      })
-    } else {
-      await prismaAny.cardLayout.create({
-        data: { entityType, cardName, title, fields },
-      })
-    }
-  } catch (e) {
-    console.warn("CardLayout update failed:", e)
-  }
+  await prisma.cardLayout.upsert({
+    where: { entityType_cardName: { entityType, cardName } },
+    create: { entityType, cardName, title, fields },
+    update: { title, fields },
+  })
 
   revalidatePath("/referrals")
   revalidatePath("/referring-doctors")
@@ -62,7 +48,7 @@ export async function updateCardLayout(
 
 export async function getCardLayoutsForEntity(entityType: EntityType) {
   try {
-    const layouts = await (prisma as any).cardLayout.findMany({
+    const layouts = await prisma.cardLayout.findMany({
       where: { entityType },
       orderBy: { order: "asc" },
     })
