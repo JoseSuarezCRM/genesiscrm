@@ -63,6 +63,7 @@ const adminItems = [
   { href: "/settings/users",      label: "User Management",    icon: Settings },
   { href: "/settings/outreach",   label: "Outreach Templates", icon: MessageSquare },
   { href: "/settings/embed",      label: "Embed Referral Form",icon: Code2 },
+  { href: "/settings/custom-properties", label: "Custom Properties", icon: Settings },
   { href: "/automations",         label: "Automations",        icon: Zap },
   { href: "/settings/duplicates", label: "Duplicate Detection",icon: CopyX },
   { href: "/settings/reconcile",  label: "Appt Reconciliation",icon: RefreshCw },
