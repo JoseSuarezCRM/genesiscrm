@@ -74,6 +74,7 @@ export default async function PracticesPage() {
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}
+        view="practices"
       />
     </div>
   )
