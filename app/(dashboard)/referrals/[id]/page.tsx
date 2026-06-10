@@ -21,6 +21,7 @@ import ReferralAssignee from "@/components/referral-assignee"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { getCardLayout } from "@/app/actions/card-layouts"
+import ReferralDetailRightColumn from "@/components/referral-detail-right-column"
 
 interface Props {
   params: { id: string }
@@ -264,120 +265,12 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
         </div>
 
         {/* RIGHT: Associated Objects (Customizable) */}
-        <div className="lg:col-span-1 space-y-4">
-          {/* Referral Info Card */}
-          <Card>
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">{referralCardLayout.title}</CardTitle>
-              <a href="/settings/card-layouts" title="Customize" className="p-1 text-slate-400 hover:text-slate-600">
-                <Settings className="h-4 w-4" />
-              </a>
-            </CardHeader>
-            <CardContent className="space-y-0 text-sm">
-              {referralCardLayout.fields.length > 0 ? (
-                referralCardLayout.fields.map((fieldId: string) => {
-                  const fieldMap: Record<string, { label: string; path: string; formatter?: (val: any) => string }> = {
-                    status: { label: "Status", path: "status", formatter: (val: any) => (typeof val === 'string' ? STATUS_LABELS[val as ReferralStatus] : val) || val },
-                    pipeline: { label: "Pipeline", path: "pipeline.name" },
-                    location: { label: "Location", path: "referringLocation.name" },
-                    insurance: { label: "Insurance", path: "insuranceProvider" },
-                    appointmentDate: { label: "Appointment Date", path: "appointmentDate", formatter: formatDate },
-                    referralDate: { label: "Referral Date", path: "referralDate", formatter: formatDate },
-                  }
-                  const field = fieldMap[fieldId]
-                  if (!field) return null
-                  let value = getFieldValue(referral, field.path)
-                  if (field.formatter) value = field.formatter(value)
-                  return <PropertyRow key={fieldId} label={field.label} value={value} />
-                })
-              ) : (
-                <p className="text-xs text-slate-400 py-2">No fields configured. Click settings to customize.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Practice Info Card - Customizable */}
-          {referral.referringPractice && (
-            <Card>
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">{practiceCardLayout.title}</CardTitle>
-                <a href="/settings/card-layouts" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
-                  <Settings className="h-4 w-4" />
-                </a>
-              </CardHeader>
-              <CardContent className="space-y-0 text-sm">
-                {practiceCardLayout.fields.length > 0 && referral.referringPractice ? (
-                  practiceCardLayout.fields.map((fieldId: string) => {
-                    const fieldMap: Record<string, { label: string; path: string }> = {
-                      name: { label: "Name", path: "referringPractice.name" },
-                      phone: { label: "Phone", path: "referringPractice.phone" },
-                      fax: { label: "Fax", path: "referringPractice.fax" },
-                      address: { label: "Address", path: "referringPractice.address" },
-                      city: { label: "City", path: "referringPractice.city" },
-                      state: { label: "State", path: "referringPractice.state" },
-                    }
-                    const field = fieldMap[fieldId]
-                    if (!field) return null
-                    const value = getFieldValue(referral, field.path)
-                    const formatted = fieldId === "phone" ? formatPhone(value) : value
-                    const practice = referral.referringPractice
-                    return (
-                      <PropertyRow
-                        key={fieldId}
-                        label={field.label}
-                        value={formatted}
-                        href={fieldId === "name" && practice ? `/practices/${practice.id}` : undefined}
-                      />
-                    )
-                  })
-                ) : (
-                  <p className="text-xs text-slate-400 py-2">No fields configured. Click settings to customize.</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Provider Info Card - Customizable */}
-          {referral.referringDoctor && (
-            <Card>
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">{providerCardLayout.title}</CardTitle>
-                <a href="/settings/card-layouts" title="Customize fields" className="p-1 text-slate-400 hover:text-slate-600">
-                  <Settings className="h-4 w-4" />
-                </a>
-              </CardHeader>
-              <CardContent className="space-y-0 text-sm">
-                {providerCardLayout.fields.length > 0 && referral.referringDoctor ? (
-                  providerCardLayout.fields.map((fieldId: string) => {
-                    const fieldMap: Record<string, { label: string; path: string }> = {
-                      name: { label: "Name", path: "referringDoctor.name" },
-                      specialty: { label: "Specialty", path: "referringDoctor.specialty" },
-                      npi: { label: "NPI", path: "referringDoctor.npi" },
-                      phone: { label: "Phone", path: "referringDoctor.phone" },
-                      email: { label: "Email", path: "referringDoctor.email" },
-                      title: { label: "Title", path: "referringDoctor.title" },
-                    }
-                    const field = fieldMap[fieldId]
-                    if (!field) return null
-                    const value = getFieldValue(referral, field.path)
-                    const formatted = fieldId === "phone" ? formatPhone(value) : value
-                    const doctor = referral.referringDoctor
-                    return (
-                      <PropertyRow
-                        key={fieldId}
-                        label={field.label}
-                        value={formatted}
-                        href={fieldId === "name" && doctor ? `/providers/${doctor.id}` : undefined}
-                      />
-                    )
-                  })
-                ) : (
-                  <p className="text-xs text-slate-400 py-2">No fields configured. Click settings to customize.</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        <ReferralDetailRightColumn
+          referral={referral}
+          referralCardLayout={referralCardLayout}
+          practiceCardLayout={practiceCardLayout}
+          providerCardLayout={providerCardLayout}
+        />
       </div>
     </div>
   )
