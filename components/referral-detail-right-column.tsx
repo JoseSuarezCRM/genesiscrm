@@ -35,16 +35,29 @@ export default function ReferralDetailRightColumn({
   providerCardLayout,
 }: Props) {
   const [customizationOpen, setCustomizationOpen] = useState(false)
+  const [editingCardName, setEditingCardName] = useState<string | null>(null)
   const [layouts, setLayouts] = useState([
     referralCardLayout,
     practiceCardLayout,
     providerCardLayout,
   ])
 
+  const handleOpenCustomization = (cardName: string) => {
+    setEditingCardName(cardName)
+    setCustomizationOpen(true)
+  }
+
+  const handleUpdateLayout = (updatedLayout: CardLayout) => {
+    setLayouts((prev) =>
+      prev.map((l) => (l.cardName === updatedLayout.cardName ? updatedLayout : l))
+    )
+  }
+
   // Get the current layout for each card
   const currentReferralLayout = layouts.find((l) => l.cardName === "Referral") || referralCardLayout
   const currentPracticeLayout = layouts.find((l) => l.cardName === "Practice") || practiceCardLayout
   const currentProviderLayout = layouts.find((l) => l.cardName === "Provider") || providerCardLayout
+  const currentEditingLayout = layouts.find((l) => l.cardName === editingCardName) || currentReferralLayout
 
   function PropertyRow({
     label,
@@ -83,9 +96,9 @@ export default function ReferralDetailRightColumn({
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentReferralLayout.title}</CardTitle>
               <button
-                onClick={() => setCustomizationOpen(true)}
+                onClick={() => handleOpenCustomization("Referral")}
                 className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Customize cards"
+                title="Customize card"
               >
                 <Settings className="h-4 w-4" />
               </button>
@@ -142,9 +155,9 @@ export default function ReferralDetailRightColumn({
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentPracticeLayout.title}</CardTitle>
               <button
-                onClick={() => setCustomizationOpen(true)}
+                onClick={() => handleOpenCustomization("Practice")}
                 className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Customize cards"
+                title="Customize card"
               >
                 <Settings className="h-4 w-4" />
               </button>
@@ -195,9 +208,9 @@ export default function ReferralDetailRightColumn({
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentProviderLayout.title}</CardTitle>
               <button
-                onClick={() => setCustomizationOpen(true)}
+                onClick={() => handleOpenCustomization("Provider")}
                 className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Customize cards"
+                title="Customize card"
               >
                 <Settings className="h-4 w-4" />
               </button>
@@ -244,13 +257,19 @@ export default function ReferralDetailRightColumn({
       </div>
 
       {/* Customization Modal */}
-      <CardCustomizationModal
-        open={customizationOpen}
-        onOpenChange={setCustomizationOpen}
-        entityType="REFERRAL"
-        currentLayouts={layouts}
-        onUpdate={setLayouts}
-      />
+      {editingCardName && (
+        <CardCustomizationModal
+          open={customizationOpen}
+          onOpenChange={(open) => {
+            setCustomizationOpen(open)
+            if (!open) setEditingCardName(null)
+          }}
+          entityType="REFERRAL"
+          cardName={editingCardName}
+          currentLayout={currentEditingLayout}
+          onUpdate={handleUpdateLayout}
+        />
+      )}
     </>
   )
 }

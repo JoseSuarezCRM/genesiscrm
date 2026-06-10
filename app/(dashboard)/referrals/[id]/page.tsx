@@ -22,6 +22,7 @@ import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { getCardLayout } from "@/app/actions/card-layouts"
 import ReferralDetailRightColumn from "@/components/referral-detail-right-column"
+import ReferralReassignPanel from "@/components/referral-reassign-panel"
 
 interface Props {
   params: { id: string }
@@ -45,9 +46,6 @@ function PropertyRow({ label, value, href }: { label: string; value: string | nu
   )
 }
 
-function getFieldValue(obj: any, path: string): any {
-  return path.split(".").reduce((curr, prop) => curr?.[prop], obj)
-}
 
 export default async function ReferralDetailPage({ params, searchParams }: Props) {
   const referral = await prisma.referral.findUnique({
@@ -119,6 +117,14 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           </div>
         </div>
       </div>
+
+      {/* Reassign Practice/Provider */}
+      <ReferralReassignPanel
+        referralId={referral.id}
+        currentPracticeId={referral.referringPractice?.id || null}
+        currentProviderId={referral.referringDoctor?.id || null}
+        practices={practices as any}
+      />
 
       {/* Three-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
