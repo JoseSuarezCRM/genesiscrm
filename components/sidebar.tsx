@@ -60,13 +60,15 @@ const surgeryItems = [
 ]
 
 const adminItems = [
-  { href: "/settings/users",      label: "Settings",           icon: Settings },
-  { href: "/settings/outreach",   label: "Outreach Templates", icon: MessageSquare },
-  { href: "/settings/embed",      label: "Embed Referral Form",icon: Code2 },
-  { href: "/automations",         label: "Automations",        icon: Zap },
-  { href: "/settings/duplicates", label: "Duplicate Detection",icon: CopyX },
-  { href: "/settings/reconcile",  label: "Appt Reconciliation",icon: RefreshCw },
-  { href: "/settings/marketing",  label: "Marketing Materials", icon: Send },
+  { href: "/settings/users",        label: "Settings",           icon: Settings },
+  { href: "/settings/custom-properties", label: "Custom Properties", icon: Code2 },
+  { href: "/settings/card-layouts", label: "Card Layouts",       icon: Code2 },
+  { href: "/settings/outreach",     label: "Outreach Templates", icon: MessageSquare },
+  { href: "/settings/embed",        label: "Embed Referral Form",icon: Code2 },
+  { href: "/automations",           label: "Automations",        icon: Zap },
+  { href: "/settings/duplicates",   label: "Duplicate Detection",icon: CopyX },
+  { href: "/settings/reconcile",    label: "Appt Reconciliation",icon: RefreshCw },
+  { href: "/settings/marketing",    label: "Marketing Materials", icon: Send },
 ]
 
 interface SidebarProps {
