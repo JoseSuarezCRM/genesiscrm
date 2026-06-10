@@ -85,10 +85,12 @@ export default function ReferralDetailRightColumn({
     label,
     value,
     href,
+    bold,
   }: {
     label: string
     value: string | null | undefined
     href?: string
+    bold?: boolean
   }) {
     return (
       <div className="flex justify-between gap-4 py-2.5 border-b border-slate-100 last:border-0">
@@ -98,12 +100,12 @@ export default function ReferralDetailRightColumn({
         {href ? (
           <Link
             href={href}
-            className="text-sm text-blue-600 hover:text-blue-700 hover:underline text-right"
+            className={`text-sm text-blue-600 hover:text-blue-700 hover:underline text-right ${bold ? "font-semibold" : ""}`}
           >
             {value ?? "—"}
           </Link>
         ) : (
-          <span className="text-sm text-slate-900 text-right">{value ?? "—"}</span>
+          <span className={`text-sm text-slate-900 text-right ${bold ? "font-semibold" : ""}`}>{value ?? "—"}</span>
         )}
       </div>
     )
@@ -213,6 +215,7 @@ export default function ReferralDetailRightColumn({
                           ? `/practices/${practice.id}`
                           : undefined
                       }
+                      bold={fieldId === "name"}
                     />
                   )
                 })
@@ -267,6 +270,7 @@ export default function ReferralDetailRightColumn({
                           ? `/referring-doctors/${doctor.id}`
                           : undefined
                       }
+                      bold={fieldId === "name"}
                     />
                   )
                 })
