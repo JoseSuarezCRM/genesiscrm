@@ -178,7 +178,7 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
             <Row label="Email" value={provider.email} />
             <div className="flex justify-between gap-4">
               <span className="text-slate-500 shrink-0">Practice</span>
-              <Link href={`/referring-doctors/practices/${provider.practice.id}`} className="text-blue-600 hover:underline font-medium text-right">
+              <Link href={`/practices/${provider.practice.id}`} className="text-blue-600 hover:underline font-medium text-right">
                 {provider.practice.name}
               </Link>
             </div>

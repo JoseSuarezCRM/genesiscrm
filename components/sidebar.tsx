@@ -35,7 +35,8 @@ import { cn } from "@/lib/utils"
 const referralItems = [
   { href: "/",                  label: "Dashboard",           icon: LayoutDashboard },
   { href: "/referrals",         label: "Referrals",           icon: Users },
-  { href: "/referring-doctors", label: "Referring Providers", icon: UserCheck },
+  { href: "/practices",         label: "Practices",           icon: Building2 },
+  { href: "/referring-doctors", label: "Providers",           icon: UserCheck },
   { href: "/activities",        label: "Activities",          icon: CalendarDays },
   { href: "/tasks",             label: "Tasks",               icon: CheckSquare },
   { href: "/messages",          label: "SMS Inbox",           icon: MessageCircle },

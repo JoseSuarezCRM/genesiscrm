@@ -4,7 +4,7 @@ import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
 
-export default async function ReferringDoctorsPage() {
+export default async function PracticesPage() {
   const session = await auth()
   const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
   const currentUserId = (session?.user as any)?.id ?? ""
@@ -60,7 +60,7 @@ export default async function ReferringDoctorsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Providers</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Practices</h1>
           <p className="text-sm text-slate-500">
             {practices.length} practice{practices.length !== 1 ? "s" : ""}
           </p>

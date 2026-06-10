@@ -824,7 +824,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                 {p.phone && <span className="text-sm text-slate-500 hidden md:block shrink-0">{p.phone}</span>}
                 <div className="flex gap-1 shrink-0">
                   <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-zinc-700 hover:bg-zinc-50" title="View / edit practice" asChild>
-                    <Link href={`/referring-doctors/practices/${p.id}`}><ExternalLink className="h-3.5 w-3.5" /></Link>
+                    <Link href={`/practices/${p.id}`}><ExternalLink className="h-3.5 w-3.5" /></Link>
                   </Button>
                   <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50" title={`View reports for ${p.name}`} asChild>
                     <Link href={`/reports?practiceId=${p.id}`}><BarChart2 className="h-3.5 w-3.5" /></Link>
