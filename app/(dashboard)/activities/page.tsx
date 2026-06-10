@@ -36,7 +36,7 @@ export default async function ActivitiesPage() {
         },
         doctors: {
           orderBy: { name: "asc" },
-          select: { id: true, name: true, title: true, practiceId: true },
+          select: { id: true, name: true, title: true, npi: true, specialty: true, phone: true, email: true, practiceId: true },
         },
       },
     }),

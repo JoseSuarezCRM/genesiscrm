@@ -31,7 +31,17 @@ interface Practice {
   locations: Location[]; doctors: Doctor[]
 }
 interface Location { id: string; name: string; address: string | null; practiceId: string }
-interface Doctor { id: string; name: string; title: string | null; practiceId: string; practiceName: string }
+interface Doctor {
+  id: string
+  name: string
+  title: string | null
+  npi: string | null
+  specialty: string | null
+  phone: string | null
+  email: string | null
+  practiceId: string
+  practiceName: string
+}
 
 interface ActivityRow {
   id: string; date: string; tags: TagObj[]
@@ -716,7 +726,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   // Locally created orgs/locations/doctors (available immediately after inline creation)
   const [extraPractices, setExtraPractices] = useState<{ id: string; name: string }[]>([])
   const [extraLocations, setExtraLocations] = useState<{ id: string; name: string; practiceId: string }[]>([])
-  const [extraDoctors, setExtraDoctors] = useState<{ id: string; name: string; title: string | null; practiceId: string; practiceName: string }[]>([])
+  const [extraDoctors, setExtraDoctors] = useState<Doctor[]>([])
 
   // Create provider modal
   const [createProviderModal, setCreateProviderModal] = useState<{ open: boolean; initialName: string }>({ open: false, initialName: "" })
@@ -783,7 +793,17 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   function handleProviderCreated(provider: { id: string; label: string; name: string; title: string | null }) {
     const practiceName = allPractices.find(p => p.id === form.practiceId)?.name ?? ""
-    setExtraDoctors(prev => [...prev, { id: provider.id, name: provider.name, title: provider.title, practiceId: form.practiceId, practiceName }])
+    setExtraDoctors(prev => [...prev, {
+      id: provider.id,
+      name: provider.name,
+      title: provider.title,
+      npi: null,
+      specialty: null,
+      phone: null,
+      email: null,
+      practiceId: form.practiceId,
+      practiceName,
+    }])
     set("providerIds", [...form.providerIds, provider.id])
     setCreateProviderModal({ open: false, initialName: "" })
   }
