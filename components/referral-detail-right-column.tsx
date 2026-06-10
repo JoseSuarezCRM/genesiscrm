@@ -255,7 +255,7 @@ export default function ReferralDetailRightColumn({
                       value={formatted}
                       href={
                         fieldId === "name" && doctor
-                          ? `/providers/${doctor.id}`
+                          ? `/referring-doctors/${doctor.id}`
                           : undefined
                       }
                     />
