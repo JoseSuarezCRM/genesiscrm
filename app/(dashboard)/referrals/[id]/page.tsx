@@ -52,7 +52,11 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
     include: {
       referringPractice: true,
       referringLocation: true,
-      referringDoctor: true,
+      referringDoctor: {
+        include: {
+          locations: { include: { location: { select: { name: true } } } },
+        },
+      },
       pipeline: { select: { id: true, name: true } },
       createdBy: { select: { name: true, email: true } },
       assignedTo: { select: { id: true, name: true, email: true } },

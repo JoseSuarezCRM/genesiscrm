@@ -46,7 +46,7 @@ export const cardFieldDefinitions: Record<EntityType, Record<string, CardFieldDe
       { id: "phone", label: "Phone", fieldKey: "referringDoctor.phone" },
       { id: "email", label: "Email", fieldKey: "referringDoctor.email" },
       { id: "title", label: "Title", fieldKey: "referringDoctor.title" },
-      { id: "location", label: "Location", fieldKey: "referringLocation.name" },
+      { id: "location", label: "Location", fieldKey: "referringDoctor.locations" },
     ],
   },
   PROVIDER: {

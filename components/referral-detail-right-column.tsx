@@ -246,6 +246,19 @@ export default function ReferralDetailRightColumn({
                 <p className="text-xs text-slate-400 py-3">No provider assigned</p>
               ) : currentProviderLayout.fields.length > 0 ? (
                 currentProviderLayout.fields.map((fieldId: string) => {
+                  if (fieldId === "location") {
+                    const locations = (referral.referringDoctor.locations || [])
+                      .map((dl: any) => dl.location?.name)
+                      .filter(Boolean)
+                      .join(", ")
+                    return (
+                      <PropertyRow
+                        key={fieldId}
+                        label="Location"
+                        value={locations || null}
+                      />
+                    )
+                  }
                   const fieldMap: Record<string, { label: string; path: string }> = {
                     name: { label: "Name", path: "referringDoctor.name" },
                     specialty: { label: "Specialty", path: "referringDoctor.specialty" },
@@ -253,7 +266,6 @@ export default function ReferralDetailRightColumn({
                     phone: { label: "Phone", path: "referringDoctor.phone" },
                     email: { label: "Email", path: "referringDoctor.email" },
                     title: { label: "Title", path: "referringDoctor.title" },
-                    location: { label: "Location", path: "referringLocation.name" },
                   }
                   const field = fieldMap[fieldId]
                   if (!field) return null
