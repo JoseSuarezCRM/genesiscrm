@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import CustomPropertyManager from "@/components/custom-property-manager"
+import CustomPropertiesPageClient from "@/components/custom-properties-page-client"
 import { listCustomProperties } from "@/app/actions/custom-properties"
 
 export default async function CustomPropertiesPage() {
@@ -16,17 +16,10 @@ export default async function CustomPropertiesPage() {
   ])
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Custom Properties</h1>
-        <p className="text-sm text-slate-500 mt-1">Create and manage custom fields for referrals, providers, and practices</p>
-      </div>
-
-      <CustomPropertyManager
-        referralProps={referralProps}
-        providerProps={providerProps}
-        practiceProps={practiceProps}
-      />
-    </div>
+    <CustomPropertiesPageClient
+      referralProps={referralProps}
+      providerProps={providerProps}
+      practiceProps={practiceProps}
+    />
   )
 }
