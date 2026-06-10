@@ -32,6 +32,7 @@ export default async function DashboardLayout({
         <TopToolbar
           initialNotifications={notifications}
           permissions={(session.user as any).permissions ?? []}
+          isAdmin={(session.user as any).role === "ADMIN"}
         />
         <main className="flex-1 overflow-auto bg-white">
           {children}

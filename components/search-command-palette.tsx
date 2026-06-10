@@ -52,9 +52,10 @@ const allItems: SearchItem[] = [
 
 interface Props {
   permissions: string[]
+  isAdmin: boolean
 }
 
-export default function SearchCommandPalette({ permissions }: Props) {
+export default function SearchCommandPalette({ permissions, isAdmin }: Props) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState(0)
@@ -62,6 +63,8 @@ export default function SearchCommandPalette({ permissions }: Props) {
   const router = useRouter()
 
   const hasPermission = (item: SearchItem) => {
+    // Super admins have access to everything
+    if (isAdmin) return true
     if (!item.requiredPermission) return true
     return permissions.includes(item.requiredPermission)
   }

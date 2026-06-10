@@ -16,12 +16,13 @@ type Notification = {
 interface TopToolbarProps {
   initialNotifications: Notification[]
   permissions: string[]
+  isAdmin: boolean
 }
 
-export default function TopToolbar({ initialNotifications, permissions }: TopToolbarProps) {
+export default function TopToolbar({ initialNotifications, permissions, isAdmin }: TopToolbarProps) {
   return (
     <div className="border-b border-slate-200 bg-white px-6 py-1 flex items-center justify-between shrink-0">
-      <SearchCommandPalette permissions={permissions} />
+      <SearchCommandPalette permissions={permissions} isAdmin={isAdmin} />
       <div className="flex items-center gap-2">
         <NotificationBell initialNotifications={initialNotifications} />
         <Link
