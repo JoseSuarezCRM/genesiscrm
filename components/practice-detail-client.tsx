@@ -11,6 +11,7 @@ import { PhoneInput } from "@/components/ui/phone-input"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
 import Link from "next/link"
+import CustomPropertiesDisplay from "@/components/custom-properties-display"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ interface Props {
   practice: Practice
   referrals: Referral[]
   isAdmin: boolean
+  customProperties?: any[]
 }
 
 const PROVIDER_TITLES = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Other"]
@@ -107,7 +109,7 @@ function InlineForm({ onCancel, onSubmit, isPending, children }: {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export default function PracticeDetailClient({ practice, referrals, isAdmin }: Props) {
+export default function PracticeDetailClient({ practice, referrals, isAdmin, customProperties }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -227,6 +229,17 @@ export default function PracticeDetailClient({ practice, referrals, isAdmin }: P
           </div>
         )}
       </SectionCard>
+
+      {/* ── Custom Properties ── */}
+      {customProperties && customProperties.length > 0 && (
+        <div className="bg-white border rounded-xl p-5">
+          <CustomPropertiesDisplay
+            entityType="PRACTICE"
+            entityId={practice.id}
+            properties={customProperties}
+          />
+        </div>
+      )}
 
       {/* ── Locations ── */}
       <SectionCard title="Locations" count={practice.locations.length}

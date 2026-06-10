@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import PracticeDetailClient from "@/components/practice-detail-client"
+import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 
 interface Props { params: { id: string } }
 
@@ -11,7 +12,7 @@ export default async function PracticeDetailPage({ params }: Props) {
   const session = await auth()
   const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
 
-  const [practice, referrals] = await Promise.all([
+  const [practice, referrals, customProperties] = await Promise.all([
     prisma.referringPractice.findUnique({
       where: { id: params.id },
       include: {
@@ -42,6 +43,7 @@ export default async function PracticeDetailPage({ params }: Props) {
         referringDoctor: { select: { id: true, name: true, title: true } },
       },
     }),
+    loadCustomPropertiesForDetail("PRACTICE", params.id),
   ])
 
   if (!practice) notFound()
@@ -60,7 +62,7 @@ export default async function PracticeDetailPage({ params }: Props) {
         {practice.phone && <p className="text-sm text-slate-500 mt-0.5">{practice.phone}</p>}
       </div>
 
-      <PracticeDetailClient practice={practice as any} referrals={referrals as any} isAdmin={isAdmin} />
+      <PracticeDetailClient practice={practice as any} referrals={referrals as any} isAdmin={isAdmin} customProperties={customProperties} />
     </div>
   )
 }

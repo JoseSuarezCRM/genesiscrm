@@ -8,6 +8,8 @@ import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
 import ProviderNotesSection from "@/components/provider-notes-section"
 import ProviderInfoEditor from "@/components/provider-info-editor"
+import CustomPropertiesDisplay from "@/components/custom-properties-display"
+import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { format } from "date-fns"
 
 interface Props { params: { id: string } }
@@ -25,7 +27,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   const session = await auth()
   const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
 
-  const [provider, activities, allPractices] = await Promise.all([
+  const [provider, activities, allPractices, customProperties] = await Promise.all([
     prisma.referringDoctor.findUnique({
       where: { id: params.id },
       include: {
@@ -51,6 +53,7 @@ export default async function ProviderDetailPage({ params }: Props) {
       orderBy: { name: "asc" },
       include: { locations: { orderBy: { name: "asc" }, select: { id: true, name: true } } },
     }),
+    loadCustomPropertiesForDetail("PROVIDER", params.id),
   ])
 
   if (!provider) notFound()
@@ -114,6 +117,19 @@ export default async function ProviderDetailPage({ params }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Custom Properties */}
+      {customProperties.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <CustomPropertiesDisplay
+              entityType="PROVIDER"
+              entityId={provider.id}
+              properties={customProperties}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Activities */}
       <Card>
