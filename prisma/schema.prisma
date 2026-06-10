@@ -214,6 +214,11 @@ model PracticeLocation {
   createdAt  DateTime          @default(now())
 }
 
+enum ContactType {
+  PROVIDER
+  STAFF
+}
+
 // A provider — belongs to one practice, can work at multiple locations
 model ReferringDoctor {
   id            String             @id @default(cuid())
@@ -223,6 +228,7 @@ model ReferringDoctor {
   specialty     String?
   phone         String?
   email         String?
+  contactType   ContactType        @default(PROVIDER)
   practiceId    String
   practice      ReferringPractice  @relation(fields: [practiceId], references: [id])
   locations     DoctorLocation[]

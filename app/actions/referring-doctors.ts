@@ -312,6 +312,7 @@ const DoctorSchema = z.object({
   specialty: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
+  contactType: z.enum(["PROVIDER", "STAFF"]).optional().default("PROVIDER"),
   practiceId: z.string().min(1, "Practice is required"),
   locationIds: z.array(z.string()).optional(),
 })
@@ -343,6 +344,7 @@ export async function createDoctor(data: unknown) {
       specialty: rest.specialty || null,
       phone: rest.phone || null,
       email: rest.email || null,
+      contactType: rest.contactType,
       practiceId: rest.practiceId,
       locations: {
         create: locationIds.map((locationId) => ({ locationId })),
@@ -372,6 +374,7 @@ export async function updateDoctor(id: string, data: unknown) {
       specialty: rest.specialty || null,
       phone: rest.phone || null,
       email: rest.email || null,
+      contactType: rest.contactType,
       practiceId: rest.practiceId,
       locations: {
         deleteMany: {},

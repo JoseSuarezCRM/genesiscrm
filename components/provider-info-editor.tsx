@@ -23,6 +23,7 @@ interface Provider {
   specialty: string | null
   phone: string | null
   email: string | null
+  contactType: "PROVIDER" | "STAFF"
   practice: { id: string; name: string }
   locations: { location: Location }[]
 }
@@ -53,6 +54,7 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
   const [specialty, setSpecialty] = useState(provider.specialty ?? "")
   const [phone, setPhone] = useState(provider.phone ?? "")
   const [email, setEmail] = useState(provider.email ?? "")
+  const [contactType, setContactType] = useState(provider.contactType)
   const [practiceId, setPracticeId] = useState(provider.practice.id)
   const [locationIds, setLocationIds] = useState<string[]>(provider.locations.map((l) => l.location.id))
 
@@ -71,7 +73,7 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
     e.preventDefault()
     if (!name.trim()) return
     startTransition(async () => {
-      const res = await updateDoctor(provider.id, { name, title, npi, specialty, phone, email, practiceId, locationIds }) as any
+      const res = await updateDoctor(provider.id, { name, title, npi, specialty, phone, email, contactType, practiceId, locationIds }) as any
       if (res?.error) { alert("Save failed"); return }
       setEditing(false)
       router.refresh()
@@ -85,6 +87,7 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
     setSpecialty(provider.specialty ?? "")
     setPhone(provider.phone ?? "")
     setEmail(provider.email ?? "")
+    setContactType(provider.contactType)
     setPracticeId(provider.practice.id)
     setLocationIds(provider.locations.map((l) => l.location.id))
     setEditing(false)
@@ -116,6 +119,13 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
                 <select value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls}>
                   <option value="">— None —</option>
                   {PROVIDER_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Contact Type</label>
+                <select value={contactType} onChange={(e) => setContactType(e.target.value as "PROVIDER" | "STAFF")} className={inputCls}>
+                  <option value="PROVIDER">Provider</option>
+                  <option value="STAFF">Staff</option>
                 </select>
               </div>
             </div>
@@ -172,6 +182,7 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
           <div className="space-y-3 text-sm">
             <Row label="Name" value={provider.name} />
             <Row label="Title" value={provider.title} />
+            <Row label="Contact Type" value={provider.contactType === "PROVIDER" ? "Provider" : "Staff"} />
             <Row label="NPI" value={provider.npi} />
             <Row label="Specialty" value={provider.specialty} />
             <Row label="Phone" value={provider.phone} />
