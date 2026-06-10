@@ -17,6 +17,8 @@ import OutreachDialog from "@/components/outreach-dialog"
 import TagSelector from "@/components/tag-selector"
 import CallTracker from "@/components/call-tracker"
 import ReferralAssignee from "@/components/referral-assignee"
+import CustomPropertiesDisplay from "@/components/custom-properties-display"
+import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 
 interface Props {
   params: { id: string }
@@ -44,7 +46,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
 
   if (!referral) notFound()
 
-  const [allTags, users, practices, pipelines] = await Promise.all([
+  const [allTags, users, practices, pipelines, customProperties] = await Promise.all([
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.referringPractice.findMany({
@@ -61,6 +63,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
+    loadCustomPropertiesForDetail("REFERRAL", params.id),
   ])
 
   return (
@@ -238,6 +241,19 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           <ReferralNotesEditor referralId={referral.id} initialNotes={referral.notes} />
         </CardContent>
       </Card>
+
+      {/* Custom Properties */}
+      {customProperties.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <CustomPropertiesDisplay
+              entityType="REFERRAL"
+              entityId={referral.id}
+              properties={customProperties}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Documents */}
       <Card>

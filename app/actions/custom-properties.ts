@@ -93,3 +93,37 @@ export async function deleteCustomProperty(id: string) {
     return { error: err.message }
   }
 }
+
+export async function saveCustomPropertyValue(
+  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE",
+  entityId: string,
+  customPropertyId: string,
+  value: any
+) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  try {
+    if (entityType === "REFERRAL") {
+      const current = await prisma.referral.findUnique({ where: { id: entityId }, select: { customProperties: true } })
+      const props = (current?.customProperties as Record<string, any>) || {}
+      props[customPropertyId] = value
+      await prisma.referral.update({ where: { id: entityId }, data: { customProperties: props } })
+    } else if (entityType === "PROVIDER") {
+      const current = await prisma.referringDoctor.findUnique({ where: { id: entityId }, select: { customProperties: true } })
+      const props = (current?.customProperties as Record<string, any>) || {}
+      props[customPropertyId] = value
+      await prisma.referringDoctor.update({ where: { id: entityId }, data: { customProperties: props } })
+    } else {
+      const current = await prisma.referringPractice.findUnique({ where: { id: entityId }, select: { customProperties: true } })
+      const props = (current?.customProperties as Record<string, any>) || {}
+      props[customPropertyId] = value
+      await prisma.referringPractice.update({ where: { id: entityId }, data: { customProperties: props } })
+    }
+
+    revalidatePath(`/${entityType === "REFERRAL" ? "referrals" : entityType === "PROVIDER" ? "referring-doctors" : "practices"}/${entityId}`)
+    return { success: true }
+  } catch (err: any) {
+    return { error: err.message }
+  }
+}
