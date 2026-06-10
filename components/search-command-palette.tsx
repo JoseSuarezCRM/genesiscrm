@@ -41,6 +41,7 @@ const allItems: SearchItem[] = [
   { id: "settings", title: "Settings", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },
   { id: "user-mgmt", title: "User Management", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },
   { id: "custom-props", title: "Custom Properties", category: "Admin", href: "/settings/custom-properties", requiredPermission: "NAV_ADMIN" },
+  { id: "customization", title: "Property Customization", category: "Admin", href: "/settings/customization", requiredPermission: "NAV_ADMIN" },
   { id: "pipelines", title: "Pipelines", category: "Admin", href: "/settings/pipelines", requiredPermission: "NAV_ADMIN" },
   { id: "org-rules", title: "Org Name Rules", category: "Admin", href: "/settings/org-rules", requiredPermission: "NAV_ADMIN" },
   { id: "automations", title: "Automations", category: "Admin", href: "/automations", requiredPermission: "NAV_ADMIN" },

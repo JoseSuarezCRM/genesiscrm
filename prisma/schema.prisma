@@ -159,6 +159,18 @@ model CustomProperty {
   @@unique([name, entityType])
 }
 
+model PropertyDisplayConfig {
+  id               String                     @id @default(cuid())
+  customPropertyId String
+  entityType       CustomPropertyEntityType
+  visible          Boolean                    @default(true)
+  order            Int                        @default(0)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@unique([customPropertyId, entityType])
+}
+
 model User {
   id                    String         @id @default(cuid())
   email                 String         @unique

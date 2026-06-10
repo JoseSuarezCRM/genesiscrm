@@ -15,6 +15,7 @@ const settingsSections = [
     title: "Data & Setup",
     items: [
       { href: "/settings/custom-properties", label: "Custom Properties" },
+      { href: "/settings/customization", label: "Property Customization" },
       { href: "/settings/pipelines", label: "Pipelines" },
       { href: "/settings/org-rules", label: "Org Name Rules" },
     ],
