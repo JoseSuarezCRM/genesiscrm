@@ -253,6 +253,7 @@ export default function ReferralDetailRightColumn({
                     phone: { label: "Phone", path: "referringDoctor.phone" },
                     email: { label: "Email", path: "referringDoctor.email" },
                     title: { label: "Title", path: "referringDoctor.title" },
+                    location: { label: "Location", path: "referringLocation.name" },
                   }
                   const field = fieldMap[fieldId]
                   if (!field) return null
