@@ -10,7 +10,7 @@ interface SearchItem {
   title: string
   category: string
   href: string
-  requiresAdmin?: boolean
+  requiredPermission?: string
 }
 
 const allItems: SearchItem[] = [
@@ -38,32 +38,36 @@ const allItems: SearchItem[] = [
   { id: "surgery-reports", title: "Surgery Reports", category: "Surgery", href: "/surgery/reports" },
 
   // Admin/Settings
-  { id: "settings", title: "Settings", category: "Admin", href: "/settings/users", requiresAdmin: true },
-  { id: "user-mgmt", title: "User Management", category: "Admin", href: "/settings/users", requiresAdmin: true },
-  { id: "custom-props", title: "Custom Properties", category: "Admin", href: "/settings/custom-properties", requiresAdmin: true },
-  { id: "pipelines", title: "Pipelines", category: "Admin", href: "/settings/pipelines", requiresAdmin: true },
-  { id: "org-rules", title: "Org Name Rules", category: "Admin", href: "/settings/org-rules", requiresAdmin: true },
-  { id: "automations", title: "Automations", category: "Admin", href: "/automations", requiresAdmin: true },
-  { id: "outreach", title: "Outreach Templates", category: "Admin", href: "/settings/outreach", requiresAdmin: true },
-  { id: "embed", title: "Embed Referral Form", category: "Admin", href: "/settings/embed", requiresAdmin: true },
-  { id: "duplicates", title: "Duplicate Detection", category: "Admin", href: "/settings/duplicates", requiresAdmin: true },
-  { id: "reconcile", title: "Appt Reconciliation", category: "Admin", href: "/settings/reconcile", requiresAdmin: true },
+  { id: "settings", title: "Settings", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },
+  { id: "user-mgmt", title: "User Management", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },
+  { id: "custom-props", title: "Custom Properties", category: "Admin", href: "/settings/custom-properties", requiredPermission: "NAV_ADMIN" },
+  { id: "pipelines", title: "Pipelines", category: "Admin", href: "/settings/pipelines", requiredPermission: "NAV_ADMIN" },
+  { id: "org-rules", title: "Org Name Rules", category: "Admin", href: "/settings/org-rules", requiredPermission: "NAV_ADMIN" },
+  { id: "automations", title: "Automations", category: "Admin", href: "/automations", requiredPermission: "NAV_ADMIN" },
+  { id: "outreach", title: "Outreach Templates", category: "Admin", href: "/settings/outreach", requiredPermission: "NAV_ADMIN" },
+  { id: "embed", title: "Embed Referral Form", category: "Admin", href: "/settings/embed", requiredPermission: "NAV_ADMIN" },
+  { id: "duplicates", title: "Duplicate Detection", category: "Admin", href: "/settings/duplicates", requiredPermission: "NAV_ADMIN" },
+  { id: "reconcile", title: "Appt Reconciliation", category: "Admin", href: "/settings/reconcile", requiredPermission: "NAV_ADMIN" },
 ]
 
 interface Props {
-  isAdmin: boolean
+  permissions: string[]
 }
 
-export default function SearchCommandPalette({ isAdmin }: Props) {
+export default function SearchCommandPalette({ permissions }: Props) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
+  const hasPermission = (item: SearchItem) => {
+    if (!item.requiredPermission) return true
+    return permissions.includes(item.requiredPermission)
+  }
+
   const filteredItems = allItems.filter((item) => {
-    // Filter by permissions
-    if (item.requiresAdmin && !isAdmin) return false
+    // Include all items (both accessible and not)
     // Filter by search
     return (
       item.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -156,16 +160,16 @@ export default function SearchCommandPalette({ isAdmin }: Props) {
                 <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 sticky top-0">
                   {group.category}
                 </div>
-                {group.items.map((item, idx) => {
+                {group.items.map((item) => {
                   const itemIndex = flatItems.indexOf(item)
                   const isSelected = itemIndex === selected
-                  const hasNoAccess = item.requiresAdmin && !isAdmin
+                  const canAccess = hasPermission(item)
 
                   return (
                     <button
                       key={item.id}
                       onClick={() => {
-                        if (!hasNoAccess) {
+                        if (canAccess) {
                           router.push(item.href)
                         }
                         setOpen(false)
@@ -175,12 +179,12 @@ export default function SearchCommandPalette({ isAdmin }: Props) {
                         isSelected
                           ? "bg-blue-50 text-slate-900"
                           : "text-slate-700 hover:bg-slate-50",
-                        hasNoAccess && "opacity-60 cursor-not-allowed"
+                        !canAccess && "opacity-60 cursor-not-allowed"
                       )}
                     >
-                      {hasNoAccess && <Lock className="h-4 w-4 text-slate-400" />}
+                      {!canAccess && <Lock className="h-4 w-4 text-slate-400" />}
                       <span>{item.title}</span>
-                      {hasNoAccess && (
+                      {!canAccess && (
                         <span className="ml-auto text-xs text-slate-400">
                           No access
                         </span>
