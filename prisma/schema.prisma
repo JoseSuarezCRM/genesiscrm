@@ -126,6 +126,39 @@ enum ReferralStatus {
   LOST
 }
 
+enum CustomPropertyType {
+  TEXT
+  LONG_TEXT
+  NUMBER
+  EMAIL
+  PHONE
+  DATE
+  CHECKBOX
+  DROPDOWN
+  MULTI_SELECT
+  URL
+}
+
+enum CustomPropertyEntityType {
+  REFERRAL
+  PROVIDER
+  PRACTICE
+}
+
+model CustomProperty {
+  id          String                     @id @default(cuid())
+  name        String                     // e.g., "Surgery Type", "Insurance Plan"
+  type        CustomPropertyType
+  entityType  CustomPropertyEntityType
+  required    Boolean                    @default(false)
+  description String?
+  options     String[]                   @default([])  // for DROPDOWN and MULTI_SELECT
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@unique([name, entityType])
+}
+
 model User {
   id                    String         @id @default(cuid())
   email                 String         @unique
@@ -187,16 +220,17 @@ model TeamMember {
 }
 
 model ReferringPractice {
-  id         String             @id @default(cuid())
-  name       String
-  phone      String?
-  fax        String?
-  address    String?
-  createdAt  DateTime           @default(now())
-  locations  PracticeLocation[]
-  doctors    ReferringDoctor[]
-  referrals  Referral[]
-  activities Activity[]
+  id                 String             @id @default(cuid())
+  name               String
+  phone              String?
+  fax                String?
+  address            String?
+  customProperties   Json               @default("{}") // custom property values
+  createdAt          DateTime           @default(now())
+  locations          PracticeLocation[]
+  doctors            ReferringDoctor[]
+  referrals          Referral[]
+  activities         Activity[]
 }
 
 // A specific office/campus of a practice
@@ -221,21 +255,22 @@ enum ContactType {
 
 // A provider — belongs to one practice, can work at multiple locations
 model ReferringDoctor {
-  id            String             @id @default(cuid())
-  name          String
-  title         String?            // MD, DO, NP, PA-C, DPM, etc.
-  npi           String?            // National Provider Identifier (10 digits)
-  specialty     String?
-  phone         String?
-  email         String?
-  contactType   ContactType        @default(PROVIDER)
-  practiceId    String
-  practice      ReferringPractice  @relation(fields: [practiceId], references: [id])
-  locations     DoctorLocation[]
-  referrals     Referral[]
-  providerNotes ProviderNote[]
-  activities    ActivityProvider[]
-  createdAt     DateTime           @default(now())
+  id                 String             @id @default(cuid())
+  name               String
+  title              String?            // MD, DO, NP, PA-C, DPM, etc.
+  npi                String?            // National Provider Identifier (10 digits)
+  specialty          String?
+  phone              String?
+  email              String?
+  contactType        ContactType        @default(PROVIDER)
+  customProperties   Json               @default("{}") // custom property values
+  practiceId         String
+  practice           ReferringPractice  @relation(fields: [practiceId], references: [id])
+  locations          DoctorLocation[]
+  referrals          Referral[]
+  providerNotes      ProviderNote[]
+  activities         ActivityProvider[]
+  createdAt          DateTime           @default(now())
 }
 
 // Join table: doctor <-> location (many-to-many)
@@ -294,6 +329,7 @@ model Referral {
   imagingType         String?            // CT | MRI | MRI Arthrogram — only set for MRI pipeline referrals
   // Notes & meta
   notes               String?
+  customProperties    Json               @default("{}") // custom property values
   createdById         String?
   createdBy           User?              @relation("ReferralCreatedBy", fields: [createdById], references: [id])
   assignedToId        String?
