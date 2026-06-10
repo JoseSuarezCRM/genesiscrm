@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Settings } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,6 +41,15 @@ export default function ReferralDetailRightColumn({
     practiceCardLayout,
     providerCardLayout,
   ])
+
+  // Update layouts when props change (e.g., when opening a different referral)
+  useEffect(() => {
+    setLayouts([
+      referralCardLayout,
+      practiceCardLayout,
+      providerCardLayout,
+    ])
+  }, [referralCardLayout, practiceCardLayout, providerCardLayout])
 
   const handleOpenCustomization = (cardName: string) => {
     setEditingCardName(cardName)

@@ -54,7 +54,9 @@ export async function updateCardLayout(
     console.warn("CardLayout update failed:", e)
   }
 
-  revalidatePath("/")
+  revalidatePath("/referrals")
+  revalidatePath("/referring-doctors")
+  revalidatePath("/practices")
   return { success: true }
 }
 
