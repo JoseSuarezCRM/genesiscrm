@@ -119,12 +119,14 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
       </div>
 
       {/* Reassign Practice/Provider */}
-      <ReferralReassignPanel
-        referralId={referral.id}
-        currentPracticeId={referral.referringPractice?.id || null}
-        currentProviderId={referral.referringDoctor?.id || null}
-        practices={practices as any}
-      />
+      <div id="reassign-panel">
+        <ReferralReassignPanel
+          referralId={referral.id}
+          currentPracticeId={referral.referringPractice?.id || null}
+          currentProviderId={referral.referringDoctor?.id || null}
+          practices={practices as any}
+        />
+      </div>
 
       {/* Three-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
