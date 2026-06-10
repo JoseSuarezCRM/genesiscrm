@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import Sidebar from "@/components/sidebar"
-import NotificationBell from "@/components/notification-bell"
 import SessionWatcher from "@/components/session-watcher"
 import TopToolbar from "@/components/top-toolbar"
 
@@ -30,12 +29,11 @@ export default async function DashboardLayout({
         userPermissions={(session.user as any).permissions ?? []}
       />
       <div className="flex flex-col flex-1 overflow-hidden">
-        <TopToolbar />
+        <TopToolbar initialNotifications={notifications} />
         <main className="flex-1 overflow-auto bg-white">
           {children}
         </main>
       </div>
-      <NotificationBell initialNotifications={notifications} />
       <SessionWatcher />
     </div>
   )
