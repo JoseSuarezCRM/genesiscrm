@@ -4,67 +4,61 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   Users,
-  UserCheck,
-  LayoutDashboard,
   LogOut,
-  BarChart2,
-  MessageSquare,
-  Code2,
-  Send,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  CheckSquare,
-  Zap,
-  CopyX,
-  CalendarDays,
-  RefreshCw,
-  ClipboardList,
-  Building2,
-  MessageCircle,
   CalendarRange,
-  UsersRound,
+  ClipboardList,
   Stethoscope,
+  Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const referralItems = [
-  { href: "/",                  label: "Dashboard",           icon: LayoutDashboard },
-  { href: "/referrals",         label: "Referrals",           icon: Users },
-  { href: "/practices",         label: "Practices",           icon: Building2 },
-  { href: "/referring-doctors", label: "Providers",           icon: UserCheck },
-  { href: "/activities",        label: "Activities",          icon: CalendarDays },
-  { href: "/tasks",             label: "Tasks",               icon: CheckSquare },
-  { href: "/messages",          label: "SMS Inbox",           icon: MessageCircle },
-  { href: "/reports",           label: "Reports",             icon: BarChart2 },
-  { href: "/broadcasts",        label: "Broadcasts",          icon: Send },
+  { href: "/",                  label: "Dashboard" },
+  { href: "/referrals",         label: "Referrals" },
+  { href: "/practices",         label: "Practices" },
+  { href: "/referring-doctors", label: "Providers" },
+  { href: "/activities",        label: "Activities" },
+  { href: "/tasks",             label: "Tasks" },
+  { href: "/messages",          label: "SMS Inbox" },
+  { href: "/reports",           label: "Reports" },
+  { href: "/broadcasts",        label: "Broadcasts" },
 ]
 
 const appointmentItems = [
-  { href: "/appointments",           label: "Completed Appts",     icon: ClipboardList },
-  { href: "/appointments/providers", label: "Referring Providers", icon: Building2 },
+  { href: "/appointments",           label: "Completed Appts" },
+  { href: "/appointments/providers", label: "Referring Providers" },
 ]
 
 const schedulingItems = [
-  { href: "/scheduler",       label: "Weekly Schedule", icon: CalendarRange },
-  { href: "/scheduler/staff", label: "Staff Roster",    icon: UsersRound },
+  { href: "/scheduler",       label: "Weekly Schedule" },
+  { href: "/scheduler/staff", label: "Staff Roster" },
 ]
 
 const surgeryItems = [
-  { href: "/surgery",         label: "Surgery Cases",   icon: Stethoscope },
-  { href: "/surgery/reports", label: "Surgery Reports", icon: BarChart2 },
+  { href: "/surgery",         label: "Surgery Cases" },
+  { href: "/surgery/reports", label: "Surgery Reports" },
 ]
 
 const adminItems = [
-  { href: "/settings/outreach",     label: "Outreach Templates", icon: MessageSquare },
-  { href: "/settings/embed",        label: "Embed Referral Form",icon: Code2 },
-  { href: "/automations",           label: "Automations",        icon: Zap },
-  { href: "/settings/duplicates",   label: "Duplicate Detection",icon: CopyX },
-  { href: "/settings/reconcile",    label: "Appt Reconciliation",icon: RefreshCw },
-  { href: "/settings/marketing",    label: "Marketing Materials", icon: Send },
+  { href: "/settings/outreach",   label: "Outreach Templates" },
+  { href: "/settings/embed",      label: "Embed Referral Form" },
+  { href: "/automations",         label: "Automations" },
+  { href: "/settings/duplicates", label: "Duplicate Detection" },
+  { href: "/settings/reconcile",  label: "Appt Reconciliation" },
+  { href: "/settings/marketing",  label: "Marketing Materials" },
+]
+
+const sections = [
+  { key: "NAV_REFERRALS",    title: "Referrals",    icon: Users,         items: referralItems },
+  { key: "NAV_APPOINTMENTS", title: "Appointments", icon: ClipboardList, items: appointmentItems },
+  { key: "NAV_SCHEDULING",   title: "Scheduling",   icon: CalendarRange, items: schedulingItems },
+  { key: "NAV_SURGERY",      title: "Surgery",      icon: Stethoscope,   items: surgeryItems },
+  { key: "NAV_ADMIN",        title: "Admin",        icon: Settings,      items: adminItems },
 ]
 
 interface SidebarProps {
@@ -74,245 +68,190 @@ interface SidebarProps {
   userPermissions: string[]
 }
 
-function NavLink({
-  href,
-  label,
-  icon: Icon,
-  isActive,
-  collapsed,
-}: {
-  href: string
-  label: string
-  icon: React.ElementType
-  isActive: boolean
-  collapsed: boolean
-}) {
-  return (
-    <Link
-      href={href}
-      title={collapsed ? label : undefined}
-      className={cn(
-        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-        collapsed && "justify-center px-2",
-        isActive
-          ? "bg-blue-600 text-white"
-          : "text-slate-300 hover:bg-slate-800 hover:text-white"
-      )}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      {!collapsed && label}
-    </Link>
-  )
-}
-
-interface SectionProps {
-  title: string
-  items: { href: string; label: string; icon: React.ElementType }[]
-  pathname: string
-  collapsed: boolean
-  defaultOpen?: boolean
-}
-
-function NavSection({ title, items, pathname, collapsed, defaultOpen = true }: SectionProps) {
-  const hasActive = items.some((item) =>
-    item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")
-  )
-  const [open, setOpen] = useState(defaultOpen || hasActive)
-
-  // Auto-open if a child becomes active (e.g. on navigation)
-  useEffect(() => {
-    if (hasActive) setOpen(true)
-  }, [hasActive])
-
-  if (collapsed) {
-    return (
-      <>
-        <div className="pt-2 border-t border-slate-700 mt-1 mb-1" />
-        {items.map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname === item.href || pathname.startsWith(item.href + "/")
-          return (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              icon={item.icon}
-              isActive={isActive}
-              collapsed
-            />
-          )
-        })}
-      </>
-    )
-  }
-
-  return (
-    <div>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-3 py-1.5 mt-2 rounded-md group hover:bg-slate-800 transition-colors"
-      >
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors">
-          {title}
-        </span>
-        <ChevronDown
-          className={cn(
-            "h-3 w-3 text-slate-600 group-hover:text-slate-400 transition-all duration-200",
-            open ? "rotate-0" : "-rotate-90"
-          )}
-        />
-      </button>
-
-      <div
-        className={cn(
-          "overflow-hidden transition-all duration-200",
-          open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-        )}
-      >
-        <div className="pt-0.5 space-y-0.5">
-          {items.map((item) => {
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname === item.href || pathname.startsWith(item.href + "/")
-            return (
-              <NavLink
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                icon={item.icon}
-                isActive={isActive}
-                collapsed={false}
-              />
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
+function isItemActive(href: string, pathname: string) {
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/")
 }
 
 export default function Sidebar({ userName, userEmail, userRole, userPermissions }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const [openSection, setOpenSection] = useState<string | null>(null)
+  const [flyoutTop, setFlyoutTop] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const isSuperAdmin = userRole === "ADMIN"
   const hasNavPerms = userPermissions.some(p => p.startsWith("NAV_"))
   // If no NAV_* perms set (no team assigned), show all non-admin sections
   const can = (key: string) => isSuperAdmin || (hasNavPerms ? userPermissions.includes(key) : key !== "NAV_ADMIN")
 
-  return (
-    <div
-      className={cn(
-        "relative flex flex-col h-full bg-slate-900 text-white transition-all duration-200 shrink-0",
-        collapsed ? "w-16" : "w-64"
-      )}
-    >
-      {/* Toggle button */}
-      <button
-        onClick={() => setCollapsed((c) => !c)}
-        className="absolute -right-3 top-6 z-10 flex items-center justify-center w-6 h-6 bg-slate-700 hover:bg-slate-600 text-white rounded-full shadow transition-colors"
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
-      </button>
+  const visibleSections = sections.filter((s) => can(s.key))
+  const activeFlyout = visibleSections.find((s) => s.title === openSection)
 
-      {/* Brand */}
+  // Close the flyout after navigating
+  useEffect(() => {
+    setOpenSection(null)
+  }, [pathname])
+
+  // Close on outside click or Escape
+  useEffect(() => {
+    if (!openSection) return
+    const onMouseDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpenSection(null)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenSection(null)
+    }
+    document.addEventListener("mousedown", onMouseDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [openSection])
+
+  const handleSectionClick = (title: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (openSection === title) {
+      setOpenSection(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    // Keep the panel on screen for sections near the bottom
+    setFlyoutTop(Math.min(rect.top, Math.max(80, window.innerHeight - 420)))
+    setOpenSection(title)
+  }
+
+  return (
+    <div ref={containerRef} className="relative h-full shrink-0">
       <div
         className={cn(
-          "flex items-center gap-3 border-b border-slate-700 overflow-hidden shrink-0",
-          collapsed ? "px-4 py-5 justify-center" : "px-6 py-5"
+          "relative flex flex-col h-full bg-slate-900 text-white transition-all duration-200",
+          collapsed ? "w-16" : "w-56"
         )}
       >
-        <Image src="/logo.png" alt="Genesis Ortho" width={40} height={40} className="rounded-lg shrink-0" />
-        {!collapsed && (
-          <div>
-            <p className="font-semibold text-sm leading-tight">Genesis Ortho</p>
-            <p className="text-xs text-slate-400 leading-tight">Referral CRM</p>
-          </div>
-        )}
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto sidebar-scroll">
-        {can("NAV_REFERRALS") && (
-          <NavSection
-            title="Referrals"
-            items={referralItems}
-            pathname={pathname}
-            collapsed={collapsed}
-            defaultOpen
-          />
-        )}
-
-        {can("NAV_APPOINTMENTS") && (
-          <NavSection
-            title="Appointments"
-            items={appointmentItems}
-            pathname={pathname}
-            collapsed={collapsed}
-            defaultOpen
-          />
-        )}
-
-        {can("NAV_SCHEDULING") && (
-          <NavSection
-            title="Scheduling"
-            items={schedulingItems}
-            pathname={pathname}
-            collapsed={collapsed}
-            defaultOpen={false}
-          />
-        )}
-
-        {can("NAV_SURGERY") && (
-          <NavSection
-            title="Surgery"
-            items={surgeryItems}
-            pathname={pathname}
-            collapsed={collapsed}
-            defaultOpen
-          />
-        )}
-
-        {can("NAV_ADMIN") && (
-          <NavSection
-            title="Admin"
-            items={adminItems}
-            pathname={pathname}
-            collapsed={collapsed}
-            defaultOpen={false}
-          />
-        )}
-      </nav>
-
-      {/* User footer */}
-      <div className={cn("py-4 border-t border-slate-700 shrink-0", collapsed ? "px-2" : "px-3")}>
-        {!collapsed && (
-          <div className="flex items-center gap-3 px-3 py-2 mb-2">
-            <div className="flex items-center justify-center w-8 h-8 bg-blue-500 rounded-full text-xs font-bold shrink-0">
-              {(userName || userEmail).charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userName || "User"}</p>
-              <p className="text-xs text-slate-400 truncate">{userEmail}</p>
-            </div>
-          </div>
-        )}
+        {/* Toggle button */}
         <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          title={collapsed ? "Sign Out" : undefined}
+          onClick={() => setCollapsed((c) => !c)}
+          className="absolute -right-3 top-6 z-10 flex items-center justify-center w-6 h-6 bg-slate-700 hover:bg-slate-600 text-white rounded-full shadow transition-colors"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+        </button>
+
+        {/* Brand */}
+        <div
           className={cn(
-            "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-colors",
-            collapsed && "justify-center px-2"
+            "flex items-center gap-3 border-b border-slate-700 overflow-hidden shrink-0",
+            collapsed ? "px-4 py-5 justify-center" : "px-5 py-5"
           )}
         >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {!collapsed && "Sign Out"}
-        </button>
+          <Image src="/logo.png" alt="Genesis Ortho" width={40} height={40} className="rounded-lg shrink-0" />
+          {!collapsed && (
+            <div>
+              <p className="font-semibold text-sm leading-tight">Genesis Ortho</p>
+              <p className="text-xs text-slate-400 leading-tight">Referral CRM</p>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation: top-level categories */}
+        <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto sidebar-scroll">
+          {visibleSections.map((section) => {
+            const Icon = section.icon
+            const hasActive = section.items.some((item) => isItemActive(item.href, pathname))
+            const isOpen = openSection === section.title
+            return (
+              <button
+                key={section.title}
+                onClick={(e) => handleSectionClick(section.title, e)}
+                title={collapsed ? section.title : undefined}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                  collapsed && "justify-center px-2",
+                  hasActive
+                    ? "bg-blue-600 text-white"
+                    : isOpen
+                      ? "bg-slate-700 text-white"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {!collapsed && (
+                  <>
+                    <span className="flex-1 text-left">{section.title}</span>
+                    <ChevronRight
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform",
+                        isOpen ? "translate-x-0.5" : "",
+                        hasActive ? "text-white/70" : "text-slate-500"
+                      )}
+                    />
+                  </>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* User footer */}
+        <div className={cn("py-4 border-t border-slate-700 shrink-0", collapsed ? "px-2" : "px-3")}>
+          {!collapsed && (
+            <div className="flex items-center gap-3 px-3 py-2 mb-2">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-500 rounded-full text-xs font-bold shrink-0">
+                {(userName || userEmail).charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{userName || "User"}</p>
+                <p className="text-xs text-slate-400 truncate">{userEmail}</p>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            title={collapsed ? "Sign Out" : undefined}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-colors",
+              collapsed && "justify-center px-2"
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed && "Sign Out"}
+          </button>
+        </div>
       </div>
+
+      {/* Flyout panel */}
+      {activeFlyout && (
+        <div
+          className="fixed z-50 w-56 max-h-[80vh] overflow-y-auto bg-slate-800 rounded-xl shadow-2xl shadow-black/40 border border-slate-700 py-2 px-2 animate-in fade-in slide-in-from-left-2 duration-150"
+          style={{ top: flyoutTop, left: (collapsed ? 64 : 224) + 8 }}
+        >
+          <p className="px-3 pt-1.5 pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            {activeFlyout.title}
+          </p>
+          <div className="space-y-0.5">
+            {activeFlyout.items.map((item) => {
+              const isActive = isItemActive(item.href, pathname)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpenSection(null)}
+                  className={cn(
+                    "block px-3 py-2 rounded-lg text-sm transition-colors",
+                    isActive
+                      ? "bg-blue-600 text-white font-medium"
+                      : "text-slate-200 hover:bg-slate-700 hover:text-white"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
