@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useEffect, useTransition } from "react"
 import Link from "next/link"
-import { Settings, Plus } from "lucide-react"
+import { Settings, Plus, Check, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ReferralStatus } from "@prisma/client"
 import { STATUS_LABELS, formatDate, formatPhone } from "@/lib/utils"
-import { updateReferralStatus } from "@/app/actions/referrals"
+import { updateReferralStatus, updateReferralField } from "@/app/actions/referrals"
 import ReferralAssignee from "@/components/referral-assignee"
 import TagSelector from "@/components/tag-selector"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
@@ -40,22 +40,133 @@ function PropertyRow({
   bold?: boolean
 }) {
   return (
-    <div className="flex justify-between gap-4 py-2.5 border-b border-slate-100 last:border-0">
-      <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+    <div className="py-2.5 border-b border-slate-100 last:border-0">
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-0.5">
         {label}
       </span>
       {href ? (
         <Link
           href={href}
-          className={`text-sm text-blue-600 hover:text-blue-700 hover:underline text-right ${bold ? "font-semibold" : ""}`}
+          className={`block text-sm text-blue-600 hover:text-blue-700 hover:underline ${bold ? "font-semibold" : ""}`}
         >
           {value ?? "—"}
         </Link>
       ) : (
-        <span className={`text-sm text-slate-900 text-right ${bold ? "font-semibold" : ""}`}>
-          {value ?? "—"}
+        <span className={`block text-sm text-slate-900 ${bold ? "font-semibold" : ""}`}>
+          {value ?? <span className="text-slate-400">—</span>}
         </span>
       )}
+    </div>
+  )
+}
+
+function EditableRow({
+  referralId,
+  field,
+  label,
+  value,
+  type = "text",
+  format,
+}: {
+  referralId: string
+  field: string
+  label: string
+  value: any
+  type?: "text" | "date"
+  format?: (v: any) => string | null
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [current, setCurrent] = useState<any>(value)
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  // Sync with fresh server data after revalidation
+  useEffect(() => { setCurrent(value) }, [value])
+
+  const display = current != null && current !== ""
+    ? (format ? format(current) : String(current))
+    : null
+
+  const startEdit = () => {
+    if (type === "date") {
+      setDraft(current ? new Date(current).toISOString().split("T")[0] : "")
+    } else {
+      setDraft(current != null ? String(current) : "")
+    }
+    setError(null)
+    setEditing(true)
+  }
+
+  const save = () => {
+    startTransition(async () => {
+      const res = await updateReferralField(referralId, field, draft || null)
+      if (res?.error) {
+        setError(typeof res.error === "string" ? res.error : "Failed to save")
+        return
+      }
+      setCurrent(draft || null)
+      setEditing(false)
+    })
+  }
+
+  if (editing) {
+    return (
+      <div className="py-2.5 border-b border-slate-100 last:border-0 space-y-1.5">
+        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+          {label}
+        </span>
+        <div className="flex items-center gap-1">
+          <input
+            autoFocus
+            type={type}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                save()
+              } else if (e.key === "Escape") {
+                setEditing(false)
+              }
+            }}
+            disabled={isPending}
+            className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 disabled:opacity-50"
+          />
+          <button
+            onClick={save}
+            disabled={isPending}
+            className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+            title="Save (Enter)"
+          >
+            <Check className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            disabled={isPending}
+            className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+            title="Cancel (Esc)"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="py-2.5 border-b border-slate-100 last:border-0">
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-0.5">
+        {label}
+      </span>
+      <button
+        onClick={startEdit}
+        className="block w-full text-left text-sm text-slate-900 cursor-text rounded px-1 -mx-1 py-0.5 hover:bg-blue-50/70 hover:ring-1 hover:ring-blue-200 transition-colors"
+        title={`Click to edit ${label}`}
+      >
+        {display ?? <span className="text-slate-400">—</span>}
+      </button>
     </div>
   )
 }
@@ -153,15 +264,15 @@ export default function ReferralDetailLeftColumn({
           </WidgetBlock>
         )
       case "mrn":
-        return <PropertyRow key={fieldId} label="Genesis MRN" value={referral.genesisMrn} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="genesisMrn" label="Genesis MRN" value={referral.genesisMrn} />
       case "patientMrn":
-        return <PropertyRow key={fieldId} label="Patient MRN" value={referral.patientMrn} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="patientMrn" label="Patient MRN" value={referral.patientMrn} />
       case "dob":
-        return <PropertyRow key={fieldId} label="DOB" value={formatDate(referral.patientDob)} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="patientDob" label="DOB" value={referral.patientDob} type="date" format={formatDate} />
       case "patientPhone":
-        return <PropertyRow key={fieldId} label="Patient Phone" value={formatPhone(referral.patientPhone)} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="patientPhone" label="Patient Phone" value={referral.patientPhone} format={formatPhone} />
       case "patientEmail":
-        return <PropertyRow key={fieldId} label="Patient Email" value={referral.patientEmail} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="patientEmail" label="Patient Email" value={referral.patientEmail} />
       case "practice":
         return (
           <PropertyRow
@@ -183,17 +294,17 @@ export default function ReferralDetailLeftColumn({
           />
         )
       case "npi":
-        return <PropertyRow key={fieldId} label="NPI" value={referral.referringNpi ?? referral.referringDoctor?.npi} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="referringNpi" label="NPI" value={referral.referringNpi ?? referral.referringDoctor?.npi} />
       case "location":
         return <PropertyRow key={fieldId} label="Location" value={referral.referringLocation?.name} />
       case "insurance":
-        return <PropertyRow key={fieldId} label="Insurance" value={referral.insuranceProvider} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="insuranceProvider" label="Insurance" value={referral.insuranceProvider} />
       case "pipeline":
         return <PropertyRow key={fieldId} label="Pipeline" value={referral.pipeline?.name} />
       case "referralDate":
-        return <PropertyRow key={fieldId} label="Referral Date" value={formatDate(referral.referralDate)} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="referralDate" label="Referral Date" value={referral.referralDate} type="date" format={formatDate} />
       case "appointmentDate":
-        return <PropertyRow key={fieldId} label="Appointment Date" value={formatDate(referral.appointmentDate)} />
+        return <EditableRow key={fieldId} referralId={referral.id} field="appointmentDate" label="Appointment Date" value={referral.appointmentDate} type="date" format={formatDate} />
       case "createdBy":
         return <PropertyRow key={fieldId} label="Created By" value={referral.createdBy?.name || referral.createdBy?.email} />
       case "createdAt":
@@ -256,10 +367,10 @@ export default function ReferralDetailLeftColumn({
               <CardTitle className="text-sm">Patient</CardTitle>
             </CardHeader>
             <CardContent className="space-y-0">
-              <PropertyRow label="MRN" value={referral.genesisMrn} />
-              <PropertyRow label="DOB" value={formatDate(referral.patientDob)} />
-              <PropertyRow label="Phone" value={formatPhone(referral.patientPhone)} />
-              <PropertyRow label="Email" value={referral.patientEmail} />
+              <EditableRow referralId={referral.id} field="genesisMrn" label="Genesis MRN" value={referral.genesisMrn} />
+              <EditableRow referralId={referral.id} field="patientDob" label="DOB" value={referral.patientDob} type="date" format={formatDate} />
+              <EditableRow referralId={referral.id} field="patientPhone" label="Phone" value={referral.patientPhone} format={formatPhone} />
+              <EditableRow referralId={referral.id} field="patientEmail" label="Email" value={referral.patientEmail} />
             </CardContent>
           </Card>
 
@@ -280,7 +391,7 @@ export default function ReferralDetailLeftColumn({
                 href={referral.referringDoctor ? `/referring-doctors/${referral.referringDoctor.id}` : undefined}
                 bold
               />
-              <PropertyRow label="NPI" value={referral.referringNpi ?? referral.referringDoctor?.npi} />
+              <EditableRow referralId={referral.id} field="referringNpi" label="NPI" value={referral.referringNpi ?? referral.referringDoctor?.npi} />
             </CardContent>
           </Card>
         </>

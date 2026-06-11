@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Edit2, Check, X } from "lucide-react"
+import { Check, X } from "lucide-react"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
 
 interface CustomProperty {
@@ -144,20 +144,17 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
   }
 
   return (
-    <div className="group flex justify-between gap-4 py-2.5 border-b border-slate-100 last:border-0">
-      <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+    <div className="py-2.5 border-b border-slate-100 last:border-0">
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-0.5">
         {property.name}
       </span>
-      <span className="text-sm text-slate-900 text-right flex items-center gap-1.5">
+      <button
+        onClick={() => setEditing(true)}
+        className="block w-full text-left text-sm text-slate-900 cursor-text rounded px-1 -mx-1 py-0.5 hover:bg-blue-50/70 hover:ring-1 hover:ring-blue-200 transition-colors"
+        title={`Click to edit ${property.name}`}
+      >
         {displayValue()}
-        <button
-          onClick={() => setEditing(true)}
-          className="p-0.5 text-slate-300 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"
-          title={`Edit ${property.name}`}
-        >
-          <Edit2 className="h-3.5 w-3.5" />
-        </button>
-      </span>
+      </button>
     </div>
   )
 }

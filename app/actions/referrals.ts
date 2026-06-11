@@ -227,6 +227,50 @@ export async function updateReferral(id: string, data: unknown) {
   redirect(`/referrals/${id}`)
 }
 
+const EDITABLE_REFERRAL_TEXT_FIELDS = [
+  "genesisMrn",
+  "patientMrn",
+  "patientPhone",
+  "patientEmail",
+  "referringNpi",
+  "insuranceProvider",
+] as const
+const EDITABLE_REFERRAL_DATE_FIELDS = ["patientDob", "referralDate", "appointmentDate"] as const
+
+// Updates a single referral field (inline editing on the detail page)
+export async function updateReferralField(id: string, field: string, value: string | null) {
+  const { session } = await assertReferralAccess(id)
+
+  const isText = (EDITABLE_REFERRAL_TEXT_FIELDS as readonly string[]).includes(field)
+  const isDate = (EDITABLE_REFERRAL_DATE_FIELDS as readonly string[]).includes(field)
+  if (!isText && !isDate) return { error: "Invalid field" }
+
+  const trimmed = value?.trim() || null
+
+  let fieldValue: string | Date | null
+  if (isDate) {
+    if (field === "referralDate" && !trimmed) return { error: "Referral date is required" }
+    fieldValue = parseDate(trimmed ?? undefined)
+    if (trimmed && !fieldValue) return { error: "Invalid date" }
+  } else {
+    fieldValue = trimmed
+  }
+
+  await prisma.referral.update({ where: { id }, data: { [field]: fieldValue } })
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.REFERRAL_UPDATE,
+    resourceType: "Referral",
+    resourceId: id,
+    metadata: { field },
+  })
+
+  revalidatePath(`/referrals/${id}`)
+  revalidatePath("/referrals")
+  return { success: true }
+}
+
 export async function updateReferralNotes(id: string, notes: string) {
   const { session } = await assertReferralAccess(id)
 

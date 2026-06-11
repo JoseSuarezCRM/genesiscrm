@@ -169,6 +169,7 @@ export default function ReferralDetailRightColumn({
   const currentProviderLayout = getLayoutByCardName("Provider")
   const currentEditingLayout = editingCardName ? getLayoutByCardName(editingCardName) : referralCardLayout
 
+  // Shows only the value (HubSpot-style association card); label kept as hover tooltip
   function PropertyRow({
     label,
     value,
@@ -181,19 +182,18 @@ export default function ReferralDetailRightColumn({
     bold?: boolean
   }) {
     return (
-      <div className="flex justify-between gap-4 py-2.5 border-b border-slate-100 last:border-0">
-        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-          {label}
-        </span>
+      <div className="py-1.5 border-b border-slate-100 last:border-0" title={label}>
         {href ? (
           <Link
             href={href}
-            className={`text-sm text-blue-600 hover:text-blue-700 hover:underline text-right ${bold ? "font-semibold" : ""}`}
+            className="block text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline"
           >
             {value ?? "—"}
           </Link>
         ) : (
-          <span className={`text-sm text-slate-900 text-right ${bold ? "font-semibold" : ""}`}>{value ?? "—"}</span>
+          <span className={`block text-sm text-slate-900 ${bold ? "font-semibold" : ""}`}>
+            {value ?? <span className="text-slate-400">—</span>}
+          </span>
         )}
       </div>
     )
