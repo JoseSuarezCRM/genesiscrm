@@ -74,7 +74,7 @@ function isItemActive(href: string, pathname: string) {
 
 export default function Sidebar({ userName, userEmail, userRole, userPermissions }: SidebarProps) {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const [openSection, setOpenSection] = useState<string | null>(null)
   const [flyoutTop, setFlyoutTop] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
