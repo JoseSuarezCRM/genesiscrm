@@ -11,6 +11,7 @@ import { updateReferralStatus } from "@/app/actions/referrals"
 import ReferralAssignee from "@/components/referral-assignee"
 import TagSelector from "@/components/tag-selector"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
+import CustomPropertyField from "@/components/custom-property-field"
 
 interface CardLayout {
   cardName: string
@@ -23,6 +24,7 @@ interface Props {
   users: { id: string; name: string | null; email: string }[]
   allTags: any[]
   leftCards: CardLayout[]
+  customProperties: any[]
   isAdmin: boolean
 }
 
@@ -94,6 +96,7 @@ export default function ReferralDetailLeftColumn({
   users,
   allTags,
   leftCards,
+  customProperties,
   isAdmin,
 }: Props) {
   const [editorOpen, setEditorOpen] = useState(false)
@@ -109,6 +112,19 @@ export default function ReferralDetailLeftColumn({
     : referral.referringDoctorName
 
   const renderField = (fieldId: string) => {
+    if (fieldId.startsWith("custom:")) {
+      const propertyId = fieldId.slice("custom:".length)
+      const property = customProperties.find((p) => p.id === propertyId)
+      if (!property) return null
+      return (
+        <CustomPropertyField
+          key={fieldId}
+          entityType="REFERRAL"
+          entityId={referral.id}
+          property={property}
+        />
+      )
+    }
     switch (fieldId) {
       case "status":
         return (
@@ -187,6 +203,18 @@ export default function ReferralDetailLeftColumn({
 
   return (
     <>
+      {isAdmin && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => openEditor(null)}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+            title="Create a new card"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add card
+          </button>
+        </div>
+      )}
+
       {leftCards.length === 0 ? (
         <>
           {/* Default cards (shown until an admin creates custom cards) */}
@@ -283,23 +311,13 @@ export default function ReferralDetailLeftColumn({
         ))
       )}
 
-      {isAdmin && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full border-dashed text-slate-500 hover:text-slate-700"
-          onClick={() => openEditor(null)}
-        >
-          <Plus className="h-4 w-4 mr-1.5" /> Add Card
-        </Button>
-      )}
-
       {editorOpen && (
         <LeftCardEditorModal
           open={editorOpen}
           onOpenChange={setEditorOpen}
           entityType="REFERRAL"
           existing={editingCard}
+          customProperties={customProperties.map((p) => ({ id: p.id, name: p.name }))}
         />
       )}
     </>

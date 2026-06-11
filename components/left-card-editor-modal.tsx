@@ -31,6 +31,8 @@ interface Props {
   entityType: "REFERRAL" | "PROVIDER" | "PRACTICE"
   // null = creating a new card
   existing: CardLayout | null
+  // custom properties defined in Settings, selectable like built-in fields
+  customProperties?: { id: string; name: string }[]
 }
 
 export default function LeftCardEditorModal({
@@ -38,10 +40,16 @@ export default function LeftCardEditorModal({
   onOpenChange,
   entityType,
   existing,
+  customProperties = [],
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [title, setTitle] = useState(existing?.title ?? "")
   const [fields, setFields] = useState<string[]>(existing?.fields ?? [])
+
+  const fieldPool = [
+    ...referralLeftFieldPool,
+    ...customProperties.map((p) => ({ id: `custom:${p.id}`, label: p.name })),
+  ]
 
   const toggleField = (fieldId: string) => {
     setFields((prev) =>
@@ -91,10 +99,10 @@ export default function LeftCardEditorModal({
 
           <div className="border rounded-lg p-4 border-slate-200 bg-white">
             <p className="text-xs text-slate-500 mb-3">
-              {fields.length} of {referralLeftFieldPool.length} properties shown
+              {fields.length} of {fieldPool.length} properties shown
             </p>
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {referralLeftFieldPool.map((field) => (
+              {fieldPool.map((field) => (
                 <div key={field.id} className="flex items-center gap-2">
                   <Checkbox
                     id={`left-card-${field.id}`}

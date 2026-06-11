@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { Trash2, Settings } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import BackButton from "@/components/back-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +14,6 @@ import EditReferralDialog from "@/components/edit-referral-dialog"
 import ReferralNotesEditor from "@/components/referral-notes-editor"
 import OutreachDialog from "@/components/outreach-dialog"
 import CallTracker from "@/components/call-tracker"
-import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { getCardLayout, getCardLayouts } from "@/app/actions/card-layouts"
 import ReferralDetailLeftColumn from "@/components/referral-detail-left-column"
@@ -113,23 +112,9 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             users={users}
             allTags={allTags}
             leftCards={leftCards as any}
+            customProperties={customProperties}
             isAdmin={isAdmin}
           />
-
-          {/* Custom Properties */}
-          {customProperties.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Custom Properties</CardTitle>
-                <a href="/settings/customization" title="Customize" className="p-1 text-slate-400 hover:text-slate-600">
-                  <Settings className="h-4 w-4" />
-                </a>
-              </CardHeader>
-              <CardContent>
-                <CustomPropertiesDisplay entityType="REFERRAL" entityId={referral.id} properties={customProperties} />
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* MIDDLE: Overview & Activities */}
