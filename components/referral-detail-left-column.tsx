@@ -153,7 +153,9 @@ export default function ReferralDetailLeftColumn({
           </WidgetBlock>
         )
       case "mrn":
-        return <PropertyRow key={fieldId} label="MRN" value={referral.genesisMrn} />
+        return <PropertyRow key={fieldId} label="Genesis MRN" value={referral.genesisMrn} />
+      case "patientMrn":
+        return <PropertyRow key={fieldId} label="Patient MRN" value={referral.patientMrn} />
       case "dob":
         return <PropertyRow key={fieldId} label="DOB" value={formatDate(referral.patientDob)} />
       case "patientPhone":
