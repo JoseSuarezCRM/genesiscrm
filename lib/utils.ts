@@ -60,10 +60,20 @@ export const STATUS_COLORS: Record<
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—"
   const d = new Date(date)
+  if (isNaN(d.getTime())) return "—"
+  // Date-only values (DOB, referral/appointment dates) are stored as UTC midnight.
+  // Format those in UTC so the calendar day doesn't shift in local timezones;
+  // real timestamps (with a time component) still format in local time.
+  const isDateOnly =
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+    ...(isDateOnly ? { timeZone: "UTC" } : {}),
   })
 }
 
