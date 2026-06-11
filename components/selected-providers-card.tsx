@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { updateDoctorField } from "@/app/actions/referring-doctors"
 import { Input } from "@/components/ui/input"
 import { Save, X, ChevronDown } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatPhone } from "@/lib/utils"
 
 interface Doctor {
   id: string
@@ -95,7 +95,18 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
               >
                 <div className="text-left">
                   <p className="font-medium text-sm text-slate-900">{doctor.name}</p>
-                  {doctor.title && <p className="text-xs text-slate-500">{doctor.title}</p>}
+                  {(() => {
+                    const subtitleParts = [
+                      doctor.title,
+                      doctor.specialty,
+                      doctor.npi ? `NPI ${doctor.npi}` : null,
+                      doctor.phone ? formatPhone(doctor.phone) : null,
+                      doctor.email,
+                    ].filter(Boolean)
+                    return subtitleParts.length > 0 ? (
+                      <p className="text-xs text-slate-500">{subtitleParts.join(" · ")}</p>
+                    ) : null
+                  })()}
                 </div>
                 <ChevronDown
                   className={cn(
