@@ -387,6 +387,34 @@ export async function updateDoctor(id: string, data: unknown) {
   return { success: true }
 }
 
+const EDITABLE_DOCTOR_FIELDS = ["name", "title", "npi", "specialty", "phone", "email"] as const
+
+// Updates a single doctor field without touching practice or location links
+export async function updateDoctorField(id: string, field: string, value: string | null) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  if (!(EDITABLE_DOCTOR_FIELDS as readonly string[]).includes(field)) {
+    return { error: "Invalid field" }
+  }
+
+  const trimmed = value?.trim() || null
+
+  if (field === "name" && !trimmed) return { error: "Provider name is required" }
+  if (field === "email" && trimmed && !z.string().email().safeParse(trimmed).success) {
+    return { error: "Invalid email address" }
+  }
+
+  await prisma.referringDoctor.update({
+    where: { id },
+    data: { [field]: field === "name" ? toProperCase(trimmed!) : trimmed },
+  })
+
+  revalidatePath("/referring-doctors")
+  revalidatePath("/activities")
+  return { success: true }
+}
+
 export async function mergeDoctor(sourceId: string, targetId: string) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
