@@ -10,6 +10,7 @@ import SelectedProvidersCard from "@/components/selected-providers-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import StyledSelect from "@/components/ui/styled-select"
+import { PhoneInput } from "@/components/ui/phone-input"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -461,7 +462,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
         </div>
         <div>
           <label className={labelCls}>Phone</label>
-          <input value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} placeholder="(312) 555-0100" />
+          <PhoneInput value={phone} onChange={setPhone} className="h-[38px] text-sm bg-white" />
         </div>
         <div>
           <label className={labelCls}>Email</label>
