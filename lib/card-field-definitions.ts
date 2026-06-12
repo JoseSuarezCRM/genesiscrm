@@ -41,7 +41,6 @@ export const cardFieldDefinitions: Record<EntityType, Record<string, CardFieldDe
     ],
     "Provider": [
       { id: "name", label: "Name", fieldKey: "referringDoctor.name" },
-      { id: "specialty", label: "Specialty", fieldKey: "referringDoctor.specialty" },
       { id: "npi", label: "NPI", fieldKey: "referringDoctor.npi" },
       { id: "phone", label: "Phone", fieldKey: "referringDoctor.phone" },
       { id: "email", label: "Email", fieldKey: "referringDoctor.email" },
@@ -52,7 +51,6 @@ export const cardFieldDefinitions: Record<EntityType, Record<string, CardFieldDe
   PROVIDER: {
     "Provider": [
       { id: "name", label: "Name", fieldKey: "name" },
-      { id: "specialty", label: "Specialty", fieldKey: "specialty" },
       { id: "npi", label: "NPI", fieldKey: "npi" },
       { id: "phone", label: "Phone", fieldKey: "phone" },
       { id: "email", label: "Email", fieldKey: "email" },

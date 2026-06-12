@@ -56,7 +56,6 @@ interface Props {
 
 const PROVIDER_COLUMNS: { key: string; label: string }[] = [
   { key: "title", label: "Title" },
-  { key: "specialty", label: "Specialty" },
   { key: "practice", label: "Practice" },
   { key: "npi", label: "NPI" },
   { key: "phone", label: "Phone" },
@@ -65,7 +64,7 @@ const PROVIDER_COLUMNS: { key: string; label: string }[] = [
   { key: "referrals", label: "Referrals" },
 ]
 
-const DEFAULT_PROVIDER_COLUMNS = ["title", "specialty", "practice", "npi", "referrals"]
+const DEFAULT_PROVIDER_COLUMNS = ["title", "practice", "npi", "referrals"]
 
 // ─── Field wrapper ─────────────────────────────────────────────────────────────
 
@@ -198,7 +197,6 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
       <Field label="NPI (National Provider Identifier)">
         <Input value={npi} onChange={(e) => setNpi(e.target.value)} placeholder="1234567890" maxLength={10} />
       </Field>
-      <Field label="Specialty"><Input value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="Orthopedic Surgery" /></Field>
       <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
       <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="dr.johnson@clinic.com" /></Field>
       <div className="space-y-1.5">
@@ -698,7 +696,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           ? allProviders.filter((d) =>
               d.name.toLowerCase().includes(q) ||
               d.practiceName.toLowerCase().includes(q) ||
-              d.specialty?.toLowerCase().includes(q) ||
               d.npi?.includes(q)
             )
           : allProviders
@@ -716,7 +713,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       <th className="px-4 py-2.5 font-semibold">Name</th>
                       {shows("title") && <th className="px-4 py-2.5 font-semibold">Title</th>}
-                      {shows("specialty") && <th className="px-4 py-2.5 font-semibold">Specialty</th>}
                       {shows("practice") && <th className="px-4 py-2.5 font-semibold">Practice</th>}
                       {shows("npi") && <th className="px-4 py-2.5 font-semibold">NPI</th>}
                       {shows("phone") && <th className="px-4 py-2.5 font-semibold">Phone</th>}
@@ -736,7 +732,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                           </Link>
                         </td>
                         {shows("title") && <td className="px-4 py-2.5 text-slate-500">{(d as any).title || "—"}</td>}
-                        {shows("specialty") && <td className="px-4 py-2.5 text-slate-500">{d.specialty || "—"}</td>}
                         {shows("practice") && (
                           <td className="px-4 py-2.5">
                             <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{d.practiceName}</span>
@@ -881,7 +876,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                               {(d as any).title ? <span className="text-slate-500 font-normal">{(d as any).title}</span> : null}{d.name}
                               <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
                             </Link>
-                            {d.specialty && <span className="text-slate-500 text-xs hidden md:block">{d.specialty}</span>}
                             <span className="text-xs text-slate-400 hidden sm:block shrink-0">
                               {(() => {
                                 const practiceLocationIds = new Set(p.locations.map((l) => l.id))

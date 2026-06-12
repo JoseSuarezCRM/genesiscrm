@@ -400,7 +400,6 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
   const [titleSelect, setTitleSelect] = useState("")
   const [titleCustom, setTitleCustom] = useState("")
   const [npi, setNpi] = useState("")
-  const [specialty, setSpecialty] = useState("")
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [locationIds, setLocationIds] = useState<string[]>([])
@@ -418,7 +417,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
     e.preventDefault()
     if (!name.trim()) { setErr("Name is required"); return }
     startTransition(async () => {
-      const res = await createDoctor({ name, title: finalTitle, npi, specialty, phone, email, practiceId, locationIds })
+      const res = await createDoctor({ name, title: finalTitle, npi, phone, email, practiceId, locationIds })
       if (!res || res.error || !res.id) { setErr("Failed to create provider"); return }
       onCreate({ id: res.id!, label: name + (finalTitle ? `, ${finalTitle}` : ""), name, title: finalTitle || null })
     })
@@ -453,10 +452,6 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
         <div>
           <label className={labelCls}>NPI</label>
           <input value={npi} onChange={e => setNpi(e.target.value)} className={inputCls} placeholder="1234567890" maxLength={10} />
-        </div>
-        <div>
-          <label className={labelCls}>Specialty</label>
-          <input value={specialty} onChange={e => setSpecialty(e.target.value)} className={inputCls} placeholder="Internal Medicine" />
         </div>
         <div>
           <label className={labelCls}>Phone</label>
@@ -1317,7 +1312,10 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
       {/* ── New / Edit Dialog ── */}
       <Dialog open={open} onOpenChange={v => !isPending && setOpen(v)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{editId ? "Edit Activity" : "New Activity"}</DialogTitle>
           </DialogHeader>
@@ -1392,12 +1390,6 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Date</label>
               <Input type="date" value={form.date} onChange={e => set("date", e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">
-                Front Desk Staff <span className="ml-1 text-slate-400 text-xs font-normal">ⓘ</span>
-              </label>
-              <Input value={form.frontDesk} onChange={e => set("frontDesk", e.target.value)} placeholder="e.g. Maria" />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Activity Type</label>

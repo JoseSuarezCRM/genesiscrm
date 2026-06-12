@@ -72,12 +72,11 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
     name: "Name",
     title: "Title",
     npi: "NPI",
-    specialty: "Specialty",
     phone: "Phone",
     email: "Email",
   }
 
-  const displayFields = ["name", "title", "npi", "specialty", "phone", "email"] as const
+  const displayFields = ["name", "title", "npi", "phone", "email"] as const
 
   return (
     <div className="space-y-3 border border-slate-200 rounded-lg bg-slate-50 p-4">
@@ -98,7 +97,6 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
                   {(() => {
                     const subtitleParts = [
                       doctor.title,
-                      doctor.specialty,
                       doctor.npi ? `NPI ${doctor.npi}` : null,
                       doctor.phone ? formatPhone(doctor.phone) : null,
                       doctor.email,

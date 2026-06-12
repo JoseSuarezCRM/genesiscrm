@@ -711,7 +711,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                   <SelectItem value={NONE}>— None —</SelectItem>
                   {availableDoctors.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      {d.name}{d.specialty ? ` · ${d.specialty}` : ""}
+                      {d.name}
                     </SelectItem>
                   ))}
                   {crossOrgDoctors.length > 0 && (
@@ -721,7 +721,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                       </div>
                       {crossOrgDoctors.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
-                          {d.name}{d.specialty ? ` · ${d.specialty}` : ""} <span className="text-slate-400">— {d._practiceName}</span>
+                          {d.name} <span className="text-slate-400">— {d._practiceName}</span>
                         </SelectItem>
                       ))}
                     </>

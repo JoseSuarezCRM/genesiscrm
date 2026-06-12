@@ -387,7 +387,7 @@ export async function updateDoctor(id: string, data: unknown) {
   return { success: true }
 }
 
-const EDITABLE_DOCTOR_FIELDS = ["name", "title", "npi", "specialty", "phone", "email"] as const
+const EDITABLE_DOCTOR_FIELDS = ["name", "title", "npi", "phone", "email"] as const
 
 // Updates a single doctor field without touching practice or location links
 export async function updateDoctorField(id: string, field: string, value: string | null) {

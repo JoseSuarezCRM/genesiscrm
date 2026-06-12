@@ -299,7 +299,6 @@ export default function PracticeDetailClient({ practice, referrals, isAdmin, cus
                   {doc.title ? `${doc.name}, ${doc.title}` : doc.name}
                   <ExternalLink className="h-3 w-3 text-slate-300 shrink-0" />
                 </Link>
-                {doc.specialty && <span className="text-xs text-slate-400 hidden sm:block shrink-0 truncate max-w-[140px]">{doc.specialty}</span>}
                 <span className="text-xs text-slate-400 shrink-0">{doc._count.referrals} ref</span>
                 {isAdmin && (
                   <>
@@ -380,7 +379,6 @@ function DoctorFormFields({ form, onChange, locations, onToggleLoc }: {
           </select>
         </div>
         <div><label className={labelCls}>NPI</label><input value={form.npi} onChange={(e) => onChange((f: any) => ({ ...f, npi: e.target.value }))} className={inputCls} maxLength={10} /></div>
-        <div><label className={labelCls}>Specialty</label><input value={form.specialty} onChange={(e) => onChange((f: any) => ({ ...f, specialty: e.target.value }))} className={inputCls} /></div>
         <div><label className={labelCls}>Phone</label><PhoneInput value={form.phone} onChange={(v) => onChange((f: any) => ({ ...f, phone: v }))} /></div>
         <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={(e) => onChange((f: any) => ({ ...f, email: e.target.value }))} className={inputCls} /></div>
       </div>

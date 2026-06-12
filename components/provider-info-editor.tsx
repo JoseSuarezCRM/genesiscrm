@@ -51,7 +51,6 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
   const [name, setName] = useState(provider.name)
   const [title, setTitle] = useState(provider.title ?? "")
   const [npi, setNpi] = useState(provider.npi ?? "")
-  const [specialty, setSpecialty] = useState(provider.specialty ?? "")
   const [phone, setPhone] = useState(provider.phone ?? "")
   const [email, setEmail] = useState(provider.email ?? "")
   const [contactType, setContactType] = useState(provider.contactType)
@@ -73,7 +72,7 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
     e.preventDefault()
     if (!name.trim()) return
     startTransition(async () => {
-      const res = await updateDoctor(provider.id, { name, title, npi, specialty, phone, email, contactType, practiceId, locationIds }) as any
+      const res = await updateDoctor(provider.id, { name, title, npi, specialty: provider.specialty ?? "", phone, email, contactType, practiceId, locationIds }) as any
       if (res?.error) { alert("Save failed"); return }
       setEditing(false)
       router.refresh()
@@ -84,7 +83,6 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
     setName(provider.name)
     setTitle(provider.title ?? "")
     setNpi(provider.npi ?? "")
-    setSpecialty(provider.specialty ?? "")
     setPhone(provider.phone ?? "")
     setEmail(provider.email ?? "")
     setContactType(provider.contactType)
@@ -134,10 +132,6 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
               <input value={npi} onChange={(e) => setNpi(e.target.value)} className={inputCls} maxLength={10} placeholder="1234567890" />
             </div>
             <div>
-              <label className={labelCls}>Specialty</label>
-              <input value={specialty} onChange={(e) => setSpecialty(e.target.value)} className={inputCls} />
-            </div>
-            <div>
               <label className={labelCls}>Phone</label>
               <PhoneInput value={phone} onChange={setPhone} />
             </div>
@@ -184,7 +178,6 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
             <Row label="Title" value={provider.title} />
             <Row label="Contact Type" value={provider.contactType === "PROVIDER" ? "Provider" : "Staff"} />
             <Row label="NPI" value={provider.npi} />
-            <Row label="Specialty" value={provider.specialty} />
             <Row label="Phone" value={provider.phone} />
             <Row label="Email" value={provider.email} />
             <div className="flex justify-between gap-4">

@@ -367,7 +367,6 @@ export default function ReferralDetailRightColumn({
                   }
                   const fieldMap: Record<string, { label: string; path: string }> = {
                     name: { label: "Name", path: "referringDoctor.name" },
-                    specialty: { label: "Specialty", path: "referringDoctor.specialty" },
                     npi: { label: "NPI", path: "referringDoctor.npi" },
                     phone: { label: "Phone", path: "referringDoctor.phone" },
                     email: { label: "Email", path: "referringDoctor.email" },
