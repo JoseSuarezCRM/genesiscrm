@@ -10,7 +10,16 @@ export function newNodeId(): string {
   return `n${Date.now().toString(36)}_${_idSeq}_${Math.random().toString(36).slice(2, 6)}`
 }
 
-// A node is either a single action or an if/else branch.
+// One arm of a multi-way branch: first arm whose rules pass wins.
+export interface BranchArm {
+  id: string
+  label: string
+  match: "all" | "any"
+  rules: Condition[]
+  next: string | null
+}
+
+// A node is a single action, an if/else branch, or a multi-way branch.
 export type GraphNode =
   | {
       id: string
@@ -25,6 +34,12 @@ export type GraphNode =
       match: "all" | "any"
       rules: Condition[]
       thenNext: string | null
+      elseNext: string | null
+    }
+  | {
+      id: string
+      kind: "multi"
+      arms: BranchArm[]
       elseNext: string | null
     }
 
@@ -61,10 +76,14 @@ export function resolveGraphActions(
     if (node.kind === "action") {
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next
-    } else {
+    } else if (node.kind === "branch") {
       // branch: with no referral context, conditions can't be evaluated → ELSE path
       const passed = referral ? branchPasses(referral, node.match, node.rules) : false
       currentId = passed ? node.thenNext : node.elseNext
+    } else {
+      // multi-way branch: first arm whose rules pass wins; otherwise ELSE path
+      const arm = referral ? node.arms.find(a => branchPasses(referral, a.match, a.rules)) : undefined
+      currentId = arm ? arm.next : node.elseNext
     }
   }
 
@@ -115,9 +134,10 @@ export function legacyToGraph(a: {
 // A slot is an insertion point identified by the pointer it occupies.
 export type Slot =
   | { kind: "root" }
-  | { kind: "after"; nodeId: string }   // action node's `next`
-  | { kind: "then"; nodeId: string }    // branch `thenNext`
-  | { kind: "else"; nodeId: string }    // branch `elseNext`
+  | { kind: "after"; nodeId: string }            // action node's `next`
+  | { kind: "then"; nodeId: string }             // branch `thenNext`
+  | { kind: "else"; nodeId: string }             // branch/multi `elseNext`
+  | { kind: "arm"; nodeId: string; armId: string } // a multi-branch arm's `next`
 
 function clone(graph: AutomationGraph): AutomationGraph {
   return { rootId: graph.rootId, nodes: structuredCloneSafe(graph.nodes) }
@@ -132,7 +152,8 @@ function getSlot(graph: AutomationGraph, slot: Slot): string | null {
   if (!n) return null
   if (slot.kind === "after" && n.kind === "action") return n.next
   if (slot.kind === "then" && n.kind === "branch") return n.thenNext
-  if (slot.kind === "else" && n.kind === "branch") return n.elseNext
+  if (slot.kind === "else" && (n.kind === "branch" || n.kind === "multi")) return n.elseNext
+  if (slot.kind === "arm" && n.kind === "multi") return n.arms.find(a => a.id === slot.armId)?.next ?? null
   return null
 }
 function setSlot(graph: AutomationGraph, slot: Slot, value: string | null): void {
@@ -141,20 +162,35 @@ function setSlot(graph: AutomationGraph, slot: Slot, value: string | null): void
   if (!n) return
   if (slot.kind === "after" && n.kind === "action") n.next = value
   else if (slot.kind === "then" && n.kind === "branch") n.thenNext = value
-  else if (slot.kind === "else" && n.kind === "branch") n.elseNext = value
+  else if (slot.kind === "else" && (n.kind === "branch" || n.kind === "multi")) n.elseNext = value
+  else if (slot.kind === "arm" && n.kind === "multi") {
+    const arm = n.arms.find(a => a.id === slot.armId)
+    if (arm) arm.next = value
+  }
 }
 
 // Insert a new node at a slot; the slot's current target becomes the new node's
-// continuation (action.next, or a branch's THEN path).
+// continuation (action.next, a branch's THEN path, or a multi's first arm).
 export function insertAt(graph: AutomationGraph, slot: Slot, node: GraphNode): AutomationGraph {
   const g = clone(graph)
   const target = getSlot(g, slot)
-  const n = { ...node }
+  const n = structuredCloneSafe(node)
   if (n.kind === "action") n.next = target
-  else { n.thenNext = target; n.elseNext = null }
+  else if (n.kind === "branch") { n.thenNext = target; n.elseNext = null }
+  else {
+    if (n.arms.length > 0) n.arms[0].next = target
+    n.elseNext = null
+  }
   g.nodes[n.id] = n
   setSlot(g, slot, n.id)
   return g
+}
+
+// All outgoing pointers of a node.
+function nodeTargets(n: GraphNode): (string | null)[] {
+  if (n.kind === "action") return [n.next]
+  if (n.kind === "branch") return [n.thenNext, n.elseNext]
+  return [...n.arms.map(a => a.next), n.elseNext]
 }
 
 // Remove all nodes not reachable from the root.
@@ -167,7 +203,7 @@ export function pruneUnreachable(graph: AutomationGraph): AutomationGraph {
     reachable.add(id)
     const n = graph.nodes[id]
     if (!n) continue
-    const targets = n.kind === "action" ? [n.next] : [n.thenNext, n.elseNext]
+    const targets = nodeTargets(n)
     for (const t of targets) if (t) stack.push(t)
   }
   const nodes: Record<string, GraphNode> = {}
@@ -181,13 +217,19 @@ export function deleteNode(graph: AutomationGraph, id: string): AutomationGraph 
   const g = clone(graph)
   const node = g.nodes[id]
   if (!node) return g
-  const continuation = node.kind === "action" ? node.next : node.thenNext
+  const continuation =
+    node.kind === "action" ? node.next
+    : node.kind === "branch" ? node.thenNext
+    : (node.arms[0]?.next ?? node.elseNext)
 
   if (g.rootId === id) g.rootId = continuation
   for (const n of Object.values(g.nodes)) {
     if (n.kind === "action" && n.next === id) n.next = continuation
     else if (n.kind === "branch") {
       if (n.thenNext === id) n.thenNext = continuation
+      if (n.elseNext === id) n.elseNext = continuation
+    } else if (n.kind === "multi") {
+      for (const arm of n.arms) if (arm.next === id) arm.next = continuation
       if (n.elseNext === id) n.elseNext = continuation
     }
   }
@@ -207,8 +249,7 @@ export function isValidGraph(graph: AutomationGraph): boolean {
   if (!graph.rootId) return false
   if (!graph.nodes[graph.rootId]) return false
   for (const node of Object.values(graph.nodes)) {
-    const targets = node.kind === "action" ? [node.next] : [node.thenNext, node.elseNext]
-    for (const t of targets) {
+    for (const t of nodeTargets(node)) {
       if (t !== null && !graph.nodes[t]) return false
     }
   }

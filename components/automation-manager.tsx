@@ -18,7 +18,7 @@ import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   type AutomationGraph, type GraphNode, type Slot,
-  newNodeId, insertAt, deleteNode, updateNode, legacyToGraph,
+  newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph,
 } from "@/lib/automation-graph"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -975,7 +975,7 @@ function Connector() {
 }
 
 // "+" insert control with a small action/branch menu
-function InsertButton({ onAddAction, onAddBranch }: { onAddAction: () => void; onAddBranch: () => void }) {
+function InsertButton({ onAddAction, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="flex justify-center relative">
@@ -986,7 +986,7 @@ function InsertButton({ onAddAction, onAddBranch }: { onAddAction: () => void; o
       {open && (
         <>
           <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
-          <div className="absolute top-7 z-50 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-40">
+          <div className="absolute top-7 z-50 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-44">
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddAction() }}
               className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
               <Zap className="h-3.5 w-3.5 text-blue-500" /> Action
@@ -994,6 +994,10 @@ function InsertButton({ onAddAction, onAddBranch }: { onAddAction: () => void; o
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddBranch() }}
               className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
               <GitBranch className="h-3.5 w-3.5 text-violet-500" /> If / Else
+            </button>
+            <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddMulti() }}
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
+              <GitBranch className="h-3.5 w-3.5 text-fuchsia-500 rotate-90" /> Branches
             </button>
           </div>
         </>
@@ -1017,15 +1021,30 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
     onChange(insertAt(graph, slot, { id, kind: "branch", match: "all", rules: [], thenNext: null, elseNext: null }))
     onEditNode(id)
   }
+  function addMulti(slot: Slot) {
+    const id = newNodeId()
+    onChange(insertAt(graph, slot, {
+      id, kind: "multi",
+      arms: [
+        { id: newNodeId(), label: "Branch 1", match: "all", rules: [], next: null },
+        { id: newNodeId(), label: "Branch 2", match: "all", rules: [], next: null },
+      ],
+      elseNext: null,
+    }))
+    onEditNode(id)
+  }
 
   function renderSlot(slot: Slot, depth = 0): React.ReactNode {
     if (depth > 50) return null // safety
-    const startId = slot.kind === "root" ? graph.rootId
-      : slot.kind === "after" ? (graph.nodes[slot.nodeId] as any)?.next
-      : slot.kind === "then" ? (graph.nodes[slot.nodeId] as any)?.thenNext
-      : (graph.nodes[slot.nodeId] as any)?.elseNext
+    const slotNode = slot.kind === "root" ? null : graph.nodes[slot.nodeId]
+    const startId: string | null | undefined =
+      slot.kind === "root" ? graph.rootId
+      : slot.kind === "after" ? (slotNode as any)?.next
+      : slot.kind === "then" ? (slotNode as any)?.thenNext
+      : slot.kind === "arm" ? (slotNode as any)?.arms?.find((a: any) => a.id === slot.armId)?.next
+      : (slotNode as any)?.elseNext
 
-    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddBranch={() => addBranch(slot)} />
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
 
     if (!startId || !graph.nodes[startId]) {
       return (
@@ -1050,7 +1069,7 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
               color="blue" icon={<Zap className="h-3.5 w-3.5" />} title={actionSummary(node.actionType as AutomationAction, node.config)} />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
           </>
-        ) : (
+        ) : node.kind === "branch" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
               color="violet" icon={<GitBranch className="h-3.5 w-3.5" />}
@@ -1061,6 +1080,27 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
                 <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Then</span>
                 {renderSlot({ kind: "then", nodeId: node.id }, depth + 1)}
               </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Else</span>
+                {renderSlot({ kind: "else", nodeId: node.id }, depth + 1)}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              color="violet" icon={<GitBranch className="h-3.5 w-3.5 rotate-90" />}
+              title={`${node.arms.length} branch${node.arms.length === 1 ? "" : "es"}`} />
+            <Connector />
+            <div className="flex gap-6 items-start">
+              {node.arms.map(arm => (
+                <div key={arm.id} className="flex flex-col items-center gap-1">
+                  <span className="text-[10px] font-bold text-fuchsia-600 uppercase tracking-wide max-w-[120px] truncate" title={arm.label}>
+                    {arm.label}
+                  </span>
+                  {renderSlot({ kind: "arm", nodeId: node.id, armId: arm.id }, depth + 1)}
+                </div>
+              ))}
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Else</span>
                 {renderSlot({ kind: "else", nodeId: node.id }, depth + 1)}
@@ -1110,11 +1150,18 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
 
+  function updateArm(armId: string, patch: Partial<import("@/lib/automation-graph").BranchArm>) {
+    if (draft.kind !== "multi") return
+    setDraft({ ...draft, arms: draft.arms.map(a => a.id === armId ? { ...a, ...patch } : a) })
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-sm font-semibold text-slate-800">{draft.kind === "branch" ? "Edit branch (if/else)" : "Edit action"}</h3>
+          <h3 className="text-sm font-semibold text-slate-800">
+            {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : "Edit action"}
+          </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
         </div>
         <div className="p-4 space-y-3">
@@ -1128,7 +1175,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
                 onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} />
             </>
-          ) : (
+          ) : draft.kind === "branch" ? (
             <>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Conditions</span>
@@ -1141,6 +1188,44 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
               </div>
               <ConditionsBuilder conditions={draft.rules} onChange={rules => setDraft({ ...draft, rules })}
                 users={users} practices={practices} locations={locations} tags={tags} />
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-slate-500">
+                Records go down the <span className="font-medium">first branch</span> whose conditions match; if none match they go down the Else path.
+              </p>
+              {draft.arms.map((arm, i) => (
+                <div key={arm.id} className="border border-fuchsia-200 rounded-lg p-3 space-y-2.5 bg-fuchsia-50/30">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={arm.label}
+                      onChange={e => updateArm(arm.id, { label: e.target.value })}
+                      placeholder={`Branch ${i + 1}`}
+                      className="flex-1 border border-slate-200 rounded-md px-2 py-1.5 text-sm font-medium bg-white focus:outline-none focus:border-slate-400"
+                    />
+                    <div className="inline-flex bg-white border border-slate-200 rounded-md p-0.5 text-xs shrink-0">
+                      <button type="button" onClick={() => updateArm(arm.id, { match: "all" })}
+                        className={cn("px-2 py-0.5 rounded font-medium", arm.match === "all" ? "bg-zinc-900 text-white" : "text-slate-500")}>All</button>
+                      <button type="button" onClick={() => updateArm(arm.id, { match: "any" })}
+                        className={cn("px-2 py-0.5 rounded font-medium", arm.match === "any" ? "bg-zinc-900 text-white" : "text-slate-500")}>Any</button>
+                    </div>
+                    {draft.arms.length > 1 && (
+                      <button type="button"
+                        onClick={() => setDraft({ ...draft, arms: draft.arms.filter(a => a.id !== arm.id) })}
+                        className="text-slate-300 hover:text-red-500 shrink-0" title="Remove branch">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <ConditionsBuilder conditions={arm.rules} onChange={rules => updateArm(arm.id, { rules })}
+                    users={users} practices={practices} locations={locations} tags={tags} />
+                </div>
+              ))}
+              <button type="button"
+                onClick={() => setDraft({ ...draft, arms: [...draft.arms, { id: newNodeId(), label: `Branch ${draft.arms.length + 1}`, match: "all", rules: [], next: null }] })}
+                className="flex items-center gap-1.5 text-sm text-fuchsia-600 hover:text-fuchsia-700 font-medium">
+                <Plus className="h-3.5 w-3.5" /> Add branch
+              </button>
             </>
           )}
         </div>
@@ -1297,8 +1382,8 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           />
 
           {/* Trigger node */}
-          <div className="bg-white border-2 border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b bg-amber-50/60 flex items-center gap-2">
+          <div className="bg-white border-2 border-slate-200 rounded-xl shadow-sm">
+            <div className="px-5 py-3 border-b bg-amber-50/60 rounded-t-[10px] flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-500" />
               <h3 className="text-sm font-semibold text-slate-800">Trigger — workflow enrollment</h3>
             </div>
@@ -1333,7 +1418,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
         <NodeEditModal
           node={editingNode}
           onClose={() => setEditingNodeId(null)}
-          onSave={(n) => { setGraph(updateNode(graph, n)); setEditingNodeId(null) }}
+          onSave={(n) => { setGraph(pruneUnreachable(updateNode(graph, n))); setEditingNodeId(null) }}
           users={users} tags={tags} practices={practices} locations={locations}
         />
       )}
