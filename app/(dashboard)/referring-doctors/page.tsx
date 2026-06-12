@@ -56,13 +56,15 @@ export default async function ReferringDoctorsPage() {
     return { ...p, locations: locationsClean, doctors: allDoctors }
   })
 
+  const providerCount = new Set(enriched.flatMap((p) => p.doctors.map((d) => d.id))).size
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Providers</h1>
           <p className="text-sm text-slate-500">
-            {practices.length} practice{practices.length !== 1 ? "s" : ""}
+            {providerCount} provider{providerCount !== 1 ? "s" : ""}
           </p>
         </div>
       </div>
