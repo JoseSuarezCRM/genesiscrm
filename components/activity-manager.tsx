@@ -696,6 +696,7 @@ function emptyForm() {
 const ACTIVITY_TYPES: { value: string; color: string; bg: string; border: string }[] = [
   { value: "Presentation", color: "text-violet-700", bg: "bg-violet-100", border: "border-violet-300" },
   { value: "Lunch",        color: "text-emerald-700", bg: "bg-emerald-100", border: "border-emerald-300" },
+  { value: "Clinic Visit", color: "text-sky-700",     bg: "bg-sky-100",     border: "border-sky-300" },
 ]
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -750,11 +751,11 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     const extras = extraLocations.filter(l => !form.practiceId || l.practiceId === form.practiceId)
       .map(l => ({ id: l.id, label: l.name, sub: undefined as string | undefined }))
     if (!form.practiceId) {
-      const base = allPractices.flatMap(p => p.locations.map(l => ({ id: l.id, label: l.name, sub: p.name + (l.address ? ` · ${l.address}` : "") })))
+      const base = allPractices.flatMap(p => p.locations.map(l => ({ id: l.id, label: l.name, sub: p.name })))
       return [...base, ...extras]
     }
     const p = allPractices.find(p => p.id === form.practiceId)
-    const base = (p?.locations ?? []).map(l => ({ id: l.id, label: l.name, sub: l.address ?? undefined }))
+    const base = (p?.locations ?? []).map(l => ({ id: l.id, label: l.name, sub: undefined as string | undefined }))
     return [...base, ...extras]
   }, [form.practiceId, allPractices, extraLocations])
 
@@ -1414,18 +1415,6 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Tags */}
-            <div className="col-span-2 space-y-1.5">
-              <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                <Tag className="h-3.5 w-3.5 text-slate-400" /> Tags
-              </label>
-              <TagInput
-                selected={form.selectedTags}
-                onChange={setSelectedTags}
-                allTags={tagRegistry}
-              />
             </div>
 
             <div className="col-span-2 space-y-1.5">
