@@ -1431,13 +1431,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Activity Type</label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {ACTIVITY_TYPES.map(t => (
                   <button
                     key={t.value}
                     type="button"
                     onClick={() => set("flyer", form.flyer === t.value ? "" : t.value)}
-                    className={`flex-1 h-9 rounded-lg border text-sm font-medium transition-all ${
+                    className={`h-9 px-3.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-all ${
                       form.flyer === t.value
                         ? `${t.bg} ${t.color} ${t.border}`
                         : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
