@@ -698,7 +698,15 @@ const ACTIVITY_TYPES: { value: string; color: string; bg: string; border: string
   { value: "Presentation", color: "text-violet-700", bg: "bg-violet-100", border: "border-violet-300" },
   { value: "Lunch",        color: "text-emerald-700", bg: "bg-emerald-100", border: "border-emerald-300" },
   { value: "Clinic Visit", color: "text-sky-700",     bg: "bg-sky-100",     border: "border-sky-300" },
+  { value: "Call",         color: "text-amber-700",   bg: "bg-amber-100",   border: "border-amber-300" },
 ]
+
+// Activity dates are date-only values stored as UTC midnight; read them in UTC
+// so the calendar day doesn't shift back in local timezones
+function activityDay(date: string | Date) {
+  const d = new Date(date)
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -827,7 +835,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       practiceId: a.practice?.id ?? "", locationId: a.location?.id ?? "",
       providerIds: a.providers.map(p => p.doctor.id),
       tagIds: a.tags.map(t => t.id), selectedTags: a.tags,
-      nextStep: a.nextStep ?? "", date: format(new Date(a.date), "yyyy-MM-dd"),
+      nextStep: a.nextStep ?? "", date: format(activityDay(a.date), "yyyy-MM-dd"),
       frontDesk: a.frontDesk ?? "", flyer: a.flyer ?? "", notes: a.notes ?? "",
     })
     setEditId(a.id); setError(null); setOpen(true)
@@ -1021,8 +1029,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         a.nextStep?.toLowerCase().includes(q) ||
         a.tags.some(t => t.name.toLowerCase().includes(q))
       )) return false
-      if (dateFrom && new Date(a.date) < new Date(dateFrom + "T00:00:00")) return false
-      if (dateTo && new Date(a.date) > new Date(dateTo + "T23:59:59")) return false
+      if (dateFrom && activityDay(a.date) < new Date(dateFrom + "T00:00:00")) return false
+      if (dateTo && activityDay(a.date) > new Date(dateTo + "T23:59:59")) return false
       if (activeTagIds.length > 0 && !activeTagIds.every(id => a.tags.some(t => t.id === id))) return false
       if (filterPracticeIds.length > 0) {
         const match = a.practice ? filterPracticeIds.includes(a.practice.id) : false
@@ -1254,9 +1262,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           {filtered.map(a => (
             <div key={a.id} className="flex items-start gap-4 p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
               <div className="shrink-0 w-16 text-center">
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{format(new Date(a.date), "MMM")}</p>
-                <p className="text-2xl font-bold text-slate-800 leading-none">{format(new Date(a.date), "d")}</p>
-                <p className="text-xs text-slate-400">{format(new Date(a.date), "yyyy")}</p>
+                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{format(activityDay(a.date), "MMM")}</p>
+                <p className="text-2xl font-bold text-slate-800 leading-none">{format(activityDay(a.date), "d")}</p>
+                <p className="text-xs text-slate-400">{format(activityDay(a.date), "yyyy")}</p>
               </div>
 
               <div className="flex-1 min-w-0 space-y-1.5">
