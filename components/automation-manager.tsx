@@ -10,8 +10,9 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Play, ChevronDown, ChevronUp, Info, X, GitBranch, Flag } from "lucide-react"
+import { Zap, Plus, Trash2, Play, ChevronLeft, Info, X, GitBranch, Flag } from "lucide-react"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
@@ -1074,10 +1075,8 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
   return (
     <div className="overflow-x-auto py-2">
       <div className="flex flex-col items-center min-w-fit">
-        {/* Trigger node at the top */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-amber-300 bg-amber-50 text-amber-800 text-sm font-semibold">
-          <Zap className="h-4 w-4" /> Trigger
-        </div>
+        {/* connector down from the trigger card above */}
+        <div className="w-px h-5 bg-slate-300" />
         {renderSlot({ kind: "root" })}
       </div>
     </div>
@@ -1154,208 +1153,179 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   )
 }
 
-// ─── Automation form dialog ───────────────────────────────────────────────────
+// ─── Workflow object grouping ─────────────────────────────────────────────────
 
-function AutomationDialog({
-  open, onClose, editing, users, tags, practices, locations, pipelines,
-}: {
-  open: boolean
-  onClose: (refresh?: boolean) => void
+export const WORKFLOW_OBJECTS: { key: string; label: string; triggers: string[] }[] = [
+  {
+    key: "REFERRAL",
+    label: "Referral",
+    triggers: [
+      "REFERRAL_CREATED", "REFERRAL_STATUS_CHANGED", "REFERRAL_ASSIGNED", "REFERRAL_NO_ACTIVITY",
+      "APPOINTMENT_UPCOMING", "APPOINTMENT_OVERDUE", "REFERRAL_STALE", "CALL_ATTEMPTS_REACHED",
+      "TAG_ADDED", "DOCUMENT_UPLOADED", "AUTH_STATUS_CHANGED", "EMBED_REFERRAL_RECEIVED", "PIPELINE_CHANGED",
+    ],
+  },
+  { key: "PROVIDER", label: "Provider",     triggers: ["PROVIDER_REFERRAL_COUNT"] },
+  { key: "PRACTICE", label: "Practice",     triggers: ["PRACTICE_REFERRAL_COUNT"] },
+  { key: "LOCATION", label: "Location",     triggers: ["LOCATION_REFERRAL_COUNT"] },
+  { key: "SURGERY",  label: "Surgery Case", triggers: ["SURGERY_STATUS_CHANGED", "SURGERY_CALL_ATTEMPTS_REACHED"] },
+]
+
+export function workflowObjectFor(trigger: string): { key: string; label: string } {
+  const obj = WORKFLOW_OBJECTS.find(o => o.triggers.includes(trigger))
+  return obj ? { key: obj.key, label: obj.label } : { key: "REFERRAL", label: "Referral" }
+}
+
+const OBJECT_BADGE_COLORS: Record<string, string> = {
+  REFERRAL: "bg-blue-50 text-blue-700 border-blue-200",
+  PROVIDER: "bg-teal-50 text-teal-700 border-teal-200",
+  PRACTICE: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  LOCATION: "bg-violet-50 text-violet-700 border-violet-200",
+  SURGERY:  "bg-rose-50 text-rose-700 border-rose-200",
+}
+
+// ─── Full-page workflow editor (HubSpot-style) ───────────────────────────────
+
+export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [] }: {
   editing: Automation | null
-  users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines: Pipeline[]
+  users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines?: Pipeline[]
 }) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState(editing?.name ?? "")
   const [description, setDescription] = useState(editing?.description ?? "")
+  const [objectKey, setObjectKey] = useState(workflowObjectFor(editing?.triggerType ?? "REFERRAL_CREATED").key)
   const [triggerType, setTriggerType] = useState<string>(editing?.triggerType ?? "REFERRAL_CREATED")
   const [triggerConfig, setTriggerConfig] = useState<Record<string, unknown>>(editing?.triggerConfig ?? emptyTriggerConfig("REFERRAL_CREATED"))
-  const [actionType, setActionType] = useState<AutomationAction>(editing?.actionType ?? "CREATE_TASK")
-  const [actionConfig, setActionConfig] = useState<Record<string, unknown>>(editing?.actionConfig ?? emptyActionConfig("CREATE_TASK"))
   const editingFlow = (editing?.flow ?? null) as AutomationFlow | null
   const editingGraph = (editing?.graph ?? null) as AutomationGraph | null
-  const [mode, setMode] = useState<"single" | "branch" | "visual">(editingGraph ? "visual" : editingFlow ? "branch" : "single")
-  const [flow, setFlow] = useState<AutomationFlow>(editingFlow ?? {
-    match: "all", rules: [], then: [], else: [],
-  })
   const [graph, setGraph] = useState<AutomationGraph>(
-    editingGraph ?? (editing ? legacyToGraph({ actionType: editing.actionType, actionConfig: editing.actionConfig, flow: editingFlow }) : { rootId: null, nodes: {} })
+    editingGraph?.rootId
+      ? editingGraph
+      : editing
+        ? legacyToGraph({ actionType: editing.actionType, actionConfig: editing.actionConfig, flow: editingFlow })
+        : { rootId: null, nodes: {} }
   )
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [error, setError] = useState("")
 
-  if (!open) return null
+  const objectDef = WORKFLOW_OBJECTS.find(o => o.key === objectKey) ?? WORKFLOW_OBJECTS[0]
+
+  function handleObjectChange(key: string) {
+    setObjectKey(key)
+    const first = (WORKFLOW_OBJECTS.find(o => o.key === key) ?? WORKFLOW_OBJECTS[0]).triggers[0]
+    setTriggerType(first)
+    setTriggerConfig(emptyTriggerConfig(first))
+  }
 
   function handleTriggerChange(t: string) {
     setTriggerType(t)
     setTriggerConfig(emptyTriggerConfig(t))
   }
 
-  function handleActionChange(a: AutomationAction) {
-    setActionType(a)
-    setActionConfig(emptyActionConfig(a))
-  }
-
-  function handleSubmit() {
-    if (!name.trim()) { setError("Name is required"); return }
-    if (mode === "branch" && flow.then.length === 0 && flow.else.length === 0) {
-      setError("Add at least one action to the Then or Else branch"); return
-    }
-    if (mode === "visual" && !graph.rootId) {
-      setError("Add at least one step to the flow"); return
-    }
+  function handleSave() {
+    if (!name.trim()) { setError("Workflow name is required"); return }
+    if (!graph.rootId) { setError("Add at least one action to the workflow"); return }
     setError("")
-    // actionType/actionConfig are unused by the engine when flow/graph is set —
-    // keep a valid enum to satisfy the non-null column.
-    const firstGraphAction = graph.rootId ? graph.nodes[graph.rootId] : null
-    const effectiveActionType =
-      mode === "visual" ? ((firstGraphAction && firstGraphAction.kind === "action" ? firstGraphAction.actionType : "CREATE_TASK") as AutomationAction)
-      : mode === "branch" ? (flow.then[0]?.type ?? flow.else[0]?.type ?? "CREATE_TASK")
-      : actionType
-    const effectiveFlow = mode === "branch" ? (flow as unknown as Record<string, unknown>) : null
-    const effectiveGraph = mode === "visual" ? (graph as unknown as Record<string, unknown>) : null
+    const firstNode = graph.rootId ? graph.nodes[graph.rootId] : null
+    const effectiveActionType = (firstNode && firstNode.kind === "action" ? firstNode.actionType : "CREATE_TASK") as AutomationAction
     startTransition(async () => {
       if (editing) {
-        await updateAutomation(editing.id, { name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow, graph: effectiveGraph, isActive: editing.isActive })
+        await updateAutomation(editing.id, {
+          name: name.trim(), description: description.trim() || undefined,
+          triggerType: triggerType as AutomationTrigger, triggerConfig,
+          actionType: effectiveActionType, actionConfig: {},
+          flow: null, graph: graph as unknown as Record<string, unknown>,
+          isActive: editing.isActive,
+        })
       } else {
-        await createAutomation({ name: name.trim(), description: description.trim() || undefined, triggerType: triggerType as AutomationTrigger, triggerConfig, actionType: effectiveActionType, actionConfig, flow: effectiveFlow, graph: effectiveGraph })
+        await createAutomation({
+          name: name.trim(), description: description.trim() || undefined,
+          triggerType: triggerType as AutomationTrigger, triggerConfig,
+          actionType: effectiveActionType, actionConfig: {},
+          flow: null, graph: graph as unknown as Record<string, unknown>,
+        })
       }
-      onClose(true)
+      router.push("/automations")
+      router.refresh()
     })
   }
 
   const editingNode = editingNodeId ? graph.nodes[editingNodeId] : null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={cn("bg-white rounded-xl shadow-xl w-full max-h-[90vh] overflow-y-auto transition-[max-width]", mode === "visual" ? "max-w-4xl" : "max-w-2xl")}>
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-base font-semibold text-slate-900">{editing ? "Edit Automation" : "New Automation Rule"}</h2>
-          <button onClick={() => onClose()} className="text-slate-400 hover:text-slate-600 text-lg leading-none">&times;</button>
-        </div>
+    <div className="min-h-full flex flex-col">
+      {/* Top bar */}
+      <div className="sticky top-0 z-20 bg-slate-900 text-white px-5 py-3 flex items-center gap-4 shrink-0">
+        <Link href="/automations" className="flex items-center gap-1 text-sm text-slate-300 hover:text-white transition-colors shrink-0">
+          <ChevronLeft className="h-4 w-4" /> Workflows
+        </Link>
+        <div className="w-px h-5 bg-slate-700 shrink-0" />
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Untitled workflow"
+          className="flex-1 min-w-0 bg-transparent text-base font-semibold placeholder:text-slate-500 outline-none border-b border-transparent focus:border-slate-500 transition-colors"
+        />
+        {editing && (
+          <span className={cn(
+            "flex items-center gap-1.5 text-xs font-semibold shrink-0",
+            editing.isActive ? "text-emerald-400" : "text-slate-400"
+          )}>
+            <span className={cn("w-2 h-2 rounded-full", editing.isActive ? "bg-emerald-400" : "bg-slate-500")} />
+            {editing.isActive ? "ON" : "OFF"}
+          </span>
+        )}
+        <button onClick={() => router.push("/automations")}
+          className="px-3 py-1.5 text-sm text-slate-300 hover:text-white transition-colors shrink-0">
+          Cancel
+        </button>
+        <button onClick={handleSave} disabled={isPending}
+          className="px-4 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 transition-colors shrink-0">
+          {isPending ? "Saving…" : editing ? "Save" : "Create workflow"}
+        </button>
+      </div>
 
-        <div className="p-5 space-y-5">
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Rule name *</label>
-              <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. Flag overdue appointments" value={name} onChange={e => setName(e.target.value)} />
+      {/* Canvas */}
+      <div className="flex-1 bg-slate-50">
+        <div className="max-w-2xl mx-auto px-4 py-8">
+          <input
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Add a description (optional)"
+            className="w-full mb-6 bg-transparent text-sm text-slate-600 placeholder:text-slate-400 outline-none border-b border-transparent focus:border-slate-300 transition-colors text-center"
+          />
+
+          {/* Trigger node */}
+          <div className="bg-white border-2 border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b bg-amber-50/60 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500" />
+              <h3 className="text-sm font-semibold text-slate-800">Trigger — workflow enrollment</h3>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Description (optional)</label>
-              <input className="w-full border rounded-md px-3 py-2 text-sm" value={description} onChange={e => setDescription(e.target.value)} />
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Runs on object</label>
+                <StyledSelect className="w-full" value={objectKey} onChange={e => handleObjectChange(e.target.value)}>
+                  {WORKFLOW_OBJECTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </StyledSelect>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">When this happens</label>
+                <StyledSelect className="w-full" value={triggerType} onChange={e => handleTriggerChange(e.target.value)}>
+                  {objectDef.triggers.map(t => <option key={t} value={t}>{TRIGGER_LABELS[t] ?? t}</option>)}
+                </StyledSelect>
+              </div>
+              <TriggerConfigFields
+                type={triggerType} config={triggerConfig} onChange={setTriggerConfig}
+                users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines}
+              />
             </div>
           </div>
 
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-600 text-xs font-bold shrink-0">T</div>
-              <h3 className="text-sm font-semibold text-slate-700">TRIGGER — When this happens</h3>
-            </div>
-            <StyledSelect className="w-full" value={triggerType} onChange={e => handleTriggerChange(e.target.value)}>
-              {Object.entries(TRIGGER_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </StyledSelect>
-            <TriggerConfigFields
-              type={triggerType} config={triggerConfig} onChange={setTriggerConfig}
-              users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines}
-            />
-          </div>
+          {/* Action flow */}
+          <FlowCanvas graph={graph} onChange={setGraph} onEditNode={setEditingNodeId} />
 
-          {/* Connector */}
-          <div className="flex justify-center"><div className="w-px h-4 bg-slate-200" /></div>
-
-          {/* Mode toggle */}
-          <div className="flex items-center gap-2 justify-center">
-            <div className="inline-flex bg-slate-100 rounded-lg p-0.5">
-              <button type="button" onClick={() => setMode("single")}
-                className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors", mode === "single" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
-                Single action
-              </button>
-              <button type="button" onClick={() => setMode("branch")}
-                className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors", mode === "branch" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
-                If / Else branch
-              </button>
-              <button type="button" onClick={() => { if (mode !== "visual" && !graph.rootId) setGraph(legacyToGraph({ actionType, actionConfig, flow: mode === "branch" ? flow : null })); setMode("visual") }}
-                className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors", mode === "visual" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
-                Visual flow
-              </button>
-            </div>
-          </div>
-
-          {mode === "visual" ? (
-            <div className="border rounded-lg p-4 bg-slate-50/50">
-              <FlowCanvas graph={graph} onChange={setGraph} onEditNode={setEditingNodeId} />
-            </div>
-          ) : mode === "single" ? (
-            <div className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold shrink-0">A</div>
-                <h3 className="text-sm font-semibold text-slate-700">ACTION — Do this</h3>
-              </div>
-              <StyledSelect className="w-full" value={actionType} onChange={e => handleActionChange(e.target.value as AutomationAction)}>
-                {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(a => (
-                  <option key={a} value={a}>{ACTION_LABELS[a]}</option>
-                ))}
-              </StyledSelect>
-              <ActionConfigFields type={actionType} config={actionConfig} onChange={setActionConfig} users={users} tags={tags} />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {/* IF card */}
-              <div className="border border-violet-200 rounded-lg p-4 space-y-3 bg-violet-50/40">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-600 text-xs font-bold shrink-0">IF</div>
-                    <h3 className="text-sm font-semibold text-slate-700">When these conditions are met</h3>
-                  </div>
-                  <div className="inline-flex bg-white border border-slate-200 rounded-md p-0.5 text-xs">
-                    <button type="button" onClick={() => setFlow({ ...flow, match: "all" })}
-                      className={cn("px-2 py-0.5 rounded font-medium", flow.match === "all" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match all</button>
-                    <button type="button" onClick={() => setFlow({ ...flow, match: "any" })}
-                      className={cn("px-2 py-0.5 rounded font-medium", flow.match === "any" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match any</button>
-                  </div>
-                </div>
-                <ConditionsBuilder
-                  conditions={flow.rules}
-                  onChange={rules => setFlow({ ...flow, rules })}
-                  users={users} practices={practices} locations={locations} tags={tags}
-                />
-              </div>
-
-              <div className="flex justify-center"><div className="w-px h-4 bg-slate-200" /></div>
-
-              {/* THEN card */}
-              <div className="border border-emerald-200 rounded-lg p-4 space-y-3 bg-emerald-50/40">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center px-2 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold shrink-0">THEN</div>
-                  <h3 className="text-sm font-semibold text-slate-700">Do this</h3>
-                </div>
-                <ActionList actions={flow.then} onChange={then => setFlow({ ...flow, then })} users={users} tags={tags}
-                  emptyLabel="No actions yet — add what should happen when conditions match." />
-              </div>
-
-              <div className="flex justify-center"><div className="w-px h-4 bg-slate-200" /></div>
-
-              {/* ELSE card */}
-              <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50/60">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center px-2 h-6 rounded-full bg-slate-200 text-slate-600 text-xs font-bold shrink-0">ELSE</div>
-                  <h3 className="text-sm font-semibold text-slate-700">Otherwise do this <span className="text-slate-400 font-normal">(optional)</span></h3>
-                </div>
-                <ActionList actions={flow.else} onChange={els => setFlow({ ...flow, else: els })} users={users} tags={tags}
-                  emptyLabel="No else actions — nothing happens when conditions don't match." />
-              </div>
-            </div>
-          )}
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-        </div>
-
-        <div className="flex justify-end gap-3 px-5 pb-5">
-          <button onClick={() => onClose()} className="px-4 py-2 text-sm rounded-md border hover:bg-slate-50 transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={isPending} className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
-            {isPending ? "Saving…" : editing ? "Save changes" : "Create rule"}
-          </button>
+          {error && <p className="text-sm text-red-500 mt-4 text-center">{error}</p>}
         </div>
       </div>
 
@@ -1371,143 +1341,73 @@ function AutomationDialog({
   )
 }
 
-// ─── Automation row ───────────────────────────────────────────────────────────
+// ─── Workflow list row ────────────────────────────────────────────────────────
 
-function AutomationRow({
-  auto, onEdit, onDeleted, onToggled,
-}: {
-  auto: Automation
-  onEdit: () => void
-  onDeleted: () => void
-  onToggled: () => void
-}) {
+function WorkflowTableRow({ auto }: { auto: Automation }) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [expanded, setExpanded] = useState(false)
 
   function handleToggle() {
     startTransition(async () => {
       await toggleAutomation(auto.id, !auto.isActive)
-      onToggled()
+      router.refresh()
     })
   }
 
   function handleDelete() {
-    if (!confirm(`Delete automation "${auto.name}"? This cannot be undone.`)) return
+    if (!confirm(`Delete workflow "${auto.name}"? This cannot be undone.`)) return
     startTransition(async () => {
       await deleteAutomation(auto.id)
-      onDeleted()
+      router.refresh()
     })
   }
 
-  const triggerColor = TRIGGER_COLORS[auto.triggerType] ?? "bg-slate-100 text-slate-700"
-  const triggerLabel = TRIGGER_LABELS[auto.triggerType] ?? auto.triggerType
-
-  // Determine automation mode
-  const graph = (auto.graph ?? null) as AutomationGraph | null
-  const flow = (auto.flow ?? null) as AutomationFlow | null
-  const isVisual = graph && graph.rootId
-  const isBranch = !isVisual && flow && (flow.then?.length || flow.else?.length)
-  const stepCount = isVisual ? Object.keys(graph.nodes).length : 0
+  const obj = workflowObjectFor(auto.triggerType)
 
   return (
-    <div className={cn("border rounded-lg bg-white transition-all", !auto.isActive && "opacity-60")}>
-      <div className="flex items-start gap-3 p-4">
-        <button onClick={handleToggle} disabled={isPending} className="mt-0.5 text-slate-400 hover:text-blue-600 transition-colors shrink-0" title={auto.isActive ? "Disable" : "Enable"}>
-          {auto.isActive ? <ToggleRight className="h-5 w-5 text-blue-600" /> : <ToggleLeft className="h-5 w-5" />}
+    <tr className="hover:bg-slate-50 transition-colors">
+      <td className="px-4 py-3">
+        <Link href={`/automations/${auto.id}`} className="font-medium text-blue-600 hover:underline text-sm">
+          {auto.name}
+        </Link>
+      </td>
+      <td className="px-4 py-3">
+        <button onClick={handleToggle} disabled={isPending}
+          className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
+          title={auto.isActive ? "Turn off" : "Turn on"}>
+          <span className={cn("w-2 h-2 rounded-full", auto.isActive ? "bg-emerald-500" : "bg-slate-300")} />
+          <span className={auto.isActive ? "text-emerald-700" : "text-slate-400"}>{auto.isActive ? "On" : "Off"}</span>
         </button>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-800 truncate">{auto.name}</p>
-              {auto.description && <p className="text-xs text-slate-500 mt-0.5 truncate">{auto.description}</p>}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button onClick={onEdit} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"><Pencil className="h-3.5 w-3.5" /></button>
-              <button onClick={handleDelete} disabled={isPending} className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", triggerColor)}>
-              {triggerLabel}
-            </span>
-            <span className="text-xs text-slate-400">→</span>
-            {isVisual ? (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 flex items-center gap-1">
-                <GitBranch className="h-3 w-3" /> Visual flow ({stepCount} steps)
-              </span>
-            ) : isBranch ? (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">
-                If / Else
-              </span>
-            ) : (
-              <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", ACTION_COLORS[auto.actionType])}>
-                {ACTION_LABELS[auto.actionType]}
-              </span>
-            )}
-            <span className="text-xs text-slate-400 ml-auto">{auto._count.runs} run{auto._count.runs !== 1 ? "s" : ""}</span>
-          </div>
-        </div>
-
-        <button onClick={() => setExpanded(e => !e)} className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5">
-          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </td>
+      <td className="px-4 py-3 text-sm text-slate-500 max-w-[260px] truncate">{auto.description || "—"}</td>
+      <td className="px-4 py-3">
+        <span className={cn("text-xs px-2 py-0.5 rounded-md font-medium border", OBJECT_BADGE_COLORS[obj.key] ?? "bg-slate-50 text-slate-600 border-slate-200")}>
+          {obj.label}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", TRIGGER_COLORS[auto.triggerType] ?? "bg-slate-100 text-slate-700")}>
+          {TRIGGER_LABELS[auto.triggerType] ?? auto.triggerType}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-sm text-slate-500 text-right">{auto._count.runs}</td>
+      <td className="px-4 py-3 text-right">
+        <button onClick={handleDelete} disabled={isPending}
+          className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors">
+          <Trash2 className="h-3.5 w-3.5" />
         </button>
-      </div>
-
-      {expanded && (
-        <div className="border-t bg-slate-50 px-4 py-3 rounded-b-lg">
-          <div className="grid grid-cols-2 gap-4 text-xs text-slate-600">
-            <div>
-              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Trigger config</p>
-              {Object.keys(auto.triggerConfig).filter(k => k !== "conditions").length === 0 && !(auto.triggerConfig.conditions as unknown[])?.length
-                ? <p className="text-slate-400 italic">No filter conditions</p>
-                : Object.entries(auto.triggerConfig).map(([k, v]) => {
-                  if (k === "conditions") {
-                    const conds = v as Condition[]
-                    if (!conds?.length) return null
-                    return <p key={k}><span className="font-medium">+{conds.length} condition{conds.length !== 1 ? "s" : ""}</span></p>
-                  }
-                  return v ? <p key={k}><span className="font-medium">{k}:</span> {String(v)}</p> : null
-                })}
-            </div>
-            <div>
-              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Action config</p>
-              {Object.entries(auto.actionConfig).map(([k, v]) => v ? (
-                <p key={k}><span className="font-medium">{k}:</span> {String(v)}</p>
-              ) : null)}
-            </div>
-          </div>
-          <p className="text-xs text-slate-400 mt-2">Created by {auto.createdBy.name || auto.createdBy.email}</p>
-        </div>
-      )}
-    </div>
+      </td>
+    </tr>
   )
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main component: workflows list ──────────────────────────────────────────
 
-export default function AutomationManager({ automations: initial, users, tags, practices, locations, pipelines = [] }: Props) {
-  const router = useRouter()
-  const [automations, setAutomations] = useState(initial)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editing, setEditing] = useState<Automation | null>(null)
+export default function AutomationManager({ automations }: { automations: Automation[] }) {
+  const [search, setSearch] = useState("")
+  const [objectFilter, setObjectFilter] = useState("")
   const [runPending, startRunTransition] = useTransition()
   const [runMsg, setRunMsg] = useState("")
-
-  useEffect(() => { setAutomations(initial) }, [initial])
-
-  function openCreate() { setEditing(null); setDialogOpen(true) }
-  function openEdit(a: Automation) { setEditing(a); setDialogOpen(true) }
-
-  function handleClose(refresh?: boolean) {
-    setDialogOpen(false)
-    setEditing(null)
-    if (refresh) router.refresh()
-  }
-
-  function handleDeleted() { router.refresh() }
-  function handleToggled() { router.refresh() }
 
   function handleRunScheduled() {
     setRunMsg("")
@@ -1518,55 +1418,80 @@ export default function AutomationManager({ automations: initial, users, tags, p
     })
   }
 
+  const q = search.toLowerCase().trim()
+  const rows = automations.filter(a => {
+    if (objectFilter && workflowObjectFor(a.triggerType).key !== objectFilter) return false
+    if (q && !a.name.toLowerCase().includes(q) && !(a.description ?? "").toLowerCase().includes(q)) return false
+    return true
+  })
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRunScheduled}
-            disabled={runPending}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 transition-colors"
-          >
-            <Play className="h-3.5 w-3.5" />
-            {runPending ? "Running…" : "Run scheduled checks now"}
-          </button>
-          {runMsg && <span className="text-xs text-green-600">{runMsg}</span>}
-        </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search workflows..."
+          className="w-64 border border-slate-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:border-slate-400"
+        />
+        <StyledSelect className="w-44" value={objectFilter} onChange={e => setObjectFilter(e.target.value)}>
+          <option value="">All object types</option>
+          {WORKFLOW_OBJECTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </StyledSelect>
         <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          onClick={handleRunScheduled}
+          disabled={runPending}
+          className="flex items-center gap-2 px-3 py-2 text-sm rounded-md border bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 transition-colors"
+        >
+          <Play className="h-3.5 w-3.5" />
+          {runPending ? "Running…" : "Run scheduled checks"}
+        </button>
+        {runMsg && <span className="text-xs text-green-600">{runMsg}</span>}
+        <Link
+          href="/automations/new"
+          className="ml-auto flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          New rule
-        </button>
+          Create workflow
+        </Link>
       </div>
 
       {automations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed rounded-xl">
           <Zap className="h-10 w-10 text-slate-300 mb-3" />
-          <p className="text-sm font-medium text-slate-600">No automation rules yet</p>
+          <p className="text-sm font-medium text-slate-600">No workflows yet</p>
           <p className="text-xs text-slate-400 mt-1 max-w-sm">
-            Create rules to automatically create tasks, send notifications, update statuses, and more based on referral events.
+            Create workflows to automatically create tasks, send notifications, update statuses, and more based on events.
           </p>
-          <button onClick={openCreate} className="mt-4 flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" /> Create your first rule
-          </button>
+          <Link href="/automations/new" className="mt-4 flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+            <Plus className="h-4 w-4" /> Create your first workflow
+          </Link>
         </div>
       ) : (
-        <div className="space-y-3">
-          {automations.map(auto => (
-            <AutomationRow
-              key={auto.id}
-              auto={auto}
-              onEdit={() => openEdit(auto)}
-              onDeleted={handleDeleted}
-              onToggled={handleToggled}
-            />
-          ))}
+        <div className="bg-white border rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <th className="px-4 py-2.5 font-semibold">Name</th>
+                  <th className="px-4 py-2.5 font-semibold">Status</th>
+                  <th className="px-4 py-2.5 font-semibold">Description</th>
+                  <th className="px-4 py-2.5 font-semibold">Object type</th>
+                  <th className="px-4 py-2.5 font-semibold">Trigger</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Runs</th>
+                  <th className="px-4 py-2.5 w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map(auto => <WorkflowTableRow key={auto.id} auto={auto} />)}
+              </tbody>
+            </table>
+          </div>
+          {rows.length === 0 && (
+            <p className="text-sm text-slate-400 text-center py-8">No workflows match your search.</p>
+          )}
         </div>
       )}
-
-      <AutomationDialog key={editing?.id ?? "new"} open={dialogOpen} onClose={handleClose} editing={editing} users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines} />
     </div>
   )
 }

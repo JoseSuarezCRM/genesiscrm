@@ -1,40 +1,26 @@
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
 import AutomationManager from "@/components/automation-manager"
 
 export default async function AutomationsPage() {
-  const session = await auth()
+  const automations = await prisma.automation.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      createdBy: { select: { name: true, email: true } },
+      _count: { select: { runs: true } },
+    },
+  })
 
-  const [automations, users, tags, practices, locations, pipelines] = await Promise.all([
-    prisma.automation.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        createdBy: { select: { name: true, email: true } },
-        _count: { select: { runs: true } },
-      },
-    }),
-    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
-    prisma.tag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
-    prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.practiceLocation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    (prisma as any).pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, color: true } }),
-  ])
+  const activeCount = automations.filter((a) => a.isActive).length
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Automations</h1>
-        <p className="text-sm text-slate-500">{automations.filter((a: any) => a.isActive).length} active rule{automations.filter((a: any) => a.isActive).length !== 1 ? "s" : ""}</p>
+        <h1 className="text-2xl font-bold text-slate-900">Workflows</h1>
+        <p className="text-sm text-slate-500">
+          {activeCount} active workflow{activeCount !== 1 ? "s" : ""} · {automations.length} total
+        </p>
       </div>
-      <AutomationManager
-        automations={automations as any}
-        users={users}
-        tags={tags}
-        practices={practices}
-        locations={locations}
-        pipelines={pipelines}
-        currentUserId={session!.user.id}
-      />
+      <AutomationManager automations={automations as any} />
     </div>
   )
 }
