@@ -392,7 +392,7 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
 
 // ─── Create Provider Modal ────────────────────────────────────────────────────
 
-const PROVIDER_TITLE_OPTIONS = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Custom..."]
+const PROVIDER_TITLE_OPTIONS = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Front Desk", "Manager", "Referral Coordinator", "Custom..."]
 
 function InlineCreateProvider({ initialName, practiceId, locations, onCancel, onCreate }: {
   initialName: string
@@ -785,6 +785,14 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     if (!res || res.error || !res.id) return null
     setExtraLocations(prev => [...prev, { id: res.id!, name, practiceId: form.practiceId }])
     return { id: res.id!, label: name }
+  }
+
+  function handleLocationSelect(id: string) {
+    // Selecting a location first auto-selects the practice it belongs to
+    const owner = allPractices.find(p => p.locations.some(l => l.id === id))
+    const extra = extraLocations.find(l => l.id === id)
+    const practiceId = owner?.id ?? extra?.practiceId ?? form.practiceId
+    setForm(prev => ({ ...prev, locationId: id, practiceId }))
   }
 
   function handleOpenCreateProvider(name: string) {
@@ -1337,7 +1345,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Clinic Location</label>
               <Picker placeholder="Search Locations..." value={form.locationId} options={locationOptions}
-                onSelect={id => set("locationId", id)} onClear={() => set("locationId", "")}
+                onSelect={handleLocationSelect} onClear={() => set("locationId", "")}
                 onQuickCreate={form.practiceId ? handleCreateLocation : undefined} />
             </div>
             <div className="space-y-1.5">
