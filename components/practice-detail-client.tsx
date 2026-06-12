@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Pencil, Trash2, Plus, Loader2, Check, MapPin, User, ExternalLink, ChevronRight, ChevronDown } from "lucide-react"
@@ -373,10 +374,10 @@ function DoctorFormFields({ form, onChange, locations, onToggleLoc }: {
         <div><label className={labelCls}>Name *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} /></div>
         <div>
           <label className={labelCls}>Title</label>
-          <select value={form.title} onChange={(e) => onChange((f: any) => ({ ...f, title: e.target.value }))} className={inputCls}>
+          <StyledSelect value={form.title} onChange={(e) => onChange((f: any) => ({ ...f, title: e.target.value }))} className={inputCls}>
             <option value="">— Select —</option>
             {PROVIDER_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          </StyledSelect>
         </div>
         <div><label className={labelCls}>NPI</label><input value={form.npi} onChange={(e) => onChange((f: any) => ({ ...f, npi: e.target.value }))} className={inputCls} maxLength={10} /></div>
         <div><label className={labelCls}>Phone</label><PhoneInput value={form.phone} onChange={(v) => onChange((f: any) => ({ ...f, phone: v }))} /></div>

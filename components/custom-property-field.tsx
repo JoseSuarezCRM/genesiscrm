@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Check, X } from "lucide-react"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
@@ -75,14 +76,14 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
         )
       case "DROPDOWN":
         return (
-          <select value={value} onChange={(e) => setEditValue(e.target.value)} className={inputClasses}>
+          <StyledSelect value={value} onChange={(e) => setEditValue(e.target.value)} className={inputClasses}>
             <option value="">Select...</option>
             {property.options.map((opt) => (
               <option key={opt} value={opt}>
                 {opt}
               </option>
             ))}
-          </select>
+          </StyledSelect>
         )
       case "LONG_TEXT":
         return (

@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useRouter } from "next/navigation"
 import { useState, useRef, useEffect, useTransition } from "react"
 import Link from "next/link"
@@ -538,7 +539,7 @@ export default function ReportBuilderClient({
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
               {dashboards.length > 0 && (
-                <select
+                <StyledSelect
                   value={saveDashboardId}
                   onChange={(e) => setSaveDashboardId(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
@@ -547,7 +548,7 @@ export default function ReportBuilderClient({
                   {dashboards.map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
-                </select>
+                </StyledSelect>
               )}
             </div>
             <div className="flex justify-end gap-2">

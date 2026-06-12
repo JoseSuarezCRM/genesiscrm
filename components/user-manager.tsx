@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Role } from "@prisma/client"
 import { createUser, updateUserRole, updateUserPermissions, deleteUser, resetPassword } from "@/app/actions/users"
@@ -279,7 +280,7 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
 
           {nonMembers.length > 0 && (
             <div className="flex items-center gap-2 pt-1">
-              <select
+              <StyledSelect
                 value={addUserId}
                 onChange={e => setAddUserId(e.target.value)}
                 className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -288,7 +289,7 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
                 {nonMembers.map(u => (
                   <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
                 ))}
-              </select>
+              </StyledSelect>
               <Button size="sm" onClick={handleAddMember} disabled={!addUserId || isPending} className="text-xs h-7">
                 Add
               </Button>

@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
@@ -99,18 +100,18 @@ function ProcedureField({ value, onChange }: { value: string; onChange: (v: stri
     <div className="flex flex-col gap-1 sm:col-span-3">
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Procedure</label>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <select value={provider} onChange={(e) => handleProviderChange(e.target.value)} className={fieldClass}>
+        <StyledSelect value={provider} onChange={(e) => handleProviderChange(e.target.value)} className={fieldClass}>
           <option value="">— Select provider —</option>
           {Object.keys(PROCEDURE_DATA).map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <select value={bodyPart} onChange={(e) => handleBodyPartChange(e.target.value)} disabled={!provider} className={fieldClass}>
+        </StyledSelect>
+        <StyledSelect value={bodyPart} onChange={(e) => handleBodyPartChange(e.target.value)} disabled={!provider} className={fieldClass}>
           <option value="">— Select body part —</option>
           {bodyParts.map((bp) => <option key={bp} value={bp}>{bp}</option>)}
-        </select>
-        <select value={value} onChange={(e) => onChange(e.target.value)} disabled={!bodyPart} className={fieldClass}>
+        </StyledSelect>
+        <StyledSelect value={value} onChange={(e) => onChange(e.target.value)} disabled={!bodyPart} className={fieldClass}>
           <option value="">— Select procedure —</option>
           {procedures.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
+        </StyledSelect>
       </div>
     </div>
   )
@@ -127,7 +128,7 @@ function SelectField({
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
-      <select
+      <StyledSelect
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
@@ -136,7 +137,7 @@ function SelectField({
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
-      </select>
+      </StyledSelect>
     </div>
   )
 }
@@ -175,7 +176,7 @@ function ReferralField({
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Referral Source</label>
-      <select
+      <StyledSelect
         value={selectVal}
         onChange={(e) => onSelectChange(e.target.value)}
         className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
@@ -183,7 +184,7 @@ function ReferralField({
         <option value="">— Not set —</option>
         {presets.map((p) => <option key={p} value={p}>{p}</option>)}
         <option value="Other">Other</option>
-      </select>
+      </StyledSelect>
       {selectVal === "Other" && (
         <input
           type="text"

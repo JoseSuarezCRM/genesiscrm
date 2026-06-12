@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Edit2, Check, X } from "lucide-react"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
@@ -101,7 +102,7 @@ export default function CustomPropertiesDisplay({
         )
       case "DROPDOWN":
         return (
-          <select
+          <StyledSelect
             value={value}
             onChange={(e) => setEditValue(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400"
@@ -112,7 +113,7 @@ export default function CustomPropertiesDisplay({
                 {opt}
               </option>
             ))}
-          </select>
+          </StyledSelect>
         )
       case "LONG_TEXT":
         return (

@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition, useRef, useEffect } from "react"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
@@ -169,14 +170,14 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
     <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, title, npi, specialty, phone, email, practiceId: selectedPracticeId, locationIds: selectedLocs }) }} className="space-y-4">
       {practices && (
         <Field label="Practice *">
-          <select
+          <StyledSelect
             value={selectedPracticeId}
             onChange={(e) => { setSelectedPracticeId(e.target.value); setSelectedLocs([]) }}
             className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">— Select practice —</option>
             {practices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </StyledSelect>
         </Field>
       )}
       <div className="grid grid-cols-2 gap-3">
@@ -184,14 +185,14 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
           <Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Sarah Johnson" />
         </Field>
         <Field label="Title">
-          <select
+          <StyledSelect
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">— Select —</option>
             {PROVIDER_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          </StyledSelect>
         </Field>
       </div>
       <Field label="NPI (National Provider Identifier)">

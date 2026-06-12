@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { cn } from "@/lib/utils"
 
@@ -156,7 +157,7 @@ function StaffForm({
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Primary Role</label>
-          <select
+          <StyledSelect
             value={role}
             onChange={e => handleRoleChange(e.target.value as StaffRole)}
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -164,7 +165,7 @@ function StaffForm({
             {ROLE_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
-          </select>
+          </StyledSelect>
         </div>
       </div>
 

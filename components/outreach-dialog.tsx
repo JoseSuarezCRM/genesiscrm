@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -212,12 +213,12 @@ export default function OutreachDialog({ referral }: Props) {
           {showEmailFields && (
             <div>
               <Label className="mb-2 block">From</Label>
-              <select value={fromSender} onChange={(e) => setFromSender(e.target.value)} disabled={status === "sending" || status === "success"}
+              <StyledSelect value={fromSender} onChange={(e) => setFromSender(e.target.value)} disabled={status === "sending" || status === "success"}
                 className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                 <option value="referrals">Referrals@genesisortho.com</option>
                 <option value="surgery">surgery@genesisortho.com</option>
                 <option value="tpl">tpl@genesisortho.com</option>
-              </select>
+              </StyledSelect>
             </div>
           )}
 

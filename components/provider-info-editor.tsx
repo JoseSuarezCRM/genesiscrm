@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2, Check, MapPin } from "lucide-react"
@@ -114,17 +115,17 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
               </div>
               <div>
                 <label className={labelCls}>Title</label>
-                <select value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls}>
+                <StyledSelect value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls}>
                   <option value="">— None —</option>
                   {PROVIDER_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                </StyledSelect>
               </div>
               <div>
                 <label className={labelCls}>Contact Type</label>
-                <select value={contactType} onChange={(e) => setContactType(e.target.value as "PROVIDER" | "STAFF")} className={inputCls}>
+                <StyledSelect value={contactType} onChange={(e) => setContactType(e.target.value as "PROVIDER" | "STAFF")} className={inputCls}>
                   <option value="PROVIDER">Provider</option>
                   <option value="STAFF">Staff</option>
-                </select>
+                </StyledSelect>
               </div>
             </div>
             <div>
@@ -141,9 +142,9 @@ export default function ProviderInfoEditor({ provider, allPractices, isAdmin }: 
             </div>
             <div>
               <label className={labelCls}>Practice</label>
-              <select value={practiceId} onChange={(e) => handlePracticeChange(e.target.value)} className={inputCls}>
+              <StyledSelect value={practiceId} onChange={(e) => handlePracticeChange(e.target.value)} className={inputCls}>
                 {allPractices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </StyledSelect>
             </div>
             {selectedPractice && selectedPractice.locations.length > 0 && (
               <div>

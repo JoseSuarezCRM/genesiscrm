@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition, useRef, useEffect } from "react"
 import { sendDirectEmail } from "@/app/actions/direct-email"
 import { Button } from "@/components/ui/button"
@@ -257,12 +258,12 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
 
           <div className="px-4 py-2 flex items-center gap-2 bg-slate-50">
             <span className="text-xs font-medium text-slate-500 w-10 shrink-0">From</span>
-            <select value={fromSender} onChange={e => setFromSender(e.target.value)}
+            <StyledSelect value={fromSender} onChange={e => setFromSender(e.target.value)}
               className="flex-1 h-8 px-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:border-slate-400">
               <option value="referrals">Referrals@genesisortho.com</option>
               <option value="surgery">surgery@genesisortho.com</option>
               <option value="tpl">tpl@genesisortho.com</option>
-            </select>
+            </StyledSelect>
           </div>
 
           <div className="px-4 py-2">

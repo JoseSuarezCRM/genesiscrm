@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition, useEffect, useRef } from "react"
 import { TaskStatus, TaskPriority } from "@prisma/client"
 import { createTask, updateTask, updateTaskStatus, deleteTask } from "@/app/actions/tasks"
@@ -93,19 +94,19 @@ function TaskForm({ users, defaultValues, onSubmit, isPending, onClose }: {
         </div>
         <div className="space-y-1.5">
           <Label>Priority</Label>
-          <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)}
+          <StyledSelect value={priority} onChange={e => setPriority(e.target.value as TaskPriority)}
             className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
             {Object.values(TaskPriority).map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
-          </select>
+          </StyledSelect>
         </div>
       </div>
       <div className="space-y-1.5">
         <Label>Assign to</Label>
-        <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)}
+        <StyledSelect value={assignedToId} onChange={e => setAssignedToId(e.target.value)}
           className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
           <option value="">— Unassigned —</option>
           {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-        </select>
+        </StyledSelect>
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

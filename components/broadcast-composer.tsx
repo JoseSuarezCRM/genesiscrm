@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -339,12 +340,12 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
 
         <div>
           <Label className="mb-1.5 block text-sm">From *</Label>
-          <select value={fromSender} onChange={(e) => setFromSender(e.target.value)}
+          <StyledSelect value={fromSender} onChange={(e) => setFromSender(e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
             <option value="referrals">Referrals@genesisortho.com</option>
             <option value="surgery">surgery@genesisortho.com</option>
             <option value="tpl">tpl@genesisortho.com</option>
-          </select>
+          </StyledSelect>
         </div>
         <div>
           <Label htmlFor="subject" className="mb-1.5 block text-sm">Subject *</Label>

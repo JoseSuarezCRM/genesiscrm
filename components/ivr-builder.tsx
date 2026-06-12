@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Plus, Trash2, GripVertical, Phone, CheckCircle2, AlertCircle, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -46,7 +47,7 @@ function OptionRow({
       {/* Digit */}
       <div className="w-20 shrink-0">
         <label className="text-xs text-slate-500 block mb-1">Digit</label>
-        <select
+        <StyledSelect
           value={opt.digit}
           onChange={(e) => onChange({ ...opt, digit: e.target.value })}
           className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -56,7 +57,7 @@ function OptionRow({
               {d}
             </option>
           ))}
-        </select>
+        </StyledSelect>
       </div>
 
       {/* Label */}
@@ -73,7 +74,7 @@ function OptionRow({
       {/* Action */}
       <div className="w-44 shrink-0">
         <label className="text-xs text-slate-500 block mb-1">Action</label>
-        <select
+        <StyledSelect
           value={opt.action}
           onChange={(e) => onChange({ ...opt, action: e.target.value as IvrAction, message: "", forwardTo: "" })}
           className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -81,7 +82,7 @@ function OptionRow({
           {(Object.keys(ACTION_LABELS) as IvrAction[]).map((a) => (
             <option key={a} value={a}>{ACTION_LABELS[a]}</option>
           ))}
-        </select>
+        </StyledSelect>
       </div>
 
       {/* Action detail */}

@@ -9,6 +9,7 @@ import { createPractice, createLocation, createDoctor } from "@/app/actions/refe
 import SelectedProvidersCard from "@/components/selected-providers-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import StyledSelect from "@/components/ui/styled-select"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -445,10 +446,10 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
         </div>
         <div>
           <label className={labelCls}>Title</label>
-          <select value={titleSelect} onChange={e => setTitleSelect(e.target.value)} className={inputCls}>
+          <StyledSelect value={titleSelect} onChange={e => setTitleSelect(e.target.value)} className="w-full">
             <option value="">— None —</option>
             {PROVIDER_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          </StyledSelect>
           {isCustomTitle && (
             <input value={titleCustom} onChange={e => setTitleCustom(e.target.value)}
               className={inputCls + " mt-1.5"} placeholder="e.g. Director of Care Coordination" autoFocus />

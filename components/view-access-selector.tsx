@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState } from "react"
 import { Lock, Globe, Users, UserCog, Check, Search } from "lucide-react"
 
@@ -80,13 +81,13 @@ export function ViewAccessSelector({ value, onChange, users, teams }: {
 
       {/* Team picker (only when user is in more than one team) */}
       {value.visibility === "TEAM" && teams.length > 1 && (
-        <select
+        <StyledSelect
           value={value.teamId ?? ""}
           onChange={e => onChange({ ...value, teamId: e.target.value })}
           className="w-full h-9 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-slate-400"
         >
           {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        </StyledSelect>
       )}
 
       {/* Custom user picker */}

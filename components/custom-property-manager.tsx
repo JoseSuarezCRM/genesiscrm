@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { createCustomProperty, updateCustomProperty, deleteCustomProperty } from "@/app/actions/custom-properties"
 import { Plus, Trash2, Edit2, X } from "lucide-react"
@@ -102,7 +103,7 @@ function PropertyForm({
           <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
             Type *
           </label>
-          <select
+          <StyledSelect
             value={type}
             onChange={(e) => setType(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
@@ -110,7 +111,7 @@ function PropertyForm({
             {PROPERTY_TYPES.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
-          </select>
+          </StyledSelect>
         </div>
 
         <div>

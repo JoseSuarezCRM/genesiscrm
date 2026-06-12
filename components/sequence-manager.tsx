@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import {
   Plus, Trash2, Pencil, Play, Pause, ChevronDown, ChevronRight,
@@ -152,7 +153,7 @@ function StepCard({
             <>
               <div>
                 <label className="text-xs font-medium text-slate-500 block mb-1">From</label>
-                <select
+                <StyledSelect
                   value={(step as any).fromSender || "referrals"}
                   onChange={(e) => onUpdate({ ...step, fromSender: e.target.value } as any)}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -160,7 +161,7 @@ function StepCard({
                   <option value="referrals">Referrals@genesisortho.com</option>
                   <option value="surgery">surgery@genesisortho.com</option>
                   <option value="tpl">tpl@genesisortho.com</option>
-                </select>
+                </StyledSelect>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 block mb-1">Subject</label>
@@ -306,19 +307,19 @@ function SequenceForm({
         </p>
         <div>
           <label className="text-xs font-medium text-slate-500 block mb-1">Trigger type</label>
-          <select
+          <StyledSelect
             value={trigger}
             onChange={(e) => setTrigger(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
             {TRIGGER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          </StyledSelect>
         </div>
 
         {trigger === "ON_STATUS_CHANGE" && (
           <div>
             <label className="text-xs font-medium text-slate-500 block mb-1">Enroll when referral reaches</label>
-            <select
+            <StyledSelect
               value={triggerStatus}
               onChange={(e) => setTriggerStatus(e.target.value)}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -327,7 +328,7 @@ function SequenceForm({
               {Object.entries(STATUS_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
-            </select>
+            </StyledSelect>
           </div>
         )}
       </div>
@@ -340,14 +341,14 @@ function SequenceForm({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-slate-500 block mb-1">Referring practice</label>
-            <select
+            <StyledSelect
               value={practiceFilter}
               onChange={(e) => setPracticeFilter(e.target.value)}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">All practices</option>
               {practices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </StyledSelect>
           </div>
           <div>
             <label className="text-xs font-medium text-slate-500 block mb-1">Insurance contains</label>

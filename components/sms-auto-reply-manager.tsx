@@ -1,5 +1,6 @@
 "use client"
 
+import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Plus, Trash2, Pencil, CheckCircle2, AlertCircle, X, Check, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -80,7 +81,7 @@ function RuleForm({
         </div>
         <div>
           <label className="text-xs font-medium text-slate-500 block mb-1">Match type</label>
-          <select
+          <StyledSelect
             value={matchType}
             onChange={(e) => setMatchType(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -88,7 +89,7 @@ function RuleForm({
             {Object.entries(MATCH_LABELS).map(([v, l]) => (
               <option key={v} value={v}>{l}</option>
             ))}
-          </select>
+          </StyledSelect>
           <p className="text-[10px] text-slate-400 mt-1">{MATCH_HINTS[matchType]}</p>
         </div>
       </div>

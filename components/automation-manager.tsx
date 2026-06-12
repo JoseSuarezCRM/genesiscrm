@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/automations"
 import { Zap, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Play, ChevronDown, ChevronUp, Info, X, GitBranch, Flag } from "lucide-react"
 import { cn } from "@/lib/utils"
+import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
@@ -194,34 +195,34 @@ function ConditionValueInput({
 }) {
   if (op === "empty" || op === "unassigned") return null
   if (field === "practiceId") return (
-    <select className="flex-1 border rounded-md px-2 py-1.5 text-xs" value={value} onChange={e => onChange(e.target.value)}>
+    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
       <option value="">Select practice</option>
       {practices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-    </select>
+    </StyledSelect>
   )
   if (field === "locationId") return (
-    <select className="flex-1 border rounded-md px-2 py-1.5 text-xs" value={value} onChange={e => onChange(e.target.value)}>
+    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
       <option value="">Select location</option>
       {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-    </select>
+    </StyledSelect>
   )
   if (field === "assignedToId") return (
-    <select className="flex-1 border rounded-md px-2 py-1.5 text-xs" value={value} onChange={e => onChange(e.target.value)}>
+    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
       <option value="">Select user</option>
       {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-    </select>
+    </StyledSelect>
   )
   if (field === "status") return (
-    <select className="flex-1 border rounded-md px-2 py-1.5 text-xs" value={value} onChange={e => onChange(e.target.value)}>
+    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
       <option value="">Select status</option>
       {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-    </select>
+    </StyledSelect>
   )
   if (field === "tagId") return (
-    <select className="flex-1 border rounded-md px-2 py-1.5 text-xs" value={value} onChange={e => onChange(e.target.value)}>
+    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
       <option value="">Select tag</option>
       {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-    </select>
+    </StyledSelect>
   )
   return <input className="flex-1 border rounded-md px-2 py-1.5 text-xs" placeholder="Value…" value={value} onChange={e => onChange(e.target.value)} />
 }
@@ -265,20 +266,20 @@ function ConditionsBuilder({
       )}
       {conditions.map((cond, i) => (
         <div key={i} className="flex items-center gap-2 flex-wrap">
-          <select
-            className="border rounded-md px-2 py-1.5 text-xs"
+          <StyledSelect
+            className="shrink-0"
             value={cond.field}
             onChange={e => update(i, { field: e.target.value })}
           >
             {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
-          <select
-            className="border rounded-md px-2 py-1.5 text-xs"
+          </StyledSelect>
+          <StyledSelect
+            className="shrink-0"
             value={cond.op}
             onChange={e => update(i, { op: e.target.value })}
           >
             {(CONDITION_OPS[cond.field] ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          </StyledSelect>
           <ConditionValueInput
             field={cond.field} op={cond.op} value={cond.value}
             onChange={v => update(i, { value: v })}
@@ -343,17 +344,17 @@ function TriggerConfigFields({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Filter by practice (optional)</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.practiceId as string) || ""} onChange={e => set("practiceId", e.target.value || undefined)}>
+            <StyledSelect className="w-full" value={(config.practiceId as string) || ""} onChange={e => set("practiceId", e.target.value || undefined)}>
               <option value="">Any practice</option>
               {practices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </StyledSelect>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Filter by location (optional)</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.locationId as string) || ""} onChange={e => set("locationId", e.target.value || undefined)}>
+            <StyledSelect className="w-full" value={(config.locationId as string) || ""} onChange={e => set("locationId", e.target.value || undefined)}>
               <option value="">Any location</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
+            </StyledSelect>
           </div>
         </div>
       )
@@ -364,17 +365,17 @@ function TriggerConfigFields({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">From status (optional)</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.fromStatus as string) || ""} onChange={e => set("fromStatus", e.target.value || undefined)}>
+            <StyledSelect className="w-full" value={(config.fromStatus as string) || ""} onChange={e => set("fromStatus", e.target.value || undefined)}>
               <option value="">Any</option>
               {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
+            </StyledSelect>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">To status (optional)</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.toStatus as string) || ""} onChange={e => set("toStatus", e.target.value || undefined)}>
+            <StyledSelect className="w-full" value={(config.toStatus as string) || ""} onChange={e => set("toStatus", e.target.value || undefined)}>
               <option value="">Any</option>
               {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
+            </StyledSelect>
           </div>
         </div>
       )
@@ -390,18 +391,18 @@ function TriggerConfigFields({
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Period</label>
-              <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.period as string) || "month"} onChange={e => set("period", e.target.value)}>
+              <StyledSelect className="w-full" value={(config.period as string) || "month"} onChange={e => set("period", e.target.value)}>
                 {PERIOD_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
+              </StyledSelect>
             </div>
           </div>
           {type === "LOCATION_REFERRAL_COUNT" && (
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Filter by specific location (optional)</label>
-              <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.locationId as string) || ""} onChange={e => set("locationId", e.target.value || undefined)}>
+              <StyledSelect className="w-full" value={(config.locationId as string) || ""} onChange={e => set("locationId", e.target.value || undefined)}>
                 <option value="">Any location</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
+              </StyledSelect>
             </div>
           )}
         </div>
@@ -417,10 +418,10 @@ function TriggerConfigFields({
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Only for status (optional)</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.statusFilter as string) || ""} onChange={e => set("statusFilter", e.target.value || undefined)}>
+            <StyledSelect className="w-full" value={(config.statusFilter as string) || ""} onChange={e => set("statusFilter", e.target.value || undefined)}>
               <option value="">Any open status</option>
               {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
+            </StyledSelect>
           </div>
         </div>
       )
@@ -458,11 +459,11 @@ function TriggerConfigFields({
       return (
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Number of call attempts</label>
-          <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.count as number) || 3} onChange={e => set("count", Number(e.target.value))}>
+          <StyledSelect className="w-full" value={(config.count as number) || 3} onChange={e => set("count", Number(e.target.value))}>
             <option value={1}>1</option>
             <option value={2}>2</option>
             <option value={3}>3</option>
-          </select>
+          </StyledSelect>
         </div>
       )
     }
@@ -471,10 +472,10 @@ function TriggerConfigFields({
       return (
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Filter by assignee (optional)</label>
-          <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.assignedToId as string) || ""} onChange={e => set("assignedToId", e.target.value || undefined)}>
+          <StyledSelect className="w-full" value={(config.assignedToId as string) || ""} onChange={e => set("assignedToId", e.target.value || undefined)}>
             <option value="">Any user</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-          </select>
+          </StyledSelect>
         </div>
       )
     }
@@ -483,10 +484,10 @@ function TriggerConfigFields({
       return (
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Filter by specific tag (optional)</label>
-          <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.tagId as string) || ""} onChange={e => set("tagId", e.target.value || undefined)}>
+          <StyledSelect className="w-full" value={(config.tagId as string) || ""} onChange={e => set("tagId", e.target.value || undefined)}>
             <option value="">Any tag</option>
             {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          </StyledSelect>
         </div>
       )
     }
@@ -496,21 +497,21 @@ function TriggerConfigFields({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">From pipeline (optional)</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.fromPipelineId as string) || ""} onChange={e => set("fromPipelineId", e.target.value || undefined)}>
+            <StyledSelect className="w-full" value={(config.fromPipelineId as string) || ""} onChange={e => set("fromPipelineId", e.target.value || undefined)}>
               <option value="">Any</option>
               {pipelines.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
-            </select>
+            </StyledSelect>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">To pipeline (optional)</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.toPipelineId as string) || ""} onChange={e => set("toPipelineId", e.target.value || undefined)}>
+            <StyledSelect className="w-full" value={(config.toPipelineId as string) || ""} onChange={e => set("toPipelineId", e.target.value || undefined)}>
               <option value="">Any</option>
               {pipelines.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
-            </select>
+            </StyledSelect>
           </div>
         </div>
       )
@@ -567,13 +568,13 @@ function RecipientRows({
         }
         return (
           <div key={i} className="flex items-start gap-2 flex-wrap">
-            <select className="border rounded-md px-2 py-1.5 text-sm shrink-0" value={r.type}
+            <StyledSelect className="shrink-0" value={r.type}
               onChange={e => onChange(rows.map((x, j) => j === i ? { type: e.target.value, value: [] } : x))}>
               <option value="all_admins">All admins</option>
               <option value="assigned_to">Referral assignee</option>
               <option value="user">Specific users</option>
               <option value="email">Custom email</option>
-            </select>
+            </StyledSelect>
             {r.type === "user" && (
               <div className="flex-1 border rounded-md overflow-y-auto max-h-36">
                 {users.map(u => (
@@ -647,9 +648,9 @@ function ActionConfigFields({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Priority</label>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.priority as string) || "NORMAL"} onChange={e => set("priority", e.target.value)}>
+            <StyledSelect className="w-full" value={(config.priority as string) || "NORMAL"} onChange={e => set("priority", e.target.value)}>
               {PRIORITY_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
+            </StyledSelect>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Due in (days, optional)</label>
@@ -658,11 +659,11 @@ function ActionConfigFields({
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Assign task to</label>
-          <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.assignedToId as string) || ""} onChange={e => set("assignedToId", e.target.value)}>
+          <StyledSelect className="w-full" value={(config.assignedToId as string) || ""} onChange={e => set("assignedToId", e.target.value)}>
             <option value="">Unassigned</option>
             <option value="assigned_to">Referral assignee</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-          </select>
+          </StyledSelect>
         </div>
       </div>
     )
@@ -690,12 +691,12 @@ function ActionConfigFields({
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Notify</label>
-          <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.userId as string) || ""} onChange={e => set("userId", e.target.value)}>
+          <StyledSelect className="w-full" value={(config.userId as string) || ""} onChange={e => set("userId", e.target.value)}>
             <option value="">Select recipient</option>
             <option value="all_admins">All admins</option>
             <option value="assigned_to">Referral assignee</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-          </select>
+          </StyledSelect>
         </div>
       </div>
     )
@@ -705,10 +706,10 @@ function ActionConfigFields({
     return (
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">New status *</label>
-        <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.status as string) || ""} onChange={e => set("status", e.target.value)}>
+        <StyledSelect className="w-full" value={(config.status as string) || ""} onChange={e => set("status", e.target.value)}>
           <option value="">Select status</option>
           {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
+        </StyledSelect>
       </div>
     )
   }
@@ -717,10 +718,10 @@ function ActionConfigFields({
     return (
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Assign to *</label>
-        <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.userId as string) || ""} onChange={e => set("userId", e.target.value)}>
+        <StyledSelect className="w-full" value={(config.userId as string) || ""} onChange={e => set("userId", e.target.value)}>
           <option value="">Select user</option>
           {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-        </select>
+        </StyledSelect>
       </div>
     )
   }
@@ -729,10 +730,10 @@ function ActionConfigFields({
     return (
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Tag *</label>
-        <select className="w-full border rounded-md px-3 py-2 text-sm" value={(config.tagId as string) || ""} onChange={e => set("tagId", e.target.value)}>
+        <StyledSelect className="w-full" value={(config.tagId as string) || ""} onChange={e => set("tagId", e.target.value)}>
           <option value="">Select tag</option>
           {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        </StyledSelect>
       </div>
     )
   }
@@ -785,12 +786,12 @@ function ActionConfigFields({
         {/* From */}
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <label className="text-xs font-semibold text-blue-700 block mb-1.5">From (sender email)</label>
-          <select value={(config.sender as string) || "referrals"} onChange={e => set("sender", e.target.value)}
-            className="w-full border border-blue-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500">
+          <StyledSelect value={(config.sender as string) || "referrals"} onChange={e => set("sender", e.target.value)}
+            className="w-full">
             <option value="referrals">Referrals@genesisortho.com</option>
             <option value="surgery">surgery@genesisortho.com</option>
             <option value="tpl">tpl@genesisortho.com</option>
-          </select>
+          </StyledSelect>
         </div>
 
         {/* To */}
@@ -931,15 +932,15 @@ function ActionList({ actions, onChange, users, tags, emptyLabel }: {
         <div key={i} className="border border-slate-200 rounded-lg p-3 space-y-2 bg-white">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-slate-400 w-4 shrink-0">{i + 1}</span>
-            <select
-              className="flex-1 border rounded-md px-2 py-1.5 text-sm"
+            <StyledSelect
+              className="flex-1"
               value={a.type}
               onChange={e => setType(i, e.target.value as AutomationAction)}
             >
               {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(t => (
                 <option key={t} value={t}>{ACTION_LABELS[t]}</option>
               ))}
-            </select>
+            </StyledSelect>
             <button type="button" onClick={() => removeAt(i)} className="text-slate-400 hover:text-red-500 shrink-0" title="Remove action">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -1120,11 +1121,11 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
         <div className="p-4 space-y-3">
           {draft.kind === "action" ? (
             <>
-              <select className="w-full border rounded-md px-3 py-2 text-sm"
+              <StyledSelect className="w-full"
                 value={draft.actionType}
                 onChange={e => { const t = e.target.value as AutomationAction; setDraft({ ...draft, actionType: t, config: emptyActionConfig(t) }) }}>
                 {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
-              </select>
+              </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
                 onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} />
             </>
@@ -1249,11 +1250,11 @@ function AutomationDialog({
               <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-600 text-xs font-bold shrink-0">T</div>
               <h3 className="text-sm font-semibold text-slate-700">TRIGGER — When this happens</h3>
             </div>
-            <select className="w-full border rounded-md px-3 py-2 text-sm" value={triggerType} onChange={e => handleTriggerChange(e.target.value)}>
+            <StyledSelect className="w-full" value={triggerType} onChange={e => handleTriggerChange(e.target.value)}>
               {Object.entries(TRIGGER_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
-            </select>
+            </StyledSelect>
             <TriggerConfigFields
               type={triggerType} config={triggerConfig} onChange={setTriggerConfig}
               users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines}
@@ -1291,11 +1292,11 @@ function AutomationDialog({
                 <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold shrink-0">A</div>
                 <h3 className="text-sm font-semibold text-slate-700">ACTION — Do this</h3>
               </div>
-              <select className="w-full border rounded-md px-3 py-2 text-sm" value={actionType} onChange={e => handleActionChange(e.target.value as AutomationAction)}>
+              <StyledSelect className="w-full" value={actionType} onChange={e => handleActionChange(e.target.value as AutomationAction)}>
                 {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(a => (
                   <option key={a} value={a}>{ACTION_LABELS[a]}</option>
                 ))}
-              </select>
+              </StyledSelect>
               <ActionConfigFields type={actionType} config={actionConfig} onChange={setActionConfig} users={users} tags={tags} />
             </div>
           ) : (
