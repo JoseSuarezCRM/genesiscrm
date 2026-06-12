@@ -339,7 +339,7 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
           ref={inputRef}
           value={open ? q : (selected ? selected.label : "")}
           onChange={e => { setQ(e.target.value); if (!open) setOpen(true) }}
-          onFocus={() => { setOpen(true); setQ("") }}
+          onClick={() => { if (!open) { setQ(""); setOpen(true) } }}
           placeholder={selected ? selected.label : placeholder}
           className="flex-1 min-w-0 truncate outline-none bg-transparent text-slate-800 placeholder:text-slate-400"
         />
@@ -1321,6 +1321,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         <DialogContent
           className="max-w-2xl max-h-[90vh] overflow-y-auto"
           onInteractOutside={(e) => e.preventDefault()}
+          onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>{editId ? "Edit Activity" : "New Activity"}</DialogTitle>
