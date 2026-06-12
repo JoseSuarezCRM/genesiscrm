@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { updateDoctorField } from "@/app/actions/referring-doctors"
 import { Input } from "@/components/ui/input"
+import { PhoneInput } from "@/components/ui/phone-input"
 import { Save, X, ChevronDown } from "lucide-react"
 import { cn, formatPhone } from "@/lib/utils"
 
@@ -134,6 +135,26 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
                         {isEditing ? (
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-1.5">
+                              {field === "phone" ? (
+                                <div
+                                  className="flex-1"
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault()
+                                      handleSaveField(doctor, field)
+                                    } else if (e.key === "Escape") {
+                                      handleCancel()
+                                    }
+                                  }}
+                                >
+                                  <PhoneInput
+                                    value={editValue}
+                                    onChange={setEditValue}
+                                    disabled={isPending}
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                              ) : (
                               <Input
                                 autoFocus
                                 value={editValue}
@@ -150,6 +171,7 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
                                 placeholder={fieldLabels[field]}
                                 disabled={isPending}
                               />
+                              )}
                               <button
                                 onClick={() => handleSaveField(doctor, field)}
                                 disabled={isPending}
@@ -175,7 +197,7 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
                             className="flex-1 text-left text-sm text-slate-700 cursor-text rounded px-1 py-0.5 -mx-1 hover:bg-blue-50/70 hover:ring-1 hover:ring-blue-200 transition-colors"
                             title={`Click to edit ${fieldLabels[field]}`}
                           >
-                            {value || <span className="text-slate-400">—</span>}
+                            {value ? (field === "phone" ? formatPhone(String(value)) : value) : <span className="text-slate-400">—</span>}
                           </button>
                         )}
                       </div>
