@@ -752,23 +752,37 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [editAccessValue, setEditAccessValue] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
   const [savingAccess, setSavingAccess] = useState(false)
 
-  const allPractices = useMemo(() => [...practices, ...extraPractices.map(p => ({ ...p, locations: [], doctors: [] }))], [practices, extraPractices])
+  // Merge session-created practices, skipping any that already arrived via server props after a refresh
+  const allPractices = useMemo(() => {
+    const seen = new Set(practices.map(p => p.id))
+    const extras = extraPractices.filter(p => {
+      if (seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+    return [...practices, ...extras.map(p => ({ ...p, locations: [], doctors: [] }))]
+  }, [practices, extraPractices])
 
   const practiceOptions = allPractices.map(p => ({ id: p.id, label: p.name }))
 
   const locationOptions = useMemo(() => {
     const extras = extraLocations.filter(l => !form.practiceId || l.practiceId === form.practiceId)
       .map(l => ({ id: l.id, label: l.name, sub: undefined as string | undefined }))
+    let base: { id: string; label: string; sub: string | undefined }[]
     if (!form.practiceId) {
-      const base = allPractices.flatMap(p => p.locations.map(l => ({ id: l.id, label: l.name, sub: p.name })))
-      return [...base, ...extras]
+      base = allPractices.flatMap(p => p.locations.map(l => ({ id: l.id, label: l.name, sub: p.name as string | undefined })))
+    } else {
+      const p = allPractices.find(p => p.id === form.practiceId)
+      base = (p?.locations ?? []).map(l => ({ id: l.id, label: l.name, sub: undefined as string | undefined }))
     }
-    const p = allPractices.find(p => p.id === form.practiceId)
-    const base = (p?.locations ?? []).map(l => ({ id: l.id, label: l.name, sub: undefined as string | undefined }))
-    return [...base, ...extras]
+    const baseIds = new Set(base.map(l => l.id))
+    return [...base, ...extras.filter(l => !baseIds.has(l.id))]
   }, [form.practiceId, allPractices, extraLocations])
 
-  const combinedDoctors = useMemo(() => [...allDoctors, ...extraDoctors], [allDoctors, extraDoctors])
+  const combinedDoctors = useMemo(() => {
+    const seen = new Set(allDoctors.map(d => d.id))
+    return [...allDoctors, ...extraDoctors.filter(d => !seen.has(d.id))]
+  }, [allDoctors, extraDoctors])
 
   const doctorOptions = useMemo(() => {
     if (!form.practiceId) return combinedDoctors.map(d => ({ id: d.id, label: d.name + (d.title ? `, ${d.title}` : ""), sub: d.practiceName }))
@@ -784,7 +798,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   async function handleCreateOrg(name: string): Promise<{ id: string; label: string } | null> {
     const res = await createPractice({ name, phone: "", fax: "", address: "" })
     if (!res || res.error || !res.id) return null
-    setExtraPractices(prev => [...prev, { id: res.id!, name }])
+    setExtraPractices(prev => prev.some(p => p.id === res.id) ? prev : [...prev, { id: res.id!, name }])
     return { id: res.id!, label: name }
   }
 
@@ -792,7 +806,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     if (!form.practiceId) { setError("Select an organization first to create a location."); return null }
     const res = await createLocation({ name, practiceId: form.practiceId, phone: "", fax: "", address: "" })
     if (!res || res.error || !res.id) return null
-    setExtraLocations(prev => [...prev, { id: res.id!, name, practiceId: form.practiceId }])
+    setExtraLocations(prev => prev.some(l => l.id === res.id) ? prev : [...prev, { id: res.id!, name, practiceId: form.practiceId }])
     return { id: res.id!, label: name }
   }
 
@@ -811,7 +825,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   function handleProviderCreated(provider: { id: string; label: string; name: string; title: string | null }) {
     const practiceName = allPractices.find(p => p.id === form.practiceId)?.name ?? ""
-    setExtraDoctors(prev => [...prev, {
+    setExtraDoctors(prev => prev.some(d => d.id === provider.id) ? prev : [...prev, {
       id: provider.id,
       name: provider.name,
       title: provider.title,
