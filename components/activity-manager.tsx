@@ -311,6 +311,7 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
   const [q, setQ] = useState("")
   const [creating, setCreating] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -332,22 +333,26 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-md bg-white text-sm text-left hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <div className="w-full flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-md bg-white text-sm hover:border-slate-300 focus-within:ring-2 focus-within:ring-blue-500">
         <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-        <span className={`flex-1 truncate ${selected ? "text-slate-800" : "text-slate-400"}`}>
-          {selected ? selected.label : placeholder}
-        </span>
+        <input
+          ref={inputRef}
+          value={open ? q : (selected ? selected.label : "")}
+          onChange={e => { setQ(e.target.value); if (!open) setOpen(true) }}
+          onFocus={() => { setOpen(true); setQ("") }}
+          placeholder={selected ? selected.label : placeholder}
+          className="flex-1 min-w-0 truncate outline-none bg-transparent text-slate-800 placeholder:text-slate-400"
+        />
         {selected
-          ? <X className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0" onClick={e => { e.stopPropagation(); onClear(); setOpen(false) }} />
-          : <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          ? <X className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 cursor-pointer" onClick={() => { onClear(); setOpen(false); setQ("") }} />
+          : <ChevronDown
+              className="h-3.5 w-3.5 text-slate-400 shrink-0 cursor-pointer"
+              onClick={() => { if (open) { setOpen(false); setQ("") } else inputRef.current?.focus() }}
+            />
         }
-      </button>
+      </div>
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg">
-          <div className="p-2 border-b border-slate-100">
-            <Input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search..." className="h-8 text-sm" />
-          </div>
           <ul className="max-h-52 overflow-y-auto py-1 bg-white">
             {filtered.length === 0 && !canCreate
               ? <li className="px-3 py-2 text-xs text-slate-400">No results</li>
