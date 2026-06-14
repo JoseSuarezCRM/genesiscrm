@@ -7,12 +7,13 @@ interface Props {
 }
 
 export default async function WorkflowEditorPage({ params }: Props) {
-  const [users, tags, practices, locations, pipelines] = await Promise.all([
+  const [users, tags, practices, locations, pipelines, customProperties] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.tag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.practiceLocation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, color: true } }),
+    prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true, options: true } }),
   ])
 
   let automation = null
@@ -35,6 +36,7 @@ export default async function WorkflowEditorPage({ params }: Props) {
       practices={practices}
       locations={locations}
       pipelines={pipelines}
+      customProperties={customProperties as any}
     />
   )
 }

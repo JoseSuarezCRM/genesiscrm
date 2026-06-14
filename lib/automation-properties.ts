@@ -1,0 +1,121 @@
+// Property catalog + type-aware operators for workflow enrollment criteria.
+// Pure data — shared by the editor UI and (via Condition.path/type) the engine.
+
+export type PropType = "text" | "number" | "date" | "boolean" | "select" | "tag"
+
+// Where a select's options come from (filled by the UI from loaded data).
+export type DynamicSource = "practice" | "location" | "user" | "pipeline" | "status" | "imaging"
+
+export interface PropertyDef {
+  id: string                                   // stable property id used as Condition.field
+  label: string
+  type: PropType
+  path: string                                 // how the engine reads it off the referral
+  source?: DynamicSource                       // dynamic select options
+  options?: { value: string; label: string }[] // static select options
+}
+
+export interface OperatorDef {
+  value: string
+  label: string
+  noValue?: boolean   // operator needs no value input (is empty / is known / is true …)
+}
+
+// Operators available per property type (HubSpot-style wording).
+export const OPERATORS_BY_TYPE: Record<PropType, OperatorDef[]> = {
+  text: [
+    { value: "contains", label: "contains" },
+    { value: "not_contains", label: "doesn't contain" },
+    { value: "eq", label: "is exactly" },
+    { value: "ne", label: "is not" },
+    { value: "empty", label: "is unknown", noValue: true },
+    { value: "not_empty", label: "is known", noValue: true },
+  ],
+  number: [
+    { value: "eq", label: "is equal to" },
+    { value: "ne", label: "is not equal to" },
+    { value: "gt", label: "is greater than" },
+    { value: "lt", label: "is less than" },
+    { value: "empty", label: "is unknown", noValue: true },
+    { value: "not_empty", label: "is known", noValue: true },
+  ],
+  date: [
+    { value: "before", label: "is before" },
+    { value: "after", label: "is after" },
+    { value: "days_ago_lt", label: "is less than N days ago" },
+    { value: "days_ago_gt", label: "is more than N days ago" },
+    { value: "empty", label: "is unknown", noValue: true },
+    { value: "not_empty", label: "is known", noValue: true },
+  ],
+  boolean: [
+    { value: "is_true", label: "is true", noValue: true },
+    { value: "is_false", label: "is false", noValue: true },
+  ],
+  select: [
+    { value: "eq", label: "is any of" },
+    { value: "ne", label: "is none of" },
+    { value: "empty", label: "is unknown", noValue: true },
+    { value: "not_empty", label: "is known", noValue: true },
+  ],
+  tag: [
+    { value: "has", label: "has tag", noValue: false },
+    { value: "not_has", label: "does not have tag", noValue: false },
+  ],
+}
+
+// Built-in referral properties available in enrollment/branch criteria.
+export const REFERRAL_PROPERTY_DEFS: PropertyDef[] = [
+  { id: "status",             label: "Status",              type: "select", path: "status", source: "status" },
+  { id: "practiceId",         label: "Referring Practice",  type: "select", path: "referringPracticeId", source: "practice" },
+  { id: "locationId",         label: "Referring Location",  type: "select", path: "referringLocationId", source: "location" },
+  { id: "assignedToId",       label: "Assigned To",         type: "select", path: "assignedToId", source: "user" },
+  { id: "pipelineId",         label: "Pipeline",            type: "select", path: "pipelineId", source: "pipeline" },
+  { id: "tag",                label: "Tag",                 type: "tag",    path: "tags" },
+  { id: "imagingType",        label: "Imaging Type",        type: "select", path: "imagingType", source: "imaging" },
+  { id: "insuranceProvider",  label: "Insurance Provider",  type: "text",   path: "insuranceProvider" },
+  { id: "insuranceMemberId",  label: "Insurance Member ID", type: "text",   path: "insuranceMemberId" },
+  { id: "insuranceGroup",     label: "Insurance Group",     type: "text",   path: "insuranceGroup" },
+  { id: "authStatus",         label: "Auth Status",         type: "text",   path: "authStatus" },
+  { id: "referralDate",       label: "Referral Date",       type: "date",   path: "referralDate" },
+  { id: "appointmentDate",    label: "Appointment Date",    type: "date",   path: "appointmentDate" },
+  { id: "patientDob",         label: "Patient DOB",         type: "date",   path: "patientDob" },
+  { id: "createdAt",          label: "Created Date",        type: "date",   path: "createdAt" },
+  { id: "patientFirstName",   label: "Patient First Name",  type: "text",   path: "patientFirstName" },
+  { id: "patientLastName",    label: "Patient Last Name",   type: "text",   path: "patientLastName" },
+  { id: "patientPhone",       label: "Patient Phone",       type: "text",   path: "patientPhone" },
+  { id: "patientEmail",       label: "Patient Email",       type: "text",   path: "patientEmail" },
+  { id: "patientMrn",         label: "Patient MRN",         type: "text",   path: "patientMrn" },
+  { id: "genesisMrn",         label: "Genesis MRN",         type: "text",   path: "genesisMrn" },
+  { id: "referringNpi",       label: "Referring NPI",       type: "text",   path: "referringNpi" },
+]
+
+export const IMAGING_OPTIONS = [
+  { value: "CT", label: "CT" },
+  { value: "MRI", label: "MRI" },
+  { value: "MRI Arthrogram", label: "MRI Arthrogram" },
+]
+
+// Map a custom property (DB) into a PropertyDef the criteria builder can use.
+export interface CustomPropertyInput {
+  id: string
+  name: string
+  type: string                 // CustomPropertyType
+  options?: string[]
+}
+
+export function customPropertyToDef(cp: CustomPropertyInput): PropertyDef {
+  const path = `custom:${cp.id}`
+  switch (cp.type) {
+    case "NUMBER":
+      return { id: path, label: cp.name, type: "number", path }
+    case "DATE":
+      return { id: path, label: cp.name, type: "date", path }
+    case "CHECKBOX":
+      return { id: path, label: cp.name, type: "boolean", path }
+    case "DROPDOWN":
+    case "MULTI_SELECT":
+      return { id: path, label: cp.name, type: "select", path, options: (cp.options ?? []).map(o => ({ value: o, label: o })) }
+    default: // TEXT, LONG_TEXT, EMAIL, PHONE, URL
+      return { id: path, label: cp.name, type: "text", path }
+  }
+}

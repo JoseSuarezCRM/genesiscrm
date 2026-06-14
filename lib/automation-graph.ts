@@ -1,7 +1,8 @@
 // Pure node-graph model for the visual automation builder.
 // No DB / mail / Twilio imports — safe to unit-test in isolation.
 import {
-  evaluateRule, type Condition, type ReferralForConditions, type FlowAction, type AutomationFlow,
+  evaluateRule, evaluateGroups, type Condition, type ConditionGroup,
+  type ReferralForConditions, type FlowAction, type AutomationFlow,
 } from "./automation-conditions"
 
 let _idSeq = 0
@@ -16,6 +17,7 @@ export interface BranchArm {
   label: string
   match: "all" | "any"
   rules: Condition[]
+  groups?: ConditionGroup[]   // OR-of-AND criteria (takes precedence over rules)
   next: string | null
 }
 
@@ -33,6 +35,7 @@ export type GraphNode =
       kind: "branch"
       match: "all" | "any"
       rules: Condition[]
+      groups?: ConditionGroup[]   // OR-of-AND criteria (takes precedence over rules)
       thenNext: string | null
       elseNext: string | null
     }
@@ -53,6 +56,15 @@ export function branchPasses(referral: ReferralForConditions, match: "all" | "an
   return match === "any"
     ? rules.some(r => evaluateRule(referral, r))
     : rules.every(r => evaluateRule(referral, r))
+}
+
+// Criteria pass for a branch/arm: prefer OR-of-AND groups, fall back to rules+match.
+function criteriaPass(
+  referral: ReferralForConditions,
+  c: { groups?: ConditionGroup[]; match: "all" | "any"; rules: Condition[] },
+): boolean {
+  if (c.groups && c.groups.length) return evaluateGroups(referral, c.groups)
+  return branchPasses(referral, c.match, c.rules)
 }
 
 // Walk the graph from the root, following branches based on the referral, and
@@ -78,11 +90,11 @@ export function resolveGraphActions(
       currentId = node.next
     } else if (node.kind === "branch") {
       // branch: with no referral context, conditions can't be evaluated → ELSE path
-      const passed = referral ? branchPasses(referral, node.match, node.rules) : false
+      const passed = referral ? criteriaPass(referral, node) : false
       currentId = passed ? node.thenNext : node.elseNext
     } else {
-      // multi-way branch: first arm whose rules pass wins; otherwise ELSE path
-      const arm = referral ? node.arms.find(a => branchPasses(referral, a.match, a.rules)) : undefined
+      // multi-way branch: first arm whose criteria pass wins; otherwise ELSE path
+      const arm = referral ? node.arms.find(a => criteriaPass(referral, a)) : undefined
       currentId = arm ? arm.next : node.elseNext
     }
   }

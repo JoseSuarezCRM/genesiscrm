@@ -20,6 +20,11 @@ import {
   type AutomationGraph, type GraphNode, type Slot,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph,
 } from "@/lib/automation-graph"
+import type { Condition as PureCondition, ConditionGroup } from "@/lib/automation-conditions"
+import {
+  REFERRAL_PROPERTY_DEFS, OPERATORS_BY_TYPE, IMAGING_OPTIONS, customPropertyToDef,
+  type PropertyDef, type CustomPropertyInput,
+} from "@/lib/automation-properties"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -170,127 +175,162 @@ const REFERRAL_TRIGGERS = new Set([
 
 interface Condition { field: string; op: string; value: string }
 
-const CONDITION_FIELDS = [
-  { value: "practiceId",       label: "Referring Practice" },
-  { value: "locationId",       label: "Referring Location" },
-  { value: "assignedToId",     label: "Assigned To" },
-  { value: "status",           label: "Status" },
-  { value: "insuranceProvider", label: "Insurance Provider" },
-  { value: "tagId",            label: "Has Tag" },
-]
 
-const CONDITION_OPS: Record<string, { value: string; label: string }[]> = {
-  practiceId:       [{ value: "eq", label: "is" }, { value: "ne", label: "is not" }, { value: "empty", label: "is empty" }],
-  locationId:       [{ value: "eq", label: "is" }, { value: "ne", label: "is not" }, { value: "empty", label: "is empty" }],
-  assignedToId:     [{ value: "eq", label: "is" }, { value: "ne", label: "is not" }, { value: "unassigned", label: "is unassigned" }],
-  status:           [{ value: "eq", label: "is" }, { value: "ne", label: "is not" }],
-  insuranceProvider:[{ value: "contains", label: "contains" }, { value: "eq", label: "equals" }, { value: "empty", label: "is empty" }],
-  tagId:            [{ value: "has", label: "has tag" }, { value: "not_has", label: "does not have tag" }],
+// ─── Property-driven criteria groups (AND within, OR between) ─────────────────
+
+interface CriteriaData {
+  users: User[]; practices: Practice[]; locations: Location[]; tags: Tag[]
+  pipelines: Pipeline[]; customDefs: PropertyDef[]
 }
 
-function ConditionValueInput({
-  field, op, value, onChange, users, practices, locations, tags,
-}: {
-  field: string; op: string; value: string; onChange: (v: string) => void
-  users: User[]; practices: Practice[]; locations: Location[]; tags: Tag[]
-}) {
-  if (op === "empty" || op === "unassigned") return null
-  if (field === "practiceId") return (
-    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">Select practice</option>
-      {practices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-    </StyledSelect>
-  )
-  if (field === "locationId") return (
-    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">Select location</option>
-      {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-    </StyledSelect>
-  )
-  if (field === "assignedToId") return (
-    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">Select user</option>
-      {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-    </StyledSelect>
-  )
-  if (field === "status") return (
-    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">Select status</option>
-      {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-    </StyledSelect>
-  )
-  if (field === "tagId") return (
-    <StyledSelect className="flex-1" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">Select tag</option>
-      {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-    </StyledSelect>
-  )
-  return <input className="flex-1 border rounded-md px-2 py-1.5 text-xs" placeholder="Value…" value={value} onChange={e => onChange(e.target.value)} />
+// Convert legacy flat rules → a single group (for editing older automations).
+function rulesToGroups(groups?: ConditionGroup[] | null, legacyRules?: PureCondition[] | null): ConditionGroup[] {
+  if (groups && groups.length) return groups
+  if (legacyRules && legacyRules.length) return [{ id: newNodeId(), conditions: legacyRules }]
+  return []
 }
 
-function ConditionsBuilder({
-  conditions, onChange, users, practices, locations, tags,
-}: {
-  conditions: Condition[]
-  onChange: (c: Condition[]) => void
-  users: User[]; practices: Practice[]; locations: Location[]; tags: Tag[]
+function optionsForProp(def: PropertyDef, data: CriteriaData): { value: string; label: string }[] {
+  if (def.type === "tag") return data.tags.map(t => ({ value: t.id, label: t.name }))
+  switch (def.source) {
+    case "status": return STATUS_OPTIONS
+    case "practice": return data.practices.map(p => ({ value: p.id, label: p.name }))
+    case "location": return data.locations.map(l => ({ value: l.id, label: l.name }))
+    case "user": return data.users.map(u => ({ value: u.id, label: u.name || u.email }))
+    case "pipeline": return data.pipelines.map(p => ({ value: p.id, label: p.name }))
+    case "imaging": return IMAGING_OPTIONS
+    default: return def.options ?? []
+  }
+}
+
+function CriteriaValueInput({ def, cond, onChange, data }: {
+  def: PropertyDef; cond: PureCondition; onChange: (v: string) => void; data: CriteriaData
 }) {
-  function add() {
-    onChange([...conditions, { field: "practiceId", op: "eq", value: "" }])
+  const opDef = OPERATORS_BY_TYPE[def.type].find(o => o.value === cond.op)
+  if (opDef?.noValue) return null
+
+  if (def.type === "tag" || def.type === "select") {
+    const opts = optionsForProp(def, data)
+    return (
+      <StyledSelect className="flex-1 min-w-[140px]" value={cond.value} onChange={e => onChange(e.target.value)}>
+        <option value="">Select…</option>
+        {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </StyledSelect>
+    )
   }
-  function remove(i: number) {
-    onChange(conditions.filter((_, idx) => idx !== i))
+  if (def.type === "number") {
+    return <input type="number" className="flex-1 min-w-[120px] border rounded-md px-2 py-1.5 text-sm" placeholder="Value" value={cond.value} onChange={e => onChange(e.target.value)} />
   }
-  function update(i: number, patch: Partial<Condition>) {
-    onChange(conditions.map((c, idx) => {
-      if (idx !== i) return c
+  if (def.type === "date") {
+    if (cond.op === "days_ago_lt" || cond.op === "days_ago_gt") {
+      return <input type="number" min={0} className="flex-1 min-w-[120px] border rounded-md px-2 py-1.5 text-sm" placeholder="Number of days" value={cond.value} onChange={e => onChange(e.target.value)} />
+    }
+    return <input type="date" className="flex-1 min-w-[140px] border rounded-md px-2 py-1.5 text-sm" value={cond.value ? cond.value.slice(0, 10) : ""} onChange={e => onChange(e.target.value)} />
+  }
+  return <input className="flex-1 min-w-[140px] border rounded-md px-2 py-1.5 text-sm" placeholder="Value…" value={cond.value} onChange={e => onChange(e.target.value)} />
+}
+
+function CriteriaGroupsBuilder({ groups, onChange, data }: {
+  groups: ConditionGroup[]; onChange: (g: ConditionGroup[]) => void; data: CriteriaData
+}) {
+  const allProps = [...REFERRAL_PROPERTY_DEFS, ...data.customDefs]
+  const propById = (id: string) => allProps.find(p => p.id === id) ?? REFERRAL_PROPERTY_DEFS[0]
+
+  function newCondition(): PureCondition {
+    const p = REFERRAL_PROPERTY_DEFS[0]
+    return { field: p.id, path: p.path, type: p.type, op: OPERATORS_BY_TYPE[p.type][0].value, value: "" }
+  }
+
+  function updateGroup(gid: string, conditions: PureCondition[]) {
+    onChange(groups.map(g => g.id === gid ? { ...g, conditions } : g))
+  }
+  function addGroup() {
+    onChange([...groups, { id: newNodeId(), conditions: [newCondition()] }])
+  }
+  function removeGroup(gid: string) {
+    onChange(groups.filter(g => g.id !== gid))
+  }
+  function setCond(gid: string, idx: number, patch: Partial<PureCondition>) {
+    const g = groups.find(x => x.id === gid)
+    if (!g) return
+    updateGroup(gid, g.conditions.map((c, i) => {
+      if (i !== idx) return c
       const next = { ...c, ...patch }
-      // reset op/value when field changes
       if (patch.field && patch.field !== c.field) {
-        next.op = CONDITION_OPS[patch.field]?.[0]?.value ?? "eq"
+        const p = propById(patch.field)
+        next.path = p.path
+        next.type = p.type
+        next.op = OPERATORS_BY_TYPE[p.type][0].value
         next.value = ""
       }
       return next
     }))
   }
 
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Additional conditions (AND)</p>
-        <button type="button" onClick={add} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-          <Plus className="h-3 w-3" /> Add condition
+  if (groups.length === 0) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-slate-400 italic">No criteria — runs for all records.</p>
+        <button type="button" onClick={addGroup}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-zinc-900 text-white hover:bg-zinc-800">
+          <Plus className="h-3.5 w-3.5" /> Add criteria
         </button>
       </div>
-      {conditions.length === 0 && (
-        <p className="text-xs text-slate-400 italic">No extra conditions — trigger fires for all referrals.</p>
-      )}
-      {conditions.map((cond, i) => (
-        <div key={i} className="flex items-center gap-2 flex-wrap">
-          <StyledSelect
-            className="shrink-0"
-            value={cond.field}
-            onChange={e => update(i, { field: e.target.value })}
-          >
-            {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </StyledSelect>
-          <StyledSelect
-            className="shrink-0"
-            value={cond.op}
-            onChange={e => update(i, { op: e.target.value })}
-          >
-            {(CONDITION_OPS[cond.field] ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </StyledSelect>
-          <ConditionValueInput
-            field={cond.field} op={cond.op} value={cond.value}
-            onChange={v => update(i, { value: v })}
-            users={users} practices={practices} locations={locations} tags={tags}
-          />
-          <button type="button" onClick={() => remove(i)} className="text-slate-400 hover:text-red-500">
-            <X className="h-3.5 w-3.5" />
-          </button>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {groups.map((group, gi) => (
+        <div key={group.id}>
+          {gi > 0 && (
+            <div className="flex items-center gap-2 my-1.5">
+              <div className="flex-1 h-px bg-slate-200" />
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">or</span>
+              <div className="flex-1 h-px bg-slate-200" />
+            </div>
+          )}
+          <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700">Group {gi + 1}</span>
+              <button type="button" onClick={() => removeGroup(group.id)} className="text-slate-300 hover:text-red-500" title="Remove group">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {group.conditions.map((cond, ci) => {
+              const def = propById(cond.field)
+              return (
+                <div key={ci}>
+                  {ci > 0 && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block my-1">and</span>}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <StyledSelect className="shrink-0 min-w-[150px]" value={cond.field} onChange={e => setCond(group.id, ci, { field: e.target.value })}>
+                      {REFERRAL_PROPERTY_DEFS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                      {data.customDefs.length > 0 && <option disabled>──────────</option>}
+                      {data.customDefs.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    </StyledSelect>
+                    <StyledSelect className="shrink-0 min-w-[130px]" value={cond.op} onChange={e => setCond(group.id, ci, { op: e.target.value, value: "" })}>
+                      {OPERATORS_BY_TYPE[def.type].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </StyledSelect>
+                    <CriteriaValueInput def={def} cond={cond} onChange={v => setCond(group.id, ci, { value: v })} data={data} />
+                    <button type="button" onClick={() => updateGroup(group.id, group.conditions.filter((_, i) => i !== ci))}
+                      className="text-slate-400 hover:text-red-500 shrink-0">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+            <button type="button" onClick={() => updateGroup(group.id, [...group.conditions, newCondition()])}
+              className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <Plus className="h-3 w-3" /> Add criteria
+            </button>
+          </div>
         </div>
       ))}
+      <button type="button" onClick={addGroup}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-600">
+        <Plus className="h-3.5 w-3.5" /> Add group <span className="text-slate-400">(OR)</span>
+      </button>
     </div>
   )
 }
@@ -328,16 +368,25 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
 // ─── Trigger config form ──────────────────────────────────────────────────────
 
 function TriggerConfigFields({
-  type, config, onChange, users, tags, practices, locations, pipelines,
+  type, config, onChange, users, tags, practices, locations, pipelines, customDefs,
 }: {
   type: string
   config: Record<string, unknown>
   onChange: (cfg: Record<string, unknown>) => void
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines: Pipeline[]
+  customDefs: PropertyDef[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
-  const conditions = (config.conditions as Condition[]) ?? []
   const showConditions = REFERRAL_TRIGGERS.has(type)
+  const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs }
+
+  // Migrate legacy flat conditions → a single group, once, when editing older rules.
+  useEffect(() => {
+    if (showConditions && !config.conditionGroups && Array.isArray(config.conditions) && (config.conditions as unknown[]).length) {
+      set("conditionGroups", [{ id: newNodeId(), conditions: config.conditions }])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function renderPrimary() {
     if (type === "REFERRAL_CREATED" || type === "EMBED_REFERRAL_RECEIVED") {
@@ -535,11 +584,12 @@ function TriggerConfigFields({
     <div className="space-y-4">
       {renderPrimary()}
       {showConditions && (
-        <div className="border-t pt-3">
-          <ConditionsBuilder
-            conditions={conditions}
-            onChange={c => set("conditions", c)}
-            users={users} practices={practices} locations={locations} tags={tags}
+        <div className="border-t pt-3 space-y-2">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Only enroll records that meet these conditions</p>
+          <CriteriaGroupsBuilder
+            groups={(config.conditionGroups as ConditionGroup[]) ?? []}
+            onChange={g => set("conditionGroups", g)}
+            data={criteriaData}
           />
         </div>
       )}
@@ -1142,13 +1192,15 @@ function NodeChip({ title, icon, color, onClick, onDelete }: {
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
+  pipelines: Pipeline[]; customDefs: PropertyDef[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
+  const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs }
 
   function updateArm(armId: string, patch: Partial<import("@/lib/automation-graph").BranchArm>) {
     if (draft.kind !== "multi") return
@@ -1177,17 +1229,12 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
             </>
           ) : draft.kind === "branch" ? (
             <>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Conditions</span>
-                <div className="inline-flex bg-slate-100 rounded-md p-0.5 text-xs">
-                  <button type="button" onClick={() => setDraft({ ...draft, match: "all" })}
-                    className={cn("px-2 py-0.5 rounded font-medium", draft.match === "all" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match all</button>
-                  <button type="button" onClick={() => setDraft({ ...draft, match: "any" })}
-                    className={cn("px-2 py-0.5 rounded font-medium", draft.match === "any" ? "bg-zinc-900 text-white" : "text-slate-500")}>Match any</button>
-                </div>
-              </div>
-              <ConditionsBuilder conditions={draft.rules} onChange={rules => setDraft({ ...draft, rules })}
-                users={users} practices={practices} locations={locations} tags={tags} />
+              <p className="text-xs text-slate-500">Records take the <span className="font-medium">Then</span> path when they meet these conditions; otherwise the <span className="font-medium">Else</span> path.</p>
+              <CriteriaGroupsBuilder
+                groups={rulesToGroups(draft.groups, draft.rules)}
+                onChange={groups => setDraft({ ...draft, groups })}
+                data={criteriaData}
+              />
             </>
           ) : (
             <>
@@ -1203,12 +1250,6 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                       placeholder={`Branch ${i + 1}`}
                       className="flex-1 border border-slate-200 rounded-md px-2 py-1.5 text-sm font-medium bg-white focus:outline-none focus:border-slate-400"
                     />
-                    <div className="inline-flex bg-white border border-slate-200 rounded-md p-0.5 text-xs shrink-0">
-                      <button type="button" onClick={() => updateArm(arm.id, { match: "all" })}
-                        className={cn("px-2 py-0.5 rounded font-medium", arm.match === "all" ? "bg-zinc-900 text-white" : "text-slate-500")}>All</button>
-                      <button type="button" onClick={() => updateArm(arm.id, { match: "any" })}
-                        className={cn("px-2 py-0.5 rounded font-medium", arm.match === "any" ? "bg-zinc-900 text-white" : "text-slate-500")}>Any</button>
-                    </div>
                     {draft.arms.length > 1 && (
                       <button type="button"
                         onClick={() => setDraft({ ...draft, arms: draft.arms.filter(a => a.id !== arm.id) })}
@@ -1217,8 +1258,11 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                       </button>
                     )}
                   </div>
-                  <ConditionsBuilder conditions={arm.rules} onChange={rules => updateArm(arm.id, { rules })}
-                    users={users} practices={practices} locations={locations} tags={tags} />
+                  <CriteriaGroupsBuilder
+                    groups={rulesToGroups(arm.groups, arm.rules)}
+                    onChange={groups => updateArm(arm.id, { groups })}
+                    data={criteriaData}
+                  />
                 </div>
               ))}
               <button type="button"
@@ -1271,10 +1315,12 @@ const OBJECT_BADGE_COLORS: Record<string, string> = {
 
 // ─── Full-page workflow editor (HubSpot-style) ───────────────────────────────
 
-export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [] }: {
+export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [], customProperties = [] }: {
   editing: Automation | null
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines?: Pipeline[]
+  customProperties?: CustomPropertyInput[]
 }) {
+  const customDefs = customProperties.map(customPropertyToDef)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState(editing?.name ?? "")
@@ -1403,6 +1449,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
               <TriggerConfigFields
                 type={triggerType} config={triggerConfig} onChange={setTriggerConfig}
                 users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines}
+                customDefs={customDefs}
               />
             </div>
           </div>
@@ -1420,6 +1467,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           onClose={() => setEditingNodeId(null)}
           onSave={(n) => { setGraph(pruneUnreachable(updateNode(graph, n))); setEditingNodeId(null) }}
           users={users} tags={tags} practices={practices} locations={locations}
+          pipelines={pipelines} customDefs={customDefs}
         />
       )}
     </div>

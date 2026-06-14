@@ -3,7 +3,7 @@ import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } fro
 import { sendEmail } from "@/lib/graph-mailer"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
-import { evaluateRule as evalRule, selectBranch, type AutomationFlow as PureFlow } from "@/lib/automation-conditions"
+import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import { resolveGraphActions, type AutomationGraph } from "@/lib/automation-graph"
 
 // ─── Template variable resolution ─────────────────────────────────────────────
@@ -75,73 +75,30 @@ function dedupeKey(period: string): string {
 
 // ─── Multi-criteria condition checker ─────────────────────────────────────────
 
-interface ReferralForConditions {
-  id: string
-  referringPracticeId: string | null
-  referringLocationId: string | null
-  assignedToId: string | null
-  status: ReferralStatus
-  insuranceProvider: string | null
-  tags: { tagId: string }[]
-}
+// The raw Prisma referral satisfies the pure ReferralForConditions shape
+// (scalar columns + customProperties + tags), so we evaluate against it directly.
+function checkConditions(referral: Record<string, unknown>, cfg: Record<string, unknown>): boolean {
+  const ref = referral as Parameters<typeof evalRule>[0]
 
-interface Condition {
-  field: string
-  op: string
-  value: string
-}
-
-function checkConditions(referral: ReferralForConditions, cfg: Record<string, unknown>): boolean {
   // Legacy top-level filters (backward compat)
-  if (cfg.practiceId && referral.referringPracticeId !== cfg.practiceId) return false
-  if (cfg.locationId && referral.referringLocationId !== cfg.locationId) return false
-  if (cfg.statusFilter && referral.status !== cfg.statusFilter) return false
+  if (cfg.practiceId && ref.referringPracticeId !== cfg.practiceId) return false
+  if (cfg.locationId && ref.referringLocationId !== cfg.locationId) return false
+  if (cfg.statusFilter && ref.status !== cfg.statusFilter) return false
   if (cfg.insuranceProvider) {
-    const ip = (referral.insuranceProvider ?? "").toLowerCase()
+    const ip = String(ref.insuranceProvider ?? "").toLowerCase()
     if (!ip.includes((cfg.insuranceProvider as string).toLowerCase())) return false
   }
   if (cfg.tagId) {
-    if (!referral.tags.some(t => t.tagId === cfg.tagId)) return false
+    if (!(ref.tags ?? []).some(t => t.tagId === cfg.tagId)) return false
   }
+
+  // New: OR-of-AND condition groups take precedence over the flat list.
+  const groups = cfg.conditionGroups as ConditionGroup[] | undefined
+  if (groups && groups.length) return evaluateGroups(ref, groups)
 
   // Conditions array (AND logic)
-  const conditions = (cfg.conditions as Condition[]) ?? []
-  for (const cond of conditions) {
-    const condVal = cond.value ?? ""
-    const condValLower = condVal.toLowerCase()
-
-    if (cond.field === "practiceId") {
-      if (cond.op === "eq" && referral.referringPracticeId !== condVal) return false
-      if (cond.op === "ne" && referral.referringPracticeId === condVal) return false
-      if (cond.op === "empty" && referral.referringPracticeId !== null) return false
-    }
-    if (cond.field === "locationId") {
-      if (cond.op === "eq" && referral.referringLocationId !== condVal) return false
-      if (cond.op === "ne" && referral.referringLocationId === condVal) return false
-      if (cond.op === "empty" && referral.referringLocationId !== null) return false
-    }
-    if (cond.field === "assignedToId") {
-      if (cond.op === "eq" && referral.assignedToId !== condVal) return false
-      if (cond.op === "ne" && referral.assignedToId === condVal) return false
-      if (cond.op === "unassigned" && referral.assignedToId !== null) return false
-    }
-    if (cond.field === "status") {
-      if (cond.op === "eq" && referral.status !== condVal) return false
-      if (cond.op === "ne" && referral.status === condVal) return false
-    }
-    if (cond.field === "insuranceProvider") {
-      const ip = (referral.insuranceProvider ?? "").toLowerCase()
-      if (cond.op === "contains" && !ip.includes(condValLower)) return false
-      if (cond.op === "eq" && ip !== condValLower) return false
-      if (cond.op === "empty" && !!referral.insuranceProvider) return false
-    }
-    if (cond.field === "tagId") {
-      const hasTag = referral.tags.some(t => t.tagId === condVal)
-      if (cond.op === "has" && !hasTag) return false
-      if (cond.op === "not_has" && hasTag) return false
-    }
-  }
-  return true
+  const conditions = (cfg.conditions as PureCondition[]) ?? []
+  return conditions.every(c => evalRule(ref, c))
 }
 
 // ─── Referral fetcher with all condition fields ────────────────────────────────
@@ -158,9 +115,6 @@ async function fetchReferralForEngine(referralId: string) {
 }
 
 // ─── Action executor ──────────────────────────────────────────────────────────
-
-// keep a reference so the import is used even though selectBranch wraps it
-void evalRule
 
 // Top-level executor: graph (visual flow) → flow (if/else) → single action.
 async function executeAction(
