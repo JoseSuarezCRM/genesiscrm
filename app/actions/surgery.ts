@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CallOutcome } from "@prisma/client"
+import { runTrigger_SurgeryStatusChanged, runTrigger_SurgeryCallAttemptsReached } from "@/lib/automation-engine"
 
 export interface SurgeryFilters {
   search?: string
@@ -106,6 +107,11 @@ export async function updateSurgeryCase(
 
   const { surgeryDate, ...rest } = data
 
+  // Capture the prior status so we can fire the status-changed workflow trigger.
+  const prev = data.status
+    ? await (prisma as any).surgeryCase.findUnique({ where: { id }, select: { status: true } })
+    : null
+
   await (prisma as any).surgeryCase.update({
     where: { id },
     data: {
@@ -113,6 +119,10 @@ export async function updateSurgeryCase(
       surgeryDate: surgeryDate ? new Date(surgeryDate) : null,
     },
   })
+
+  if (data.status && prev?.status && prev.status !== data.status) {
+    await runTrigger_SurgeryStatusChanged(id, prev.status, data.status, session.user.id).catch(() => {})
+  }
 
   revalidatePath(`/surgery/${id}`)
   revalidatePath("/surgery")
@@ -161,6 +171,9 @@ export async function addSurgeryCallAttempt(caseId: string, outcome: string, not
       notes: notes || null,
     },
   })
+
+  const callCount = await (prisma as any).surgeryCallAttempt.count({ where: { caseId } })
+  await runTrigger_SurgeryCallAttemptsReached(caseId, callCount, session.user.id).catch(() => {})
 
   revalidatePath(`/surgery/${caseId}`)
 }

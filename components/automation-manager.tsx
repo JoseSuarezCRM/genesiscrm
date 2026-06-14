@@ -22,7 +22,8 @@ import {
 } from "@/lib/automation-graph"
 import type { Condition as PureCondition, ConditionGroup } from "@/lib/automation-conditions"
 import {
-  REFERRAL_PROPERTY_DEFS, OPERATORS_BY_TYPE, IMAGING_OPTIONS, customPropertyToDef,
+  REFERRAL_PROPERTY_DEFS, OPERATORS_BY_TYPE, IMAGING_OPTIONS, SURGERY_STATUS_OPTIONS, customPropertyToDef,
+  OBJECT_PROPERTY_DEFS, OBJECT_CUSTOM_ENTITY,
   type PropertyDef, type CustomPropertyInput,
 } from "@/lib/automation-properties"
 
@@ -100,6 +101,14 @@ const ACTION_LABELS: Record<string, string> = {
   ADD_TAG: "Add tag to referral",
   SEND_EMAIL: "Send email",
   SEND_SMS: "Send SMS to patient",
+}
+
+// Actions that act on a specific referral — only offered for referral workflows.
+const REFERRAL_ONLY_ACTIONS = new Set(["UPDATE_REFERRAL_STATUS", "ASSIGN_REFERRAL", "ADD_TAG", "SEND_SMS"])
+
+function actionsForObject(objectKey: string): AutomationAction[] {
+  const all = Object.keys(ACTION_LABELS) as AutomationAction[]
+  return objectKey === "REFERRAL" ? all : all.filter(a => !REFERRAL_ONLY_ACTIONS.has(a))
 }
 
 const TRIGGER_COLORS: Record<string, string> = {
@@ -180,7 +189,7 @@ interface Condition { field: string; op: string; value: string }
 
 interface CriteriaData {
   users: User[]; practices: Practice[]; locations: Location[]; tags: Tag[]
-  pipelines: Pipeline[]; customDefs: PropertyDef[]
+  pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]
 }
 
 // Convert legacy flat rules → a single group (for editing older automations).
@@ -233,11 +242,12 @@ function CriteriaValueInput({ def, cond, onChange, data }: {
 function CriteriaGroupsBuilder({ groups, onChange, data }: {
   groups: ConditionGroup[]; onChange: (g: ConditionGroup[]) => void; data: CriteriaData
 }) {
-  const allProps = [...REFERRAL_PROPERTY_DEFS, ...data.customDefs]
-  const propById = (id: string) => allProps.find(p => p.id === id) ?? REFERRAL_PROPERTY_DEFS[0]
+  const baseProps = data.propDefs.length ? data.propDefs : REFERRAL_PROPERTY_DEFS
+  const allProps = [...baseProps, ...data.customDefs]
+  const propById = (id: string) => allProps.find(p => p.id === id) ?? baseProps[0]
 
   function newCondition(): PureCondition {
-    const p = REFERRAL_PROPERTY_DEFS[0]
+    const p = baseProps[0]
     return { field: p.id, path: p.path, type: p.type, op: OPERATORS_BY_TYPE[p.type][0].value, value: "" }
   }
 
@@ -304,7 +314,7 @@ function CriteriaGroupsBuilder({ groups, onChange, data }: {
                   {ci > 0 && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block my-1">and</span>}
                   <div className="flex items-center gap-2 flex-wrap">
                     <StyledSelect className="shrink-0 min-w-[150px]" value={cond.field} onChange={e => setCond(group.id, ci, { field: e.target.value })}>
-                      {REFERRAL_PROPERTY_DEFS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                      {baseProps.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                       {data.customDefs.length > 0 && <option disabled>──────────</option>}
                       {data.customDefs.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                     </StyledSelect>
@@ -351,6 +361,8 @@ function emptyTriggerConfig(type: string): Record<string, unknown> {
   if (type === "TAG_ADDED") return { tagId: "", conditions: [] }
   if (type === "AUTH_STATUS_CHANGED") return { toAuthStatus: "", conditions: [] }
   if (type === "PIPELINE_CHANGED") return { fromPipelineId: "", toPipelineId: "", conditions: [] }
+  if (type === "SURGERY_STATUS_CHANGED") return { fromStatus: "", toStatus: "", conditionGroups: [] }
+  if (type === "SURGERY_CALL_ATTEMPTS_REACHED") return { count: 4, conditionGroups: [] }
   return { conditions: [] } // REFERRAL_CREATED, DOCUMENT_UPLOADED, EMBED_REFERRAL_RECEIVED
 }
 
@@ -368,21 +380,22 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
 // ─── Trigger config form ──────────────────────────────────────────────────────
 
 function TriggerConfigFields({
-  type, config, onChange, users, tags, practices, locations, pipelines, customDefs,
+  type, config, onChange, users, tags, practices, locations, pipelines, customDefs, propDefs,
 }: {
   type: string
   config: Record<string, unknown>
   onChange: (cfg: Record<string, unknown>) => void
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines: Pipeline[]
-  customDefs: PropertyDef[]
+  customDefs: PropertyDef[]; propDefs: PropertyDef[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
-  const showConditions = REFERRAL_TRIGGERS.has(type)
-  const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs }
+  // Every object supports enrollment criteria now.
+  const showConditions = true
+  const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
 
   // Migrate legacy flat conditions → a single group, once, when editing older rules.
   useEffect(() => {
-    if (showConditions && !config.conditionGroups && Array.isArray(config.conditions) && (config.conditions as unknown[]).length) {
+    if (!config.conditionGroups && Array.isArray(config.conditions) && (config.conditions as unknown[]).length) {
       set("conditionGroups", [{ id: newNodeId(), conditions: config.conditions }])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -572,6 +585,36 @@ function TriggerConfigFields({
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Filter by new auth status value (optional)</label>
           <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. Approved" value={(config.toAuthStatus as string) || ""} onChange={e => set("toAuthStatus", e.target.value || undefined)} />
+        </div>
+      )
+    }
+
+    if (type === "SURGERY_STATUS_CHANGED") {
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">From status (optional)</label>
+            <StyledSelect className="w-full" value={(config.fromStatus as string) || ""} onChange={e => set("fromStatus", e.target.value || undefined)}>
+              <option value="">Any</option>
+              {SURGERY_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </StyledSelect>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">To status (optional)</label>
+            <StyledSelect className="w-full" value={(config.toStatus as string) || ""} onChange={e => set("toStatus", e.target.value || undefined)}>
+              <option value="">Any</option>
+              {SURGERY_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </StyledSelect>
+          </div>
+        </div>
+      )
+    }
+
+    if (type === "SURGERY_CALL_ATTEMPTS_REACHED") {
+      return (
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Number of call attempts</label>
+          <input type="number" min={1} className="w-full border rounded-md px-3 py-2 text-sm" value={(config.count as number) || 4} onChange={e => set("count", Number(e.target.value))} />
         </div>
       )
     }
@@ -1192,15 +1235,15 @@ function NodeChip({ title, icon, color, onClick, onDelete }: {
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
-  pipelines: Pipeline[]; customDefs: PropertyDef[]
+  pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
-  const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs }
+  const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
 
   function updateArm(armId: string, patch: Partial<import("@/lib/automation-graph").BranchArm>) {
     if (draft.kind !== "multi") return
@@ -1222,7 +1265,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
               <StyledSelect className="w-full"
                 value={draft.actionType}
                 onChange={e => { const t = e.target.value as AutomationAction; setDraft({ ...draft, actionType: t, config: emptyActionConfig(t) }) }}>
-                {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
+                {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
                 onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} />
@@ -1315,12 +1358,11 @@ const OBJECT_BADGE_COLORS: Record<string, string> = {
 
 // ─── Full-page workflow editor (HubSpot-style) ───────────────────────────────
 
-export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [], customProperties = [] }: {
+export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [], customPropsByEntity = {} }: {
   editing: Automation | null
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines?: Pipeline[]
-  customProperties?: CustomPropertyInput[]
+  customPropsByEntity?: Record<string, CustomPropertyInput[]>
 }) {
-  const customDefs = customProperties.map(customPropertyToDef)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState(editing?.name ?? "")
@@ -1341,6 +1383,10 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const [error, setError] = useState("")
 
   const objectDef = WORKFLOW_OBJECTS.find(o => o.key === objectKey) ?? WORKFLOW_OBJECTS[0]
+  const propDefs = OBJECT_PROPERTY_DEFS[objectKey] ?? REFERRAL_PROPERTY_DEFS
+  const objectEntity = OBJECT_CUSTOM_ENTITY[objectKey]
+  const customDefs = (objectEntity ? customPropsByEntity[objectEntity] ?? [] : []).map(customPropertyToDef)
+  const objectActions = actionsForObject(objectKey)
 
   function handleObjectChange(key: string) {
     setObjectKey(key)
@@ -1449,7 +1495,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
               <TriggerConfigFields
                 type={triggerType} config={triggerConfig} onChange={setTriggerConfig}
                 users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines}
-                customDefs={customDefs}
+                customDefs={customDefs} propDefs={propDefs}
               />
             </div>
           </div>
@@ -1467,7 +1513,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           onClose={() => setEditingNodeId(null)}
           onSave={(n) => { setGraph(pruneUnreachable(updateNode(graph, n))); setEditingNodeId(null) }}
           users={users} tags={tags} practices={practices} locations={locations}
-          pipelines={pipelines} customDefs={customDefs}
+          pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions}
         />
       )}
     </div>

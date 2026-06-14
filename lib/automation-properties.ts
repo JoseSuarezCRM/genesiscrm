@@ -95,6 +95,85 @@ export const IMAGING_OPTIONS = [
   { value: "MRI Arthrogram", label: "MRI Arthrogram" },
 ]
 
+export const SURGERY_STATUS_OPTIONS = [
+  { value: "NEW", label: "New" },
+  { value: "SCHEDULED", label: "Scheduled" },
+  { value: "PENDING_CONFIRMATION", label: "Pending Confirmation" },
+  { value: "PENDING_CLEARANCE", label: "Pending Clearance" },
+  { value: "CANCELED", label: "Canceled" },
+  { value: "COMPLETED", label: "Completed" },
+]
+
+const CONTACT_TYPE_OPTIONS = [
+  { value: "PROVIDER", label: "Provider" },
+  { value: "STAFF", label: "Staff" },
+]
+
+// ── Provider (ReferringDoctor) ────────────────────────────────────────────────
+const PROVIDER_PROPERTY_DEFS: PropertyDef[] = [
+  { id: "name",        label: "Name",         type: "text",   path: "name" },
+  { id: "title",       label: "Title",        type: "text",   path: "title" },
+  { id: "npi",         label: "NPI",          type: "text",   path: "npi" },
+  { id: "specialty",   label: "Specialty",    type: "text",   path: "specialty" },
+  { id: "phone",       label: "Phone",        type: "text",   path: "phone" },
+  { id: "email",       label: "Email",        type: "text",   path: "email" },
+  { id: "contactType", label: "Contact Type", type: "select", path: "contactType", options: CONTACT_TYPE_OPTIONS },
+  { id: "practiceId",  label: "Practice",     type: "select", path: "practiceId", source: "practice" },
+  { id: "createdAt",   label: "Created Date", type: "date",   path: "createdAt" },
+]
+
+// ── Practice (ReferringPractice) ──────────────────────────────────────────────
+const PRACTICE_PROPERTY_DEFS: PropertyDef[] = [
+  { id: "name",      label: "Name",         type: "text", path: "name" },
+  { id: "phone",     label: "Phone",        type: "text", path: "phone" },
+  { id: "fax",       label: "Fax",          type: "text", path: "fax" },
+  { id: "address",   label: "Address",      type: "text", path: "address" },
+  { id: "createdAt", label: "Created Date", type: "date", path: "createdAt" },
+]
+
+// ── Location (PracticeLocation) ───────────────────────────────────────────────
+const LOCATION_PROPERTY_DEFS: PropertyDef[] = [
+  { id: "name",       label: "Name",     type: "text",   path: "name" },
+  { id: "phone",      label: "Phone",    type: "text",   path: "phone" },
+  { id: "fax",        label: "Fax",      type: "text",   path: "fax" },
+  { id: "address",    label: "Address",  type: "text",   path: "address" },
+  { id: "practiceId", label: "Practice", type: "select", path: "practiceId", source: "practice" },
+]
+
+// ── Surgery Case ──────────────────────────────────────────────────────────────
+const SURGERY_PROPERTY_DEFS: PropertyDef[] = [
+  { id: "status",            label: "Status",             type: "select", path: "status", options: SURGERY_STATUS_OPTIONS },
+  { id: "patientName",       label: "Patient Name",       type: "text",   path: "patientName" },
+  { id: "mrn",               label: "MRN",                type: "text",   path: "mrn" },
+  { id: "orderingProvider",  label: "Ordering Provider",  type: "text",   path: "orderingProvider" },
+  { id: "diagnosis",         label: "Diagnosis",          type: "text",   path: "diagnosis" },
+  { id: "facility",          label: "Facility",           type: "text",   path: "facility" },
+  { id: "procedure",         label: "Procedure",          type: "text",   path: "procedure" },
+  { id: "surgeryDate",       label: "Surgery Date",       type: "date",   path: "surgeryDate" },
+  { id: "medicalClearance",  label: "Medical Clearance",  type: "text",   path: "medicalClearance" },
+  { id: "ctRequired",        label: "CT Required",        type: "text",   path: "ctRequired" },
+  { id: "email",             label: "Email",              type: "text",   path: "email" },
+  { id: "createdAt",         label: "Created Date",       type: "date",   path: "createdAt" },
+]
+
+// Built-in property catalog per workflow object.
+export const OBJECT_PROPERTY_DEFS: Record<string, PropertyDef[]> = {
+  REFERRAL: REFERRAL_PROPERTY_DEFS,
+  PROVIDER: PROVIDER_PROPERTY_DEFS,
+  PRACTICE: PRACTICE_PROPERTY_DEFS,
+  LOCATION: LOCATION_PROPERTY_DEFS,
+  SURGERY:  SURGERY_PROPERTY_DEFS,
+}
+
+// Which custom-property entity (if any) backs each workflow object.
+export const OBJECT_CUSTOM_ENTITY: Record<string, "REFERRAL" | "PROVIDER" | "PRACTICE" | null> = {
+  REFERRAL: "REFERRAL",
+  PROVIDER: "PROVIDER",
+  PRACTICE: "PRACTICE",
+  LOCATION: null,
+  SURGERY: null,
+}
+
 // Map a custom property (DB) into a PropertyDef the criteria builder can use.
 export interface CustomPropertyInput {
   id: string

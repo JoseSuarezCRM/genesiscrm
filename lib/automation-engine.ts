@@ -117,16 +117,26 @@ async function fetchReferralForEngine(referralId: string) {
 // ─── Action executor ──────────────────────────────────────────────────────────
 
 // Top-level executor: graph (visual flow) → flow (if/else) → single action.
+// `conditionRecord` is the object the workflow runs on (referral, provider,
+// practice, location, surgery case); branch criteria evaluate against it.
+// `referralId` is the referral that referral-specific actions operate on (null
+// for non-referral objects).
 async function executeAction(
   automation: { id: string; actionType: AutomationAction; actionConfig: unknown; flow?: unknown; graph?: unknown },
   referralId: string | null,
   vars: TemplateVars,
-  triggeredByUserId?: string
+  triggeredByUserId?: string,
+  conditionRecord?: Record<string, unknown> | null
 ): Promise<void> {
+  // For referral workflows that didn't pass a record, fall back to fetching it.
+  const record = conditionRecord !== undefined
+    ? conditionRecord
+    : (referralId ? await fetchReferralForEngine(referralId) : null)
+  const condRef = record ? (record as unknown as Parameters<typeof resolveGraphActions>[1]) : null
+
   const graph = automation.graph as AutomationGraph | null | undefined
   if (graph && graph.rootId && graph.nodes) {
-    const ref = referralId ? await fetchReferralForEngine(referralId) : null
-    const actions = resolveGraphActions(graph, ref ? (ref as unknown as Parameters<typeof resolveGraphActions>[1]) : null)
+    const actions = resolveGraphActions(graph, condRef)
     for (const action of actions) {
       await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId)
     }
@@ -136,13 +146,12 @@ async function executeAction(
   const flow = automation.flow as PureFlow | null | undefined
   if (flow && (flow.then?.length || flow.else?.length)) {
     // Resolve which branch runs. With no rules the THEN branch runs; if rules
-    // exist but we have no referral context, conditions can't pass → ELSE.
+    // exist but we have no record context, conditions can't pass → ELSE.
     const rules = flow.rules ?? []
     let branch = flow.then ?? []
     if (rules.length) {
-      const ref = referralId ? await fetchReferralForEngine(referralId) : null
-      branch = ref
-        ? selectBranch(ref as unknown as Parameters<typeof selectBranch>[0], flow)
+      branch = condRef
+        ? selectBranch(condRef as unknown as Parameters<typeof selectBranch>[0], flow)
         : (flow.else ?? [])
     }
     for (const action of branch) {
@@ -629,6 +638,7 @@ export async function runTrigger_ProviderReferralCount(providerId: string, trigg
       where: { referringDoctorId: providerId, referralDate: { gte: start } },
     })
     if (count !== threshold) continue
+    if (!checkConditions(provider as unknown as Record<string, unknown>, cfg)) continue
 
     const key = `${providerId}:${dedupeKey(period)}`
     const already = await prisma.automationRun.findFirst({
@@ -643,7 +653,7 @@ export async function runTrigger_ProviderReferralCount(providerId: string, trigg
       period: periodLabel(period),
     }
 
-    await executeAction(auto, null, vars, triggeredByUserId)
+    await executeAction(auto, null, vars, triggeredByUserId, provider as unknown as Record<string, unknown>)
     await prisma.automationRun.create({
       data: { automationId: auto.id, contextType: "provider", contextId: key, result: "success", detail: `${provider.name} reached ${count} referrals ${periodLabel(period)}` },
     })
@@ -670,6 +680,7 @@ export async function runTrigger_PracticeReferralCount(practiceId: string, trigg
       where: { referringPracticeId: practiceId, referralDate: { gte: start } },
     })
     if (count !== threshold) continue
+    if (!checkConditions(practice as unknown as Record<string, unknown>, cfg)) continue
 
     const key = `${practiceId}:${dedupeKey(period)}`
     const already = await prisma.automationRun.findFirst({
@@ -678,7 +689,7 @@ export async function runTrigger_PracticeReferralCount(practiceId: string, trigg
     if (already) continue
 
     const vars: TemplateVars = { practice_name: practice.name, count, period: periodLabel(period) }
-    await executeAction(auto, null, vars, triggeredByUserId)
+    await executeAction(auto, null, vars, triggeredByUserId, practice as unknown as Record<string, unknown>)
     await prisma.automationRun.create({
       data: { automationId: auto.id, contextType: "practice", contextId: key, result: "success", detail: `${practice.name} reached ${count} referrals ${periodLabel(period)}` },
     })
@@ -706,6 +717,7 @@ export async function runTrigger_LocationReferralCount(locationId: string, trigg
       where: { referringLocationId: locationId, referralDate: { gte: start } },
     })
     if (count !== threshold) continue
+    if (!checkConditions(location as unknown as Record<string, unknown>, cfg)) continue
 
     const key = `${locationId}:${dedupeKey(period)}`
     const already = await prisma.automationRun.findFirst({
@@ -714,9 +726,74 @@ export async function runTrigger_LocationReferralCount(locationId: string, trigg
     if (already) continue
 
     const vars: TemplateVars = { count, period: periodLabel(period) }
-    await executeAction(auto, null, vars, triggeredByUserId)
+    await executeAction(auto, null, vars, triggeredByUserId, location as unknown as Record<string, unknown>)
     await prisma.automationRun.create({
       data: { automationId: auto.id, contextType: "location", contextId: key, result: "success", detail: `${location.name} reached ${count} referrals ${periodLabel(period)}` },
+    })
+  }
+}
+
+// ─── Surgery triggers ─────────────────────────────────────────────────────────
+
+export async function runTrigger_SurgeryStatusChanged(
+  caseId: string,
+  fromStatus: string,
+  toStatus: string,
+  triggeredByUserId?: string,
+) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "SURGERY_STATUS_CHANGED" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const sc = await (prisma as any).surgeryCase.findUnique({ where: { id: caseId } })
+  if (!sc) return
+
+  const vars: TemplateVars = { patient_name: sc.patientName, status: toStatus }
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    if (cfg.fromStatus && cfg.fromStatus !== fromStatus) continue
+    if (cfg.toStatus && cfg.toStatus !== toStatus) continue
+    if (!checkConditions(sc as Record<string, unknown>, cfg)) continue
+
+    await executeAction(auto, null, vars, triggeredByUserId, sc as Record<string, unknown>)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "surgery", contextId: caseId, result: "success", detail: `Surgery status ${fromStatus} → ${toStatus}` },
+    })
+  }
+}
+
+export async function runTrigger_SurgeryCallAttemptsReached(
+  caseId: string,
+  callCount: number,
+  triggeredByUserId?: string,
+) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "SURGERY_CALL_ATTEMPTS_REACHED" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const sc = await (prisma as any).surgeryCase.findUnique({ where: { id: caseId } })
+  if (!sc) return
+
+  const vars: TemplateVars = { patient_name: sc.patientName, call_count: callCount }
+
+  for (const auto of automations) {
+    const cfg = auto.triggerConfig as Record<string, unknown>
+    const threshold = Number(cfg.count ?? 4)
+    if (callCount !== threshold) continue
+    if (!checkConditions(sc as Record<string, unknown>, cfg)) continue
+
+    const key = `${caseId}:calls:${callCount}`
+    const already = await prisma.automationRun.findFirst({
+      where: { automationId: auto.id, contextType: "surgery", contextId: key },
+    })
+    if (already) continue
+
+    await executeAction(auto, null, vars, triggeredByUserId, sc as Record<string, unknown>)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, contextType: "surgery", contextId: key, result: "success", detail: `${callCount} surgery call attempts reached` },
     })
   }
 }
