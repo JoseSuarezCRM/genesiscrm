@@ -1250,12 +1250,55 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
     )
   }
 
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
+
+  function onCanvasMouseDown(e: React.MouseEvent) {
+    // Pan only when grabbing the background — not nodes, buttons, or inputs.
+    if ((e.target as HTMLElement).closest("button, input, a, select, label, textarea, [role=button]")) return
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: pan.x, oy: pan.y }
+    setDragging(true)
+  }
+
+  useEffect(() => {
+    if (!dragging) return
+    function move(e: MouseEvent) {
+      const d = dragRef.current
+      if (d) setPan({ x: d.ox + (e.clientX - d.sx), y: d.oy + (e.clientY - d.sy) })
+    }
+    function up() { setDragging(false); dragRef.current = null }
+    window.addEventListener("mousemove", move)
+    window.addEventListener("mouseup", up)
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up) }
+  }, [dragging])
+
   return (
-    <div className="overflow-x-auto py-2">
-      <div className="flex flex-col items-center min-w-fit">
-        {/* connector down from the trigger card above */}
-        <div className="w-px h-5 bg-slate-300" />
-        {renderSlot({ kind: "root" })}
+    <div
+      onMouseDown={onCanvasMouseDown}
+      className={cn(
+        "relative h-[62vh] overflow-hidden rounded-xl border border-slate-200 select-none",
+        "bg-slate-50 bg-[radial-gradient(#d1d5db_1px,transparent_1px)] [background-size:20px_20px]",
+        dragging ? "cursor-grabbing" : "cursor-grab",
+      )}
+    >
+      {/* Reset view */}
+      <button
+        type="button"
+        onClick={() => setPan({ x: 0, y: 0 })}
+        className="absolute top-3 right-3 z-10 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 bg-white/90 text-slate-600 hover:bg-white shadow-sm"
+      >
+        Reset view
+      </button>
+      <div
+        className="absolute left-1/2 top-6"
+        style={{ transform: `translate(calc(-50% + ${pan.x}px), ${pan.y}px)` }}
+      >
+        <div className="flex flex-col items-center min-w-fit">
+          {/* connector down from the trigger card above */}
+          <div className="w-px h-5 bg-slate-300" />
+          {renderSlot({ kind: "root" })}
+        </div>
       </div>
     </div>
   )
@@ -1509,8 +1552,8 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 bg-slate-50">
-        <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="flex-1 bg-slate-50 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-4 pt-8">
           <input
             value={description}
             onChange={e => setDescription(e.target.value)}
@@ -1544,10 +1587,11 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
               />
             </div>
           </div>
+        </div>
 
-          {/* Action flow */}
+        {/* Action flow — full-width pannable canvas */}
+        <div className="px-4 py-6">
           <FlowCanvas graph={graph} onChange={setGraph} onEditNode={setEditingNodeId} />
-
           {error && <p className="text-sm text-red-500 mt-4 text-center">{error}</p>}
         </div>
       </div>
