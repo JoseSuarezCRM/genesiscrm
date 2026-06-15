@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
 import {
@@ -10,7 +10,7 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Trash2, Play, ChevronLeft, Info, X, GitBranch, Flag } from "lucide-react"
+import { Zap, Plus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -212,6 +212,56 @@ function optionsForProp(def: PropertyDef, data: CriteriaData): { value: string; 
   }
 }
 
+// Multi-select value picker — value is a comma-joined list ("is any of A, B").
+function MultiSelectValue({ options, value, onChange }: {
+  options: { value: string; label: string }[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = value.split(",").map(s => s.trim()).filter(Boolean)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+  }, [open])
+
+  const toggle = (v: string) => {
+    const next = selected.includes(v) ? selected.filter(s => s !== v) : [...selected, v]
+    onChange(next.join(","))
+  }
+
+  const label = selected.length === 0
+    ? "Select…"
+    : selected.length <= 2
+      ? selected.map(v => options.find(o => o.value === v)?.label ?? v).join(", ")
+      : `${selected.length} selected`
+
+  return (
+    <div ref={ref} className="relative flex-1 min-w-[160px]">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 border border-slate-200 rounded-md px-2.5 py-1.5 text-sm text-left bg-white hover:border-slate-300">
+        <span className={cn("truncate", selected.length ? "text-slate-800" : "text-slate-400")}>{label}</span>
+        <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-md shadow-lg py-1">
+          {options.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">No options</p>}
+          {options.map(o => (
+            <label key={o.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer">
+              <input type="checkbox" className="accent-blue-600" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
+              <span className="text-sm text-slate-700">{o.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CriteriaValueInput({ def, cond, onChange, data }: {
   def: PropertyDef; cond: PureCondition; onChange: (v: string) => void; data: CriteriaData
 }) {
@@ -219,13 +269,7 @@ function CriteriaValueInput({ def, cond, onChange, data }: {
   if (opDef?.noValue) return null
 
   if (def.type === "tag" || def.type === "select") {
-    const opts = optionsForProp(def, data)
-    return (
-      <StyledSelect className="flex-1 min-w-[140px]" value={cond.value} onChange={e => onChange(e.target.value)}>
-        <option value="">Select…</option>
-        {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </StyledSelect>
-    )
+    return <MultiSelectValue options={optionsForProp(def, data)} value={cond.value} onChange={onChange} />
   }
   if (def.type === "number") {
     return <input type="number" className="flex-1 min-w-[120px] border rounded-md px-2 py-1.5 text-sm" placeholder="Value" value={cond.value} onChange={e => onChange(e.target.value)} />
@@ -664,6 +708,7 @@ function RecipientRows({
           <div key={i} className="flex items-start gap-2 flex-wrap">
             <StyledSelect className="shrink-0" value={r.type}
               onChange={e => onChange(rows.map((x, j) => j === i ? { type: e.target.value, value: [] } : x))}>
+              <option value="record_email">Enrolled record's email</option>
               <option value="all_admins">All admins</option>
               <option value="assigned_to">Referral assignee</option>
               <option value="user">Specific users</option>

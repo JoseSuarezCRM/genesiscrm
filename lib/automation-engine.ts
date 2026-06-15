@@ -146,7 +146,7 @@ async function executeAction(
   if (graph && graph.rootId && graph.nodes) {
     const actions = resolveGraphActions(graph, condRef)
     for (const action of actions) {
-      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId)
+      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId, record)
     }
     return
   }
@@ -163,11 +163,19 @@ async function executeAction(
         : (flow.else ?? [])
     }
     for (const action of branch) {
-      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId)
+      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId, record)
     }
     return
   }
-  await runSingleAction(automation.actionType, automation.actionConfig as Record<string, unknown>, referralId, vars, triggeredByUserId)
+  await runSingleAction(automation.actionType, automation.actionConfig as Record<string, unknown>, referralId, vars, triggeredByUserId, record)
+}
+
+// Email of the enrolled record itself (surgery case `email`, referral patient,
+// provider, etc.) — used by the "record_email" recipient option.
+function recordEmail(record?: Record<string, unknown> | null): string | null {
+  if (!record) return null
+  const e = (record.email ?? record.patientEmail) as string | undefined
+  return e && e.trim() ? e.trim() : null
 }
 
 // Runs one action of the given type with its config.
@@ -176,7 +184,8 @@ async function runSingleAction(
   cfg: Record<string, unknown>,
   referralId: string | null,
   vars: TemplateVars,
-  triggeredByUserId?: string
+  triggeredByUserId?: string,
+  record?: Record<string, unknown> | null
 ): Promise<void> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
 
@@ -271,7 +280,10 @@ async function runSingleAction(
       const emailSet = new Set<string>()
       if (Array.isArray(list)) {
         for (const r of list as { type: string; value: string }[]) {
-          if (r.type === "all_admins") {
+          if (r.type === "record_email") {
+            const e = recordEmail(record)
+            if (e) emailSet.add(e)
+          } else if (r.type === "all_admins") {
             const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
             admins.forEach(a => emailSet.add(a.email))
           } else if (r.type === "assigned_to" && referralId) {
