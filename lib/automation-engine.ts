@@ -14,6 +14,27 @@ function withDerivedSurgeryFields(sc: Record<string, unknown>): Record<string, u
   return { ...sc, surgeryProvider: loc.provider, surgeryBodyPart: loc.bodyPart }
 }
 
+// Template vars for surgery-case emails/notifications/tasks.
+function surgeryVars(sc: Record<string, unknown>, extra: Partial<TemplateVars> = {}): TemplateVars {
+  const name = (sc.patientName as string) ?? ""
+  // Surgery names are stored "Last, First" — take the part after the comma.
+  const firstName = name.includes(",") ? name.split(",").pop()!.trim() : name
+  const loc = findProcedureLocation((sc.procedure as string) ?? "")
+  const date = sc.surgeryDate ? new Date(sc.surgeryDate as string) : null
+  return {
+    patient_name: name,
+    patient_first_name: firstName,
+    procedure: (sc.procedure as string) ?? "",
+    body_part: loc.bodyPart,
+    surgical_provider: loc.provider,
+    surgery_date: date && !isNaN(date.getTime())
+      ? date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })
+      : "",
+    facility: (sc.facility as string) ?? "",
+    ...extra,
+  }
+}
+
 // ─── Template variable resolution ─────────────────────────────────────────────
 
 interface TemplateVars {
@@ -29,6 +50,12 @@ interface TemplateVars {
   auth_status?: string
   tag_name?: string
   referral_url?: string
+  // Surgery case
+  procedure?: string
+  body_part?: string
+  surgical_provider?: string
+  surgery_date?: string
+  facility?: string
 }
 
 function resolveTemplate(template: string, vars: TemplateVars): string {
@@ -47,6 +74,11 @@ function resolveTemplate(template: string, vars: TemplateVars): string {
     .replace(/\{call_count\}/g, String(vars.call_count ?? ""))
     .replace(/\{auth_status\}/g, vars.auth_status ?? "")
     .replace(/\{tag_name\}/g, vars.tag_name ?? "")
+    .replace(/\{procedure\}/g, vars.procedure ?? "")
+    .replace(/\{body_part\}/g, vars.body_part ?? "")
+    .replace(/\{surgical_provider\}/g, vars.surgical_provider ?? "")
+    .replace(/\{surgery_date\}/g, vars.surgery_date ?? "")
+    .replace(/\{facility\}/g, vars.facility ?? "")
     .replace(/\{referral_url\}/g, vars.referral_url ?? "")
     .replace(/\{referral_button\}/g, btnHtml)
 }
@@ -770,7 +802,7 @@ export async function runTrigger_SurgeryStatusChanged(
   if (!rawSc) return
   const sc = withDerivedSurgeryFields(rawSc)
 
-  const vars: TemplateVars = { patient_name: rawSc.patientName, status: toStatus }
+  const vars = surgeryVars(sc, { status: toStatus })
 
   for (const auto of automations) {
     const cfg = auto.triggerConfig as Record<string, unknown>
@@ -799,7 +831,7 @@ export async function runTrigger_SurgeryCallAttemptsReached(
   if (!rawSc) return
   const sc = withDerivedSurgeryFields(rawSc)
 
-  const vars: TemplateVars = { patient_name: rawSc.patientName, call_count: callCount }
+  const vars = surgeryVars(sc, { call_count: callCount })
 
   for (const auto of automations) {
     const cfg = auto.triggerConfig as Record<string, unknown>

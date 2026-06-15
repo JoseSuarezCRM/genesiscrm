@@ -172,6 +172,23 @@ const TEMPLATE_VARS = [
   "{referral_url}", "{referral_button}",
 ]
 
+// Tokens that actually resolve per workflow object — used to scope the Fields
+// menu so you only see variables that will populate.
+const TOKENS_BY_OBJECT: Record<string, string[]> = {
+  REFERRAL: TEMPLATE_VARS,
+  PROVIDER: ["{provider_name}", "{practice_name}", "{count}", "{period}"],
+  PRACTICE: ["{practice_name}", "{count}", "{period}"],
+  LOCATION: ["{count}", "{period}"],
+  SURGERY: [
+    "{patient_name}", "{patient_first_name}", "{procedure}", "{body_part}",
+    "{surgical_provider}", "{surgery_date}", "{facility}", "{status}", "{call_count}",
+  ],
+}
+
+function tokensForObject(objectKey: string): string[] {
+  return TOKENS_BY_OBJECT[objectKey] ?? TEMPLATE_VARS
+}
+
 // Triggers that fire on a specific referral (support extra conditions)
 const REFERRAL_TRIGGERS = new Set([
   "REFERRAL_CREATED", "REFERRAL_STATUS_CHANGED", "CALL_ATTEMPTS_REACHED",
@@ -746,13 +763,14 @@ function RecipientRows({
 // ─── Action config form ───────────────────────────────────────────────────────
 
 function ActionConfigFields({
-  type, config, onChange, users, tags,
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS,
 }: {
   type: AutomationAction
   config: Record<string, unknown>
   onChange: (cfg: Record<string, unknown>) => void
   users: User[]
   tags: Tag[]
+  tokens?: string[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
   const [showVars, setShowVars] = useState(false)
@@ -772,7 +790,7 @@ function ActionConfigFields({
           </div>
           {showVars && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {TEMPLATE_VARS.map(v => (
+              {tokens.map(v => (
                 <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
                   onClick={() => set("title", ((config.title as string) || "") + v)}>{v}</span>
               ))}
@@ -820,7 +838,7 @@ function ActionConfigFields({
           </div>
           {showVars && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {TEMPLATE_VARS.map(v => (
+              {tokens.map(v => (
                 <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
                   onClick={() => set("message", ((config.message as string) || "") + v)}>{v}</span>
               ))}
@@ -897,7 +915,7 @@ function ActionConfigFields({
           </div>
           {showVars && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {TEMPLATE_VARS.map(v => (
+              {tokens.map(v => (
                 <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
                   onClick={() => set("body", body + v)}>{v}</span>
               ))}
@@ -990,7 +1008,7 @@ function ActionConfigFields({
           </div>
           {showVars && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {TEMPLATE_VARS.map(v => (
+              {tokens.map(v => (
                 <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
                   onClick={() => set("subject", ((config.subject as string) || "") + v)}>{v}</span>
               ))}
@@ -1010,7 +1028,7 @@ function ActionConfigFields({
           </div>
           {showBodyVars && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {TEMPLATE_VARS.map(v => (
+              {tokens.map(v => (
                 <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
                   onClick={() => set("body", ((config.body as string) || "") + v)}>{v}</span>
               ))}
@@ -1021,7 +1039,7 @@ function ActionConfigFields({
             onChange={html => set("body", html)}
             minHeight={140}
             placeholder="e.g. Hi, A new referral for {patient_name} was received from {practice_name}."
-            tokens={tokensFromStrings(TEMPLATE_VARS)}
+            tokens={tokensFromStrings(tokens)}
           />
         </div>
 
@@ -1323,12 +1341,12 @@ function NodeChip({ title, icon, color, onClick, onDelete }: {
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
-  pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]
+  pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]; tokens: string[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
@@ -1356,7 +1374,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} />
             </>
           ) : draft.kind === "branch" ? (
             <>
@@ -1475,6 +1493,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const objectEntity = OBJECT_CUSTOM_ENTITY[objectKey]
   const customDefs = (objectEntity ? customPropsByEntity[objectEntity] ?? [] : []).map(customPropertyToDef)
   const objectActions = actionsForObject(objectKey)
+  const objectTokens = tokensForObject(objectKey)
 
   function handleObjectChange(key: string) {
     setObjectKey(key)
@@ -1602,7 +1621,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           onClose={() => setEditingNodeId(null)}
           onSave={(n) => { setGraph(pruneUnreachable(updateNode(graph, n))); setEditingNodeId(null) }}
           users={users} tags={tags} practices={practices} locations={locations}
-          pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions}
+          pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions} tokens={objectTokens}
         />
       )}
     </div>
