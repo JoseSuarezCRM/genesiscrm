@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { getSurgeryCases } from "@/app/actions/surgery"
 import SurgeryImportDialog from "@/components/surgery-import-dialog"
+import SurgeryCreateDialog from "@/components/surgery-create-dialog"
 import SurgeryFilters from "@/components/surgery-filters"
 import SurgeryTable from "@/components/surgery-table"
 import { Stethoscope, ChevronLeft, ChevronRight } from "lucide-react"
@@ -67,7 +68,10 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-bold text-slate-900">Surgery</h1>
           <p className="text-sm text-slate-500">{total} case{total !== 1 ? "s" : ""}</p>
         </div>
-        <SurgeryImportDialog />
+        <div className="flex items-center gap-2">
+          <SurgeryCreateDialog />
+          <SurgeryImportDialog />
+        </div>
       </div>
 
       {/* Filters */}
@@ -86,7 +90,11 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
         <div className="bg-white border rounded-xl py-20 text-center space-y-3">
           <Stethoscope className="h-10 w-10 text-slate-300 mx-auto" />
           <p className="text-slate-500 font-medium">No surgery cases yet</p>
-          <p className="text-slate-400 text-sm">Import a CSV or XLSX file to get started.</p>
+          <p className="text-slate-400 text-sm">Add a case manually or import a CSV or XLSX file to get started.</p>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <SurgeryCreateDialog />
+            <SurgeryImportDialog />
+          </div>
         </div>
       ) : (
         <SurgeryTable cases={cases as any[]} total={total} allMatchingIds={allMatchingIds} />

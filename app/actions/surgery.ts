@@ -84,6 +84,39 @@ export async function getSurgeryCase(id: string) {
   })
 }
 
+export async function createSurgeryCase(data: {
+  patientName: string
+  mrn?: string | null
+  status?: string
+  orderingProvider?: string | null
+  diagnosis?: string | null
+  facility?: string | null
+  procedure?: string | null
+  surgeryDate?: string | null
+  email?: string | null
+  notes?: string | null
+}) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+  if (!data.patientName?.trim()) return { error: "Patient name is required" }
+
+  const { surgeryDate, status, patientName, ...rest } = data
+
+  const created = await (prisma as any).surgeryCase.create({
+    data: {
+      ...rest,
+      patientName: patientName.trim(),
+      status: status || "NEW",
+      surgeryDate: surgeryDate ? new Date(surgeryDate) : null,
+      creationDate: new Date(),
+      createdById: session.user.id,
+    },
+  })
+
+  revalidatePath("/surgery")
+  return { success: true, id: created.id }
+}
+
 export async function updateSurgeryCase(
   id: string,
   data: {
