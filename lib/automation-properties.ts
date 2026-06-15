@@ -1,6 +1,12 @@
 // Property catalog + type-aware operators for workflow enrollment criteria.
 // Pure data — shared by the editor UI and (via Condition.path/type) the engine.
 
+import {
+  surgeryProviders, allBodyParts, allProcedures, toOptions,
+  FACILITY_OPTIONS, CLEARANCE_OPTIONS, DENTAL_CLEARANCE_OPTIONS,
+  CT_REQUIRED_OPTIONS, GLP1_OPTIONS, DME_OPTIONS, REFERRAL_PRESETS,
+} from "./surgery-procedures"
+
 export type PropType = "text" | "number" | "date" | "boolean" | "select" | "tag"
 
 // Where a select's options come from (filled by the UI from loaded data).
@@ -141,19 +147,29 @@ const LOCATION_PROPERTY_DEFS: PropertyDef[] = [
 ]
 
 // ── Surgery Case ──────────────────────────────────────────────────────────────
+// Provider / Body Part / Procedure are a cascade; the case stores the single
+// `procedure` value, and provider/body part are derived from it (the engine
+// attaches surgeryProvider/surgeryBodyPart before evaluating).
 const SURGERY_PROPERTY_DEFS: PropertyDef[] = [
-  { id: "status",            label: "Status",             type: "select", path: "status", options: SURGERY_STATUS_OPTIONS },
-  { id: "patientName",       label: "Patient Name",       type: "text",   path: "patientName" },
-  { id: "mrn",               label: "MRN",                type: "text",   path: "mrn" },
-  { id: "orderingProvider",  label: "Ordering Provider",  type: "text",   path: "orderingProvider" },
-  { id: "diagnosis",         label: "Diagnosis",          type: "text",   path: "diagnosis" },
-  { id: "facility",          label: "Facility",           type: "text",   path: "facility" },
-  { id: "procedure",         label: "Procedure",          type: "text",   path: "procedure" },
-  { id: "surgeryDate",       label: "Surgery Date",       type: "date",   path: "surgeryDate" },
-  { id: "medicalClearance",  label: "Medical Clearance",  type: "text",   path: "medicalClearance" },
-  { id: "ctRequired",        label: "CT Required",        type: "text",   path: "ctRequired" },
-  { id: "email",             label: "Email",              type: "text",   path: "email" },
-  { id: "createdAt",         label: "Created Date",       type: "date",   path: "createdAt" },
+  { id: "status",             label: "Status",              type: "select", path: "status", options: SURGERY_STATUS_OPTIONS },
+  { id: "surgeryProvider",    label: "Surgical Provider",   type: "select", path: "surgeryProvider", options: toOptions(surgeryProviders()) },
+  { id: "surgeryBodyPart",    label: "Body Part",           type: "select", path: "surgeryBodyPart", options: toOptions(allBodyParts()) },
+  { id: "procedure",          label: "Procedure",           type: "select", path: "procedure", options: toOptions(allProcedures()) },
+  { id: "facility",           label: "Facility",            type: "select", path: "facility", options: toOptions(FACILITY_OPTIONS) },
+  { id: "medicalClearance",   label: "Medical Clearance",   type: "select", path: "medicalClearance", options: toOptions(CLEARANCE_OPTIONS) },
+  { id: "secondaryClearance", label: "Secondary Clearance", type: "select", path: "secondaryClearance", options: toOptions(CLEARANCE_OPTIONS) },
+  { id: "dentalClearance",    label: "Dental Clearance",    type: "select", path: "dentalClearance", options: toOptions(DENTAL_CLEARANCE_OPTIONS) },
+  { id: "ctRequired",         label: "CT Required",         type: "select", path: "ctRequired", options: toOptions(CT_REQUIRED_OPTIONS) },
+  { id: "glp1",               label: "GLP-1",               type: "select", path: "glp1", options: toOptions(GLP1_OPTIONS) },
+  { id: "dme",                label: "DME",                 type: "select", path: "dme", options: toOptions(DME_OPTIONS) },
+  { id: "referral",           label: "Referral Source",     type: "select", path: "referral", options: toOptions(REFERRAL_PRESETS) },
+  { id: "orderingProvider",   label: "Ordering Provider",   type: "text",   path: "orderingProvider" },
+  { id: "patientName",        label: "Patient Name",        type: "text",   path: "patientName" },
+  { id: "mrn",                label: "MRN",                 type: "text",   path: "mrn" },
+  { id: "diagnosis",          label: "Diagnosis",           type: "text",   path: "diagnosis" },
+  { id: "surgeryDate",        label: "Surgery Date",        type: "date",   path: "surgeryDate" },
+  { id: "email",              label: "Email",               type: "text",   path: "email" },
+  { id: "createdAt",          label: "Created Date",        type: "date",   path: "createdAt" },
 ]
 
 // Built-in property catalog per workflow object.

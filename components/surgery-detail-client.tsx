@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
+import { PROCEDURE_DATA, findProcedureLocation } from "@/lib/surgery-procedures"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -25,54 +26,6 @@ const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
   NO_ANSWER: { label: "No Answer", color: "text-slate-500" },
   VOICEMAIL: { label: "Voicemail", color: "text-amber-600" },
   ANSWERED: { label: "Answered", color: "text-green-600" },
-}
-
-const PROCEDURE_DATA: Record<string, Record<string, string[]>> = {
-  "Horner, Nolan": {
-    Shoulder: [
-      "AC Joint Reconstruction", "Bankart Repair", "Latarjet", "Pec Repair",
-      "Reverse Total Shoulder Arthroplasty", "Rotator Cuff Debridement", "Rotator Cuff Repair",
-      "Shoulder Arthroscopy and Biceps Tenodesis", "Shoulder Manipulation/Lysis of Adhesions",
-      "Total Shoulder Arthroplasty", "Proximal Humerus Post-Op Instructions",
-    ],
-    Knee: [
-      "ACL Reconstruction with Meniscus Repair", "ACL Reconstruction without Meniscus Repair",
-      "ACL Reconstruction with MCL Reconstruction", "ACL/PCL Repair, possible ORIF Discharge",
-      "Knee Arthroscopy - Meniscal Repair", "Partial Meniscectomy/Debridement",
-      "OCD Fixation or Drilling", "MUA Knee", "Patellar Tendon Repair", "MPFL",
-    ],
-    "Hand & Elbow": [
-      "Carpal Tunnel Release", "Trigger Finger", "Cubital Tunnel Release", "Ganglion Cyst Excision",
-      "Distal Biceps Repair", "Elbow Dislocation", "Lateral Medial Epicondyle Debridement Repair",
-      "Tricep Reconstruction/Repair", "UCL Recon", "UCL Rehab non op",
-    ],
-    Trauma: [
-      "Achilles Repair", "Proximal Hamstring Repair", "Upper Extremity ORIF",
-      "Humeral Shaft Post-Op Instructions",
-    ],
-    Other: [
-      "General Post Op-Instructions", "Brostrom Procedure", "Clavicle ORIF", "Hip Arthroscopy",
-      "Lower Extremity Removal", "Lower Extremity ORIF", "QUAD", "OCD Excision", "Troch Bursitis",
-    ],
-  },
-  "Diamond, Matthew": {
-    Ankle: ["Achilles Repair", "ORIF Lower Extremity"],
-    Feet: ["Bunionectomy", "Cheilectomy", "Hammer Toe Arthroplasty", "Lisfranc Pinning"],
-    Other: ["General Post-Op Instructions"],
-  },
-  "Wang, Jonathan": {
-    Knee: ["Partial Meniscectomy/Debridement", "Total Knee Arthroplasty"],
-    Hip: ["Total Hip Arthroplasty"],
-  },
-}
-
-function findProcedureLocation(proc: string): { provider: string; bodyPart: string } {
-  for (const [prov, bodyParts] of Object.entries(PROCEDURE_DATA)) {
-    for (const [bp, procs] of Object.entries(bodyParts)) {
-      if (procs.includes(proc)) return { provider: prov, bodyPart: bp }
-    }
-  }
-  return { provider: "", bodyPart: "" }
 }
 
 function ProcedureField({ value, onChange }: { value: string; onChange: (v: string) => void }) {

@@ -5,6 +5,14 @@ import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import { resolveGraphActions, type AutomationGraph } from "@/lib/automation-graph"
+import { findProcedureLocation } from "@/lib/surgery-procedures"
+
+// Attach derived surgical provider + body part (from the stored procedure) so
+// criteria can filter on them even though the case only stores `procedure`.
+function withDerivedSurgeryFields(sc: Record<string, unknown>): Record<string, unknown> {
+  const loc = findProcedureLocation((sc.procedure as string) ?? "")
+  return { ...sc, surgeryProvider: loc.provider, surgeryBodyPart: loc.bodyPart }
+}
 
 // ─── Template variable resolution ─────────────────────────────────────────────
 
@@ -746,18 +754,19 @@ export async function runTrigger_SurgeryStatusChanged(
   })
   if (!automations.length) return
 
-  const sc = await (prisma as any).surgeryCase.findUnique({ where: { id: caseId } })
-  if (!sc) return
+  const rawSc = await (prisma as any).surgeryCase.findUnique({ where: { id: caseId } })
+  if (!rawSc) return
+  const sc = withDerivedSurgeryFields(rawSc)
 
-  const vars: TemplateVars = { patient_name: sc.patientName, status: toStatus }
+  const vars: TemplateVars = { patient_name: rawSc.patientName, status: toStatus }
 
   for (const auto of automations) {
     const cfg = auto.triggerConfig as Record<string, unknown>
     if (cfg.fromStatus && cfg.fromStatus !== fromStatus) continue
     if (cfg.toStatus && cfg.toStatus !== toStatus) continue
-    if (!checkConditions(sc as Record<string, unknown>, cfg)) continue
+    if (!checkConditions(sc, cfg)) continue
 
-    await executeAction(auto, null, vars, triggeredByUserId, sc as Record<string, unknown>)
+    await executeAction(auto, null, vars, triggeredByUserId, sc)
     await prisma.automationRun.create({
       data: { automationId: auto.id, contextType: "surgery", contextId: caseId, result: "success", detail: `Surgery status ${fromStatus} → ${toStatus}` },
     })
@@ -774,16 +783,17 @@ export async function runTrigger_SurgeryCallAttemptsReached(
   })
   if (!automations.length) return
 
-  const sc = await (prisma as any).surgeryCase.findUnique({ where: { id: caseId } })
-  if (!sc) return
+  const rawSc = await (prisma as any).surgeryCase.findUnique({ where: { id: caseId } })
+  if (!rawSc) return
+  const sc = withDerivedSurgeryFields(rawSc)
 
-  const vars: TemplateVars = { patient_name: sc.patientName, call_count: callCount }
+  const vars: TemplateVars = { patient_name: rawSc.patientName, call_count: callCount }
 
   for (const auto of automations) {
     const cfg = auto.triggerConfig as Record<string, unknown>
     const threshold = Number(cfg.count ?? 4)
     if (callCount !== threshold) continue
-    if (!checkConditions(sc as Record<string, unknown>, cfg)) continue
+    if (!checkConditions(sc, cfg)) continue
 
     const key = `${caseId}:calls:${callCount}`
     const already = await prisma.automationRun.findFirst({
@@ -791,7 +801,7 @@ export async function runTrigger_SurgeryCallAttemptsReached(
     })
     if (already) continue
 
-    await executeAction(auto, null, vars, triggeredByUserId, sc as Record<string, unknown>)
+    await executeAction(auto, null, vars, triggeredByUserId, sc)
     await prisma.automationRun.create({
       data: { automationId: auto.id, contextType: "surgery", contextId: key, result: "success", detail: `${callCount} surgery call attempts reached` },
     })
