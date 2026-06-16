@@ -20,7 +20,7 @@ import {
   type AutomationGraph, type GraphNode, type Slot,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph,
 } from "@/lib/automation-graph"
-import type { Condition as PureCondition, ConditionGroup } from "@/lib/automation-conditions"
+import { MULTI_SEP, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import {
   REFERRAL_PROPERTY_DEFS, OPERATORS_BY_TYPE, IMAGING_OPTIONS, SURGERY_STATUS_OPTIONS, customPropertyToDef,
   OBJECT_PROPERTY_DEFS, OBJECT_CUSTOM_ENTITY,
@@ -229,7 +229,16 @@ function optionsForProp(def: PropertyDef, data: CriteriaData): { value: string; 
   }
 }
 
-// Multi-select value picker — value is a comma-joined list ("is any of A, B").
+// Multi-select value picker. Values are joined by MULTI_SEP (not a comma) so
+// that option values containing commas (e.g. "Horner, Nolan") work. Reads
+// legacy comma/single values too.
+function parseSelectedValues(value: string, options: { value: string }[]): string[] {
+  if (value.includes(MULTI_SEP)) return value.split(MULTI_SEP).map(s => s.trim()).filter(Boolean)
+  if (!value) return []
+  if (options.some(o => o.value === value)) return [value]   // single value (may contain commas)
+  return value.split(",").map(s => s.trim()).filter(Boolean)  // legacy multi
+}
+
 function MultiSelectValue({ options, value, onChange }: {
   options: { value: string; label: string }[]
   value: string
@@ -237,7 +246,7 @@ function MultiSelectValue({ options, value, onChange }: {
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const selected = value.split(",").map(s => s.trim()).filter(Boolean)
+  const selected = parseSelectedValues(value, options)
 
   useEffect(() => {
     if (!open) return
@@ -248,7 +257,7 @@ function MultiSelectValue({ options, value, onChange }: {
 
   const toggle = (v: string) => {
     const next = selected.includes(v) ? selected.filter(s => s !== v) : [...selected, v]
-    onChange(next.join(","))
+    onChange(next.join(MULTI_SEP))
   }
 
   const label = selected.length === 0

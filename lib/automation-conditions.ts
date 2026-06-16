@@ -73,6 +73,16 @@ function toMillis(v: unknown): number | null {
 }
 
 // Evaluate a single condition against a referral.
+// Multi-select values are joined by this separator (option values may contain
+// commas, e.g. "Horner, Nolan", so a comma delimiter is unsafe).
+export const MULTI_SEP = String.fromCharCode(31)
+
+function parseMultiValue(condVal: string, actual: string[]): string[] {
+  if (condVal.includes(MULTI_SEP)) return condVal.split(MULTI_SEP).map(s => s.trim()).filter(Boolean)
+  if (actual.includes(condVal)) return [condVal]
+  return condVal.split(",").map(s => s.trim()).filter(Boolean)
+}
+
 export function evaluateRule(referral: ReferralForConditions, cond: Condition): boolean {
   const type = cond.type ?? LEGACY_TYPE[cond.field] ?? "text"
   const path = cond.path ?? LEGACY_PATH[cond.field] ?? cond.field
@@ -126,8 +136,8 @@ export function evaluateRule(referral: ReferralForConditions, cond: Condition): 
 
   // ── Select (single or multi value) ─────────────────────
   if (type === "select") {
-    const wanted = condVal.split(",").map(s => s.trim()).filter(Boolean)
     const actual = Array.isArray(raw) ? raw.map(String) : [String(raw ?? "")]
+    const wanted = parseMultiValue(condVal, actual)
     const intersects = wanted.some(w => actual.includes(w))
     if (cond.op === "eq") return intersects        // is any of
     if (cond.op === "ne") return !intersects       // is none of
