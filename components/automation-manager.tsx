@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
+import WorkflowLogsDialog from "@/components/workflow-logs-dialog"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   type AutomationGraph, type GraphNode, type Slot,
@@ -1688,10 +1689,13 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
       </td>
       <td className="px-4 py-3 text-sm text-slate-500 text-right">{auto._count.runs}</td>
       <td className="px-4 py-3 text-right">
-        <button onClick={handleDelete} disabled={isPending}
-          className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center justify-end gap-0.5">
+          <WorkflowLogsDialog automationId={auto.id} name={auto.name} />
+          <button onClick={handleDelete} disabled={isPending}
+            className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </td>
     </tr>
   )
@@ -1775,7 +1779,7 @@ export default function AutomationManager({ automations }: { automations: Automa
                   <th className="px-4 py-2.5 font-semibold">Object type</th>
                   <th className="px-4 py-2.5 font-semibold">Trigger</th>
                   <th className="px-4 py-2.5 font-semibold text-right">Runs</th>
-                  <th className="px-4 py-2.5 w-12"></th>
+                  <th className="px-4 py-2.5 w-20"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

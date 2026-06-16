@@ -96,3 +96,16 @@ export async function runScheduledAutomationsAction() {
   revalidatePath("/automations")
   return { success: true }
 }
+
+export async function getAutomationRuns(automationId: string, limit = 100) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  const runs = await prisma.automationRun.findMany({
+    where: { automationId },
+    orderBy: { triggeredAt: "desc" },
+    take: Math.min(limit, 300),
+    select: { id: true, triggeredAt: true, result: true, contextType: true, contextId: true, detail: true },
+  })
+  return runs.map(r => ({ ...r, triggeredAt: r.triggeredAt.toISOString() }))
+}
