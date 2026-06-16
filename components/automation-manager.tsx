@@ -10,7 +10,7 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2 } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -1140,7 +1140,7 @@ function VLine({ h = 22 }: { h?: number }) {
 }
 
 // "+" insert control with a small action/branch menu
-function InsertButton({ onAddAction, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
+function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
@@ -1158,6 +1158,10 @@ function InsertButton({ onAddAction, onAddBranch, onAddMulti }: { onAddAction: (
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddAction() }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
               <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><Zap className="h-3.5 w-3.5" /></span> Action
+            </button>
+            <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddDelay() }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+              <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><Clock className="h-3.5 w-3.5" /></span> Delay
             </button>
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddBranch() }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
@@ -1218,6 +1222,11 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
     onChange(insertAt(graph, slot, { id, kind: "action", actionType: "CREATE_TASK", config: emptyActionConfig("CREATE_TASK"), next: null }))
     onEditNode(id)
   }
+  function addDelay(slot: Slot) {
+    const id = newNodeId()
+    onChange(insertAt(graph, slot, { id, kind: "delay", amount: 1, unit: "days", next: null }))
+    onEditNode(id)
+  }
   function addBranch(slot: Slot) {
     const id = newNodeId()
     onChange(insertAt(graph, slot, { id, kind: "branch", match: "all", rules: [], thenNext: null, elseNext: null }))
@@ -1246,7 +1255,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
       : slot.kind === "arm" ? (slotNode as any)?.arms?.find((a: any) => a.id === slot.armId)?.next
       : (slotNode as any)?.elseNext
 
-    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
 
     if (!startId || !graph.nodes[startId]) {
       return (
@@ -1273,6 +1282,13 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
               tone="action" icon={<Zap className="h-4 w-4" />} title={actionSummary(node.actionType as AutomationAction, node.config)} />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
           </>
+        ) : node.kind === "delay" ? (
+          <>
+            <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              tone="delay" icon={<Clock className="h-4 w-4" />}
+              title={`Wait ${node.amount} ${node.unit}`} subtitle="Delay before continuing" />
+            {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
+          </>
         ) : node.kind === "branch" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
@@ -1285,7 +1301,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
               { key: "else", label: "Else", tone: "else", body: renderSlot({ kind: "else", nodeId: node.id }, depth + 1) },
             ]} />
           </>
-        ) : (
+        ) : node.kind === "multi" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
               tone="multi" icon={<GitBranch className="h-4 w-4 rotate-90" />}
@@ -1296,7 +1312,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
               { key: "else", label: "Else", tone: "else" as const, body: renderSlot({ kind: "else", nodeId: node.id }, depth + 1) },
             ]} />
           </>
-        )}
+        ) : null}
       </div>
     )
   }
@@ -1346,7 +1362,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
       ref={viewportRef}
       onMouseDown={onCanvasMouseDown}
       className={cn(
-        "relative h-[68vh] overflow-hidden rounded-2xl border border-zinc-200 select-none",
+        "relative h-full w-full overflow-hidden select-none",
         "bg-zinc-50 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] [background-size:22px_22px]",
         dragging ? "cursor-grabbing" : "cursor-grab",
       )}
@@ -1377,11 +1393,12 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
 }
 
 function NodeChip({ title, subtitle, icon, tone, onClick, onDelete }: {
-  title: string; subtitle?: string; icon: React.ReactNode; tone: "action" | "branch" | "multi"
+  title: string; subtitle?: string; icon: React.ReactNode; tone: "action" | "branch" | "multi" | "delay"
   onClick: () => void; onDelete: () => void
 }) {
   const toneCls = tone === "action" ? "bg-blue-50 text-blue-600"
     : tone === "branch" ? "bg-violet-50 text-violet-600"
+    : tone === "delay" ? "bg-amber-50 text-amber-600"
     : "bg-fuchsia-50 text-fuchsia-600"
   return (
     <div
@@ -1421,7 +1438,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-sm font-semibold text-slate-800">
-            {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : "Edit action"}
+            {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : draft.kind === "delay" ? "Edit delay" : "Edit action"}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
         </div>
@@ -1435,6 +1452,20 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
                 onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} />
+            </>
+          ) : draft.kind === "delay" ? (
+            <>
+              <p className="text-xs text-slate-500">Pause the workflow for this long before continuing to the next step.</p>
+              <div className="flex items-center gap-2">
+                <input type="number" min={1} value={draft.amount}
+                  onChange={e => setDraft({ ...draft, amount: Math.max(1, Number(e.target.value) || 1) })}
+                  className="w-24 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                <StyledSelect className="flex-1" value={draft.unit} onChange={e => setDraft({ ...draft, unit: e.target.value as any })}>
+                  <option value="minutes">minutes</option>
+                  <option value="hours">hours</option>
+                  <option value="days">days</option>
+                </StyledSelect>
+              </div>
             </>
           ) : draft.kind === "branch" ? (
             <>
@@ -1599,9 +1630,9 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const editingNode = editingNodeId ? graph.nodes[editingNodeId] : null
 
   return (
-    <div className="min-h-full flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Top bar */}
-      <div className="sticky top-0 z-20 bg-slate-900 text-white px-5 py-3 flex items-center gap-4 shrink-0">
+      <div className="z-20 bg-slate-900 text-white px-5 py-3 flex items-center gap-4 shrink-0">
         <Link href="/automations" className="flex items-center gap-1 text-sm text-slate-300 hover:text-white transition-colors shrink-0">
           <ChevronLeft className="h-4 w-4" /> Workflows
         </Link>
@@ -1645,8 +1676,11 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
         </button>
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 bg-zinc-50 p-4">
+      {/* Canvas — full-bleed, fills the screen below the top bar */}
+      <div className="flex-1 min-h-0 relative">
+        {error && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 text-sm text-red-600 bg-white border border-red-200 rounded-lg px-3 py-1.5 shadow-sm">{error}</div>
+        )}
         <FlowCanvas
           graph={graph}
           onChange={setGraph}
@@ -1666,7 +1700,6 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
             </button>
           }
         />
-        {error && <p className="text-sm text-red-500 mt-3 text-center">{error}</p>}
       </div>
 
       {/* Trigger edit modal */}

@@ -564,6 +564,7 @@ model Automation {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   runs          AutomationRun[]
+  resumes       WorkflowResume[]
 
   @@index([triggerType, isActive])
 }
@@ -581,6 +582,23 @@ model AutomationRun {
 
   @@index([automationId])
   @@index([contextType, contextId])
+}
+
+// A workflow paused at a delay step, waiting to resume.
+model WorkflowResume {
+  id           String     @id @default(cuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  resumeNodeId String     // node to continue from when resumed
+  resumeAt     DateTime   // when to continue
+  referralId   String?    // referral that referral-actions operate on (if any)
+  recordLabel  String?
+  vars         Json       // template vars captured at enrollment
+  record       Json       // record snapshot for branch evaluation
+  createdAt    DateTime   @default(now())
+
+  @@index([resumeAt])
+  @@index([automationId])
 }
 
 model Activity {

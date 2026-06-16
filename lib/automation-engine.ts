@@ -4,7 +4,7 @@ import { sendEmail } from "@/lib/graph-mailer"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
-import { resolveGraphActions, type AutomationGraph } from "@/lib/automation-graph"
+import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/automation-graph"
 import { findProcedureLocation } from "@/lib/surgery-procedures"
 
 // Attach derived surgical provider + body part (from the stored procedure) so
@@ -202,7 +202,7 @@ async function executeAction(
   const record = conditionRecord !== undefined
     ? conditionRecord
     : (referralId ? await fetchReferralForEngine(referralId) : null)
-  const condRef = record ? (record as unknown as Parameters<typeof resolveGraphActions>[1]) : null
+  const condRef = record ? (record as unknown as Parameters<typeof walkGraph>[2]) : null
 
   const steps: RunStep[] = []
   const run = async (type: AutomationAction, cfg: Record<string, unknown>) => {
@@ -212,9 +212,14 @@ async function executeAction(
 
   const graph = automation.graph as AutomationGraph | null | undefined
   if (graph && graph.rootId && graph.nodes) {
-    const actions = resolveGraphActions(graph, condRef)
+    // Walk to the first delay; run those actions; if paused, persist a resume.
+    const { actions, resumeNodeId, delay } = walkGraph(graph, graph.rootId, condRef)
     for (const action of actions) {
       await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
+    }
+    if (delay && resumeNodeId) {
+      await scheduleResume(automation.id, resumeNodeId, delay, referralId, record, vars, recordLabelFor(record, vars))
+      steps.push({ label: `Wait ${delay.amount} ${delay.unit}`, status: "ok" })
     }
   } else {
     const flow = automation.flow as PureFlow | null | undefined
@@ -247,6 +252,82 @@ function runData(log: RunLog, contextType: string, contextId: string, detail: st
     result: log.ok ? "success" : "error",
     detail: log.ok ? detail : `${detail} — ${log.steps.filter(s => s.status === "failed").map(s => s.error).join("; ")}`.slice(0, 1000),
     meta: { recordLabel: log.recordLabel, recordType: contextType, steps: log.steps } as any,
+  }
+}
+
+// ─── Delay: pause & resume ─────────────────────────────────────────────────────
+
+async function scheduleResume(
+  automationId: string,
+  resumeNodeId: string,
+  delay: { amount: number; unit: DelayUnit },
+  referralId: string | null,
+  record: Record<string, unknown> | null,
+  vars: TemplateVars,
+  recordLabel: string,
+) {
+  await prisma.workflowResume.create({
+    data: {
+      automationId,
+      resumeNodeId,
+      resumeAt: new Date(Date.now() + delayMs(delay.amount, delay.unit)),
+      referralId: referralId ?? null,
+      recordLabel,
+      vars: vars as any,
+      record: (record ?? {}) as any,
+    },
+  })
+}
+
+// Process workflows whose delay has elapsed: continue from where they paused.
+export async function runDueWorkflowResumes() {
+  const due = await prisma.workflowResume.findMany({
+    where: { resumeAt: { lte: new Date() } },
+    orderBy: { resumeAt: "asc" },
+    take: 100,
+    include: { automation: true },
+  })
+
+  for (const r of due) {
+    const automation = r.automation
+    const graph = automation.graph as AutomationGraph | null
+    if (!automation.isActive || !graph || !graph.nodes) {
+      await prisma.workflowResume.delete({ where: { id: r.id } }).catch(() => {})
+      continue
+    }
+
+    const record = (r.record ?? null) as Record<string, unknown> | null
+    const condRef = record ? (record as unknown as Parameters<typeof walkGraph>[2]) : null
+    const vars = (r.vars ?? {}) as TemplateVars
+
+    const { actions, resumeNodeId, delay } = walkGraph(graph, r.resumeNodeId, condRef)
+    const steps: RunStep[] = []
+    for (const a of actions) {
+      const cfg = (a.config ?? {}) as Record<string, unknown>
+      const issue = await runSingleAction(a.type as AutomationAction, cfg, r.referralId, vars, undefined, record)
+      steps.push({ label: stepLabel(a.type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
+    }
+
+    if (delay && resumeNodeId) {
+      await prisma.workflowResume.update({
+        where: { id: r.id },
+        data: { resumeNodeId, resumeAt: new Date(Date.now() + delayMs(delay.amount, delay.unit)) },
+      })
+      steps.push({ label: `Wait ${delay.amount} ${delay.unit}`, status: "ok" })
+    } else {
+      await prisma.workflowResume.delete({ where: { id: r.id } })
+    }
+
+    await prisma.automationRun.create({
+      data: {
+        automationId: automation.id,
+        contextType: "resume",
+        contextId: (record?.id as string) ?? "n/a",
+        result: steps.some(s => s.status === "failed") ? "error" : "success",
+        detail: "Resumed after delay",
+        meta: { recordLabel: r.recordLabel ?? "record", recordType: "resume", steps } as any,
+      },
+    }).catch(() => {})
   }
 }
 
@@ -915,6 +996,7 @@ export async function runScheduledTriggers() {
   await runTrigger_AppointmentUpcoming()
   await runTrigger_AppointmentOverdue()
   await runTrigger_ReferralStale()
+  await runDueWorkflowResumes()
 }
 
 async function runTrigger_NoActivity() {
