@@ -65,6 +65,7 @@ export default function WorkflowLogsClient({
           ) : (
             runs.map(run => {
               const steps = run.meta?.steps ?? []
+              const hasStepData = !!run.meta && Array.isArray(run.meta.steps)
               const failed = isError(run)
               return (
                 <div key={run.id} className={cn("bg-white border rounded-xl overflow-hidden", failed ? "border-red-200" : "border-slate-200")}>
@@ -97,8 +98,10 @@ export default function WorkflowLogsClient({
                     </div>
 
                     {/* Steps */}
-                    {steps.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic pl-1">No actions ran for this record (it didn't match any branch).</p>
+                    {!hasStepData ? (
+                      <p className="text-xs text-slate-400 italic pl-1">Older run — step details weren&apos;t recorded.</p>
+                    ) : steps.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic pl-1">No actions ran for this record (it didn&apos;t match any branch).</p>
                     ) : (
                       <ol className="space-y-1.5">
                         {steps.map((s, i) => (
