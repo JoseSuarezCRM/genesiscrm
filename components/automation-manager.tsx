@@ -26,6 +26,7 @@ import {
   OBJECT_PROPERTY_DEFS, OBJECT_CUSTOM_ENTITY,
   type PropertyDef, type CustomPropertyInput,
 } from "@/lib/automation-properties"
+import { WORKFLOW_OBJECTS, workflowObjectFor } from "@/lib/workflow-objects"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1523,27 +1524,6 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
 }
 
 // ─── Workflow object grouping ─────────────────────────────────────────────────
-
-export const WORKFLOW_OBJECTS: { key: string; label: string; triggers: string[] }[] = [
-  {
-    key: "REFERRAL",
-    label: "Referral",
-    triggers: [
-      "REFERRAL_CREATED", "REFERRAL_STATUS_CHANGED", "REFERRAL_ASSIGNED", "REFERRAL_NO_ACTIVITY",
-      "APPOINTMENT_UPCOMING", "APPOINTMENT_OVERDUE", "REFERRAL_STALE", "CALL_ATTEMPTS_REACHED",
-      "TAG_ADDED", "DOCUMENT_UPLOADED", "AUTH_STATUS_CHANGED", "EMBED_REFERRAL_RECEIVED", "PIPELINE_CHANGED",
-    ],
-  },
-  { key: "PROVIDER", label: "Provider",     triggers: ["PROVIDER_REFERRAL_COUNT"] },
-  { key: "PRACTICE", label: "Practice",     triggers: ["PRACTICE_REFERRAL_COUNT"] },
-  { key: "LOCATION", label: "Location",     triggers: ["LOCATION_REFERRAL_COUNT"] },
-  { key: "SURGERY",  label: "Surgery Case", triggers: ["SURGERY_STATUS_CHANGED", "SURGERY_CALL_ATTEMPTS_REACHED"] },
-]
-
-export function workflowObjectFor(trigger: string): { key: string; label: string } {
-  const obj = WORKFLOW_OBJECTS.find(o => o.triggers.includes(trigger))
-  return obj ? { key: obj.key, label: obj.label } : { key: "REFERRAL", label: "Referral" }
-}
 
 const OBJECT_BADGE_COLORS: Record<string, string> = {
   REFERRAL: "bg-blue-50 text-blue-700 border-blue-200",
