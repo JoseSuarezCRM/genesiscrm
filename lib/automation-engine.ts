@@ -156,6 +156,22 @@ async function fetchReferralForEngine(referralId: string) {
 
 // ─── Action executor ──────────────────────────────────────────────────────────
 
+// Record action-level problems (e.g. an email that failed to send) as an
+// "error" automation run, so failures are visible in the workflow history
+// instead of being silently swallowed.
+async function recordActionIssues(automationId: string, record: Record<string, unknown> | null, issues: string[]) {
+  if (!issues.length) return
+  await prisma.automationRun.create({
+    data: {
+      automationId,
+      contextType: "action",
+      contextId: (record?.id as string) ?? "n/a",
+      result: "error",
+      detail: issues.join(" | ").slice(0, 1000),
+    },
+  }).catch(() => {})
+}
+
 // Top-level executor: graph (visual flow) → flow (if/else) → single action.
 // `conditionRecord` is the object the workflow runs on (referral, provider,
 // practice, location, surgery case); branch criteria evaluate against it.
@@ -174,12 +190,19 @@ async function executeAction(
     : (referralId ? await fetchReferralForEngine(referralId) : null)
   const condRef = record ? (record as unknown as Parameters<typeof resolveGraphActions>[1]) : null
 
+  const issues: string[] = []
+  const run = async (type: AutomationAction, cfg: Record<string, unknown>) => {
+    const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record)
+    if (issue) issues.push(issue)
+  }
+
   const graph = automation.graph as AutomationGraph | null | undefined
   if (graph && graph.rootId && graph.nodes) {
     const actions = resolveGraphActions(graph, condRef)
     for (const action of actions) {
-      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId, record)
+      await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
     }
+    await recordActionIssues(automation.id, record, issues)
     return
   }
 
@@ -195,11 +218,13 @@ async function executeAction(
         : (flow.else ?? [])
     }
     for (const action of branch) {
-      await runSingleAction(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>, referralId, vars, triggeredByUserId, record)
+      await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
     }
+    await recordActionIssues(automation.id, record, issues)
     return
   }
-  await runSingleAction(automation.actionType, automation.actionConfig as Record<string, unknown>, referralId, vars, triggeredByUserId, record)
+  await run(automation.actionType, automation.actionConfig as Record<string, unknown>)
+  await recordActionIssues(automation.id, record, issues)
 }
 
 // Email of the enrolled record itself (surgery case `email`, referral patient,
@@ -211,6 +236,8 @@ function recordEmail(record?: Record<string, unknown> | null): string | null {
 }
 
 // Runs one action of the given type with its config.
+// Returns a human-readable issue string if the action couldn't complete (e.g.
+// an email that didn't send), or null on success.
 async function runSingleAction(
   actionType: AutomationAction,
   cfg: Record<string, unknown>,
@@ -218,7 +245,7 @@ async function runSingleAction(
   vars: TemplateVars,
   triggeredByUserId?: string,
   record?: Record<string, unknown> | null
-): Promise<void> {
+): Promise<string | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
 
   if (automation.actionType === AutomationAction.CREATE_TASK) {
@@ -360,8 +387,12 @@ async function runSingleAction(
     const ccEmails = await resolveRecipientList(cfg.cc)
     const bccEmails = await resolveRecipientList(cfg.bcc)
 
-    if (toEmails.length) {
-      await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails, sender: (cfg.sender as any) || "referrals", attachments: emailAttachments })
+    if (!toEmails.length) {
+      return "Email not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
+    }
+    const result = await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails, sender: (cfg.sender as any) || "referrals", attachments: emailAttachments })
+    if (!result.success) {
+      return `Email failed to ${toEmails.join(", ")} via ${(cfg.sender as string) || "referrals"}: ${result.error ?? "unknown error"}`
     }
   }
 
@@ -384,6 +415,8 @@ async function runSingleAction(
       })
     }
   }
+
+  return null
 }
 
 // ─── Event triggers ───────────────────────────────────────────────────────────
