@@ -10,7 +10,7 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -1135,34 +1135,37 @@ function actionSummary(type: AutomationAction, config: Record<string, unknown>):
 }
 
 // vertical connector line
-function Connector() {
-  return <div className="flex justify-center"><div className="w-px h-5 bg-slate-300" /></div>
+function VLine({ h = 22 }: { h?: number }) {
+  return <div className="w-px bg-zinc-300" style={{ height: h }} />
 }
 
 // "+" insert control with a small action/branch menu
 function InsertButton({ onAddAction, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="flex justify-center relative">
+    <div className="relative">
       <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-6 h-6 rounded-full border border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-500 flex items-center justify-center shadow-sm">
-        <Plus className="h-3.5 w-3.5" />
+        className={cn(
+          "w-7 h-7 rounded-full border bg-white flex items-center justify-center shadow-sm transition-all",
+          open ? "border-indigo-400 text-indigo-500 rotate-45" : "border-zinc-300 text-zinc-400 hover:border-indigo-400 hover:text-indigo-500",
+        )}>
+        <Plus className="h-4 w-4 transition-transform" />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
-          <div className="absolute top-7 z-50 bg-white border border-slate-200 rounded-lg shadow-xl py-1 w-44">
+          <div className="absolute left-1/2 -translate-x-1/2 top-9 z-50 bg-white border border-zinc-200 rounded-xl shadow-xl shadow-zinc-200/60 py-1.5 w-48">
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddAction() }}
-              className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
-              <Zap className="h-3.5 w-3.5 text-blue-500" /> Action
+              className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+              <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><Zap className="h-3.5 w-3.5" /></span> Action
             </button>
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddBranch() }}
-              className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
-              <GitBranch className="h-3.5 w-3.5 text-violet-500" /> If / Else
+              className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+              <span className="w-6 h-6 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center"><GitBranch className="h-3.5 w-3.5" /></span> If / Else
             </button>
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddMulti() }}
-              className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-2">
-              <GitBranch className="h-3.5 w-3.5 text-fuchsia-500 rotate-90" /> Branches
+              className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+              <span className="w-6 h-6 rounded-lg bg-fuchsia-50 text-fuchsia-600 flex items-center justify-center"><GitBranch className="h-3.5 w-3.5 rotate-90" /></span> Branches
             </button>
           </div>
         </>
@@ -1171,10 +1174,44 @@ function InsertButton({ onAddAction, onAddBranch, onAddMulti }: { onAddAction: (
   )
 }
 
-function FlowCanvas({ graph, onChange, onEditNode }: {
+// Horizontal split: a rail spanning the columns with a drop line to each.
+function BranchSplit({ columns }: { columns: { key: string; label: string; tone: "then" | "else" | "arm"; body: React.ReactNode }[] }) {
+  const n = columns.length
+  return (
+    <div className="flex items-start">
+      {columns.map((col, i) => (
+        <div key={col.key} className="flex flex-col items-center px-5">
+          {/* rail segment + vertical drop */}
+          <div className="relative w-full h-4">
+            {n > 1 && (
+              <div className={cn(
+                "absolute top-0 h-px bg-zinc-300",
+                i === 0 ? "left-1/2 right-0" : i === n - 1 ? "left-0 right-1/2" : "left-0 right-0",
+              )} />
+            )}
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 w-px h-4 bg-zinc-300" />
+          </div>
+          <span className={cn(
+            "px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide border shadow-sm bg-white max-w-[150px] truncate",
+            col.tone === "then" ? "text-emerald-700 border-emerald-200"
+              : col.tone === "else" ? "text-zinc-400 border-zinc-200"
+              : "text-fuchsia-700 border-fuchsia-200",
+          )} title={col.label}>
+            {col.label}
+          </span>
+          <VLine h={16} />
+          {col.body}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FlowCanvas({ graph, onChange, onEditNode, header }: {
   graph: AutomationGraph
   onChange: (g: AutomationGraph) => void
   onEditNode: (id: string) => void
+  header?: React.ReactNode
 }) {
   function addAction(slot: Slot) {
     const id = newNodeId()
@@ -1214,9 +1251,10 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
     if (!startId || !graph.nodes[startId]) {
       return (
         <div className="flex flex-col items-center">
+          <VLine />
           {insert}
-          <Connector />
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-400 text-xs font-medium">
+          <VLine h={16} />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 text-zinc-400 text-xs font-medium border border-zinc-200">
             <Flag className="h-3 w-3" /> End
           </div>
         </div>
@@ -1226,60 +1264,51 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
     const node = graph.nodes[startId]
     return (
       <div className="flex flex-col items-center">
+        <VLine />
         {insert}
-        <Connector />
+        <VLine h={16} />
         {node.kind === "action" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
-              color="blue" icon={<Zap className="h-3.5 w-3.5" />} title={actionSummary(node.actionType as AutomationAction, node.config)} />
+              tone="action" icon={<Zap className="h-4 w-4" />} title={actionSummary(node.actionType as AutomationAction, node.config)} />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
           </>
         ) : node.kind === "branch" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
-              color="violet" icon={<GitBranch className="h-3.5 w-3.5" />}
-              title={`If ${node.rules.length} condition${node.rules.length === 1 ? "" : "s"} (match ${node.match})`} />
-            <Connector />
-            <div className="grid grid-cols-2 gap-6 items-start">
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Then</span>
-                {renderSlot({ kind: "then", nodeId: node.id }, depth + 1)}
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Else</span>
-                {renderSlot({ kind: "else", nodeId: node.id }, depth + 1)}
-              </div>
-            </div>
+              tone="branch" icon={<GitBranch className="h-4 w-4" />}
+              title={node.rules.length || node.groups?.length ? `If conditions met` : "If / Else"}
+              subtitle={`${node.rules.length || (node.groups?.[0]?.conditions.length ?? 0)} condition(s)`} />
+            <VLine h={16} />
+            <BranchSplit columns={[
+              { key: "then", label: "Then", tone: "then", body: renderSlot({ kind: "then", nodeId: node.id }, depth + 1) },
+              { key: "else", label: "Else", tone: "else", body: renderSlot({ kind: "else", nodeId: node.id }, depth + 1) },
+            ]} />
           </>
         ) : (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
-              color="violet" icon={<GitBranch className="h-3.5 w-3.5 rotate-90" />}
-              title={`${node.arms.length} branch${node.arms.length === 1 ? "" : "es"}`} />
-            <Connector />
-            <div className="flex gap-6 items-start">
-              {node.arms.map(arm => (
-                <div key={arm.id} className="flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-bold text-fuchsia-600 uppercase tracking-wide max-w-[120px] truncate" title={arm.label}>
-                    {arm.label}
-                  </span>
-                  {renderSlot({ kind: "arm", nodeId: node.id, armId: arm.id }, depth + 1)}
-                </div>
-              ))}
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Else</span>
-                {renderSlot({ kind: "else", nodeId: node.id }, depth + 1)}
-              </div>
-            </div>
+              tone="multi" icon={<GitBranch className="h-4 w-4 rotate-90" />}
+              title="Branches" subtitle={`${node.arms.length} path${node.arms.length === 1 ? "" : "s"} + else`} />
+            <VLine h={16} />
+            <BranchSplit columns={[
+              ...node.arms.map(arm => ({ key: arm.id, label: arm.label, tone: "arm" as const, body: renderSlot({ kind: "arm", nodeId: node.id, armId: arm.id }, depth + 1) })),
+              { key: "else", label: "Else", tone: "else" as const, body: renderSlot({ kind: "else", nodeId: node.id }, depth + 1) },
+            ]} />
           </>
         )}
       </div>
     )
   }
 
+  const viewportRef = useRef<HTMLDivElement>(null)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
+
+  const clampZoom = (z: number) => Math.min(1.5, Math.max(0.4, z))
+  const resetView = () => { setPan({ x: 0, y: 0 }); setZoom(1) }
 
   function onCanvasMouseDown(e: React.MouseEvent) {
     // Pan only when grabbing the background — not nodes, buttons, or inputs.
@@ -1300,30 +1329,46 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up) }
   }, [dragging])
 
+  // Wheel to zoom (non-passive so we can preventDefault page scroll).
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    function onWheel(e: WheelEvent) {
+      e.preventDefault()
+      setZoom(z => clampZoom(z - e.deltaY * 0.0015))
+    }
+    el.addEventListener("wheel", onWheel, { passive: false })
+    return () => el.removeEventListener("wheel", onWheel)
+  }, [])
+
   return (
     <div
+      ref={viewportRef}
       onMouseDown={onCanvasMouseDown}
       className={cn(
-        "relative h-[62vh] overflow-hidden rounded-xl border border-slate-200 select-none",
-        "bg-slate-50 bg-[radial-gradient(#d1d5db_1px,transparent_1px)] [background-size:20px_20px]",
+        "relative h-[68vh] overflow-hidden rounded-2xl border border-zinc-200 select-none",
+        "bg-zinc-50 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] [background-size:22px_22px]",
         dragging ? "cursor-grabbing" : "cursor-grab",
       )}
     >
-      {/* Reset view */}
-      <button
-        type="button"
-        onClick={() => setPan({ x: 0, y: 0 })}
-        className="absolute top-3 right-3 z-10 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 bg-white/90 text-slate-600 hover:bg-white shadow-sm"
-      >
-        Reset view
-      </button>
+      {/* Zoom controls */}
+      <div className="absolute bottom-4 left-4 z-10 flex items-center gap-1 rounded-xl border border-zinc-200 bg-white/95 shadow-sm p-1">
+        <button type="button" onClick={() => setZoom(z => clampZoom(z - 0.1))}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-500 flex items-center justify-center"><Minus className="h-4 w-4" /></button>
+        <span className="text-xs font-medium text-zinc-500 w-10 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+        <button type="button" onClick={() => setZoom(z => clampZoom(z + 0.1))}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-500 flex items-center justify-center"><Plus className="h-4 w-4" /></button>
+        <div className="w-px h-5 bg-zinc-200 mx-0.5" />
+        <button type="button" onClick={resetView}
+          className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-500 flex items-center justify-center" title="Reset view"><Maximize2 className="h-3.5 w-3.5" /></button>
+      </div>
+
       <div
-        className="absolute left-1/2 top-6"
-        style={{ transform: `translate(calc(-50% + ${pan.x}px), ${pan.y}px)` }}
+        className="absolute left-1/2 top-8"
+        style={{ transform: `translate(calc(-50% + ${pan.x}px), ${pan.y}px) scale(${zoom})`, transformOrigin: "top center" }}
       >
         <div className="flex flex-col items-center min-w-fit">
-          {/* connector down from the trigger card above */}
-          <div className="w-px h-5 bg-slate-300" />
+          {header}
           {renderSlot({ kind: "root" })}
         </div>
       </div>
@@ -1331,19 +1376,25 @@ function FlowCanvas({ graph, onChange, onEditNode }: {
   )
 }
 
-function NodeChip({ title, icon, color, onClick, onDelete }: {
-  title: string; icon: React.ReactNode; color: "blue" | "violet"
+function NodeChip({ title, subtitle, icon, tone, onClick, onDelete }: {
+  title: string; subtitle?: string; icon: React.ReactNode; tone: "action" | "branch" | "multi"
   onClick: () => void; onDelete: () => void
 }) {
+  const toneCls = tone === "action" ? "bg-blue-50 text-blue-600"
+    : tone === "branch" ? "bg-violet-50 text-violet-600"
+    : "bg-fuchsia-50 text-fuchsia-600"
   return (
-    <div className={cn(
-      "group relative inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-white shadow-sm cursor-pointer hover:shadow transition-shadow min-w-[180px] max-w-[260px]",
-      color === "blue" ? "border-blue-200" : "border-violet-200"
-    )} onClick={onClick}>
-      <span className={cn("shrink-0", color === "blue" ? "text-blue-500" : "text-violet-500")}>{icon}</span>
-      <span className="text-sm text-slate-700 truncate flex-1">{title}</span>
+    <div
+      onClick={onClick}
+      className="group relative flex items-center gap-3 pl-2.5 pr-3 py-2.5 rounded-xl border border-zinc-200 bg-white shadow-sm cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all w-[244px]"
+    >
+      <span className={cn("shrink-0 w-8 h-8 rounded-lg flex items-center justify-center", toneCls)}>{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-zinc-800 truncate">{title}</p>
+        {subtitle && <p className="text-xs text-zinc-400 truncate">{subtitle}</p>}
+      </div>
       <button type="button" onClick={e => { e.stopPropagation(); onDelete() }}
-        className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 transition-opacity">
+        className="opacity-0 group-hover:opacity-100 text-zinc-300 hover:text-red-500 shrink-0 transition-opacity">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -1495,6 +1546,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
         : { rootId: null, nodes: {} }
   )
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
+  const [triggerOpen, setTriggerOpen] = useState(false)
   const [error, setError] = useState("")
 
   const objectDef = WORKFLOW_OBJECTS.find(o => o.key === objectKey) ?? WORKFLOW_OBJECTS[0]
@@ -1554,12 +1606,20 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           <ChevronLeft className="h-4 w-4" /> Workflows
         </Link>
         <div className="w-px h-5 bg-slate-700 shrink-0" />
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Untitled workflow"
-          className="flex-1 min-w-0 bg-transparent text-base font-semibold placeholder:text-slate-500 outline-none border-b border-transparent focus:border-slate-500 transition-colors"
-        />
+        <div className="flex-1 min-w-0">
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Untitled workflow"
+            className="w-full bg-transparent text-base font-semibold placeholder:text-slate-500 outline-none leading-tight"
+          />
+          <input
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Add a description…"
+            className="w-full bg-transparent text-xs text-slate-400 placeholder:text-slate-600 outline-none leading-tight"
+          />
+        </div>
         {editing && (
           <span className={cn(
             "flex items-center gap-1.5 text-xs font-semibold shrink-0",
@@ -1586,30 +1646,49 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 bg-slate-50 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-4 pt-8">
-          <input
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="Add a description (optional)"
-            className="w-full mb-6 bg-transparent text-sm text-slate-600 placeholder:text-slate-400 outline-none border-b border-transparent focus:border-slate-300 transition-colors text-center"
-          />
+      <div className="flex-1 bg-zinc-50 p-4">
+        <FlowCanvas
+          graph={graph}
+          onChange={setGraph}
+          onEditNode={setEditingNodeId}
+          header={
+            <button
+              type="button"
+              onClick={() => setTriggerOpen(true)}
+              className="group flex items-start gap-3 pl-2.5 pr-4 py-3 rounded-xl border border-amber-300 bg-white shadow-sm hover:shadow-md hover:border-amber-400 transition-all w-[300px] text-left"
+            >
+              <span className="shrink-0 w-9 h-9 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center"><Zap className="h-5 w-5" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">Trigger · {objectDef.label}</p>
+                <p className="text-sm font-medium text-zinc-800 truncate">{TRIGGER_LABELS[triggerType] ?? triggerType}</p>
+                <p className="text-xs text-zinc-400 truncate">{triggerSummary(triggerConfig)}</p>
+              </div>
+            </button>
+          }
+        />
+        {error && <p className="text-sm text-red-500 mt-3 text-center">{error}</p>}
+      </div>
 
-          {/* Trigger node */}
-          <div className="bg-white border-2 border-slate-200 rounded-xl shadow-sm">
-            <div className="px-5 py-3 border-b bg-amber-50/60 rounded-t-[10px] flex items-center gap-2">
-              <Zap className="h-4 w-4 text-amber-500" />
-              <h3 className="text-sm font-semibold text-slate-800">Trigger — workflow enrollment</h3>
+      {/* Trigger edit modal */}
+      {triggerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setTriggerOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[88vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center"><Zap className="h-4 w-4" /></span>
+                <h3 className="text-sm font-semibold text-zinc-800">Trigger — workflow enrollment</h3>
+              </div>
+              <button onClick={() => setTriggerOpen(false)} className="text-zinc-400 hover:text-zinc-600"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Runs on object</label>
+                <label className="block text-xs font-medium text-zinc-600 mb-1">Runs on object</label>
                 <StyledSelect className="w-full" value={objectKey} onChange={e => handleObjectChange(e.target.value)}>
                   {WORKFLOW_OBJECTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
                 </StyledSelect>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">When this happens</label>
+                <label className="block text-xs font-medium text-zinc-600 mb-1">When this happens</label>
                 <StyledSelect className="w-full" value={triggerType} onChange={e => handleTriggerChange(e.target.value)}>
                   {objectDef.triggers.map(t => <option key={t} value={t}>{TRIGGER_LABELS[t] ?? t}</option>)}
                 </StyledSelect>
@@ -1620,15 +1699,12 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
                 customDefs={customDefs} propDefs={propDefs}
               />
             </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t">
+              <button onClick={() => setTriggerOpen(false)} className="px-4 py-2 text-sm font-medium rounded-md bg-zinc-900 text-white hover:bg-zinc-800">Done</button>
+            </div>
           </div>
         </div>
-
-        {/* Action flow — full-width pannable canvas */}
-        <div className="px-4 py-6">
-          <FlowCanvas graph={graph} onChange={setGraph} onEditNode={setEditingNodeId} />
-          {error && <p className="text-sm text-red-500 mt-4 text-center">{error}</p>}
-        </div>
-      </div>
+      )}
 
       {editingNode && (
         <NodeEditModal
@@ -1641,6 +1717,16 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
       )}
     </div>
   )
+}
+
+// Short human summary of a trigger's enrollment criteria for the compact node.
+function triggerSummary(config: Record<string, unknown>): string {
+  const groups = (config.conditionGroups as ConditionGroup[]) ?? []
+  const count = groups.reduce((sum, g) => sum + (g.conditions?.length ?? 0), 0)
+  const parts: string[] = []
+  if (config.toStatus) parts.push(`to ${config.toStatus}`)
+  if (count > 0) parts.push(`${count} condition${count === 1 ? "" : "s"}`)
+  return parts.length ? parts.join(" · ") : "No enrollment filters"
 }
 
 // ─── Workflow list row ────────────────────────────────────────────────────────
