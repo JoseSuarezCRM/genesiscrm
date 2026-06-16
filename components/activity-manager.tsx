@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Plus, Loader2, Trash2, Pencil, Search, X, CalendarDays,
   Building2, MapPin, User, ChevronDown, Tag, Check, Save,
-  Globe, Users, UserCog, Lock,
+  Globe, Users, UserCog, Lock, LayoutList, Table2, Download,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -719,6 +719,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards")
 
   // Filters
   const [dateFrom, setDateFrom] = useState("")
@@ -1068,6 +1069,32 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const hasFilters = search || dateFrom || dateTo || activeTagIds.length > 0 ||
     filterPracticeIds.length > 0 || filterLocationIds.length > 0 || filterProviderIds.length > 0
 
+  // Export the currently filtered activities to a CSV file.
+  function exportCsv() {
+    const headers = ["Date", "Account", "Location", "Providers", "Activity Type", "Next Step", "Front Desk", "Tags", "Notes", "Logged By"]
+    const esc = (v: string) => `"${(v ?? "").replace(/"/g, '""')}"`
+    const rows = filtered.map(a => [
+      format(activityDay(a.date), "yyyy-MM-dd"),
+      a.practice?.name ?? "",
+      a.location?.name ?? "",
+      a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join("; "),
+      a.flyer ?? "",
+      a.nextStep ?? "",
+      a.frontDesk ?? "",
+      a.tags.map(t => t.name).join("; "),
+      (a.notes ?? "").replace(/\s+/g, " ").trim(),
+      a.createdBy.name ?? a.createdBy.email,
+    ].map(esc).join(","))
+    const csv = [headers.map(esc).join(","), ...rows].join("\r\n")
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `activities-${format(new Date(), "yyyy-MM-dd")}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       {/* ── Views bar ── */}
@@ -1136,8 +1163,40 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           )}
         </div>
 
-        {/* Right-side controls: save-changes + access */}
+        {/* Right-side controls: view toggle + export + save-changes + access */}
         <div className="ml-auto flex items-center gap-2">
+          {/* Card / Table view toggle */}
+          <div className="inline-flex items-center rounded-lg border border-zinc-200 bg-white p-0.5">
+            <button
+              onClick={() => setViewMode("cards")}
+              title="Card view"
+              className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors ${
+                viewMode === "cards" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode("table")}
+              title="Table view"
+              className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors ${
+                viewMode === "table" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              <Table2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Export to CSV */}
+          <button
+            onClick={exportCsv}
+            disabled={filtered.length === 0}
+            title="Export current view to CSV"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" /> Export
+          </button>
+
           {/* Save-changes button — grayed when no unsaved changes */}
           <button
             onClick={handleUpdateView}
@@ -1271,6 +1330,53 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           <CalendarDays className="h-10 w-10 text-slate-300 mb-3" />
           <p className="font-medium text-slate-600">{hasFilters ? "No activities match your filters" : "No activities yet"}</p>
           <p className="text-sm text-slate-400 mt-1">{hasFilters ? "Try adjusting the date range or tags." : "Log a visit or call to a referring practice."}</p>
+        </div>
+      ) : viewMode === "table" ? (
+        <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                  <th className="px-4 py-2.5">Date</th>
+                  <th className="px-4 py-2.5">Account</th>
+                  <th className="px-4 py-2.5">Location</th>
+                  <th className="px-4 py-2.5">Providers</th>
+                  <th className="px-4 py-2.5">Type</th>
+                  <th className="px-4 py-2.5">Next Step</th>
+                  <th className="px-4 py-2.5">Tags</th>
+                  <th className="px-4 py-2.5">Logged By</th>
+                  <th className="px-4 py-2.5 w-16"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {filtered.map(a => {
+                  const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
+                  return (
+                    <tr key={a.id} className="hover:bg-zinc-50 transition-colors align-top">
+                      <td className="px-4 py-3 whitespace-nowrap text-zinc-600">{format(activityDay(a.date), "MMM d, yyyy")}</td>
+                      <td className="px-4 py-3 font-medium text-zinc-800">{a.practice?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-zinc-500">{a.location?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-zinc-600 max-w-[220px]">{a.providers.length ? a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join(", ") : "—"}</td>
+                      <td className="px-4 py-3">
+                        {a.flyer
+                          ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t ? `${t.bg} ${t.color} ${t.border}` : "bg-zinc-100 text-zinc-600 border-zinc-200"}`}>{a.flyer}</span>
+                          : <span className="text-zinc-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-500 max-w-[200px] truncate">{a.nextStep || "—"}</td>
+                      <td className="px-4 py-3 text-zinc-500">{a.tags.length ? a.tags.map(tg => tg.name).join(", ") : "—"}</td>
+                      <td className="px-4 py-3 text-zinc-500 whitespace-nowrap">{a.createdBy.name ?? a.createdBy.email}</td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="inline-flex gap-0.5">
+                          <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setDeleteId(a.id)} className="p-1.5 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">
