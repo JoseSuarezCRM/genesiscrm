@@ -577,6 +577,7 @@ model AutomationRun {
   contextId    String
   result       String     // "success" | "skipped" | "error"
   detail       String?
+  meta         Json?      // { recordLabel, recordType, steps: [{ label, status, error? }] }
 
   @@index([automationId])
   @@index([contextType, contextId])

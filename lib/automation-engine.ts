@@ -156,23 +156,37 @@ async function fetchReferralForEngine(referralId: string) {
 
 // ─── Action executor ──────────────────────────────────────────────────────────
 
-// Record action-level problems (e.g. an email that failed to send) as an
-// "error" automation run, so failures are visible in the workflow history
-// instead of being silently swallowed.
-async function recordActionIssues(automationId: string, record: Record<string, unknown> | null, issues: string[]) {
-  if (!issues.length) return
-  await prisma.automationRun.create({
-    data: {
-      automationId,
-      contextType: "action",
-      contextId: (record?.id as string) ?? "n/a",
-      result: "error",
-      detail: issues.join(" | ").slice(0, 1000),
-    },
-  }).catch(() => {})
+export interface RunStep { label: string; status: "ok" | "failed"; error?: string }
+export interface RunLog { recordLabel: string; steps: RunStep[]; ok: boolean }
+
+const ACTION_STEP_LABELS: Record<string, string> = {
+  CREATE_TASK: "Create task",
+  SEND_NOTIFICATION: "Send notification",
+  UPDATE_REFERRAL_STATUS: "Update referral status",
+  ASSIGN_REFERRAL: "Assign referral",
+  ADD_TAG: "Add tag",
+  SEND_EMAIL: "Send email",
+  SEND_SMS: "Send SMS",
+}
+
+function stepLabel(type: string, cfg: Record<string, unknown>): string {
+  const base = ACTION_STEP_LABELS[type] ?? type
+  if (type === "SEND_EMAIL" && cfg.subject) return `${base}: ${String(cfg.subject).slice(0, 60)}`
+  if (type === "CREATE_TASK" && cfg.title) return `${base}: ${String(cfg.title).slice(0, 60)}`
+  if (type === "UPDATE_REFERRAL_STATUS" && cfg.status) return `${base} → ${cfg.status}`
+  return base
+}
+
+function recordLabelFor(record: Record<string, unknown> | null, vars: TemplateVars): string {
+  return (vars.patient_name as string)
+    ?? (record?.patientName as string)
+    ?? (record?.name as string)
+    ?? (record?.email as string)
+    ?? "record"
 }
 
 // Top-level executor: graph (visual flow) → flow (if/else) → single action.
+// Returns a structured log (enrolled record + each step's outcome).
 // `conditionRecord` is the object the workflow runs on (referral, provider,
 // practice, location, surgery case); branch criteria evaluate against it.
 // `referralId` is the referral that referral-specific actions operate on (null
@@ -183,17 +197,17 @@ async function executeAction(
   vars: TemplateVars,
   triggeredByUserId?: string,
   conditionRecord?: Record<string, unknown> | null
-): Promise<void> {
+): Promise<RunLog> {
   // For referral workflows that didn't pass a record, fall back to fetching it.
   const record = conditionRecord !== undefined
     ? conditionRecord
     : (referralId ? await fetchReferralForEngine(referralId) : null)
   const condRef = record ? (record as unknown as Parameters<typeof resolveGraphActions>[1]) : null
 
-  const issues: string[] = []
+  const steps: RunStep[] = []
   const run = async (type: AutomationAction, cfg: Record<string, unknown>) => {
     const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record)
-    if (issue) issues.push(issue)
+    steps.push({ label: stepLabel(type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
   }
 
   const graph = automation.graph as AutomationGraph | null | undefined
@@ -202,29 +216,38 @@ async function executeAction(
     for (const action of actions) {
       await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
     }
-    await recordActionIssues(automation.id, record, issues)
-    return
+  } else {
+    const flow = automation.flow as PureFlow | null | undefined
+    if (flow && (flow.then?.length || flow.else?.length)) {
+      // Resolve which branch runs. With no rules the THEN branch runs; if rules
+      // exist but we have no record context, conditions can't pass → ELSE.
+      const rules = flow.rules ?? []
+      let branch = flow.then ?? []
+      if (rules.length) {
+        branch = condRef
+          ? selectBranch(condRef as unknown as Parameters<typeof selectBranch>[0], flow)
+          : (flow.else ?? [])
+      }
+      for (const action of branch) {
+        await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
+      }
+    } else {
+      await run(automation.actionType, automation.actionConfig as Record<string, unknown>)
+    }
   }
 
-  const flow = automation.flow as PureFlow | null | undefined
-  if (flow && (flow.then?.length || flow.else?.length)) {
-    // Resolve which branch runs. With no rules the THEN branch runs; if rules
-    // exist but we have no record context, conditions can't pass → ELSE.
-    const rules = flow.rules ?? []
-    let branch = flow.then ?? []
-    if (rules.length) {
-      branch = condRef
-        ? selectBranch(condRef as unknown as Parameters<typeof selectBranch>[0], flow)
-        : (flow.else ?? [])
-    }
-    for (const action of branch) {
-      await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
-    }
-    await recordActionIssues(automation.id, record, issues)
-    return
+  return { recordLabel: recordLabelFor(record, vars), steps, ok: steps.every(s => s.status !== "failed") }
+}
+
+// Build the run-create payload from a workflow's execution log.
+function runData(log: RunLog, contextType: string, contextId: string, detail: string) {
+  return {
+    contextType,
+    contextId,
+    result: log.ok ? "success" : "error",
+    detail: log.ok ? detail : `${detail} — ${log.steps.filter(s => s.status === "failed").map(s => s.error).join("; ")}`.slice(0, 1000),
+    meta: { recordLabel: log.recordLabel, recordType: contextType, steps: log.steps } as any,
   }
-  await run(automation.actionType, automation.actionConfig as Record<string, unknown>)
-  await recordActionIssues(automation.id, record, issues)
 }
 
 // Email of the enrolled record itself (surgery case `email`, referral patient,
@@ -442,9 +465,9 @@ export async function runTrigger_ReferralCreated(referralId: string, triggeredBy
     const cfg = auto.triggerConfig as Record<string, unknown>
     if (!checkConditions(referral, cfg)) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Triggered on new referral for ${vars.patient_name}` },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, `Triggered on new referral for ${vars.patient_name}`) },
     })
   }
 }
@@ -470,9 +493,9 @@ export async function runTrigger_EmbedReferralReceived(referralId: string) {
     const cfg = auto.triggerConfig as Record<string, unknown>
     if (!checkConditions(referral, cfg)) continue
 
-    await executeAction(auto, referralId, vars)
+    const log = await executeAction(auto, referralId, vars)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Triggered on embed form referral for ${vars.patient_name}` },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, `Triggered on embed form referral for ${vars.patient_name}`) },
     })
   }
 }
@@ -501,9 +524,9 @@ export async function runTrigger_StatusChanged(referralId: string, fromStatus: R
     if (cfg.fromStatus && cfg.fromStatus !== fromStatus) continue
     if (!checkConditions(referral, cfg)) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Status changed ${fromStatus} → ${toStatus}` },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, `Status changed ${fromStatus} → ${toStatus}`) },
     })
   }
 
@@ -538,9 +561,9 @@ export async function runTrigger_CallAttemptsReached(referralId: string, callCou
     })
     if (already) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `calls:${callCount} - ${callCount} call attempts reached` },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, `calls:${callCount} - ${callCount} call attempts reached`) },
     })
   }
 }
@@ -567,9 +590,9 @@ export async function runTrigger_ReferralAssigned(referralId: string, assignedTo
     if (cfg.assignedToId && cfg.assignedToId !== assignedToId) continue
     if (!checkConditions(referral, cfg)) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Referral assigned to user ${assignedToId}` },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, `Referral assigned to user ${assignedToId}`) },
     })
   }
 }
@@ -603,9 +626,9 @@ export async function runTrigger_TagAdded(referralId: string, tagId: string, tag
     })
     if (already) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: `Tag "${tagName}" added` },
+      data: { automationId: auto.id, ...runData(log, "referral", key, `Tag "${tagName}" added`) },
     })
   }
 }
@@ -631,9 +654,9 @@ export async function runTrigger_DocumentUploaded(referralId: string, triggeredB
     const cfg = auto.triggerConfig as Record<string, unknown>
     if (!checkConditions(referral, cfg)) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: "Document uploaded" },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, "Document uploaded") },
     })
   }
 }
@@ -661,9 +684,9 @@ export async function runTrigger_AuthStatusChanged(referralId: string, _fromAuth
     if (cfg.toAuthStatus && cfg.toAuthStatus !== toAuthStatus) continue
     if (!checkConditions(referral, cfg)) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Auth status → "${toAuthStatus}"` },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, `Auth status → "${toAuthStatus}"`) },
     })
   }
 }
@@ -691,9 +714,9 @@ export async function runTrigger_PipelineChanged(referralId: string, fromPipelin
     if (cfg.fromPipelineId && cfg.fromPipelineId !== fromPipelineId) continue
     if (!checkConditions(referral, cfg)) continue
 
-    await executeAction(auto, referralId, vars, triggeredByUserId)
+    const log = await executeAction(auto, referralId, vars, triggeredByUserId)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "referral", contextId: referralId, result: "success", detail: `Pipeline changed ${fromPipelineId ?? "none"} → ${toPipelineId ?? "none"}` },
+      data: { automationId: auto.id, ...runData(log, "referral", referralId, `Pipeline changed ${fromPipelineId ?? "none"} → ${toPipelineId ?? "none"}`) },
     })
   }
 }
@@ -738,9 +761,9 @@ export async function runTrigger_ProviderReferralCount(providerId: string, trigg
       period: periodLabel(period),
     }
 
-    await executeAction(auto, null, vars, triggeredByUserId, provider as unknown as Record<string, unknown>)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, provider as unknown as Record<string, unknown>)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "provider", contextId: key, result: "success", detail: `${provider.name} reached ${count} referrals ${periodLabel(period)}` },
+      data: { automationId: auto.id, ...runData(log, "provider", key, `${provider.name} reached ${count} referrals ${periodLabel(period)}`) },
     })
   }
 }
@@ -774,9 +797,9 @@ export async function runTrigger_PracticeReferralCount(practiceId: string, trigg
     if (already) continue
 
     const vars: TemplateVars = { practice_name: practice.name, count, period: periodLabel(period) }
-    await executeAction(auto, null, vars, triggeredByUserId, practice as unknown as Record<string, unknown>)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, practice as unknown as Record<string, unknown>)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "practice", contextId: key, result: "success", detail: `${practice.name} reached ${count} referrals ${periodLabel(period)}` },
+      data: { automationId: auto.id, ...runData(log, "practice", key, `${practice.name} reached ${count} referrals ${periodLabel(period)}`) },
     })
   }
 }
@@ -811,9 +834,9 @@ export async function runTrigger_LocationReferralCount(locationId: string, trigg
     if (already) continue
 
     const vars: TemplateVars = { count, period: periodLabel(period) }
-    await executeAction(auto, null, vars, triggeredByUserId, location as unknown as Record<string, unknown>)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, location as unknown as Record<string, unknown>)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "location", contextId: key, result: "success", detail: `${location.name} reached ${count} referrals ${periodLabel(period)}` },
+      data: { automationId: auto.id, ...runData(log, "location", key, `${location.name} reached ${count} referrals ${periodLabel(period)}`) },
     })
   }
 }
@@ -843,9 +866,9 @@ export async function runTrigger_SurgeryStatusChanged(
     if (cfg.toStatus && cfg.toStatus !== toStatus) continue
     if (!checkConditions(sc, cfg)) continue
 
-    await executeAction(auto, null, vars, triggeredByUserId, sc)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, sc)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "surgery", contextId: caseId, result: "success", detail: `Surgery status ${fromStatus} → ${toStatus}` },
+      data: { automationId: auto.id, ...runData(log, "surgery", caseId, `Surgery status ${fromStatus} → ${toStatus}`) },
     })
   }
 }
@@ -878,9 +901,9 @@ export async function runTrigger_SurgeryCallAttemptsReached(
     })
     if (already) continue
 
-    await executeAction(auto, null, vars, triggeredByUserId, sc)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, sc)
     await prisma.automationRun.create({
-      data: { automationId: auto.id, contextType: "surgery", contextId: key, result: "success", detail: `${callCount} surgery call attempts reached` },
+      data: { automationId: auto.id, ...runData(log, "surgery", key, `${callCount} surgery call attempts reached`) },
     })
   }
 }
@@ -936,9 +959,9 @@ async function runTrigger_NoActivity() {
         referral_url: buildReferralUrl(referral.id),
       }
 
-      await executeAction(auto, referral.id, vars)
+      const log = await executeAction(auto, referral.id, vars)
       await prisma.automationRun.create({
-        data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: `No activity for ${days} days` },
+        data: { automationId: auto.id, ...runData(log, "referral", key, `No activity for ${days} days`) },
       })
     }
   }
@@ -980,9 +1003,9 @@ async function runTrigger_AppointmentUpcoming() {
         referral_url: buildReferralUrl(referral.id),
       }
 
-      await executeAction(auto, referral.id, vars)
+      const log = await executeAction(auto, referral.id, vars)
       await prisma.automationRun.create({
-        data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: `Appointment in ${daysAhead} day(s)` },
+        data: { automationId: auto.id, ...runData(log, "referral", key, `Appointment in ${daysAhead} day(s)`) },
       })
     }
   }
@@ -1028,9 +1051,9 @@ async function runTrigger_AppointmentOverdue() {
         referral_url: buildReferralUrl(referral.id),
       }
 
-      await executeAction(auto, referral.id, vars)
+      const log = await executeAction(auto, referral.id, vars)
       await prisma.automationRun.create({
-        data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: "Appointment date passed, still Scheduled" },
+        data: { automationId: auto.id, ...runData(log, "referral", key, "Appointment date passed, still Scheduled") },
       })
     }
   }
@@ -1075,9 +1098,9 @@ async function runTrigger_ReferralStale() {
         referral_url: buildReferralUrl(referral.id),
       }
 
-      await executeAction(auto, referral.id, vars)
+      const log = await executeAction(auto, referral.id, vars)
       await prisma.automationRun.create({
-        data: { automationId: auto.id, contextType: "referral", contextId: key, result: "success", detail: `No appointment set after ${days} days` },
+        data: { automationId: auto.id, ...runData(log, "referral", key, `No appointment set after ${days} days`) },
       })
     }
   }

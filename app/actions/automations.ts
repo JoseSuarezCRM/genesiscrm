@@ -105,7 +105,7 @@ export async function getAutomationRuns(automationId: string, limit = 100) {
     where: { automationId },
     orderBy: { triggeredAt: "desc" },
     take: Math.min(limit, 300),
-    select: { id: true, triggeredAt: true, result: true, contextType: true, contextId: true, detail: true },
+    select: { id: true, triggeredAt: true, result: true, contextType: true, contextId: true, detail: true, meta: true },
   })
   return runs.map(r => ({ ...r, triggeredAt: r.triggeredAt.toISOString() }))
 }

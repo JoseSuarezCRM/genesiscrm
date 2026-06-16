@@ -10,12 +10,11 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag } from "lucide-react"
+import { Zap, Plus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
-import WorkflowLogsDialog from "@/components/workflow-logs-dialog"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   type AutomationGraph, type GraphNode, type Slot,
@@ -1570,6 +1569,12 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
             {editing.isActive ? "ON" : "OFF"}
           </span>
         )}
+        {editing && (
+          <Link href={`/automations/${editing.id}/logs`}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-slate-700 hover:bg-slate-600 text-white shrink-0">
+            <ScrollText className="h-3.5 w-3.5" /> Logs
+          </Link>
+        )}
         <button onClick={() => router.push("/automations")}
           className="px-3 py-1.5 text-sm text-slate-300 hover:text-white transition-colors shrink-0">
           Cancel
@@ -1690,7 +1695,10 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
       <td className="px-4 py-3 text-sm text-slate-500 text-right">{auto._count.runs}</td>
       <td className="px-4 py-3 text-right">
         <div className="flex items-center justify-end gap-0.5">
-          <WorkflowLogsDialog automationId={auto.id} name={auto.name} />
+          <Link href={`/automations/${auto.id}/logs`} title="View action logs"
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+            <ScrollText className="h-3.5 w-3.5" />
+          </Link>
           <button onClick={handleDelete} disabled={isPending}
             className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete">
             <Trash2 className="h-3.5 w-3.5" />
