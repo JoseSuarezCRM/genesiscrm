@@ -18,7 +18,7 @@ import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
-  newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel,
+  newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel, WEEKDAY_NAMES,
 } from "@/lib/automation-graph"
 import { MULTI_SEP, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import {
@@ -1269,7 +1269,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
   }
   function addDelay(slot: Slot) {
     const id = newNodeId()
-    onChange(insertAt(graph, slot, { id, kind: "delay", amount: 1, unit: "days", next: null }))
+    onChange(insertAt(graph, slot, { id, kind: "delay", mode: "duration", amount: 1, unit: "days", direction: "before", offsetUnit: "days", offsetAmount: 1, weekday: 1, timeOfDay: "09:00", next: null }))
     onEditNode(id)
   }
   function addBranch(slot: Slot) {
@@ -1331,7 +1331,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
               tone="delay" icon={<Clock className="h-4 w-4" />}
-              title={`Wait ${node.amount} ${node.unit}`} subtitle="Delay before continuing" />
+              title={waitLabel(node, waitFieldLabels)} subtitle="Delay before continuing" />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
           </>
         ) : node.kind === "waitUntil" ? (
@@ -1508,17 +1508,74 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
             </>
           ) : draft.kind === "delay" ? (
             <>
-              <p className="text-xs text-slate-500">Pause the workflow for this long before continuing to the next step.</p>
-              <div className="flex items-center gap-2">
-                <input type="number" min={1} value={draft.amount}
-                  onChange={e => setDraft({ ...draft, amount: Math.max(1, Number(e.target.value) || 1) })}
-                  className="w-24 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
-                <StyledSelect className="flex-1" value={draft.unit} onChange={e => setDraft({ ...draft, unit: e.target.value as any })}>
-                  <option value="minutes">minutes</option>
-                  <option value="hours">hours</option>
-                  <option value="days">days</option>
+              <p className="text-xs text-slate-500">Pause the workflow before continuing to the next step. Choose what the delay is based on.</p>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Delay <span className="text-red-500">*</span></label>
+                <StyledSelect className="w-full" value={draft.mode ?? "duration"}
+                  onChange={e => setDraft({ ...draft, mode: e.target.value as any })}>
+                  <option value="duration">For a set amount of time</option>
+                  <option value="calendar">Until a calendar date</option>
+                  <option value="property">Until a date property</option>
+                  <option value="dayOfWeek">Until a day of the week</option>
+                  <option value="timeOfDay">Until a specific time of day</option>
                 </StyledSelect>
               </div>
+
+              {(draft.mode ?? "duration") === "duration" ? (
+                <div className="flex items-center gap-2">
+                  <input type="number" min={1} value={draft.amount ?? 1}
+                    onChange={e => setDraft({ ...draft, amount: Math.max(1, Number(e.target.value) || 1) })}
+                    className="w-24 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                  <StyledSelect className="flex-1" value={draft.unit ?? "days"} onChange={e => setDraft({ ...draft, unit: e.target.value as any })}>
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                    <option value="days">days</option>
+                  </StyledSelect>
+                </div>
+              ) : draft.mode === "calendar" ? (
+                <div className="space-y-1">
+                  <input type="datetime-local" value={draft.datetime ? draft.datetime.slice(0, 16) : ""}
+                    onChange={e => setDraft({ ...draft, datetime: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                    className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                  <p className="text-xs text-slate-400">The workflow resumes at this date and time (e.g. a fixed launch date).</p>
+                </div>
+              ) : draft.mode === "property" ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} value={draft.offsetAmount ?? 0}
+                      onChange={e => setDraft({ ...draft, offsetAmount: Math.max(0, Number(e.target.value) || 0) })}
+                      className="w-20 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                    <StyledSelect className="w-28" value={draft.offsetUnit ?? "days"} onChange={e => setDraft({ ...draft, offsetUnit: e.target.value as any })}>
+                      <option value="minutes">minutes</option>
+                      <option value="hours">hours</option>
+                      <option value="days">days</option>
+                    </StyledSelect>
+                    <StyledSelect className="w-28" value={draft.direction ?? "before"} onChange={e => setDraft({ ...draft, direction: e.target.value as any })}>
+                      <option value="before">before</option>
+                      <option value="after">after</option>
+                    </StyledSelect>
+                  </div>
+                  <StyledSelect className="w-full" value={draft.field ?? ""} onChange={e => setDraft({ ...draft, field: e.target.value || null })}>
+                    <option value="">Select a date property…</option>
+                    {dateProps.map(p => <option key={p.id} value={p.path}>{p.label}</option>)}
+                  </StyledSelect>
+                  {dateProps.length === 0 && <p className="text-xs text-amber-600">This object has no date properties to wait on.</p>}
+                </div>
+              ) : draft.mode === "dayOfWeek" ? (
+                <div className="space-y-1">
+                  <StyledSelect className="w-full" value={String(draft.weekday ?? 1)} onChange={e => setDraft({ ...draft, weekday: Number(e.target.value) })}>
+                    {WEEKDAY_NAMES.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                  </StyledSelect>
+                  <p className="text-xs text-slate-400">Resumes on the next occurrence of this weekday.</p>
+                </div>
+              ) : draft.mode === "timeOfDay" ? (
+                <div className="space-y-1">
+                  <input type="time" value={draft.timeOfDay ?? "09:00"}
+                    onChange={e => setDraft({ ...draft, timeOfDay: e.target.value || "09:00" })}
+                    className="w-40 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                  <p className="text-xs text-slate-400">Resumes at the next occurrence of this time (server time).</p>
+                </div>
+              ) : null}
             </>
           ) : draft.kind === "waitUntil" ? (
             <>

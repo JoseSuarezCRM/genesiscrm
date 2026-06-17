@@ -23,6 +23,11 @@ export interface BranchArm {
 
 export type DelayUnit = "minutes" | "hours" | "days"
 
+// What a Delay step is based on (HubSpot-style). Absent = legacy "duration".
+export type DelayMode = "duration" | "calendar" | "property" | "dayOfWeek" | "timeOfDay"
+
+export const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
 // A node is a single action, a delay, an if/else branch, or a multi-way branch.
 export type GraphNode =
   | {
@@ -35,8 +40,21 @@ export type GraphNode =
   | {
       id: string
       kind: "delay"
-      amount: number
-      unit: DelayUnit
+      mode?: DelayMode              // absent = "duration" (legacy nodes)
+      // duration: pause for a set amount of time
+      amount?: number
+      unit?: DelayUnit
+      // calendar: pause until a fixed calendar date/time
+      datetime?: string | null
+      // property: pause until a date property on the record (± offset)
+      field?: string | null
+      offsetAmount?: number
+      offsetUnit?: DelayUnit
+      direction?: "before" | "after"
+      // dayOfWeek: pause until the next given weekday (0=Sun … 6=Sat)
+      weekday?: number
+      // timeOfDay: pause until the next occurrence of a time of day ("HH:MM")
+      timeOfDay?: string
       next: string | null
     }
   | {
@@ -163,6 +181,52 @@ function waitUntilTime(node: Extract<GraphNode, { kind: "waitUntil" }>, referral
   return computeScheduleTime(node, referral)
 }
 
+const DAY_MS = 86_400_000
+
+// Next future occurrence of a weekday (0=Sun … 6=Sat), at start of that day.
+function nextWeekday(from: Date, weekday: number): Date {
+  const d = new Date(from)
+  d.setHours(0, 0, 0, 0)
+  let diff = (weekday - d.getDay() + 7) % 7
+  if (diff === 0) diff = 7 // always advance to the next occurrence
+  return new Date(d.getTime() + diff * DAY_MS)
+}
+
+// Next future occurrence of a time of day ("HH:MM"): today if still ahead, else tomorrow.
+function nextTimeOfDay(from: Date, hhmm: string): Date {
+  const [h, m] = (hhmm || "09:00").split(":").map(Number)
+  const d = new Date(from)
+  d.setHours(h || 0, m || 0, 0, 0)
+  if (d.getTime() <= from.getTime()) d.setTime(d.getTime() + DAY_MS)
+  return d
+}
+
+// Resolve a Delay node to an absolute resume time (or null = can't compute, skip wait).
+export function delayResumeTime(
+  node: Extract<GraphNode, { kind: "delay" }>,
+  referral: ReferralForConditions | null,
+  now: Date = new Date(),
+): Date | null {
+  const mode = node.mode ?? "duration"
+  switch (mode) {
+    case "duration":
+      return new Date(now.getTime() + delayMs(node.amount ?? 1, node.unit ?? "days"))
+    case "calendar":
+      return node.datetime ? new Date(node.datetime) : null
+    case "property":
+      return computeScheduleTime(
+        { mode: "field", field: node.field, offsetAmount: node.offsetAmount, offsetUnit: node.offsetUnit, direction: node.direction },
+        referral,
+      )
+    case "dayOfWeek":
+      return nextWeekday(now, node.weekday ?? 1)
+    case "timeOfDay":
+      return nextTimeOfDay(now, node.timeOfDay ?? "09:00")
+    default:
+      return null
+  }
+}
+
 // Schedule attached to an action's config under `schedule`.
 function actionScheduleTime(config: Record<string, unknown>, referral: ReferralForConditions | null): Date | null {
   const sched = config?.schedule as ScheduleConfig | undefined
@@ -170,10 +234,18 @@ function actionScheduleTime(config: Record<string, unknown>, referral: ReferralF
 }
 
 export function waitLabel(node: Extract<GraphNode, { kind: "delay" | "waitUntil" }>, fieldLabels?: Record<string, string>): string {
-  if (node.kind === "delay") return `Wait ${node.amount} ${node.unit}`
+  const fldLabel = (f: string | null | undefined) => (fieldLabels && f && fieldLabels[f]) || f || "date"
+  if (node.kind === "delay") {
+    const mode = node.mode ?? "duration"
+    if (mode === "duration") return `Wait ${node.amount ?? 1} ${node.unit ?? "days"}`
+    if (mode === "calendar") return node.datetime ? `Wait until ${new Date(node.datetime).toLocaleString()}` : "Wait until a date"
+    if (mode === "property") return `Wait until ${node.offsetAmount ?? 0} ${node.offsetUnit ?? "days"} ${node.direction ?? "before"} ${fldLabel(node.field)}`
+    if (mode === "dayOfWeek") return `Wait until ${WEEKDAY_NAMES[node.weekday ?? 1] ?? "Monday"}`
+    if (mode === "timeOfDay") return `Wait until ${node.timeOfDay ?? "09:00"}`
+    return "Delay"
+  }
   if (node.mode === "fixed") return node.datetime ? `Wait until ${new Date(node.datetime).toLocaleString()}` : "Wait until a date"
-  const fld = (fieldLabels && node.field && fieldLabels[node.field]) || node.field || "date"
-  return `Wait until ${node.offsetAmount} ${node.offsetUnit} ${node.direction} ${fld}`
+  return `Wait until ${node.offsetAmount} ${node.offsetUnit} ${node.direction} ${fldLabel(node.field)}`
 }
 
 // Walk the graph from a start node, collecting actions until the first wait
@@ -204,8 +276,8 @@ export function walkGraph(
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next
     } else if (node.kind === "delay") {
-      const resumeAt = new Date(Date.now() + delayMs(node.amount, node.unit))
-      if (resumeAt.getTime() <= Date.now()) { currentId = node.next; continue }
+      const resumeAt = delayResumeTime(node, referral)
+      if (!resumeAt || resumeAt.getTime() <= Date.now()) { currentId = node.next; continue }
       return { actions: out, resumeNodeId: node.next, resumeAt, waitLabel: waitLabel(node) }
     } else if (node.kind === "waitUntil") {
       const resumeAt = waitUntilTime(node, referral)
