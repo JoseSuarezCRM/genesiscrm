@@ -183,22 +183,50 @@ function waitUntilTime(node: Extract<GraphNode, { kind: "waitUntil" }>, referral
 
 const DAY_MS = 86_400_000
 
-// Next future occurrence of a weekday (0=Sun … 6=Sat), at start of that day.
-function nextWeekday(from: Date, weekday: number): Date {
-  const d = new Date(from)
-  d.setHours(0, 0, 0, 0)
-  let diff = (weekday - d.getDay() + 7) % 7
-  if (diff === 0) diff = 7 // always advance to the next occurrence
-  return new Date(d.getTime() + diff * DAY_MS)
+// Day-of-week / time-of-day delays resolve against the clinic's wall clock.
+export const CLINIC_TZ = "America/Chicago"
+
+// Wall-clock parts of an instant in a given timezone.
+function zonedParts(date: Date, tz: string) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  })
+  const m: Record<string, number> = {}
+  for (const p of dtf.formatToParts(date)) if (p.type !== "literal") m[p.type] = Number(p.value)
+  return { year: m.year, month: m.month - 1, day: m.day, hour: m.hour === 24 ? 0 : m.hour, minute: m.minute, second: m.second }
 }
 
-// Next future occurrence of a time of day ("HH:MM"): today if still ahead, else tomorrow.
+// Convert a wall-clock time in `tz` to the corresponding UTC instant (DST-aware).
+function zonedWallToUtc(y: number, mo: number, d: number, h: number, mi: number, tz: string): Date {
+  const guess = Date.UTC(y, mo, d, h, mi, 0)
+  const p = zonedParts(new Date(guess), tz)
+  const asUtcOfParts = Date.UTC(p.year, p.month, p.day, p.hour, p.minute, p.second)
+  const offset = asUtcOfParts - guess // tz offset at that instant
+  return new Date(guess - offset)
+}
+
+// Next future occurrence of a weekday (0=Sun … 6=Sat), at start of that day in CLINIC_TZ.
+function nextWeekday(from: Date, weekday: number): Date {
+  const p = zonedParts(from, CLINIC_TZ)
+  const curDow = new Date(Date.UTC(p.year, p.month, p.day)).getUTCDay()
+  let diff = (weekday - curDow + 7) % 7
+  if (diff === 0) diff = 7 // always advance to the next occurrence
+  const t = new Date(Date.UTC(p.year, p.month, p.day) + diff * DAY_MS)
+  return zonedWallToUtc(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 0, 0, CLINIC_TZ)
+}
+
+// Next future occurrence of a time of day ("HH:MM") in CLINIC_TZ: today if still ahead, else tomorrow.
 function nextTimeOfDay(from: Date, hhmm: string): Date {
-  const [h, m] = (hhmm || "09:00").split(":").map(Number)
-  const d = new Date(from)
-  d.setHours(h || 0, m || 0, 0, 0)
-  if (d.getTime() <= from.getTime()) d.setTime(d.getTime() + DAY_MS)
-  return d
+  const [h, mi] = (hhmm || "09:00").split(":").map(Number)
+  const p = zonedParts(from, CLINIC_TZ)
+  let cand = zonedWallToUtc(p.year, p.month, p.day, h || 0, mi || 0, CLINIC_TZ)
+  if (cand.getTime() <= from.getTime()) {
+    const next = new Date(Date.UTC(p.year, p.month, p.day) + DAY_MS)
+    cand = zonedWallToUtc(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate(), h || 0, mi || 0, CLINIC_TZ)
+  }
+  return cand
 }
 
 // Resolve a Delay node to an absolute resume time (or null = can't compute, skip wait).
@@ -241,7 +269,7 @@ export function waitLabel(node: Extract<GraphNode, { kind: "delay" | "waitUntil"
     if (mode === "calendar") return node.datetime ? `Wait until ${new Date(node.datetime).toLocaleString()}` : "Wait until a date"
     if (mode === "property") return `Wait until ${node.offsetAmount ?? 0} ${node.offsetUnit ?? "days"} ${node.direction ?? "before"} ${fldLabel(node.field)}`
     if (mode === "dayOfWeek") return `Wait until ${WEEKDAY_NAMES[node.weekday ?? 1] ?? "Monday"}`
-    if (mode === "timeOfDay") return `Wait until ${node.timeOfDay ?? "09:00"}`
+    if (mode === "timeOfDay") return `Wait until ${node.timeOfDay ?? "09:00"} CT`
     return "Delay"
   }
   if (node.mode === "fixed") return node.datetime ? `Wait until ${new Date(node.datetime).toLocaleString()}` : "Wait until a date"

@@ -1573,7 +1573,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                   <input type="time" value={draft.timeOfDay ?? "09:00"}
                     onChange={e => setDraft({ ...draft, timeOfDay: e.target.value || "09:00" })}
                     className="w-40 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
-                  <p className="text-xs text-slate-400">Resumes at the next occurrence of this time (server time).</p>
+                  <p className="text-xs text-slate-400">Resumes at the next occurrence of this time (Central Time, Chicago).</p>
                 </div>
               ) : null}
             </>
