@@ -110,8 +110,8 @@ export default function SurgeryCreateDialog() {
                   </StyledSelect>
                 </div>
                 <div>
-                  <label className={labelCls}>Surgery Date</label>
-                  <input type="date" value={form.surgeryDate} onChange={e => set("surgeryDate", e.target.value)} className={inputCls} />
+                  <label className={labelCls}>Surgery Date &amp; Time</label>
+                  <input type="datetime-local" value={form.surgeryDate} onChange={e => set("surgeryDate", e.target.value)} className={inputCls} />
                 </div>
                 <div className="col-span-2">
                   <label className={labelCls}>Patient Email</label>

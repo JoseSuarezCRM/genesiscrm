@@ -41,6 +41,17 @@ export type GraphNode =
     }
   | {
       id: string
+      kind: "waitUntil"
+      mode: "field" | "fixed"
+      field: string | null          // record date property (field mode)
+      offsetAmount: number          // offset before/after the field date
+      offsetUnit: DelayUnit
+      direction: "before" | "after"
+      datetime: string | null       // fixed ISO datetime (fixed mode)
+      next: string | null
+    }
+  | {
+      id: string
       kind: "branch"
       match: "all" | "any"
       rules: Condition[]
@@ -102,8 +113,8 @@ export function resolveGraphActions(
     if (node.kind === "action") {
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next
-    } else if (node.kind === "delay") {
-      currentId = node.next // flat resolver ignores delays; walkGraph handles pausing
+    } else if (node.kind === "delay" || node.kind === "waitUntil") {
+      currentId = node.next // flat resolver ignores waits; walkGraph handles pausing
     } else if (node.kind === "branch") {
       // branch: with no referral context, conditions can't be evaluated → ELSE path
       const passed = referral ? criteriaPass(referral, node) : false
@@ -118,14 +129,39 @@ export function resolveGraphActions(
   return out
 }
 
-// Walk the graph from a start node, collecting actions until the first delay or
-// the end. Returns the actions to run now, and—if it paused at a delay—the node
-// to resume from plus the delay. Branch decisions use the given record.
+// Resolve a waitUntil node to an absolute resume time (or null if it shouldn't
+// wait — e.g. the field is empty or the target is already in the past).
+function waitUntilTime(node: Extract<GraphNode, { kind: "waitUntil" }>, referral: ReferralForConditions | null): Date | null {
+  let base: number | null = null
+  if (node.mode === "fixed") {
+    base = node.datetime ? new Date(node.datetime).getTime() : null
+  } else if (node.field && referral) {
+    const raw = (referral as Record<string, unknown>)[node.field]
+    const t = raw ? new Date(raw as string).getTime() : NaN
+    if (!isNaN(t)) {
+      const off = delayMs(node.offsetAmount, node.offsetUnit)
+      base = node.direction === "before" ? t - off : t + off
+    }
+  }
+  if (base == null || isNaN(base)) return null
+  return new Date(base)
+}
+
+export function waitLabel(node: Extract<GraphNode, { kind: "delay" | "waitUntil" }>, fieldLabels?: Record<string, string>): string {
+  if (node.kind === "delay") return `Wait ${node.amount} ${node.unit}`
+  if (node.mode === "fixed") return node.datetime ? `Wait until ${new Date(node.datetime).toLocaleString()}` : "Wait until a date"
+  const fld = (fieldLabels && node.field && fieldLabels[node.field]) || node.field || "date"
+  return `Wait until ${node.offsetAmount} ${node.offsetUnit} ${node.direction} ${fld}`
+}
+
+// Walk the graph from a start node, collecting actions until the first wait
+// (delay or waitUntil) or the end. Returns the actions to run now, and—if it
+// paused—the node to resume from plus the absolute resume time.
 export function walkGraph(
   graph: AutomationGraph,
   startId: string | null,
   referral: ReferralForConditions | null,
-): { actions: FlowAction[]; resumeNodeId: string | null; delay: { amount: number; unit: DelayUnit } | null } {
+): { actions: FlowAction[]; resumeNodeId: string | null; resumeAt: Date | null; waitLabel: string | null } {
   const out: FlowAction[] = []
   const visited = new Set<string>()
   let currentId = startId
@@ -140,7 +176,13 @@ export function walkGraph(
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next
     } else if (node.kind === "delay") {
-      return { actions: out, resumeNodeId: node.next, delay: { amount: node.amount, unit: node.unit } }
+      const resumeAt = new Date(Date.now() + delayMs(node.amount, node.unit))
+      if (resumeAt.getTime() <= Date.now()) { currentId = node.next; continue }
+      return { actions: out, resumeNodeId: node.next, resumeAt, waitLabel: waitLabel(node) }
+    } else if (node.kind === "waitUntil") {
+      const resumeAt = waitUntilTime(node, referral)
+      if (!resumeAt || resumeAt.getTime() <= Date.now()) { currentId = node.next; continue }
+      return { actions: out, resumeNodeId: node.next, resumeAt, waitLabel: waitLabel(node) }
     } else if (node.kind === "branch") {
       const passed = referral ? criteriaPass(referral, node) : false
       currentId = passed ? node.thenNext : node.elseNext
@@ -150,7 +192,7 @@ export function walkGraph(
     }
   }
 
-  return { actions: out, resumeNodeId: null, delay: null }
+  return { actions: out, resumeNodeId: null, resumeAt: null, waitLabel: null }
 }
 
 // Build a graph from a chain of actions (each → the next, last → null).
@@ -213,7 +255,7 @@ function getSlot(graph: AutomationGraph, slot: Slot): string | null {
   if (slot.kind === "root") return graph.rootId
   const n = graph.nodes[slot.nodeId]
   if (!n) return null
-  if (slot.kind === "after" && (n.kind === "action" || n.kind === "delay")) return n.next
+  if (slot.kind === "after" && (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil")) return n.next
   if (slot.kind === "then" && n.kind === "branch") return n.thenNext
   if (slot.kind === "else" && (n.kind === "branch" || n.kind === "multi")) return n.elseNext
   if (slot.kind === "arm" && n.kind === "multi") return n.arms.find(a => a.id === slot.armId)?.next ?? null
@@ -223,7 +265,7 @@ function setSlot(graph: AutomationGraph, slot: Slot, value: string | null): void
   if (slot.kind === "root") { graph.rootId = value; return }
   const n = graph.nodes[slot.nodeId]
   if (!n) return
-  if (slot.kind === "after" && (n.kind === "action" || n.kind === "delay")) n.next = value
+  if (slot.kind === "after" && (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil")) n.next = value
   else if (slot.kind === "then" && n.kind === "branch") n.thenNext = value
   else if (slot.kind === "else" && (n.kind === "branch" || n.kind === "multi")) n.elseNext = value
   else if (slot.kind === "arm" && n.kind === "multi") {
@@ -238,7 +280,7 @@ export function insertAt(graph: AutomationGraph, slot: Slot, node: GraphNode): A
   const g = clone(graph)
   const target = getSlot(g, slot)
   const n = structuredCloneSafe(node)
-  if (n.kind === "action" || n.kind === "delay") n.next = target
+  if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") n.next = target
   else if (n.kind === "branch") { n.thenNext = target; n.elseNext = null }
   else {
     if (n.arms.length > 0) n.arms[0].next = target
@@ -251,7 +293,7 @@ export function insertAt(graph: AutomationGraph, slot: Slot, node: GraphNode): A
 
 // All outgoing pointers of a node.
 function nodeTargets(n: GraphNode): (string | null)[] {
-  if (n.kind === "action" || n.kind === "delay") return [n.next]
+  if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") return [n.next]
   if (n.kind === "branch") return [n.thenNext, n.elseNext]
   return [...n.arms.map(a => a.next), n.elseNext]
 }
@@ -281,13 +323,13 @@ export function deleteNode(graph: AutomationGraph, id: string): AutomationGraph 
   const node = g.nodes[id]
   if (!node) return g
   const continuation =
-    node.kind === "action" || node.kind === "delay" ? node.next
+    node.kind === "action" || node.kind === "delay" || node.kind === "waitUntil" ? node.next
     : node.kind === "branch" ? node.thenNext
     : (node.arms[0]?.next ?? node.elseNext)
 
   if (g.rootId === id) g.rootId = continuation
   for (const n of Object.values(g.nodes)) {
-    if ((n.kind === "action" || n.kind === "delay") && n.next === id) n.next = continuation
+    if ((n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") && n.next === id) n.next = continuation
     else if (n.kind === "branch") {
       if (n.thenNext === id) n.thenNext = continuation
       if (n.elseNext === id) n.elseNext = continuation

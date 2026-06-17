@@ -12,6 +12,12 @@ import { Button } from "@/components/ui/button"
 
 const MAX_CALLS = 4
 
+// Format a Date as a datetime-local input value (YYYY-MM-DDTHH:mm) in local time.
+function toLocalDatetimeValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const STATUS_OPTIONS = ["NEW", "PENDING_CLEARANCE", "PENDING_CONFIRMATION", "SCHEDULED", "CANCELED", "COMPLETED"]
 const STATUS_COLORS: Record<string, string> = {
   NEW: "bg-zinc-100 text-zinc-700 border-zinc-200",
@@ -176,7 +182,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [facility, setFacility] = useState(facility_)
   const [procedure, setProcedure] = useState(surgeryCase.procedure ?? "")
   const [surgeryDate, setSurgeryDate] = useState(
-    surgeryCase.surgeryDate ? new Date(surgeryCase.surgeryDate).toISOString().slice(0, 10) : ""
+    surgeryCase.surgeryDate ? toLocalDatetimeValue(new Date(surgeryCase.surgeryDate)) : ""
   )
   const [email, setEmail] = useState(surgeryCase.email ?? "")
   const [notes, setNotes] = useState(surgeryCase.notes ?? "")
@@ -403,7 +409,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
             <ProcedureField value={procedure} onChange={setProcedure} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <InputField label="Surgery Date" value={surgeryDate} type="date" onChange={setSurgeryDate} />
+            <InputField label="Surgery Date & Time" value={surgeryDate} type="datetime-local" onChange={setSurgeryDate} />
             <InputField label="Patient Email" value={email} type="email" onChange={setEmail} />
           </div>
           <div className="flex flex-col gap-1">

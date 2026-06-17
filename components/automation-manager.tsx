@@ -10,7 +10,7 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -18,7 +18,7 @@ import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   type AutomationGraph, type GraphNode, type Slot,
-  newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph,
+  newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel,
 } from "@/lib/automation-graph"
 import { MULTI_SEP, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import {
@@ -1141,7 +1141,7 @@ function VLine({ h = 22 }: { h?: number }) {
 }
 
 // "+" insert control with a small action/branch menu
-function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
+function InsertButton({ onAddAction, onAddDelay, onAddWaitUntil, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddDelay: () => void; onAddWaitUntil: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
@@ -1163,6 +1163,10 @@ function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti }: { on
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddDelay() }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
               <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><Clock className="h-3.5 w-3.5" /></span> Delay
+            </button>
+            <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddWaitUntil() }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+              <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><CalendarClock className="h-3.5 w-3.5" /></span> Wait until a date
             </button>
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddBranch() }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
@@ -1212,12 +1216,14 @@ function BranchSplit({ columns }: { columns: { key: string; label: string; tone:
   )
 }
 
-function FlowCanvas({ graph, onChange, onEditNode, header }: {
+function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
   graph: AutomationGraph
   onChange: (g: AutomationGraph) => void
   onEditNode: (id: string) => void
   header?: React.ReactNode
+  propDefs?: PropertyDef[]
 }) {
+  const waitFieldLabels = Object.fromEntries(propDefs.map(p => [p.path, p.label]))
   function addAction(slot: Slot) {
     const id = newNodeId()
     onChange(insertAt(graph, slot, { id, kind: "action", actionType: "CREATE_TASK", config: emptyActionConfig("CREATE_TASK"), next: null }))
@@ -1226,6 +1232,11 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
   function addDelay(slot: Slot) {
     const id = newNodeId()
     onChange(insertAt(graph, slot, { id, kind: "delay", amount: 1, unit: "days", next: null }))
+    onEditNode(id)
+  }
+  function addWaitUntil(slot: Slot) {
+    const id = newNodeId()
+    onChange(insertAt(graph, slot, { id, kind: "waitUntil", mode: "field", field: null, offsetAmount: 1, offsetUnit: "days", direction: "before", datetime: null, next: null }))
     onEditNode(id)
   }
   function addBranch(slot: Slot) {
@@ -1256,7 +1267,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
       : slot.kind === "arm" ? (slotNode as any)?.arms?.find((a: any) => a.id === slot.armId)?.next
       : (slotNode as any)?.elseNext
 
-    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddWaitUntil={() => addWaitUntil(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
 
     if (!startId || !graph.nodes[startId]) {
       return (
@@ -1288,6 +1299,13 @@ function FlowCanvas({ graph, onChange, onEditNode, header }: {
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
               tone="delay" icon={<Clock className="h-4 w-4" />}
               title={`Wait ${node.amount} ${node.unit}`} subtitle="Delay before continuing" />
+            {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
+          </>
+        ) : node.kind === "waitUntil" ? (
+          <>
+            <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              tone="delay" icon={<CalendarClock className="h-4 w-4" />}
+              title={waitLabel(node, waitFieldLabels)} subtitle="Scheduled wait" />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
           </>
         ) : node.kind === "branch" ? (
@@ -1428,6 +1446,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
+  const dateProps = propDefs.filter(p => p.type === "date")
 
   function updateArm(armId: string, patch: Partial<import("@/lib/automation-graph").BranchArm>) {
     if (draft.kind !== "multi") return
@@ -1468,6 +1487,43 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 </StyledSelect>
               </div>
             </>
+          ) : draft.kind === "waitUntil" ? (
+            <>
+              <p className="text-xs text-slate-500">Pause until a date, then continue. Useful for time-based sends (e.g. 1 day before a date on the record).</p>
+              <div className="inline-flex bg-zinc-100 rounded-lg p-0.5 text-xs">
+                <button type="button" onClick={() => setDraft({ ...draft, mode: "field" })}
+                  className={cn("px-2.5 py-1 rounded-md font-medium", draft.mode === "field" ? "bg-zinc-900 text-white" : "text-zinc-500")}>Record date property</button>
+                <button type="button" onClick={() => setDraft({ ...draft, mode: "fixed" })}
+                  className={cn("px-2.5 py-1 rounded-md font-medium", draft.mode === "fixed" ? "bg-zinc-900 text-white" : "text-zinc-500")}>Specific date</button>
+              </div>
+              {draft.mode === "field" ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} value={draft.offsetAmount}
+                      onChange={e => setDraft({ ...draft, offsetAmount: Math.max(0, Number(e.target.value) || 0) })}
+                      className="w-20 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                    <StyledSelect className="w-28" value={draft.offsetUnit} onChange={e => setDraft({ ...draft, offsetUnit: e.target.value as any })}>
+                      <option value="minutes">minutes</option>
+                      <option value="hours">hours</option>
+                      <option value="days">days</option>
+                    </StyledSelect>
+                    <StyledSelect className="w-28" value={draft.direction} onChange={e => setDraft({ ...draft, direction: e.target.value as any })}>
+                      <option value="before">before</option>
+                      <option value="after">after</option>
+                    </StyledSelect>
+                  </div>
+                  <StyledSelect className="w-full" value={draft.field ?? ""} onChange={e => setDraft({ ...draft, field: e.target.value || null })}>
+                    <option value="">Select a date property…</option>
+                    {dateProps.map(p => <option key={p.id} value={p.path}>{p.label}</option>)}
+                  </StyledSelect>
+                  {dateProps.length === 0 && <p className="text-xs text-amber-600">This object has no date properties to wait on.</p>}
+                </div>
+              ) : (
+                <input type="datetime-local" value={draft.datetime ? draft.datetime.slice(0, 16) : ""}
+                  onChange={e => setDraft({ ...draft, datetime: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+              )}
+            </>
           ) : draft.kind === "branch" ? (
             <>
               <p className="text-xs text-slate-500">Records take the <span className="font-medium">Then</span> path when they meet these conditions; otherwise the <span className="font-medium">Else</span> path.</p>
@@ -1477,7 +1533,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 data={criteriaData}
               />
             </>
-          ) : (
+          ) : draft.kind === "multi" ? (
             <>
               <p className="text-xs text-slate-500">
                 Records go down the <span className="font-medium">first branch</span> whose conditions match; if none match they go down the Else path.
@@ -1512,7 +1568,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 <Plus className="h-3.5 w-3.5" /> Add branch
               </button>
             </>
-          )}
+          ) : null}
         </div>
         <div className="flex justify-end gap-2 p-4 border-t">
           <button onClick={onClose} className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
@@ -1665,6 +1721,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           graph={graph}
           onChange={setGraph}
           onEditNode={setEditingNodeId}
+          propDefs={propDefs}
           header={
             <button
               type="button"

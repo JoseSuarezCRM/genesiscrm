@@ -212,14 +212,14 @@ async function executeAction(
 
   const graph = automation.graph as AutomationGraph | null | undefined
   if (graph && graph.rootId && graph.nodes) {
-    // Walk to the first delay; run those actions; if paused, persist a resume.
-    const { actions, resumeNodeId, delay } = walkGraph(graph, graph.rootId, condRef)
+    // Walk to the first wait; run those actions; if paused, persist a resume.
+    const { actions, resumeNodeId, resumeAt, waitLabel } = walkGraph(graph, graph.rootId, condRef)
     for (const action of actions) {
       await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
     }
-    if (delay && resumeNodeId) {
-      await scheduleResume(automation.id, resumeNodeId, delay, referralId, record, vars, recordLabelFor(record, vars))
-      steps.push({ label: `Wait ${delay.amount} ${delay.unit}`, status: "ok" })
+    if (resumeAt && resumeNodeId) {
+      await scheduleResume(automation.id, resumeNodeId, resumeAt, referralId, record, vars, recordLabelFor(record, vars))
+      steps.push({ label: waitLabel ?? "Wait", status: "ok" })
     }
   } else {
     const flow = automation.flow as PureFlow | null | undefined
@@ -260,7 +260,7 @@ function runData(log: RunLog, contextType: string, contextId: string, detail: st
 async function scheduleResume(
   automationId: string,
   resumeNodeId: string,
-  delay: { amount: number; unit: DelayUnit },
+  resumeAt: Date,
   referralId: string | null,
   record: Record<string, unknown> | null,
   vars: TemplateVars,
@@ -270,7 +270,7 @@ async function scheduleResume(
     data: {
       automationId,
       resumeNodeId,
-      resumeAt: new Date(Date.now() + delayMs(delay.amount, delay.unit)),
+      resumeAt,
       referralId: referralId ?? null,
       recordLabel,
       vars: vars as any,
@@ -300,7 +300,7 @@ export async function runDueWorkflowResumes() {
     const condRef = record ? (record as unknown as Parameters<typeof walkGraph>[2]) : null
     const vars = (r.vars ?? {}) as TemplateVars
 
-    const { actions, resumeNodeId, delay } = walkGraph(graph, r.resumeNodeId, condRef)
+    const { actions, resumeNodeId, resumeAt, waitLabel } = walkGraph(graph, r.resumeNodeId, condRef)
     const steps: RunStep[] = []
     for (const a of actions) {
       const cfg = (a.config ?? {}) as Record<string, unknown>
@@ -308,12 +308,12 @@ export async function runDueWorkflowResumes() {
       steps.push({ label: stepLabel(a.type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
     }
 
-    if (delay && resumeNodeId) {
+    if (resumeAt && resumeNodeId) {
       await prisma.workflowResume.update({
         where: { id: r.id },
-        data: { resumeNodeId, resumeAt: new Date(Date.now() + delayMs(delay.amount, delay.unit)) },
+        data: { resumeNodeId, resumeAt },
       })
-      steps.push({ label: `Wait ${delay.amount} ${delay.unit}`, status: "ok" })
+      steps.push({ label: waitLabel ?? "Wait", status: "ok" })
     } else {
       await prisma.workflowResume.delete({ where: { id: r.id } })
     }
