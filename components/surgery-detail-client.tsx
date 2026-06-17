@@ -7,16 +7,11 @@ import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { PROCEDURE_DATA, findProcedureLocation } from "@/lib/surgery-procedures"
+import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
 const MAX_CALLS = 4
-
-// Format a Date as a datetime-local input value (YYYY-MM-DDTHH:mm) in local time.
-function toLocalDatetimeValue(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 
 const STATUS_OPTIONS = ["NEW", "PENDING_CLEARANCE", "PENDING_CONFIRMATION", "SCHEDULED", "CANCELED", "COMPLETED"]
 const STATUS_COLORS: Record<string, string> = {
@@ -182,7 +177,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [facility, setFacility] = useState(facility_)
   const [procedure, setProcedure] = useState(surgeryCase.procedure ?? "")
   const [surgeryDate, setSurgeryDate] = useState(
-    surgeryCase.surgeryDate ? toLocalDatetimeValue(new Date(surgeryCase.surgeryDate)) : ""
+    surgeryCase.surgeryDate ? clinicDatetimeLocalValue(new Date(surgeryCase.surgeryDate)) : ""
   )
   const [email, setEmail] = useState(surgeryCase.email ?? "")
   const [notes, setNotes] = useState(surgeryCase.notes ?? "")
@@ -220,7 +215,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         referral: referralValue || null,
         facility: facility || null,
         procedure: procedure || null,
-        surgeryDate: surgeryDate || null,
+        surgeryDate: clinicDatetimeLocalToISO(surgeryDate),
         email: email || null,
         notes: notes || null,
       })

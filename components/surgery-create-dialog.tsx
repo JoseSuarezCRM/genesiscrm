@@ -8,6 +8,7 @@ import StyledSelect from "@/components/ui/styled-select"
 import { createSurgeryCase } from "@/app/actions/surgery"
 import { SURGERY_STATUS_OPTIONS } from "@/lib/automation-properties"
 import { FACILITY_OPTIONS } from "@/lib/surgery-procedures"
+import { clinicDatetimeLocalToISO } from "@/lib/tz"
 
 const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 const inputCls = "w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400"
@@ -45,7 +46,7 @@ export default function SurgeryCreateDialog() {
         orderingProvider: form.orderingProvider || null,
         diagnosis: form.diagnosis || null,
         facility: form.facility || null,
-        surgeryDate: form.surgeryDate || null,
+        surgeryDate: clinicDatetimeLocalToISO(form.surgeryDate),
         email: form.email || null,
         notes: form.notes || null,
       })

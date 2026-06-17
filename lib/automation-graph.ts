@@ -4,6 +4,7 @@ import {
   evaluateRule, evaluateGroups, type Condition, type ConditionGroup,
   type ReferralForConditions, type FlowAction, type AutomationFlow,
 } from "./automation-conditions"
+import { CLINIC_TZ, zonedParts, zonedWallToUtc } from "./tz"
 
 let _idSeq = 0
 export function newNodeId(): string {
@@ -182,30 +183,6 @@ function waitUntilTime(node: Extract<GraphNode, { kind: "waitUntil" }>, referral
 }
 
 const DAY_MS = 86_400_000
-
-// Day-of-week / time-of-day delays resolve against the clinic's wall clock.
-export const CLINIC_TZ = "America/Chicago"
-
-// Wall-clock parts of an instant in a given timezone.
-function zonedParts(date: Date, tz: string) {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz, hour12: false,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  })
-  const m: Record<string, number> = {}
-  for (const p of dtf.formatToParts(date)) if (p.type !== "literal") m[p.type] = Number(p.value)
-  return { year: m.year, month: m.month - 1, day: m.day, hour: m.hour === 24 ? 0 : m.hour, minute: m.minute, second: m.second }
-}
-
-// Convert a wall-clock time in `tz` to the corresponding UTC instant (DST-aware).
-function zonedWallToUtc(y: number, mo: number, d: number, h: number, mi: number, tz: string): Date {
-  const guess = Date.UTC(y, mo, d, h, mi, 0)
-  const p = zonedParts(new Date(guess), tz)
-  const asUtcOfParts = Date.UTC(p.year, p.month, p.day, p.hour, p.minute, p.second)
-  const offset = asUtcOfParts - guess // tz offset at that instant
-  return new Date(guess - offset)
-}
 
 // Next future occurrence of a weekday (0=Sun … 6=Sat), at start of that day in CLINIC_TZ.
 function nextWeekday(from: Date, weekday: number): Date {

@@ -28,7 +28,7 @@ function surgeryVars(sc: Record<string, unknown>, extra: Partial<TemplateVars> =
     body_part: loc.bodyPart,
     surgical_provider: loc.provider,
     surgery_date: date && !isNaN(date.getTime())
-      ? date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })
+      ? date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
       : "",
     facility: (sc.facility as string) ?? "",
     ...extra,

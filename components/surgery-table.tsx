@@ -110,7 +110,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
 
   function fmt(d: string | Date | null | undefined) {
     if (!d) return "—"
-    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
   }
 
   const colSpan = 9
