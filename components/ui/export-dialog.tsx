@@ -11,19 +11,21 @@ interface Props {
   // What's being exported, e.g. "activities" (used in the summary line).
   subject: string
   defaultName: string
-  // Lazily produce the export data when the user clicks Export.
-  getData: () => { headers: string[]; rows: (string | number | null | undefined)[][] }
+  // Client-side export: lazily produce the data when the user clicks Export.
+  getData?: () => { headers: string[]; rows: (string | number | null | undefined)[][] }
+  // Server-side export: download from this URL instead (filename appended).
+  href?: string
 }
 
 // HubSpot-style export modal (a16z styling): name the file, pick a format, export.
-export default function ExportDialog({ open, onClose, subject, defaultName, getData }: Props) {
+export default function ExportDialog({ open, onClose, subject, defaultName, getData, href }: Props) {
   const [name, setName] = useState(defaultName)
   const [format, setFormat] = useState("csv")
   const [busy, setBusy] = useState(false)
   const [rowCount, setRowCount] = useState<number | null>(null)
 
-  // Refresh the count whenever the dialog opens.
-  if (open && rowCount === null) {
+  // Refresh the client-side count whenever the dialog opens.
+  if (open && getData && rowCount === null) {
     try { setRowCount(getData().rows.length) } catch { setRowCount(0) }
   }
 
@@ -35,8 +37,17 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
   function handleExport() {
     setBusy(true)
     try {
-      const { headers, rows } = getData()
-      downloadCsv((name.trim() || defaultName), toCsv(headers, rows))
+      const filename = (name.trim() || defaultName)
+      if (href) {
+        const url = `${href}${href.includes("?") ? "&" : "?"}filename=${encodeURIComponent(filename)}`
+        const link = document.createElement("a")
+        link.href = url
+        link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`
+        link.click()
+      } else if (getData) {
+        const { headers, rows } = getData()
+        downloadCsv(filename, toCsv(headers, rows))
+      }
       handleClose()
     } finally {
       setBusy(false)
@@ -78,7 +89,7 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
 
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-zinc-100">
           <button onClick={handleClose} className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-200 text-zinc-600 hover:border-zinc-300">Cancel</button>
-          <button onClick={handleExport} disabled={busy || rowCount === 0}
+          <button onClick={handleExport} disabled={busy || (getData && rowCount === 0)}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             Export

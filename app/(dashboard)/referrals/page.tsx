@@ -3,9 +3,10 @@ import { ReferralStatus } from "@prisma/client"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus, Download } from "lucide-react"
+import { Plus } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
 import ReferralTable from "@/components/referral-table"
+import ReferralsExportButton from "@/components/referrals-export-button"
 
 interface PageProps {
   searchParams: {
@@ -212,12 +213,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <a href={`/api/referrals/export?${exportParams}`} download>
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </a>
-          </Button>
+          <ReferralsExportButton exportParams={exportParams.toString()} />
           <Button asChild>
             <Link href={`/referrals/new${pipelineId ? `?pipeline=${pipelineId}` : ""}`}>
               <Plus className="h-4 w-4 mr-2" />

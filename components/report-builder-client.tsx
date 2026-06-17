@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import ExportDialog from "@/components/ui/export-dialog"
 import { useRouter } from "next/navigation"
 import { useState, useRef, useEffect, useTransition } from "react"
 import Link from "next/link"
@@ -187,6 +188,7 @@ export default function ReportBuilderClient({
   dashboards,
 }: Props) {
   const router = useRouter()
+  const [exportOpen, setExportOpen] = useState(false)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
   const [customTo, setCustomTo] = useState(currentTo ?? "")
   const [viz, setViz] = useState<VizType>("bar")
@@ -417,25 +419,13 @@ export default function ReportBuilderClient({
     router.push(`/reports/builder?${p.toString()}`)
   }
 
-  function downloadCsv() {
-    // Exports all sorted rows, ignoring limit
+  // Build CSV data (all sorted rows, ignoring the display limit).
+  function buildReportExport() {
     const headers = [groupLabel, "Total", "Completed", "Scheduled", "No-Show", "Pending", "Conversion %"]
-    const csvRows = sortedRows.map((r) => [
+    const rows = sortedRows.map((r) => [
       r.label, r.total, r.completed, r.scheduled, r.noShow, r.pending, `${r.conversionRate}%`,
     ])
-    const csv = [headers, ...csvRows]
-      .map((row) => row.map((v) => {
-        const s = String(v)
-        return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
-      }).join(","))
-      .join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `report-${groupBy}-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    return { headers, rows }
   }
 
   const TABLE_COLS: { key: SortKey; label: string }[] = [
@@ -852,11 +842,11 @@ export default function ReportBuilderClient({
               )}
               {rows.length > 0 && (
                 <button
-                  onClick={downloadCsv}
+                  onClick={() => setExportOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
                 >
                   <Download className="h-3.5 w-3.5" />
-                  Export CSV
+                  Export
                 </button>
               )}
             </div>
@@ -971,6 +961,14 @@ export default function ReportBuilderClient({
           )}
         </>
       )}
+
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        subject="report"
+        defaultName={`report-${groupBy}-${new Date().toISOString().slice(0, 10)}`}
+        getData={buildReportExport}
+      />
     </div>
   )
 }

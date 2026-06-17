@@ -120,10 +120,14 @@ export async function GET(req: NextRequest) {
     },
   })
 
+  const rawName = (searchParams.get("filename") || `referrals-${new Date().toISOString().slice(0, 10)}`)
+    .replace(/[^a-z0-9_\- ]/gi, "").trim() || "referrals"
+  const fileName = rawName.endsWith(".csv") ? rawName : `${rawName}.csv`
+
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv",
-      "Content-Disposition": `attachment; filename="referrals-${new Date().toISOString().slice(0, 10)}.csv"`,
+      "Content-Disposition": `attachment; filename="${fileName}"`,
     },
   })
 }
