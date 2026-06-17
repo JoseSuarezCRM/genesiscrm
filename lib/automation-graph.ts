@@ -129,22 +129,44 @@ export function resolveGraphActions(
   return out
 }
 
-// Resolve a waitUntil node to an absolute resume time (or null if it shouldn't
-// wait — e.g. the field is empty or the target is already in the past).
-function waitUntilTime(node: Extract<GraphNode, { kind: "waitUntil" }>, referral: ReferralForConditions | null): Date | null {
+// A send-time schedule (used by the waitUntil node and by per-action "when to
+// send" config). mode "immediate" (or absent) = no wait.
+export interface ScheduleConfig {
+  mode?: "immediate" | "fixed" | "field"
+  datetime?: string | null
+  field?: string | null
+  offsetAmount?: number
+  offsetUnit?: DelayUnit
+  direction?: "before" | "after"
+}
+
+// Resolve a schedule to an absolute time (or null = run now: immediate, empty
+// field, or unparseable).
+export function computeScheduleTime(cfg: ScheduleConfig, referral: ReferralForConditions | null): Date | null {
+  if (!cfg || !cfg.mode || cfg.mode === "immediate") return null
   let base: number | null = null
-  if (node.mode === "fixed") {
-    base = node.datetime ? new Date(node.datetime).getTime() : null
-  } else if (node.field && referral) {
-    const raw = (referral as Record<string, unknown>)[node.field]
+  if (cfg.mode === "fixed") {
+    base = cfg.datetime ? new Date(cfg.datetime).getTime() : null
+  } else if (cfg.field && referral) {
+    const raw = (referral as Record<string, unknown>)[cfg.field]
     const t = raw ? new Date(raw as string).getTime() : NaN
     if (!isNaN(t)) {
-      const off = delayMs(node.offsetAmount, node.offsetUnit)
-      base = node.direction === "before" ? t - off : t + off
+      const off = delayMs(cfg.offsetAmount ?? 0, cfg.offsetUnit ?? "days")
+      base = cfg.direction === "after" ? t + off : t - off
     }
   }
   if (base == null || isNaN(base)) return null
   return new Date(base)
+}
+
+function waitUntilTime(node: Extract<GraphNode, { kind: "waitUntil" }>, referral: ReferralForConditions | null): Date | null {
+  return computeScheduleTime(node, referral)
+}
+
+// Schedule attached to an action's config under `schedule`.
+function actionScheduleTime(config: Record<string, unknown>, referral: ReferralForConditions | null): Date | null {
+  const sched = config?.schedule as ScheduleConfig | undefined
+  return sched ? computeScheduleTime(sched, referral) : null
 }
 
 export function waitLabel(node: Extract<GraphNode, { kind: "delay" | "waitUntil" }>, fieldLabels?: Record<string, string>): string {
@@ -173,6 +195,12 @@ export function walkGraph(
     if (!node) break
 
     if (node.kind === "action") {
+      // Per-action scheduled send: if a future send-time is set, pause AT this
+      // node; on resume the time is past, so it executes then continues.
+      const at = actionScheduleTime(node.config ?? {}, referral)
+      if (at && at.getTime() > Date.now()) {
+        return { actions: out, resumeNodeId: node.id, resumeAt: at, waitLabel: `Scheduled — waiting until ${at.toLocaleString()}` }
+      }
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next
     } else if (node.kind === "delay") {

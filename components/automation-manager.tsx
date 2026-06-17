@@ -17,7 +17,7 @@ import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
-  type AutomationGraph, type GraphNode, type Slot,
+  type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel,
 } from "@/lib/automation-graph"
 import { MULTI_SEP, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
@@ -773,7 +773,7 @@ function RecipientRows({
 // ─── Action config form ───────────────────────────────────────────────────────
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS,
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, dateProps = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -781,6 +781,7 @@ function ActionConfigFields({
   users: User[]
   tags: Tag[]
   tokens?: string[]
+  dateProps?: PropertyDef[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
   const [showVars, setShowVars] = useState(false)
@@ -948,8 +949,49 @@ function ActionConfigFields({
     const ccRows = (config.cc as Recipient[]) ?? []
     const bccRows = (config.bcc as Recipient[]) ?? []
 
+    const schedule = (config.schedule as ScheduleConfig) ?? { mode: "immediate" }
+    const setSchedule = (patch: Partial<ScheduleConfig>) => set("schedule", { ...schedule, ...patch })
+
     return (
       <div className="space-y-3">
+        {/* When to send */}
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2.5">
+          <label className="text-xs font-semibold text-amber-700 block">When to send</label>
+          <StyledSelect value={schedule.mode ?? "immediate"} onChange={e => setSchedule({ mode: e.target.value as ScheduleConfig["mode"] })} className="w-full">
+            <option value="immediate">Immediately</option>
+            <option value="field">Relative to a date on the record</option>
+            <option value="fixed">At a specific date &amp; time</option>
+          </StyledSelect>
+          {schedule.mode === "field" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} value={schedule.offsetAmount ?? 1}
+                  onChange={e => setSchedule({ offsetAmount: Math.max(0, Number(e.target.value) || 0) })}
+                  className="w-20 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 bg-white" />
+                <StyledSelect className="w-28" value={schedule.offsetUnit ?? "days"} onChange={e => setSchedule({ offsetUnit: e.target.value as any })}>
+                  <option value="minutes">minutes</option>
+                  <option value="hours">hours</option>
+                  <option value="days">days</option>
+                </StyledSelect>
+                <StyledSelect className="w-28" value={schedule.direction ?? "before"} onChange={e => setSchedule({ direction: e.target.value as any })}>
+                  <option value="before">before</option>
+                  <option value="after">after</option>
+                </StyledSelect>
+              </div>
+              <StyledSelect className="w-full" value={schedule.field ?? ""} onChange={e => setSchedule({ field: e.target.value || null })}>
+                <option value="">Select a date property…</option>
+                {dateProps.map(p => <option key={p.id} value={p.path}>{p.label}</option>)}
+              </StyledSelect>
+              {dateProps.length === 0 && <p className="text-xs text-amber-700">This object has no date properties to schedule on.</p>}
+            </div>
+          )}
+          {schedule.mode === "fixed" && (
+            <input type="datetime-local" value={schedule.datetime ? schedule.datetime.slice(0, 16) : ""}
+              onChange={e => setSchedule({ datetime: e.target.value ? new Date(e.target.value).toISOString() : null })}
+              className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 bg-white" />
+          )}
+        </div>
+
         {/* From */}
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <label className="text-xs font-semibold text-blue-700 block mb-1.5">From (sender email)</label>
@@ -1141,7 +1183,7 @@ function VLine({ h = 22 }: { h?: number }) {
 }
 
 // "+" insert control with a small action/branch menu
-function InsertButton({ onAddAction, onAddDelay, onAddWaitUntil, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddDelay: () => void; onAddWaitUntil: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
+function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
@@ -1163,10 +1205,6 @@ function InsertButton({ onAddAction, onAddDelay, onAddWaitUntil, onAddBranch, on
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddDelay() }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
               <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><Clock className="h-3.5 w-3.5" /></span> Delay
-            </button>
-            <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddWaitUntil() }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
-              <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><CalendarClock className="h-3.5 w-3.5" /></span> Wait until a date
             </button>
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddBranch() }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
@@ -1234,11 +1272,6 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
     onChange(insertAt(graph, slot, { id, kind: "delay", amount: 1, unit: "days", next: null }))
     onEditNode(id)
   }
-  function addWaitUntil(slot: Slot) {
-    const id = newNodeId()
-    onChange(insertAt(graph, slot, { id, kind: "waitUntil", mode: "field", field: null, offsetAmount: 1, offsetUnit: "days", direction: "before", datetime: null, next: null }))
-    onEditNode(id)
-  }
   function addBranch(slot: Slot) {
     const id = newNodeId()
     onChange(insertAt(graph, slot, { id, kind: "branch", match: "all", rules: [], thenNext: null, elseNext: null }))
@@ -1267,7 +1300,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
       : slot.kind === "arm" ? (slotNode as any)?.arms?.find((a: any) => a.id === slot.armId)?.next
       : (slotNode as any)?.elseNext
 
-    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddWaitUntil={() => addWaitUntil(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
 
     if (!startId || !graph.nodes[startId]) {
       return (
@@ -1471,7 +1504,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} dateProps={dateProps} />
             </>
           ) : draft.kind === "delay" ? (
             <>
