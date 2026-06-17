@@ -7,6 +7,7 @@ import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUs
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import SelectedProvidersCard from "@/components/selected-providers-card"
+import ExportDialog from "@/components/ui/export-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import StyledSelect from "@/components/ui/styled-select"
@@ -19,7 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Plus, Loader2, Trash2, Pencil, Search, X, CalendarDays,
   Building2, MapPin, User, ChevronDown, Tag, Check, Save,
-  Globe, Users, UserCog, Lock, LayoutList, Table2, Download,
+  Globe, Users, UserCog, Lock, LayoutList, Table2, Download, Columns3, ChevronUp,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -709,6 +710,21 @@ function activityDay(date: string | Date) {
   return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 }
 
+// Table columns for the activities table view.
+const ACTIVITY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
+  { key: "date",      label: "Date",       sortable: true },
+  { key: "account",   label: "Account",    sortable: true },
+  { key: "location",  label: "Location" },
+  { key: "providers", label: "Providers" },
+  { key: "type",      label: "Type" },
+  { key: "nextStep",  label: "Next Step" },
+  { key: "frontDesk", label: "Front Desk" },
+  { key: "tags",      label: "Tags" },
+  { key: "notes",     label: "Notes" },
+  { key: "loggedBy",  label: "Logged By" },
+]
+const DEFAULT_ACTIVITY_COLS = ["date", "account", "location", "providers", "type", "nextStep", "tags", "loggedBy"]
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ActivityManager({ activities, practices, allDoctors, allTags, savedViews: initialSavedViews, shareUsers, shareTeams }: Props) {
@@ -720,6 +736,22 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [search, setSearch] = useState("")
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards")
+  const [exportOpen, setExportOpen] = useState(false)
+
+  // Table view: columns, sort, selection
+  const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_ACTIVITY_COLS)
+  const [colMenuOpen, setColMenuOpen] = useState(false)
+  const colMenuRef = useRef<HTMLDivElement>(null)
+  const [sortKey, setSortKey] = useState<"date" | "account">("date")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!colMenuOpen) return
+    const onDown = (e: MouseEvent) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false) }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+  }, [colMenuOpen])
 
   // Filters
   const [dateFrom, setDateFrom] = useState("")
@@ -1069,10 +1101,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const hasFilters = search || dateFrom || dateTo || activeTagIds.length > 0 ||
     filterPracticeIds.length > 0 || filterLocationIds.length > 0 || filterProviderIds.length > 0
 
-  // Export the currently filtered activities to a CSV file.
-  function exportCsv() {
+  // Build CSV data (headers + rows) for the currently filtered activities.
+  function buildExportData() {
     const headers = ["Date", "Account", "Location", "Providers", "Activity Type", "Next Step", "Front Desk", "Tags", "Notes", "Logged By"]
-    const esc = (v: string) => `"${(v ?? "").replace(/"/g, '""')}"`
     const rows = filtered.map(a => [
       format(activityDay(a.date), "yyyy-MM-dd"),
       a.practice?.name ?? "",
@@ -1084,15 +1115,66 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       a.tags.map(t => t.name).join("; "),
       (a.notes ?? "").replace(/\s+/g, " ").trim(),
       a.createdBy.name ?? a.createdBy.email,
-    ].map(esc).join(","))
-    const csv = [headers.map(esc).join(","), ...rows].join("\r\n")
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `activities-${format(new Date(), "yyyy-MM-dd")}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
+    ])
+    return { headers, rows }
+  }
+
+  // Sorted rows for the table view.
+  const sorted = useMemo(() => {
+    const rows = [...filtered]
+    rows.sort((a, b) => {
+      let cmp = 0
+      if (sortKey === "date") cmp = activityDay(a.date).getTime() - activityDay(b.date).getTime()
+      else cmp = (a.practice?.name ?? "").localeCompare(b.practice?.name ?? "")
+      return sortDir === "asc" ? cmp : -cmp
+    })
+    return rows
+  }, [filtered, sortKey, sortDir])
+
+  const cols = ACTIVITY_COLUMNS.filter(c => visibleCols.includes(c.key))
+  const toggleCol = (key: string) =>
+    setVisibleCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  const toggleSort = (key: "date" | "account") => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc")
+    else { setSortKey(key); setSortDir("desc") }
+  }
+
+  const allSelected = sorted.length > 0 && sorted.every(a => selectedIds.has(a.id))
+  const toggleSelectAll = () => setSelectedIds(allSelected ? new Set() : new Set(sorted.map(a => a.id)))
+  const toggleSelect = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  function bulkDelete() {
+    const ids = Array.from(selectedIds)
+    if (!ids.length || !confirm(`Delete ${ids.length} activit${ids.length === 1 ? "y" : "ies"}? This cannot be undone.`)) return
+    startTransition(async () => {
+      for (const id of ids) await deleteActivity(id)
+      setSelectedIds(new Set())
+    })
+  }
+
+  // One table cell's content for the given column.
+  function renderCell(a: typeof filtered[number], key: string): React.ReactNode {
+    switch (key) {
+      case "date": return <span className="whitespace-nowrap text-zinc-600">{format(activityDay(a.date), "MMM d, yyyy")}</span>
+      case "account": return <span className="font-medium text-zinc-800">{a.practice?.name ?? "—"}</span>
+      case "location": return <span className="text-zinc-500">{a.location?.name ?? "—"}</span>
+      case "providers": return <span className="text-zinc-600">{a.providers.length ? a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join(", ") : "—"}</span>
+      case "type": {
+        const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
+        return a.flyer
+          ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t ? `${t.bg} ${t.color} ${t.border}` : "bg-zinc-100 text-zinc-600 border-zinc-200"}`}>{a.flyer}</span>
+          : <span className="text-zinc-400">—</span>
+      }
+      case "nextStep": return <span className="text-zinc-500">{a.nextStep || "—"}</span>
+      case "frontDesk": return <span className="text-zinc-500">{a.frontDesk || "—"}</span>
+      case "tags": return <span className="text-zinc-500">{a.tags.length ? a.tags.map(tg => tg.name).join(", ") : "—"}</span>
+      case "notes": return <span className="text-zinc-500">{a.notes ? a.notes.replace(/\s+/g, " ").trim() : "—"}</span>
+      case "loggedBy": return <span className="whitespace-nowrap text-zinc-500">{a.createdBy.name ?? a.createdBy.email}</span>
+      default: return null
+    }
   }
 
   return (
@@ -1187,9 +1269,35 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             </button>
           </div>
 
+          {/* Column selector (table view only) */}
+          {viewMode === "table" && (
+            <div className="relative" ref={colMenuRef}>
+              <button
+                onClick={() => setColMenuOpen(v => !v)}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors"
+              >
+                <Columns3 className="h-3.5 w-3.5" /> Columns
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </button>
+              {colMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden py-1">
+                  {ACTIVITY_COLUMNS.map(col => (
+                    <button key={col.key} onClick={() => toggleCol(col.key)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
+                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300")}>
+                        {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                      </span>
+                      <span className="text-zinc-700">{col.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Export to CSV */}
           <button
-            onClick={exportCsv}
+            onClick={() => setExportOpen(true)}
             disabled={filtered.length === 0}
             title="Export current view to CSV"
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -1333,47 +1441,59 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         </div>
       ) : viewMode === "table" ? (
         <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900 text-white text-sm">
+              <span className="font-medium">{selectedIds.size} selected</span>
+              <button onClick={bulkDelete} disabled={isPending}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </button>
+              <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-zinc-300 hover:text-white">Clear</button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                  <th className="px-4 py-2.5">Date</th>
-                  <th className="px-4 py-2.5">Account</th>
-                  <th className="px-4 py-2.5">Location</th>
-                  <th className="px-4 py-2.5">Providers</th>
-                  <th className="px-4 py-2.5">Type</th>
-                  <th className="px-4 py-2.5">Next Step</th>
-                  <th className="px-4 py-2.5">Tags</th>
-                  <th className="px-4 py-2.5">Logged By</th>
+                  <th className="px-4 py-2.5 w-10">
+                    <button onClick={toggleSelectAll}
+                      className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center align-middle", allSelected ? "bg-zinc-900 border-zinc-900" : "border-zinc-300 hover:border-zinc-400")}>
+                      {allSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                    </button>
+                  </th>
+                  {cols.map(col => (
+                    <th key={col.key} className="px-4 py-2.5">
+                      {col.sortable ? (
+                        <button onClick={() => toggleSort(col.key as "date" | "account")} className="inline-flex items-center gap-1 hover:text-zinc-800">
+                          {col.label}
+                          {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                        </button>
+                      ) : col.label}
+                    </th>
+                  ))}
                   <th className="px-4 py-2.5 w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {filtered.map(a => {
-                  const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
-                  return (
-                    <tr key={a.id} className="hover:bg-zinc-50 transition-colors align-top">
-                      <td className="px-4 py-3 whitespace-nowrap text-zinc-600">{format(activityDay(a.date), "MMM d, yyyy")}</td>
-                      <td className="px-4 py-3 font-medium text-zinc-800">{a.practice?.name ?? "—"}</td>
-                      <td className="px-4 py-3 text-zinc-500">{a.location?.name ?? "—"}</td>
-                      <td className="px-4 py-3 text-zinc-600 max-w-[220px]">{a.providers.length ? a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join(", ") : "—"}</td>
-                      <td className="px-4 py-3">
-                        {a.flyer
-                          ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t ? `${t.bg} ${t.color} ${t.border}` : "bg-zinc-100 text-zinc-600 border-zinc-200"}`}>{a.flyer}</span>
-                          : <span className="text-zinc-400">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500 max-w-[200px] truncate">{a.nextStep || "—"}</td>
-                      <td className="px-4 py-3 text-zinc-500">{a.tags.length ? a.tags.map(tg => tg.name).join(", ") : "—"}</td>
-                      <td className="px-4 py-3 text-zinc-500 whitespace-nowrap">{a.createdBy.name ?? a.createdBy.email}</td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="inline-flex gap-0.5">
-                          <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => setDeleteId(a.id)} className="p-1.5 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {sorted.map(a => (
+                  <tr key={a.id} className={cn("hover:bg-zinc-50 transition-colors align-top", selectedIds.has(a.id) && "bg-blue-50/40")}>
+                    <td className="px-4 py-3">
+                      <button onClick={() => toggleSelect(a.id)}
+                        className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center", selectedIds.has(a.id) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300 hover:border-zinc-400")}>
+                        {selectedIds.has(a.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                      </button>
+                    </td>
+                    {cols.map(col => (
+                      <td key={col.key} className="px-4 py-3 max-w-[240px] truncate">{renderCell(a, col.key)}</td>
+                    ))}
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <div className="inline-flex gap-0.5">
+                        <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => setDeleteId(a.id)} className="p-1.5 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1573,6 +1693,15 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Export dialog ── */}
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        subject="activities"
+        defaultName={`activities-${format(new Date(), "yyyy-MM-dd")}`}
+        getData={buildExportData}
+      />
 
       {/* ── Delete confirm ── */}
       <Dialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
