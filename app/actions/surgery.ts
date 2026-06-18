@@ -145,12 +145,16 @@ export async function updateSurgeryCase(
     ? await (prisma as any).surgeryCase.findUnique({ where: { id }, select: { status: true } })
     : null
 
+  // Only write surgeryDate when the caller actually provided it; otherwise a
+  // partial update (e.g. a status-only change) would null out the date.
+  const updateData: Record<string, unknown> = { ...rest }
+  if ("surgeryDate" in data) {
+    updateData.surgeryDate = surgeryDate ? new Date(surgeryDate) : null
+  }
+
   await (prisma as any).surgeryCase.update({
     where: { id },
-    data: {
-      ...rest,
-      surgeryDate: surgeryDate ? new Date(surgeryDate) : null,
-    },
+    data: updateData,
   })
 
   if (data.status && prev?.status && prev.status !== data.status) {
