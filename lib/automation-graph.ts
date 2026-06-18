@@ -238,18 +238,25 @@ function actionScheduleTime(config: Record<string, unknown>, referral: ReferralF
   return sched ? computeScheduleTime(sched, referral) : null
 }
 
+// Format an instant in the clinic's wall clock (Central Time) for labels.
+export function fmtClinic(d: Date): string {
+  return d.toLocaleString("en-US", {
+    timeZone: CLINIC_TZ, month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  }) + " CT"
+}
+
 export function waitLabel(node: Extract<GraphNode, { kind: "delay" | "waitUntil" }>, fieldLabels?: Record<string, string>): string {
   const fldLabel = (f: string | null | undefined) => (fieldLabels && f && fieldLabels[f]) || f || "date"
   if (node.kind === "delay") {
     const mode = node.mode ?? "duration"
     if (mode === "duration") return `Wait ${node.amount ?? 1} ${node.unit ?? "days"}`
-    if (mode === "calendar") return node.datetime ? `Wait until ${new Date(node.datetime).toLocaleString()}` : "Wait until a date"
+    if (mode === "calendar") return node.datetime ? `Wait until ${fmtClinic(new Date(node.datetime))}` : "Wait until a date"
     if (mode === "property") return `Wait until ${node.offsetAmount ?? 0} ${node.offsetUnit ?? "days"} ${node.direction ?? "before"} ${fldLabel(node.field)}`
     if (mode === "dayOfWeek") return `Wait until ${WEEKDAY_NAMES[node.weekday ?? 1] ?? "Monday"}`
     if (mode === "timeOfDay") return `Wait until ${node.timeOfDay ?? "09:00"} CT`
     return "Delay"
   }
-  if (node.mode === "fixed") return node.datetime ? `Wait until ${new Date(node.datetime).toLocaleString()}` : "Wait until a date"
+  if (node.mode === "fixed") return node.datetime ? `Wait until ${fmtClinic(new Date(node.datetime))}` : "Wait until a date"
   return `Wait until ${node.offsetAmount} ${node.offsetUnit} ${node.direction} ${fldLabel(node.field)}`
 }
 
@@ -276,7 +283,7 @@ export function walkGraph(
       // node; on resume the time is past, so it executes then continues.
       const at = actionScheduleTime(node.config ?? {}, referral)
       if (at && at.getTime() > Date.now()) {
-        return { actions: out, resumeNodeId: node.id, resumeAt: at, waitLabel: `Scheduled — waiting until ${at.toLocaleString()}` }
+        return { actions: out, resumeNodeId: node.id, resumeAt: at, waitLabel: `Scheduled — waiting until ${fmtClinic(at)}` }
       }
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next

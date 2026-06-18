@@ -957,7 +957,16 @@ function ActionConfigFields({
         {/* When to send */}
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2.5">
           <label className="text-xs font-semibold text-amber-700 block">When to send</label>
-          <StyledSelect value={schedule.mode ?? "immediate"} onChange={e => setSchedule({ mode: e.target.value as ScheduleConfig["mode"] })} className="w-full">
+          <StyledSelect value={schedule.mode ?? "immediate"}
+            onChange={e => {
+              const mode = e.target.value as ScheduleConfig["mode"]
+              // Seed real defaults so the shown offset (1 day before) is actually
+              // persisted — otherwise an untouched offset saves as undefined → 0.
+              setSchedule(mode === "field"
+                ? { mode, offsetAmount: schedule.offsetAmount ?? 1, offsetUnit: schedule.offsetUnit ?? "days", direction: schedule.direction ?? "before" }
+                : { mode })
+            }}
+            className="w-full">
             <option value="immediate">Immediately</option>
             <option value="field">Relative to a date on the record</option>
             <option value="fixed">At a specific date &amp; time</option>
