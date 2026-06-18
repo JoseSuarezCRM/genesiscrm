@@ -1059,6 +1059,7 @@ model SurgeryCase {
   facility          String?
   procedure         String?
   surgeryDate       DateTime?
+  language          String?        @default("EN")
   email             String?
   notes             String?
   createdById       String?

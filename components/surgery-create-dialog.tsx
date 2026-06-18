@@ -6,7 +6,7 @@ import { Plus, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import StyledSelect from "@/components/ui/styled-select"
 import { createSurgeryCase } from "@/app/actions/surgery"
-import { SURGERY_STATUS_OPTIONS } from "@/lib/automation-properties"
+import { SURGERY_STATUS_OPTIONS, LANGUAGE_OPTIONS } from "@/lib/automation-properties"
 import { FACILITY_OPTIONS } from "@/lib/surgery-procedures"
 import { clinicDatetimeLocalToISO } from "@/lib/tz"
 
@@ -20,13 +20,13 @@ export default function SurgeryCreateDialog() {
   const [error, setError] = useState("")
   const [form, setForm] = useState({
     patientName: "", mrn: "", status: "NEW", orderingProvider: "",
-    diagnosis: "", facility: "", surgeryDate: "", email: "", notes: "",
+    diagnosis: "", facility: "", surgeryDate: "", language: "EN", email: "", notes: "",
   })
 
   const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }))
 
   function reset() {
-    setForm({ patientName: "", mrn: "", status: "NEW", orderingProvider: "", diagnosis: "", facility: "", surgeryDate: "", email: "", notes: "" })
+    setForm({ patientName: "", mrn: "", status: "NEW", orderingProvider: "", diagnosis: "", facility: "", surgeryDate: "", language: "EN", email: "", notes: "" })
     setError("")
   }
 
@@ -47,6 +47,7 @@ export default function SurgeryCreateDialog() {
         diagnosis: form.diagnosis || null,
         facility: form.facility || null,
         surgeryDate: clinicDatetimeLocalToISO(form.surgeryDate),
+        language: form.language || "EN",
         email: form.email || null,
         notes: form.notes || null,
       })
@@ -113,6 +114,12 @@ export default function SurgeryCreateDialog() {
                 <div>
                   <label className={labelCls}>Surgery Date &amp; Time</label>
                   <input type="datetime-local" value={form.surgeryDate} onChange={e => set("surgeryDate", e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Language</label>
+                  <StyledSelect className="w-full" value={form.language} onChange={e => set("language", e.target.value)}>
+                    {LANGUAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </StyledSelect>
                 </div>
                 <div className="col-span-2">
                   <label className={labelCls}>Patient Email</label>

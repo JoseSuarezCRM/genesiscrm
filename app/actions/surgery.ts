@@ -93,6 +93,7 @@ export async function createSurgeryCase(data: {
   facility?: string | null
   procedure?: string | null
   surgeryDate?: string | null
+  language?: string | null
   email?: string | null
   notes?: string | null
 }) {
@@ -131,6 +132,7 @@ export async function updateSurgeryCase(
     facility?: string | null
     procedure?: string | null
     surgeryDate?: string | null
+    language?: string | null
     email?: string | null
     notes?: string | null
   }

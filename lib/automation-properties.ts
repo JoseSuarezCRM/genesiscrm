@@ -115,6 +115,11 @@ const CONTACT_TYPE_OPTIONS = [
   { value: "STAFF", label: "Staff" },
 ]
 
+export const LANGUAGE_OPTIONS = [
+  { value: "EN", label: "English" },
+  { value: "ES", label: "Spanish" },
+]
+
 // ── Provider (ReferringDoctor) ────────────────────────────────────────────────
 const PROVIDER_PROPERTY_DEFS: PropertyDef[] = [
   { id: "name",        label: "Name",         type: "text",   path: "name" },
@@ -168,6 +173,7 @@ const SURGERY_PROPERTY_DEFS: PropertyDef[] = [
   { id: "mrn",                label: "MRN",                 type: "text",   path: "mrn" },
   { id: "diagnosis",          label: "Diagnosis",           type: "text",   path: "diagnosis" },
   { id: "surgeryDate",        label: "Surgery Date",        type: "date",   path: "surgeryDate" },
+  { id: "language",           label: "Language",            type: "select", path: "language", options: LANGUAGE_OPTIONS },
   { id: "email",              label: "Email",               type: "text",   path: "email" },
   { id: "createdAt",          label: "Created Date",        type: "date",   path: "createdAt" },
 ]

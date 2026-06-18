@@ -7,6 +7,7 @@ import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { PROCEDURE_DATA, findProcedureLocation } from "@/lib/surgery-procedures"
+import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
 import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -179,6 +180,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [surgeryDate, setSurgeryDate] = useState(
     surgeryCase.surgeryDate ? clinicDatetimeLocalValue(new Date(surgeryCase.surgeryDate)) : ""
   )
+  const [language, setLanguage] = useState(surgeryCase.language ?? "EN")
   const [email, setEmail] = useState(surgeryCase.email ?? "")
   const [notes, setNotes] = useState(surgeryCase.notes ?? "")
 
@@ -216,6 +218,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         facility: facility || null,
         procedure: procedure || null,
         surgeryDate: clinicDatetimeLocalToISO(surgeryDate),
+        language: language || "EN",
         email: email || null,
         notes: notes || null,
       })
@@ -405,6 +408,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <InputField label="Surgery Date & Time" value={surgeryDate} type="datetime-local" onChange={setSurgeryDate} />
+            <SelectField label="Language" value={language} options={LANGUAGE_OPTIONS} onChange={setLanguage} />
             <InputField label="Patient Email" value={email} type="email" onChange={setEmail} />
           </div>
           <div className="flex flex-col gap-1">
