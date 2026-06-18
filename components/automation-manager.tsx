@@ -957,16 +957,7 @@ function ActionConfigFields({
         {/* When to send */}
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2.5">
           <label className="text-xs font-semibold text-amber-700 block">When to send</label>
-          <StyledSelect value={schedule.mode ?? "immediate"}
-            onChange={e => {
-              const mode = e.target.value as ScheduleConfig["mode"]
-              // Seed real defaults so the shown offset (1 day before) is actually
-              // persisted — otherwise an untouched offset saves as undefined → 0.
-              setSchedule(mode === "field"
-                ? { mode, offsetAmount: schedule.offsetAmount ?? 1, offsetUnit: schedule.offsetUnit ?? "days", direction: schedule.direction ?? "before" }
-                : { mode })
-            }}
-            className="w-full">
+          <StyledSelect value={schedule.mode ?? "immediate"} onChange={e => setSchedule({ mode: e.target.value as ScheduleConfig["mode"] })} className="w-full">
             <option value="immediate">Immediately</option>
             <option value="field">Relative to a date on the record</option>
             <option value="fixed">At a specific date &amp; time</option>
@@ -974,7 +965,7 @@ function ActionConfigFields({
           {schedule.mode === "field" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <input type="number" min={0} value={schedule.offsetAmount ?? 1}
+                <input type="number" min={0} value={schedule.offsetAmount ?? 0}
                   onChange={e => setSchedule({ offsetAmount: Math.max(0, Number(e.target.value) || 0) })}
                   className="w-20 border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 bg-white" />
                 <StyledSelect className="w-28" value={schedule.offsetUnit ?? "days"} onChange={e => setSchedule({ offsetUnit: e.target.value as any })}>
@@ -1278,7 +1269,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
   }
   function addDelay(slot: Slot) {
     const id = newNodeId()
-    onChange(insertAt(graph, slot, { id, kind: "delay", mode: "duration", amount: 1, unit: "days", direction: "before", offsetUnit: "days", offsetAmount: 1, weekday: 1, timeOfDay: "09:00", next: null }))
+    onChange(insertAt(graph, slot, { id, kind: "delay", mode: "duration", amount: 1, unit: "days", direction: "before", offsetUnit: "days", offsetAmount: 0, weekday: 1, timeOfDay: "09:00", next: null }))
     onEditNode(id)
   }
   function addBranch(slot: Slot) {
