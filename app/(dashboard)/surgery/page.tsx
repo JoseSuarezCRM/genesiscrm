@@ -17,6 +17,8 @@ interface PageProps {
     from?: string
     to?: string
     page?: string
+    sort?: string
+    dir?: string
   }
 }
 
@@ -33,6 +35,7 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
   const statusMode: "any" | "none" = searchParams.statusMode === "none" ? "none" : "any"
   const page = Math.max(1, parseInt(searchParams.page ?? "1"))
 
+  const dir: "asc" | "desc" = searchParams.dir === "asc" ? "asc" : "desc"
   const { cases, total, allMatchingIds, pageSize } = await getSurgeryCases({
     search: searchParams.search,
     statuses,
@@ -40,6 +43,8 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
     from: searchParams.from,
     to: searchParams.to,
     page,
+    sort: searchParams.sort,
+    dir,
   })
 
   const totalPages = Math.ceil(total / pageSize)

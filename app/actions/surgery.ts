@@ -5,57 +5,29 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CallOutcome } from "@prisma/client"
 import { runTrigger_SurgeryStatusChanged, runTrigger_SurgeryCallAttemptsReached } from "@/lib/automation-engine"
-
-export interface SurgeryFilters {
-  search?: string
-  statuses?: string[]
-  statusMode?: "any" | "none"
-  from?: string
-  to?: string
-  page?: number
-}
-
-const PAGE_SIZE = 20
+import { type SurgeryFilters, SURGERY_PAGE_SIZE, buildSurgeryWhere, surgeryOrderBy } from "@/lib/surgery-query"
 
 export async function getSurgeryCases(filters: SurgeryFilters = {}) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
-  const { search, statuses = [], statusMode = "any", from, to, page = 1 } = filters
-  const skip = (page - 1) * PAGE_SIZE
-
-  const where: Record<string, unknown> = {}
-
-  if (statuses.length > 0) {
-    where.status = statusMode === "none" ? { notIn: statuses } : { in: statuses }
-  }
-
-  if (from || to) {
-    where.creationDate = {
-      ...(from ? { gte: new Date(from) } : {}),
-      ...(to ? { lte: new Date(to) } : {}),
-    }
-  }
-
-  if (search?.trim()) {
-    where.OR = [
-      { patientName: { contains: search.trim(), mode: "insensitive" } },
-      { mrn: { contains: search.trim(), mode: "insensitive" } },
-    ]
-  }
+  const { page = 1, sort, dir = "desc" } = filters
+  const skip = (page - 1) * SURGERY_PAGE_SIZE
+  const where = buildSurgeryWhere(filters)
+  const orderBy = surgeryOrderBy(sort, dir)
 
   const [cases, total, allMatchingIds] = await Promise.all([
     (prisma as any).surgeryCase.findMany({
       where,
-      orderBy: { createdAt: "desc" },
-      take: PAGE_SIZE,
+      orderBy,
+      take: SURGERY_PAGE_SIZE,
       skip,
       include: {
         _count: { select: { callAttempts: true, documents: true } },
       },
     }),
     (prisma as any).surgeryCase.count({ where }),
-    (prisma as any).surgeryCase.findMany({ where, select: { id: true }, orderBy: { createdAt: "desc" } }),
+    (prisma as any).surgeryCase.findMany({ where, select: { id: true }, orderBy }),
   ])
 
   return {
@@ -63,7 +35,7 @@ export async function getSurgeryCases(filters: SurgeryFilters = {}) {
     total,
     allMatchingIds: (allMatchingIds as { id: string }[]).map((r) => r.id),
     page,
-    pageSize: PAGE_SIZE,
+    pageSize: SURGERY_PAGE_SIZE,
   }
 }
 

@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useTransition, useEffect, useRef, useMemo } from "react"
+import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import {
   Phone, FileText, ChevronDown, ChevronUp, Loader2, Trash2,
   LayoutList, Table2, Download, Columns3, Check, Stethoscope,
 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
@@ -70,6 +70,8 @@ function fmt(d: string | Date | null | undefined) {
 
 export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [allPagesSelected, setAllPagesSelected] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -77,14 +79,16 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
   const menuRef = useRef<HTMLDivElement>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
 
-  // View mode + columns + sort + export (mirrors the activities table).
+  // View mode + columns are client-only prefs. Sort + export are server-side
+  // (URL params), so they cover the whole filtered set, not just this page.
   const [viewMode, setViewMode] = useState<"cards" | "table">("table")
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_SURGERY_COLS)
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
-  const [sortKey, setSortKey] = useState<"patient" | "status" | "surgeryDate">("surgeryDate")
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [exportOpen, setExportOpen] = useState(false)
+
+  const sortKey = searchParams.get("sort") ?? ""
+  const sortDir: "asc" | "desc" = searchParams.get("dir") === "asc" ? "asc" : "desc"
 
   // Persist view prefs across navigation (loaded after mount to avoid hydration mismatch).
   useEffect(() => {
@@ -146,46 +150,28 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
   const cols = SURGERY_COLUMNS.filter((c) => visibleCols.includes(c.key))
   const toggleCol = (key: string) =>
     setVisibleCols((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
-  const toggleSort = (key: "patient" | "status" | "surgeryDate") => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    else { setSortKey(key); setSortDir("desc") }
+
+  // Server-side sort: update the URL (resetting to page 1) so it covers all pages.
+  function toggleSort(key: "patient" | "status" | "surgeryDate") {
+    const params = new URLSearchParams(searchParams.toString())
+    const nextDir = sortKey === key && sortDir === "desc" ? "asc" : "desc"
+    params.set("sort", key)
+    params.set("dir", nextDir)
+    params.set("page", "1")
+    router.push(`${pathname}?${params.toString()}`)
   }
 
-  // Sorted rows (current page).
-  const sorted = useMemo(() => {
-    const rows = [...cases]
-    rows.sort((a, b) => {
-      let cmp = 0
-      if (sortKey === "patient") cmp = a.patientName.localeCompare(b.patientName)
-      else if (sortKey === "status") cmp = a.status.localeCompare(b.status)
-      else {
-        const at = a.surgeryDate ? new Date(a.surgeryDate).getTime() : 0
-        const bt = b.surgeryDate ? new Date(b.surgeryDate).getTime() : 0
-        cmp = at - bt
-      }
-      return sortDir === "asc" ? cmp : -cmp
-    })
-    return rows
-  }, [cases, sortKey, sortDir])
-
-  function buildExportData() {
-    const headers = ["Patient", "MRN", "Status", "Surgery Date", "Language", "Procedure", "Facility", "Ordering Provider", "Diagnosis", "Expires", "Calls", "Documents"]
-    const rows = sorted.map((c) => [
-      c.patientName,
-      c.mrn ?? "",
-      SURGERY_STATUS_LABELS[c.status] ?? c.status,
-      fmt(c.surgeryDate),
-      LANGUAGE_LABELS[c.language ?? "EN"] ?? (c.language ?? ""),
-      c.procedure ?? "",
-      c.facility ?? "",
-      c.orderingProvider ?? "",
-      (c.diagnosis ?? "").replace(/\s+/g, " ").trim(),
-      fmt(c.expires),
-      c._count.callAttempts,
-      c._count.documents,
-    ])
-    return { headers, rows }
+  // Server-side export: hit the route with the current filters + sort (all matching rows).
+  const exportParams = new URLSearchParams()
+  for (const k of ["search", "statusMode", "from", "to", "sort", "dir"]) {
+    const v = searchParams.get(k)
+    if (v) exportParams.set(k, v)
   }
+  searchParams.getAll("status").forEach((s) => exportParams.append("status", s))
+  const exportHref = `/api/surgery/export${exportParams.toString() ? `?${exportParams.toString()}` : ""}`
+
+  // Rows render in the server-provided order.
+  const sorted = cases
 
   // One table/card cell's content for a given column.
   function renderCell(c: SurgeryCase, key: string): React.ReactNode {
@@ -389,7 +375,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
         onClose={() => setExportOpen(false)}
         subject="surgery cases"
         defaultName={`surgery-cases-${new Date().toISOString().slice(0, 10)}`}
-        getData={buildExportData}
+        href={exportHref}
       />
     </>
   )
