@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
+import Anthropic from "@anthropic-ai/sdk"
 import { auth } from "@/lib/auth"
 import { getAnthropicClient } from "@/lib/anthropic"
 
@@ -201,6 +202,14 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[FAX EXTRACT]", message)
+    // 529 overloaded / 429 rate-limited are transient — tell the user to retry,
+    // rather than implying the document couldn't be read.
+    if (err instanceof Anthropic.APIError && (err.status === 529 || err.status === 429)) {
+      return NextResponse.json(
+        { error: "The AI service is busy right now. Please wait a moment and click Try again." },
+        { status: 503 },
+      )
+    }
     return NextResponse.json({ error: "AI extraction failed. Please fill the form manually." }, { status: 500 })
   }
 }
