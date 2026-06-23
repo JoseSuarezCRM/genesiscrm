@@ -461,6 +461,38 @@ export function updateNode(graph: AutomationGraph, node: GraphNode): AutomationG
   return g
 }
 
+// Clone/copy/move apply to linear steps (action/delay/waitUntil) — the ones with
+// a single `next`. Branch/multi nodes (which own subtrees) are not supported.
+function isLinear(node: GraphNode | undefined): node is Extract<GraphNode, { kind: "action" | "delay" | "waitUntil" }> {
+  return !!node && (node.kind === "action" || node.kind === "delay" || node.kind === "waitUntil")
+}
+
+// Duplicate a step right after itself (new id, same config).
+export function cloneStep(graph: AutomationGraph, id: string): AutomationGraph {
+  const node = graph.nodes[id]
+  if (!isLinear(node)) return graph
+  const copy = { ...structuredCloneSafe(node), id: newNodeId(), next: null } as GraphNode
+  return insertAt(graph, { kind: "after", nodeId: id }, copy)
+}
+
+// Insert a copy of a step snapshot at a slot (paste).
+export function pasteStep(graph: AutomationGraph, snapshot: GraphNode, slot: Slot): AutomationGraph {
+  if (!isLinear(snapshot)) return graph
+  const copy = { ...structuredCloneSafe(snapshot), id: newNodeId(), next: null } as GraphNode
+  return insertAt(graph, slot, copy)
+}
+
+// Move a step to a new slot: remove it (relinking around it), then re-insert.
+export function moveStep(graph: AutomationGraph, id: string, slot: Slot): AutomationGraph {
+  const node = graph.nodes[id]
+  if (!isLinear(node)) return graph
+  if (slot.kind !== "root" && slot.nodeId === id) return graph // can't move relative to itself
+  const snapshot = { ...structuredCloneSafe(node), id: newNodeId(), next: null } as GraphNode
+  const without = deleteNode(graph, id)
+  if (slot.kind !== "root" && !without.nodes[slot.nodeId]) return graph // anchor gone — bail safely
+  return insertAt(without, slot, snapshot)
+}
+
 // Validate a graph has no dangling pointers and a reachable root.
 export function isValidGraph(graph: AutomationGraph): boolean {
   if (!graph.rootId) return false

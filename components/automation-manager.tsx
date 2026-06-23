@@ -10,7 +10,7 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -19,6 +19,7 @@ import { EmailAttachments, type AttachmentRef } from "@/components/email-attachm
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel, WEEKDAY_NAMES,
+  cloneStep, pasteStep, moveStep,
 } from "@/lib/automation-graph"
 import { MULTI_SEP, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import {
@@ -1183,21 +1184,42 @@ function VLine({ h = 22 }: { h?: number }) {
 }
 
 // "+" insert control with a small action/branch menu
-function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti }: { onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void }) {
+function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti, pasteMode, onPaste, onCancelPaste }: {
+  onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void
+  pasteMode?: "copy" | "move" | null; onPaste?: () => void; onCancelPaste?: () => void
+}) {
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(o => !o)}
         className={cn(
           "w-7 h-7 rounded-full border bg-white flex items-center justify-center shadow-sm transition-all",
-          open ? "border-indigo-400 text-indigo-500 rotate-45" : "border-zinc-300 text-zinc-400 hover:border-indigo-400 hover:text-indigo-500",
+          pasteMode ? "border-indigo-400 text-indigo-500 ring-2 ring-indigo-100"
+          : open ? "border-indigo-400 text-indigo-500 rotate-45"
+          : "border-zinc-300 text-zinc-400 hover:border-indigo-400 hover:text-indigo-500",
         )}>
-        <Plus className="h-4 w-4 transition-transform" />
+        <Plus className={cn("h-4 w-4 transition-transform", !pasteMode && open && "rotate-45")} />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
           <div className="absolute left-1/2 -translate-x-1/2 top-9 z-50 bg-white border border-zinc-200 rounded-xl shadow-xl shadow-zinc-200/60 py-1.5 w-48">
+            {pasteMode && (
+              <>
+                <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onPaste?.() }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 flex items-center gap-2.5 text-indigo-700 font-medium">
+                  <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    {pasteMode === "move" ? <Move className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
+                  </span>
+                  {pasteMode === "move" ? "Move here" : "Paste here"}
+                </button>
+                <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onCancelPaste?.() }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-50 text-zinc-400">
+                  Cancel {pasteMode === "move" ? "move" : "paste"}
+                </button>
+                <div className="my-1 border-t border-zinc-100" />
+              </>
+            )}
             <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddAction() }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
               <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><Zap className="h-3.5 w-3.5" /></span> Action
@@ -1262,6 +1284,19 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
   propDefs?: PropertyDef[]
 }) {
   const waitFieldLabels = Object.fromEntries(propDefs.map(p => [p.path, p.label]))
+
+  // Clipboard for copy/paste + move of linear steps.
+  const [clip, setClip] = useState<{ mode: "copy"; snapshot: GraphNode } | { mode: "move"; sourceId: string } | null>(null)
+  const handleClone = (id: string) => onChange(cloneStep(graph, id))
+  const handleCopy = (id: string) => setClip({ mode: "copy", snapshot: graph.nodes[id] })
+  const handleMove = (id: string) => setClip({ mode: "move", sourceId: id })
+  const handlePaste = (slot: Slot) => {
+    if (!clip) return
+    onChange(clip.mode === "copy" ? pasteStep(graph, clip.snapshot, slot) : moveStep(graph, clip.sourceId, slot))
+    setClip(null)
+  }
+  const moveSourceId = clip?.mode === "move" ? clip.sourceId : null
+
   function addAction(slot: Slot) {
     const id = newNodeId()
     onChange(insertAt(graph, slot, { id, kind: "action", actionType: "CREATE_TASK", config: emptyActionConfig("CREATE_TASK"), next: null }))
@@ -1300,7 +1335,8 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
       : slot.kind === "arm" ? (slotNode as any)?.arms?.find((a: any) => a.id === slot.armId)?.next
       : (slotNode as any)?.elseNext
 
-    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} />
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)}
+      pasteMode={clip?.mode ?? null} onPaste={() => handlePaste(slot)} onCancelPaste={() => setClip(null)} />
 
     if (!startId || !graph.nodes[startId]) {
       return (
@@ -1324,12 +1360,16 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
         {node.kind === "action" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              onClone={() => handleClone(node.id)} onCopy={() => handleCopy(node.id)} onMove={() => handleMove(node.id)}
+              dimmed={moveSourceId === node.id}
               tone="action" icon={<Zap className="h-4 w-4" />} title={actionSummary(node.actionType as AutomationAction, node.config)} />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
           </>
         ) : node.kind === "delay" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              onClone={() => handleClone(node.id)} onCopy={() => handleCopy(node.id)} onMove={() => handleMove(node.id)}
+              dimmed={moveSourceId === node.id}
               tone="delay" icon={<Clock className="h-4 w-4" />}
               title={waitLabel(node, waitFieldLabels)} subtitle="Delay before continuing" />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
@@ -1337,6 +1377,8 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
         ) : node.kind === "waitUntil" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              onClone={() => handleClone(node.id)} onCopy={() => handleCopy(node.id)} onMove={() => handleMove(node.id)}
+              dimmed={moveSourceId === node.id}
               tone="delay" icon={<CalendarClock className="h-4 w-4" />}
               title={waitLabel(node, waitFieldLabels)} subtitle="Scheduled wait" />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
@@ -1444,28 +1486,37 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
   )
 }
 
-function NodeChip({ title, subtitle, icon, tone, onClick, onDelete }: {
+function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onCopy, onMove, dimmed }: {
   title: string; subtitle?: string; icon: React.ReactNode; tone: "action" | "branch" | "multi" | "delay"
   onClick: () => void; onDelete: () => void
+  onClone?: () => void; onCopy?: () => void; onMove?: () => void; dimmed?: boolean
 }) {
   const toneCls = tone === "action" ? "bg-blue-50 text-blue-600"
     : tone === "branch" ? "bg-violet-50 text-violet-600"
     : tone === "delay" ? "bg-amber-50 text-amber-600"
     : "bg-fuchsia-50 text-fuchsia-600"
+  const tbBtn = "w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:bg-zinc-100 transition-colors"
   return (
     <div
       onClick={onClick}
-      className="group relative flex items-center gap-3 pl-2.5 pr-3 py-2.5 rounded-xl border border-zinc-200 bg-white shadow-sm cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all w-[244px]"
+      className={cn(
+        "group relative flex items-center gap-3 pl-2.5 pr-3 py-2.5 rounded-xl border border-zinc-200 bg-white shadow-sm cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all w-[244px]",
+        dimmed && "opacity-40",
+      )}
     >
       <span className={cn("shrink-0 w-8 h-8 rounded-lg flex items-center justify-center", toneCls)}>{icon}</span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-zinc-800 truncate">{title}</p>
         {subtitle && <p className="text-xs text-zinc-400 truncate">{subtitle}</p>}
       </div>
-      <button type="button" onClick={e => { e.stopPropagation(); onDelete() }}
-        className="opacity-0 group-hover:opacity-100 text-zinc-300 hover:text-red-500 shrink-0 transition-opacity">
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      {/* Floating HubSpot-style toolbar: clone / move / copy / delete */}
+      <div className="absolute -bottom-3.5 right-3 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 bg-white border border-zinc-200 rounded-lg shadow-sm px-1 py-0.5 transition-opacity z-20"
+        onClick={e => e.stopPropagation()}>
+        {onClone && <button type="button" title="Clone" onClick={onClone} className={cn(tbBtn, "hover:text-indigo-500")}><Copy className="h-3.5 w-3.5" /></button>}
+        {onMove && <button type="button" title="Move" onClick={onMove} className={cn(tbBtn, "hover:text-indigo-500")}><Move className="h-3.5 w-3.5" /></button>}
+        {onCopy && <button type="button" title="Copy and paste" onClick={onCopy} className={cn(tbBtn, "hover:text-indigo-500")}><Clipboard className="h-3.5 w-3.5" /></button>}
+        <button type="button" title="Delete" onClick={onDelete} className={cn(tbBtn, "hover:text-red-500")}><Trash2 className="h-3.5 w-3.5" /></button>
+      </div>
     </div>
   )
 }
