@@ -70,6 +70,35 @@ export async function updateAutomation(id: string, data: {
   return { success: true }
 }
 
+// Duplicate an existing workflow. The (potentially large) graph is copied
+// server-side — it never travels over the wire — so this works regardless of
+// the Server Action body-size limit. The clone starts paused (isActive: false).
+export async function cloneAutomation(id: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+
+  const src = await prisma.automation.findUnique({ where: { id } })
+  if (!src) throw new Error("Workflow not found")
+
+  const created = await prisma.automation.create({
+    data: {
+      name: `${src.name} (copy)`,
+      description: src.description,
+      triggerType: src.triggerType,
+      triggerConfig: (src.triggerConfig ?? undefined) as any,
+      actionType: src.actionType,
+      actionConfig: (src.actionConfig ?? undefined) as any,
+      flow: (src.flow ?? undefined) as any,
+      graph: (src.graph ?? undefined) as any,
+      isActive: false,
+      createdById: session.user.id,
+    },
+  })
+
+  revalidatePath("/automations")
+  return { success: true, id: created.id }
+}
+
 export async function toggleAutomation(id: string, isActive: boolean) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")

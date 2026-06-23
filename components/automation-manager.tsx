@@ -8,6 +8,7 @@ import {
   updateAutomation,
   toggleAutomation,
   deleteAutomation,
+  cloneAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
 import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal } from "lucide-react"
@@ -2009,6 +2010,14 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
     })
   }
 
+  function handleClone() {
+    startTransition(async () => {
+      const res = await cloneAutomation(auto.id)
+      if (res?.id) router.push(`/automations/${res.id}`)
+      else router.refresh()
+    })
+  }
+
   const obj = workflowObjectFor(auto.triggerType)
 
   return (
@@ -2044,6 +2053,10 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
             className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
             <ScrollText className="h-3.5 w-3.5" />
           </Link>
+          <button onClick={handleClone} disabled={isPending}
+            className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Clone workflow">
+            <Copy className="h-3.5 w-3.5" />
+          </button>
           <button onClick={handleDelete} disabled={isPending}
             className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete">
             <Trash2 className="h-3.5 w-3.5" />
