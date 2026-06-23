@@ -493,6 +493,108 @@ export function moveStep(graph: AutomationGraph, id: string, slot: Slot): Automa
   return insertAt(without, slot, snapshot)
 }
 
+// ── Subtree ops: a step *and everything after it* (copy/move whole blocks) ─────
+
+export interface Subgraph { nodes: Record<string, GraphNode>; rootId: string }
+
+// All node ids reachable from a starting node (its subtree).
+function reachableFrom(graph: AutomationGraph, startId: string): Set<string> {
+  const seen = new Set<string>()
+  const stack: (string | null)[] = [startId]
+  while (stack.length) {
+    const id = stack.pop()
+    if (!id || seen.has(id) || !graph.nodes[id]) continue
+    seen.add(id)
+    for (const t of nodeTargets(graph.nodes[id])) stack.push(t)
+  }
+  return seen
+}
+
+// Snapshot a step + everything after it (original ids; remapped on paste).
+export function extractSubtree(graph: AutomationGraph, id: string): Subgraph | null {
+  if (!graph.nodes[id]) return null
+  const nodes: Record<string, GraphNode> = {}
+  reachableFrom(graph, id).forEach(i => { nodes[i] = structuredCloneSafe(graph.nodes[i]) })
+  return { nodes, rootId: id }
+}
+
+// Give every node (and multi-arm) in a subgraph a fresh id, remapping pointers.
+function remapIds(sub: Subgraph): Subgraph {
+  const map = new Map<string, string>()
+  for (const id of Object.keys(sub.nodes)) map.set(id, newNodeId())
+  const remap = (id: string | null) => (id && map.has(id) ? map.get(id)! : id)
+  const nodes: Record<string, GraphNode> = {}
+  for (const [oldId, node] of Object.entries(sub.nodes)) {
+    const n = structuredCloneSafe(node)
+    n.id = map.get(oldId)!
+    if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") n.next = remap(n.next)
+    else if (n.kind === "branch") { n.thenNext = remap(n.thenNext); n.elseNext = remap(n.elseNext) }
+    else { n.arms = n.arms.map(a => ({ ...a, id: newNodeId(), next: remap(a.next) })); n.elseNext = remap(n.elseNext) }
+    nodes[n.id] = n
+  }
+  return { nodes, rootId: map.get(sub.rootId)! }
+}
+
+// The open end of a subgraph's primary path (where a continuation re-attaches).
+function primaryTailId(nodes: Record<string, GraphNode>, startId: string): string | null {
+  let id: string | null = startId
+  for (let guard = 0; id && guard < 10000; guard++) {
+    const n: GraphNode | undefined = nodes[id]
+    if (!n) return null
+    const next: string | null =
+      (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") ? n.next
+      : n.kind === "branch" ? n.thenNext
+      : (n.arms[0]?.next ?? n.elseNext)
+    if (next == null) return id
+    id = next
+  }
+  return id
+}
+function setPrimaryNext(node: GraphNode, value: string | null): void {
+  if (node.kind === "action" || node.kind === "delay" || node.kind === "waitUntil") node.next = value
+  else if (node.kind === "branch") node.thenNext = value
+  else if (node.arms[0]) node.arms[0].next = value
+  else node.elseNext = value
+}
+
+// Paste a whole block at a slot (fresh ids); the slot's prior target re-attaches
+// after the block so the existing flow continues.
+export function pasteSubgraph(graph: AutomationGraph, sub: Subgraph, slot: Slot): AutomationGraph {
+  const g = clone(graph)
+  const fresh = remapIds(sub)
+  const prevTarget = getSlot(g, slot)
+  for (const [id, n] of Object.entries(fresh.nodes)) g.nodes[id] = n
+  setSlot(g, slot, fresh.rootId)
+  if (prevTarget) {
+    const tailId = primaryTailId(g.nodes, fresh.rootId)
+    if (tailId) setPrimaryNext(g.nodes[tailId], prevTarget)
+  }
+  return g
+}
+
+// Remove a node and its whole following subtree (predecessors → End).
+export function deleteSubtree(graph: AutomationGraph, id: string): AutomationGraph {
+  const g = clone(graph)
+  if (!g.nodes[id]) return g
+  if (g.rootId === id) g.rootId = null
+  for (const n of Object.values(g.nodes)) {
+    if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") { if (n.next === id) n.next = null }
+    else if (n.kind === "branch") { if (n.thenNext === id) n.thenNext = null; if (n.elseNext === id) n.elseNext = null }
+    else { for (const a of n.arms) if (a.next === id) a.next = null; if (n.elseNext === id) n.elseNext = null }
+  }
+  return pruneUnreachable(g)
+}
+
+// Move a step + everything after it to a new slot.
+export function moveSubtree(graph: AutomationGraph, id: string, slot: Slot): AutomationGraph {
+  const sub = extractSubtree(graph, id)
+  if (!sub) return graph
+  if (slot.kind !== "root" && sub.nodes[slot.nodeId]) return graph // can't move into itself
+  const without = deleteSubtree(graph, id)
+  if (slot.kind !== "root" && !without.nodes[slot.nodeId]) return graph
+  return pasteSubgraph(without, sub, slot)
+}
+
 // Validate a graph has no dangling pointers and a reachable root.
 export function isValidGraph(graph: AutomationGraph): boolean {
   if (!graph.rootId) return false

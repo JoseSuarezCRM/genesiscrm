@@ -10,7 +10,7 @@ import {
   deleteAutomation,
   runScheduledAutomationsAction,
 } from "@/app/actions/automations"
-import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -19,7 +19,7 @@ import { EmailAttachments, type AttachmentRef } from "@/components/email-attachm
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel, WEEKDAY_NAMES,
-  cloneStep, pasteStep, moveStep,
+  cloneStep, moveStep, extractSubtree, pasteSubgraph, moveSubtree, type Subgraph,
 } from "@/lib/automation-graph"
 import { MULTI_SEP, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import {
@@ -1285,14 +1285,24 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
 }) {
   const waitFieldLabels = Object.fromEntries(propDefs.map(p => [p.path, p.label]))
 
-  // Clipboard for copy/paste + move of linear steps.
-  const [clip, setClip] = useState<{ mode: "copy"; snapshot: GraphNode } | { mode: "move"; sourceId: string } | null>(null)
+  // Clipboard for copy/paste + move. `following` = include all steps after it.
+  type Clip =
+    | { mode: "copy"; sub: Subgraph }
+    | { mode: "move"; sourceId: string; following: boolean }
+  const [clip, setClip] = useState<Clip | null>(null)
   const handleClone = (id: string) => onChange(cloneStep(graph, id))
-  const handleCopy = (id: string) => setClip({ mode: "copy", snapshot: graph.nodes[id] })
-  const handleMove = (id: string) => setClip({ mode: "move", sourceId: id })
+  const handleCopy = (id: string) => {
+    const node = graph.nodes[id]
+    if (!node || !(node.kind === "action" || node.kind === "delay" || node.kind === "waitUntil")) return
+    setClip({ mode: "copy", sub: { nodes: { [id]: { ...node, next: null } }, rootId: id } })
+  }
+  const handleCopyFollowing = (id: string) => { const s = extractSubtree(graph, id); if (s) setClip({ mode: "copy", sub: s }) }
+  const handleMove = (id: string) => setClip({ mode: "move", sourceId: id, following: false })
+  const handleMoveFollowing = (id: string) => setClip({ mode: "move", sourceId: id, following: true })
   const handlePaste = (slot: Slot) => {
     if (!clip) return
-    onChange(clip.mode === "copy" ? pasteStep(graph, clip.snapshot, slot) : moveStep(graph, clip.sourceId, slot))
+    if (clip.mode === "copy") onChange(pasteSubgraph(graph, clip.sub, slot))
+    else onChange(clip.following ? moveSubtree(graph, clip.sourceId, slot) : moveStep(graph, clip.sourceId, slot))
     setClip(null)
   }
   const moveSourceId = clip?.mode === "move" ? clip.sourceId : null
@@ -1361,6 +1371,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
               onClone={() => handleClone(node.id)} onCopy={() => handleCopy(node.id)} onMove={() => handleMove(node.id)}
+              onCopyFollowing={() => handleCopyFollowing(node.id)} onMoveFollowing={() => handleMoveFollowing(node.id)}
               dimmed={moveSourceId === node.id}
               tone="action" icon={<Zap className="h-4 w-4" />} title={actionSummary(node.actionType as AutomationAction, node.config)} />
             {renderSlot({ kind: "after", nodeId: node.id }, depth + 1)}
@@ -1369,6 +1380,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
               onClone={() => handleClone(node.id)} onCopy={() => handleCopy(node.id)} onMove={() => handleMove(node.id)}
+              onCopyFollowing={() => handleCopyFollowing(node.id)} onMoveFollowing={() => handleMoveFollowing(node.id)}
               dimmed={moveSourceId === node.id}
               tone="delay" icon={<Clock className="h-4 w-4" />}
               title={waitLabel(node, waitFieldLabels)} subtitle="Delay before continuing" />
@@ -1378,6 +1390,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
               onClone={() => handleClone(node.id)} onCopy={() => handleCopy(node.id)} onMove={() => handleMove(node.id)}
+              onCopyFollowing={() => handleCopyFollowing(node.id)} onMoveFollowing={() => handleMoveFollowing(node.id)}
               dimmed={moveSourceId === node.id}
               tone="delay" icon={<CalendarClock className="h-4 w-4" />}
               title={waitLabel(node, waitFieldLabels)} subtitle="Scheduled wait" />
@@ -1386,6 +1399,8 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
         ) : node.kind === "branch" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              onCopyFollowing={() => handleCopyFollowing(node.id)} onMoveFollowing={() => handleMoveFollowing(node.id)}
+              dimmed={moveSourceId === node.id}
               tone="branch" icon={<GitBranch className="h-4 w-4" />}
               title={node.rules.length || node.groups?.length ? `If conditions met` : "If / Else"}
               subtitle={`${node.rules.length || (node.groups?.[0]?.conditions.length ?? 0)} condition(s)`} />
@@ -1398,6 +1413,8 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
         ) : node.kind === "multi" ? (
           <>
             <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+              onCopyFollowing={() => handleCopyFollowing(node.id)} onMoveFollowing={() => handleMoveFollowing(node.id)}
+              dimmed={moveSourceId === node.id}
               tone="multi" icon={<GitBranch className="h-4 w-4 rotate-90" />}
               title="Branches" subtitle={`${node.arms.length} path${node.arms.length === 1 ? "" : "s"} + else`} />
             <VLine h={16} />
@@ -1486,11 +1503,13 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
   )
 }
 
-function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onCopy, onMove, dimmed }: {
+function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onCopy, onMove, onCopyFollowing, onMoveFollowing, dimmed }: {
   title: string; subtitle?: string; icon: React.ReactNode; tone: "action" | "branch" | "multi" | "delay"
   onClick: () => void; onDelete: () => void
-  onClone?: () => void; onCopy?: () => void; onMove?: () => void; dimmed?: boolean
+  onClone?: () => void; onCopy?: () => void; onMove?: () => void
+  onCopyFollowing?: () => void; onMoveFollowing?: () => void; dimmed?: boolean
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
   const toneCls = tone === "action" ? "bg-blue-50 text-blue-600"
     : tone === "branch" ? "bg-violet-50 text-violet-600"
     : tone === "delay" ? "bg-amber-50 text-amber-600"
@@ -1509,12 +1528,41 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
         <p className="text-sm font-medium text-zinc-800 truncate">{title}</p>
         {subtitle && <p className="text-xs text-zinc-400 truncate">{subtitle}</p>}
       </div>
-      {/* Floating HubSpot-style toolbar: clone / move / copy / delete */}
-      <div className="absolute -bottom-3.5 right-3 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 bg-white border border-zinc-200 rounded-lg shadow-sm px-1 py-0.5 transition-opacity z-20"
+      {/* Floating HubSpot-style toolbar: clone / move / copy / ⋯ / delete */}
+      <div className={cn(
+          "absolute -bottom-3.5 right-3 flex items-center gap-0.5 bg-white border border-zinc-200 rounded-lg shadow-sm px-1 py-0.5 transition-opacity z-20",
+          menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
         onClick={e => e.stopPropagation()}>
         {onClone && <button type="button" title="Clone" onClick={onClone} className={cn(tbBtn, "hover:text-indigo-500")}><Copy className="h-3.5 w-3.5" /></button>}
         {onMove && <button type="button" title="Move" onClick={onMove} className={cn(tbBtn, "hover:text-indigo-500")}><Move className="h-3.5 w-3.5" /></button>}
         {onCopy && <button type="button" title="Copy and paste" onClick={onCopy} className={cn(tbBtn, "hover:text-indigo-500")}><Clipboard className="h-3.5 w-3.5" /></button>}
+        {(onCopyFollowing || onMoveFollowing) && (
+          <div className="relative">
+            <button type="button" title="More" onClick={() => setMenuOpen(o => !o)} className={cn(tbBtn, "hover:text-zinc-700", menuOpen && "bg-zinc-100 text-zinc-700")}>
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 bottom-8 z-50 w-56 bg-white border border-zinc-200 rounded-xl shadow-xl py-1 text-left">
+                  {onCopyFollowing && (
+                    <button type="button" onClick={() => { setMenuOpen(false); onCopyFollowing() }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+                      <Clipboard className="h-3.5 w-3.5 text-zinc-400" /> Copy with following steps
+                    </button>
+                  )}
+                  {onMoveFollowing && (
+                    <button type="button" onClick={() => { setMenuOpen(false); onMoveFollowing() }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+                      <Move className="h-3.5 w-3.5 text-zinc-400" /> Move with following steps
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <button type="button" title="Delete" onClick={onDelete} className={cn(tbBtn, "hover:text-red-500")}><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
     </div>
