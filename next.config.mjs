@@ -50,6 +50,10 @@ const nextConfig = {
         "localhost:3000",
         process.env.VERCEL_URL ?? "",
       ].filter(Boolean),
+      // Workflow graphs can get large (many email actions with HTML bodies).
+      // Default Server Action body limit is 1MB; raise it so saving big
+      // automations doesn't throw a server-side exception.
+      bodySizeLimit: "8mb",
     },
   },
   async headers() {
