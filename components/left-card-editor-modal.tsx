@@ -8,7 +8,6 @@ import {
 } from "@/app/actions/card-layouts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -16,7 +15,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Trash2 } from "lucide-react"
+import { Trash2, GripVertical, X, Plus } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { referralLeftFieldPool } from "@/lib/card-field-definitions"
 
 interface CardLayout {
@@ -45,19 +45,31 @@ export default function LeftCardEditorModal({
   const [isPending, startTransition] = useTransition()
   const [title, setTitle] = useState(existing?.title ?? "")
   const [fields, setFields] = useState<string[]>(existing?.fields ?? [])
+  const [dragId, setDragId] = useState<string | null>(null)
 
   const fieldPool = [
     ...referralLeftFieldPool,
     ...customProperties.map((p) => ({ id: `custom:${p.id}`, label: p.name })),
   ]
+  const labelFor = (id: string) => fieldPool.find((f) => f.id === id)?.label ?? id
 
-  const toggleField = (fieldId: string) => {
-    setFields((prev) =>
-      prev.includes(fieldId)
-        ? prev.filter((f) => f !== fieldId)
-        : [...prev, fieldId]
-    )
-  }
+  // Selected fields, in display order; available = the rest of the pool.
+  const selected = fields.filter((id) => fieldPool.some((f) => f.id === id))
+  const available = fieldPool.filter((f) => !fields.includes(f.id))
+
+  const addField = (id: string) => setFields((prev) => [...prev, id])
+  const removeField = (id: string) => setFields((prev) => prev.filter((f) => f !== id))
+
+  // Drag-to-reorder: live-move the dragged field ahead of the one it's over.
+  const reorder = (fromId: string, toId: string) =>
+    setFields((prev) => {
+      const arr = [...prev]
+      const from = arr.indexOf(fromId)
+      const to = arr.indexOf(toId)
+      if (from < 0 || to < 0 || from === to) return prev
+      arr.splice(to, 0, arr.splice(from, 1)[0])
+      return arr
+    })
 
   const handleSave = () => {
     const trimmed = title.trim()
@@ -97,27 +109,59 @@ export default function LeftCardEditorModal({
             />
           </div>
 
-          <div className="border rounded-lg p-4 border-slate-200 bg-white">
-            <p className="text-xs text-slate-500 mb-3">
-              {fields.length} of {fieldPool.length} properties shown
+          <div className="border rounded-lg p-4 border-slate-200 bg-white space-y-3">
+            <p className="text-xs text-slate-500">
+              {selected.length} of {fieldPool.length} properties shown · drag to reorder
             </p>
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {fieldPool.map((field) => (
-                <div key={field.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`left-card-${field.id}`}
-                    checked={fields.includes(field.id)}
-                    onCheckedChange={() => toggleField(field.id)}
-                  />
-                  <label
-                    htmlFor={`left-card-${field.id}`}
-                    className="text-sm text-slate-700 cursor-pointer flex-1"
+
+            {/* Selected, in display order — drag the handle to reorder */}
+            {selected.length > 0 && (
+              <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                {selected.map((id) => (
+                  <div
+                    key={id}
+                    draggable
+                    onDragStart={() => setDragId(id)}
+                    onDragEnd={() => setDragId(null)}
+                    onDragOver={(e) => { e.preventDefault(); if (dragId && dragId !== id) reorder(dragId, id) }}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 transition-shadow",
+                      dragId === id ? "opacity-50" : "hover:border-slate-300",
+                    )}
                   >
-                    {field.label}
-                  </label>
+                    <GripVertical className="h-4 w-4 text-slate-300 cursor-grab shrink-0" />
+                    <span className="flex-1 text-sm text-slate-700 truncate">{labelFor(id)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeField(id)}
+                      className="text-slate-300 hover:text-red-500 shrink-0"
+                      title="Remove from card"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Available to add */}
+            {available.length > 0 && (
+              <div className="pt-1">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 mb-1.5">Add a property</p>
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                  {available.map((field) => (
+                    <button
+                      key={field.id}
+                      type="button"
+                      onClick={() => addField(field.id)}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors"
+                    >
+                      <Plus className="h-3 w-3" /> {field.label}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -1,8 +1,9 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { Check, X } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
 
 interface CustomProperty {
@@ -25,6 +26,9 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState<any>(null)
   const [isPending, startTransition] = useTransition()
+  const [optimistic, setOptimistic] = useState<boolean | null>(null)
+  // Clear the optimistic toggle once the server-updated value arrives.
+  useEffect(() => { setOptimistic(null) }, [property.value])
 
   const handleSave = () => {
     startTransition(async () => {
@@ -113,6 +117,43 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
           />
         )
     }
+  }
+
+  // Checkbox/boolean: a direct toggle that saves on click (no edit/save dance).
+  if (property.type === "CHECKBOX") {
+    const checked = optimistic ?? !!property.value
+    const toggle = () => {
+      const next = !checked
+      setOptimistic(next)
+      startTransition(async () => {
+        await saveCustomPropertyValue(entityType, entityId, property.id, next)
+      })
+    }
+    return (
+      <div className="py-2.5 border-b border-slate-100 last:border-0">
+        <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">
+          {property.name}
+        </span>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button" role="switch" aria-checked={checked} disabled={isPending} onClick={toggle}
+            className={cn(
+              "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
+              checked ? "bg-emerald-500" : "bg-slate-200",
+            )}
+            title={`Toggle ${property.name}`}
+          >
+            <span className={cn(
+              "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+              checked ? "translate-x-4" : "translate-x-0.5",
+            )} />
+          </button>
+          <span className={cn("text-sm font-medium", checked ? "text-emerald-700" : "text-slate-400")}>
+            {checked ? "Yes" : "No"}
+          </span>
+        </div>
+      </div>
+    )
   }
 
   if (editing) {
