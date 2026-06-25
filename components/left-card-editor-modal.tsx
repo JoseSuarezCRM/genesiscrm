@@ -46,6 +46,7 @@ export default function LeftCardEditorModal({
   const [title, setTitle] = useState(existing?.title ?? "")
   const [fields, setFields] = useState<string[]>(existing?.fields ?? [])
   const [dragId, setDragId] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
 
   const fieldPool = [
     ...referralLeftFieldPool,
@@ -53,9 +54,11 @@ export default function LeftCardEditorModal({
   ]
   const labelFor = (id: string) => fieldPool.find((f) => f.id === id)?.label ?? id
 
-  // Selected fields, in display order; available = the rest of the pool.
+  // Selected fields, in display order; available = the rest of the pool (filtered by search).
   const selected = fields.filter((id) => fieldPool.some((f) => f.id === id))
-  const available = fieldPool.filter((f) => !fields.includes(f.id))
+  const available = fieldPool
+    .filter((f) => !fields.includes(f.id))
+    .filter((f) => f.label.toLowerCase().includes(query.trim().toLowerCase()))
 
   const addField = (id: string) => setFields((prev) => [...prev, id])
   const removeField = (id: string) => setFields((prev) => prev.filter((f) => f !== id))
@@ -145,21 +148,31 @@ export default function LeftCardEditorModal({
             )}
 
             {/* Available to add */}
-            {available.length > 0 && (
+            {fieldPool.some((f) => !fields.includes(f.id)) && (
               <div className="pt-1">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 mb-1.5">Add a property</p>
-                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                  {available.map((field) => (
-                    <button
-                      key={field.id}
-                      type="button"
-                      onClick={() => addField(field.id)}
-                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors"
-                    >
-                      <Plus className="h-3 w-3" /> {field.label}
-                    </button>
-                  ))}
-                </div>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search properties…"
+                  className="w-full mb-2 px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400"
+                />
+                {available.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                    {available.map((field) => (
+                      <button
+                        key={field.id}
+                        type="button"
+                        onClick={() => addField(field.id)}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors"
+                      >
+                        <Plus className="h-3 w-3" /> {field.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 py-1">No properties match “{query}”.</p>
+                )}
               </div>
             )}
           </div>
