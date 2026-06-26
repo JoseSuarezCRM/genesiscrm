@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma"
+import { requireView } from "@/lib/auth-guard"
 import AutomationManager from "@/components/automation-manager"
 
 export default async function AutomationsPage() {
+  await requireView("AUTOMATIONS")
   const automations = await prisma.automation.findMany({
     orderBy: { createdAt: "desc" },
     include: {

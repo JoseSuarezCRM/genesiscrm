@@ -1,9 +1,10 @@
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import SmsInbox from "@/components/sms-inbox"
 
 export default async function MessagesPage() {
-  const session = await auth()
+  const session = await requireView("SMS")
   const isAdmin = (session?.user as any)?.role === "ADMIN"
 
   const smsTemplates = await prisma.messageTemplate.findMany({

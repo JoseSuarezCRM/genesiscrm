@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { userCan, userCanLevel } from "@/lib/permissions"
 import { redirect } from "next/navigation"
 import Link from "next/link"
@@ -29,7 +30,7 @@ function toArray(val: string | string[] | undefined): string[] {
 }
 
 export default async function SurgeryPage({ searchParams }: PageProps) {
-  const session = await auth()
+  const session = await requireView("SURGERY")
   if (!session) redirect("/login")
   const canManage = userCanLevel(session.user as any, "SURGERY", "EDIT")
   const canImport = userCan(session.user as any, "IMPORT_DATA")

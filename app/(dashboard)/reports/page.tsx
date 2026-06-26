@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { ReferralStatus } from "@prisma/client"
 import { STATUS_LABELS } from "@/lib/utils"
+import { requireView } from "@/lib/auth-guard"
 import ReportsClient from "@/components/reports-client"
 
 interface PageProps {
@@ -50,6 +51,7 @@ function resolveRange(range?: string, from?: string, to?: string): { start: Date
 }
 
 export default async function ReportsPage({ searchParams }: PageProps) {
+  await requireView("REPORTS")
   const { start, end } = resolveRange(searchParams.range, searchParams.from, searchParams.to)
   const fromStr = start.toISOString().slice(0, 10)
   const toStr = end.toISOString().slice(0, 10)

@@ -17,43 +17,46 @@ import {
   MessageCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { userCanLevel } from "@/lib/permissions"
 
-const referralItems = [
+type NavItem = { href: string; label: string; object?: string }
+
+const referralItems: NavItem[] = [
   { href: "/",                  label: "Dashboard" },
-  { href: "/referrals",         label: "Referrals" },
-  { href: "/practices",         label: "Practices" },
-  { href: "/referring-doctors", label: "Providers" },
-  { href: "/activities",        label: "Activities" },
-  { href: "/tasks",             label: "Tasks" },
-  { href: "/messages",          label: "SMS Inbox" },
-  { href: "/reports",           label: "Reports" },
-  { href: "/broadcasts",        label: "Broadcasts" },
+  { href: "/referrals",         label: "Referrals",  object: "REFERRALS" },
+  { href: "/practices",         label: "Practices",  object: "PRACTICES" },
+  { href: "/referring-doctors", label: "Providers",  object: "PROVIDERS" },
+  { href: "/activities",        label: "Activities", object: "ACTIVITIES" },
+  { href: "/tasks",             label: "Tasks",      object: "TASKS" },
+  { href: "/messages",          label: "SMS Inbox",  object: "SMS" },
+  { href: "/reports",           label: "Reports",    object: "REPORTS" },
+  { href: "/broadcasts",        label: "Broadcasts", object: "BROADCASTS" },
 ]
 
-const appointmentItems = [
+const appointmentItems: NavItem[] = [
   { href: "/appointments",           label: "Completed Appts" },
   { href: "/appointments/providers", label: "Referring Providers" },
 ]
 
-const schedulingItems = [
+const schedulingItems: NavItem[] = [
   { href: "/scheduler",       label: "Weekly Schedule" },
   { href: "/scheduler/staff", label: "Staff Roster" },
 ]
 
-const surgeryItems = [
-  { href: "/surgery",         label: "Surgery Cases" },
-  { href: "/surgery/reports", label: "Surgery Reports" },
+const surgeryItems: NavItem[] = [
+  { href: "/surgery",         label: "Surgery Cases",   object: "SURGERY" },
+  { href: "/surgery/reports", label: "Surgery Reports", object: "SURGERY" },
 ]
 
-const communicationsItems = [
-  { href: "/communications/sms",   label: "SMS" },
-  { href: "/communications/email", label: "Email" },
+const communicationsItems: NavItem[] = [
+  { href: "/communications/sms",   label: "SMS",   object: "TEMPLATES" },
+  { href: "/communications/email", label: "Email", object: "TEMPLATES" },
 ]
 
-const adminItems = [
+const adminItems: NavItem[] = [
   { href: "/settings/outreach",   label: "Outreach Templates" },
   { href: "/settings/embed",      label: "Embed Referral Form" },
-  { href: "/automations",         label: "Automations" },
+  { href: "/automations",         label: "Automations", object: "AUTOMATIONS" },
   { href: "/settings/duplicates", label: "Duplicate Detection" },
   { href: "/settings/reconcile",  label: "Appt Reconciliation" },
   { href: "/settings/marketing",  label: "Marketing Materials" },
@@ -90,8 +93,14 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
   const hasNavPerms = userPermissions.some(p => p.startsWith("NAV_"))
   // If no NAV_* perms set (no team assigned), show all non-admin sections
   const can = (key: string) => isSuperAdmin || (hasNavPerms ? userPermissions.includes(key) : key !== "NAV_ADMIN")
+  // An item tied to an object is hidden when the user has no View access to it.
+  const canViewItem = (item: { object?: string }) =>
+    isSuperAdmin || !item.object || userCanLevel({ role: userRole, permissions: userPermissions }, item.object, "VIEW")
 
-  const visibleSections = sections.filter((s) => can(s.key))
+  const visibleSections = sections
+    .filter((s) => can(s.key))
+    .map((s) => ({ ...s, items: s.items.filter(canViewItem) }))
+    .filter((s) => s.items.length > 0)
   const activeFlyout = visibleSections.find((s) => s.title === openSection)
 
   // Close the flyout after navigating

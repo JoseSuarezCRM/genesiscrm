@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { userCan, userCanLevel } from "@/lib/permissions"
 import { notFound } from "next/navigation"
 import Link from "next/link"
@@ -10,7 +11,7 @@ import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 interface Props { params: { id: string } }
 
 export default async function PracticeDetailPage({ params }: Props) {
-  const session = await auth()
+  const session = await requireView("PRACTICES")
   const isAdmin = userCanLevel(session?.user as any, "PRACTICES", "EDIT")
 
   const [practice, referrals, customProperties] = await Promise.all([

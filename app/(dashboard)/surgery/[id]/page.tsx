@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Trash2 } from "lucide-react"
@@ -32,7 +33,7 @@ function formatDate(d: Date | string | null | undefined) {
 }
 
 export default async function SurgeryCasePage({ params }: { params: { id: string } }) {
-  const session = await auth()
+  const session = await requireView("SURGERY")
   if (!session) redirect("/login")
 
   const surgeryCase = await getSurgeryCase(params.id)

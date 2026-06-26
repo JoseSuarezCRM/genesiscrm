@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { TaskStatus, TaskPriority } from "@prisma/client"
 import { userCanLevel } from "@/lib/permissions"
 import TasksClient from "@/components/tasks-client"
 
 export default async function TasksPage({ searchParams }: { searchParams: { filter?: string; highlight?: string } }) {
-  const session = await auth()
+  const session = await requireView("TASKS")
   const userId = session!.user.id
 
   const [tasks, users] = await Promise.all([

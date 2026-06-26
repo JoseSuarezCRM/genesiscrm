@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { userCan, userCanLevel } from "@/lib/permissions"
 import { deleteReferral } from "@/app/actions/referrals"
 import DocumentUpload from "@/components/document-upload"
@@ -26,7 +27,7 @@ interface Props {
 }
 
 export default async function ReferralDetailPage({ params, searchParams }: Props) {
-  const session = await auth()
+  const session = await requireView("REFERRALS")
   const isAdmin = userCanLevel(session?.user as any, "REFERRALS", "EDIT")
 
   const referral = await prisma.referral.findUnique({

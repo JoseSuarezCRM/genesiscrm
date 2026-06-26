@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
 import { userCan, userCanLevel } from "@/lib/permissions"
 
 export default async function PracticesPage() {
-  const session = await auth()
+  const session = await requireView("PRACTICES")
   const canManage = userCanLevel(session?.user as any, "PRACTICES", "EDIT")
   const currentUserId = (session?.user as any)?.id ?? ""
 

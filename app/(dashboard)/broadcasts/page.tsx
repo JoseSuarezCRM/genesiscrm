@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { requireView } from "@/lib/auth-guard"
 import { listBroadcasts } from "@/app/actions/broadcasts"
 import { getIvrConfig } from "@/app/actions/ivr"
 import { getSmsAutoResponses } from "@/app/actions/sms-auto"
@@ -36,6 +37,7 @@ interface Props {
 }
 
 export default async function BroadcastsPage({ searchParams }: Props) {
+  await requireView("BROADCASTS")
   const tab = searchParams.tab ?? "email"
 
   const [broadcasts, ivrConfig, smsRules, sequences, practices, composeContacts, sentEmails] = await Promise.all([

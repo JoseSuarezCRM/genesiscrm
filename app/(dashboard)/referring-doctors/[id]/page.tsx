@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { userCan, userCanLevel } from "@/lib/permissions"
 import { notFound } from "next/navigation"
 import Link from "next/link"
@@ -25,7 +26,7 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 }
 
 export default async function ProviderDetailPage({ params }: Props) {
-  const session = await auth()
+  const session = await requireView("PROVIDERS")
   const isAdmin = userCanLevel(session?.user as any, "PROVIDERS", "EDIT")
 
   const [provider, activities, allPractices, customProperties] = await Promise.all([

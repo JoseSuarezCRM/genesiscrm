@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requireView } from "@/lib/auth-guard"
 import { userCanLevel } from "@/lib/permissions"
 import ActivityManager from "@/components/activity-manager"
 import { listActivityTags } from "@/app/actions/tags"
@@ -7,7 +8,7 @@ import { getActivityViews } from "@/app/actions/activity-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
 
 export default async function ActivitiesPage() {
-  const session = await auth()
+  const session = await requireView("ACTIVITIES")
 
   const [activities, practices, allTags, savedViews, shareOptions] = await Promise.all([
     prisma.activity.findMany({
