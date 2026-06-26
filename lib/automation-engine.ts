@@ -352,6 +352,15 @@ async function runSingleAction(
 ): Promise<string | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
 
+  // If the action references a saved Communications template, load its content.
+  // Referencing by id keeps workflow graphs small and lets edits propagate.
+  let tplSubject: string | null = null
+  let tplBody: string | null = null
+  if (cfg.templateId) {
+    const tpl = await prisma.messageTemplate.findUnique({ where: { id: cfg.templateId as string } })
+    if (tpl) { tplSubject = tpl.subject; tplBody = tpl.body }
+  }
+
   if (automation.actionType === AutomationAction.CREATE_TASK) {
     const title = resolveTemplate((cfg.title as string) || "Automation task", vars)
     const description = cfg.description ? resolveTemplate(cfg.description as string, vars) : null
@@ -432,8 +441,8 @@ async function runSingleAction(
   }
 
   if (automation.actionType === AutomationAction.SEND_EMAIL) {
-    const subject = resolveTemplate((cfg.subject as string) || "Automation notification", vars)
-    const bodyText = resolveTemplate((cfg.body as string) || "", vars)
+    const subject = resolveTemplate((tplSubject ?? (cfg.subject as string)) || "Automation notification", vars)
+    const bodyText = resolveTemplate((tplBody ?? (cfg.body as string)) || "", vars)
     // Body may already be HTML (rich text editor); only convert newlines for legacy plain text.
     const inner = /<[a-z][\s\S]*>/i.test(bodyText) ? bodyText : bodyText.replace(/\n/g, "<br/>")
     const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${inner}</div>`
@@ -501,7 +510,7 @@ async function runSingleAction(
   }
 
   if ((automation.actionType as string) === "SEND_SMS" && referralId) {
-    const body = resolveTemplate((cfg.body as string) || "", vars)
+    const body = resolveTemplate((tplBody ?? (cfg.body as string)) || "", vars)
     if (body) {
       const referral = await prisma.referral.findUnique({ where: { id: referralId }, select: { patientPhone: true } })
       const phone = referral?.patientPhone

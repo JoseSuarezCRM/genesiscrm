@@ -6,6 +6,12 @@ export default async function MessagesPage() {
   const session = await auth()
   const isAdmin = (session?.user as any)?.role === "ADMIN"
 
+  const smsTemplates = await prisma.messageTemplate.findMany({
+    where: { channel: "SMS", isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, body: true },
+  })
+
   const threads = await prisma.smsThread.findMany({
     orderBy: { lastMessageAt: "desc" },
     include: {
@@ -37,7 +43,7 @@ export default async function MessagesPage() {
         </p>
       </div>
       <div className="flex-1 min-h-0">
-        <SmsInbox initialThreads={serialized as any} isAdmin={isAdmin} />
+        <SmsInbox initialThreads={serialized as any} isAdmin={isAdmin} templates={smsTemplates} />
       </div>
     </div>
   )

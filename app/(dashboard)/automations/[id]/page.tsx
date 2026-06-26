@@ -7,13 +7,14 @@ interface Props {
 }
 
 export default async function WorkflowEditorPage({ params }: Props) {
-  const [users, tags, practices, locations, pipelines, customProps] = await Promise.all([
+  const [users, tags, practices, locations, pipelines, customProps, templates] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.tag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.practiceLocation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, color: true } }),
     prisma.customProperty.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, type: true, options: true, entityType: true } }),
+    prisma.messageTemplate.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, channel: true } }),
   ])
 
   // Group custom properties by entity type so the editor can show the right
@@ -45,6 +46,7 @@ export default async function WorkflowEditorPage({ params }: Props) {
       locations={locations}
       pipelines={pipelines}
       customPropsByEntity={customPropsByEntity}
+      templates={templates as any}
     />
   )
 }

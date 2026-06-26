@@ -774,8 +774,10 @@ function RecipientRows({
 
 // ─── Action config form ───────────────────────────────────────────────────────
 
+interface MessageTemplateOption { id: string; name: string; channel: string }
+
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, dateProps = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, dateProps = [], templates = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -784,8 +786,32 @@ function ActionConfigFields({
   tags: Tag[]
   tokens?: string[]
   dateProps?: PropertyDef[]
+  templates?: MessageTemplateOption[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
+  const templateId = (config.templateId as string) || ""
+  // Template picker shown for email/SMS actions; references a Communications template by id.
+  const channelTemplates = templates.filter(t => t.channel === (type === "SEND_SMS" ? "SMS" : "EMAIL"))
+  const pickTemplate = (id: string) => {
+    const t = channelTemplates.find(x => x.id === id)
+    if (t) onChange({ ...config, templateId: t.id, templateName: t.name })
+    else { const c = { ...config }; delete c.templateId; delete c.templateName; onChange(c) }
+  }
+  const TemplatePicker = (type === "SEND_EMAIL" || (type as string) === "SEND_SMS") ? (
+    <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg">
+      <label className="text-xs font-semibold text-violet-700 block mb-1.5">Template</label>
+      <StyledSelect value={templateId} onChange={e => pickTemplate(e.target.value)} className="w-full">
+        <option value="">— Write a custom message —</option>
+        {channelTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </StyledSelect>
+      {templateId && (
+        <p className="text-xs text-violet-600 mt-1.5">
+          Content comes from this template — edit it under Communications. Recipients{type === "SEND_EMAIL" ? ", sender and send-time" : ""} stay set here.
+        </p>
+      )}
+      {channelTemplates.length === 0 && <p className="text-xs text-violet-400 mt-1.5">No {type === "SEND_SMS" ? "SMS" : "email"} templates yet — create one under Communications.</p>}
+    </div>
+  ) : null
   const [showVars, setShowVars] = useState(false)
   const [showBodyVars, setShowBodyVars] = useState(false)
   const [showCc, setShowCc] = useState(() => Array.isArray(config.cc) && (config.cc as unknown[]).length > 0)
@@ -914,6 +940,8 @@ function ActionConfigFields({
     return (
       <div className="space-y-3">
         <p className="text-xs text-slate-500">Sends an SMS to the patient's phone number on the referral.</p>
+        {TemplatePicker}
+        {templateId ? null : (
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs font-medium text-slate-600">Message *</label>
@@ -942,6 +970,7 @@ function ActionConfigFields({
             onChange={e => set("body", e.target.value)}
           />
         </div>
+        )}
       </div>
     )
   }
@@ -956,6 +985,7 @@ function ActionConfigFields({
 
     return (
       <div className="space-y-3">
+        {TemplatePicker}
         {/* When to send */}
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2.5">
           <label className="text-xs font-semibold text-amber-700 block">When to send</label>
@@ -1052,6 +1082,7 @@ function ActionConfigFields({
           </div>
         )}
 
+        {!templateId && <>
         {/* Subject */}
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -1096,6 +1127,7 @@ function ActionConfigFields({
             tokens={tokensFromStrings(tokens)}
           />
         </div>
+        </>}
 
         {/* Attachments */}
         <div>
@@ -1170,6 +1202,7 @@ function ActionList({ actions, onChange, users, tags, emptyLabel }: {
 
 function actionSummary(type: AutomationAction, config: Record<string, unknown>): string {
   if (type === "CREATE_TASK" && config.title) return `Create task: ${config.title}`
+  if ((type === "SEND_EMAIL" || (type as string) === "SEND_SMS") && config.templateName) return `${type === "SEND_EMAIL" ? "Send email" : "Send SMS"}: ${config.templateName} (template)`
   if (type === "SEND_EMAIL" && config.subject) return `Send email: ${config.subject}`
   if (type === "SEND_SMS") return "Send SMS"
   if (type === "ADD_TAG") return "Add tag"
@@ -1570,12 +1603,13 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, templates = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
   pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]; tokens: string[]
+  templates?: MessageTemplateOption[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
@@ -1604,7 +1638,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} dateProps={dateProps} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} dateProps={dateProps} templates={templates} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -1781,10 +1815,11 @@ const OBJECT_BADGE_COLORS: Record<string, string> = {
 
 // ─── Full-page workflow editor (HubSpot-style) ───────────────────────────────
 
-export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [], customPropsByEntity = {} }: {
+export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [], customPropsByEntity = {}, templates = [] }: {
   editing: Automation | null
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines?: Pipeline[]
   customPropsByEntity?: Record<string, CustomPropertyInput[]>
+  templates?: MessageTemplateOption[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -1973,6 +2008,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           onSave={(n) => { setGraph(pruneUnreachable(updateNode(graph, n))); setEditingNodeId(null) }}
           users={users} tags={tags} practices={practices} locations={locations}
           pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions} tokens={objectTokens}
+          templates={templates}
         />
       )}
     </div>

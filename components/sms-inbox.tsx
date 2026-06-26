@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Send, MessageSquare, Plus, X, Phone, Trash2,
-  ExternalLink, Search, Link2, Unlink, Loader2,
+  ExternalLink, Search, Link2, Unlink, Loader2, FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -38,9 +38,12 @@ interface Message {
   sentBy: { name: string | null; email: string } | null
 }
 
+interface SmsTemplate { id: string; name: string; body: string }
+
 interface Props {
   initialThreads: Thread[]
   isAdmin: boolean
+  templates?: SmsTemplate[]
 }
 
 function formatTime(iso: string) {
@@ -197,12 +200,13 @@ function LinkReferralModal({
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function SmsInbox({ initialThreads, isAdmin }: Props) {
+export default function SmsInbox({ initialThreads, isAdmin, templates = [] }: Props) {
   const [threads, setThreads] = useState<Thread[]>(initialThreads)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [draftBody, setDraftBody] = useState("")
   const [sending, setSending] = useState(false)
+  const [tplOpen, setTplOpen] = useState(false)
   const [sendError, setSendError] = useState("")
   const [showNew, setShowNew] = useState(false)
   const [showLinkReferral, setShowLinkReferral] = useState(false)
@@ -563,6 +567,41 @@ export default function SmsInbox({ initialThreads, isAdmin }: Props) {
                 <p className="text-xs text-red-600 mb-2">{sendError}</p>
               )}
               <div className="flex items-end gap-2">
+                {templates.length > 0 && (
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setTplOpen((o) => !o)}
+                      title="Insert a template"
+                      className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700 transition-colors"
+                    >
+                      <FileText className="h-4 w-4" />
+                    </button>
+                    {tplOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setTplOpen(false)} />
+                        <div className="absolute bottom-11 left-0 z-50 w-64 max-h-64 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1">
+                          <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">SMS templates</p>
+                          {templates.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => {
+                                setDraftBody((prev) => (prev.trim() ? prev + " " + t.body : t.body))
+                                setTplOpen(false)
+                                inputRef.current?.focus()
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors"
+                            >
+                              <p className="text-sm font-medium text-slate-700 truncate">{t.name}</p>
+                              <p className="text-xs text-slate-400 truncate">{t.body}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 <textarea
                   ref={inputRef}
                   rows={1}
