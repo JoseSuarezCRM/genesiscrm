@@ -29,6 +29,7 @@ interface Props {
 export default async function ReferralDetailPage({ params, searchParams }: Props) {
   const session = await requireView("REFERRALS")
   const isAdmin = userCanLevel(session?.user as any, "REFERRALS", "EDIT")
+  const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
 
   const referral = await prisma.referral.findUnique({
     where: { id: params.id },
@@ -116,6 +117,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             leftCards={leftCards as any}
             customProperties={customProperties}
             isAdmin={isAdmin}
+            canEditCards={canEditCards}
           />
         </div>
 
@@ -187,6 +189,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           practiceCardLayout={practiceCardLayout}
           providerCardLayout={providerCardLayout}
           isAdmin={isAdmin}
+          canEditCards={canEditCards}
         />
       </div>
     </div>

@@ -26,6 +26,7 @@ interface Props {
   leftCards: CardLayout[]
   customProperties: any[]
   isAdmin: boolean
+  canEditCards?: boolean
 }
 
 function PropertyRow({
@@ -209,6 +210,7 @@ export default function ReferralDetailLeftColumn({
   leftCards,
   customProperties,
   isAdmin,
+  canEditCards = isAdmin,
 }: Props) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingCard, setEditingCard] = useState<CardLayout | null>(null)
@@ -316,7 +318,7 @@ export default function ReferralDetailLeftColumn({
 
   return (
     <>
-      {isAdmin && (
+      {canEditCards && (
         <div className="flex justify-end">
           <button
             onClick={() => openEditor(null)}
@@ -401,7 +403,7 @@ export default function ReferralDetailLeftColumn({
           <Card key={card.cardName}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{card.title}</CardTitle>
-              {isAdmin && (
+              {canEditCards && (
                 <button
                   onClick={() => openEditor(card)}
                   className="p-1 text-slate-400 hover:text-slate-600 transition-colors"

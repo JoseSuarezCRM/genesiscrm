@@ -33,6 +33,7 @@ interface Props {
   practiceCardLayout: CardLayout
   providerCardLayout: CardLayout
   isAdmin: boolean
+  canEditCards?: boolean
 }
 
 function getFieldValue(obj: any, path: string): any {
@@ -120,6 +121,7 @@ export default function ReferralDetailRightColumn({
   practiceCardLayout,
   providerCardLayout,
   isAdmin,
+  canEditCards = isAdmin,
 }: Props) {
   const [customizationOpen, setCustomizationOpen] = useState(false)
   const [cardsModalOpen, setCardsModalOpen] = useState(false)
@@ -202,7 +204,7 @@ export default function ReferralDetailRightColumn({
   return (
     <>
       <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
-        {isAdmin && (
+        {canEditCards && (
           <div className="flex justify-end">
             <button
               onClick={() => setCardsModalOpen(true)}
@@ -219,7 +221,7 @@ export default function ReferralDetailRightColumn({
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentReferralLayout.title}</CardTitle>
-              {isAdmin && (
+              {canEditCards && (
                 <button
                   onClick={() => handleOpenCustomization("Referral")}
                   className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
@@ -280,7 +282,7 @@ export default function ReferralDetailRightColumn({
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentPracticeLayout.title}</CardTitle>
-              {isAdmin && (
+              {canEditCards && (
                 <button
                   onClick={() => handleOpenCustomization("Practice")}
                   className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
@@ -337,7 +339,7 @@ export default function ReferralDetailRightColumn({
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentProviderLayout.title}</CardTitle>
-              {isAdmin && (
+              {canEditCards && (
                 <button
                   onClick={() => handleOpenCustomization("Provider")}
                   className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
