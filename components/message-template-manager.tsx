@@ -29,7 +29,7 @@ function stripHtml(html: string) {
   return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim()
 }
 
-export default function MessageTemplateManager({ channel, templates }: { channel: "SMS" | "EMAIL"; templates: Template[] }) {
+export default function MessageTemplateManager({ channel, templates, canManage = true, canDelete = true }: { channel: "SMS" | "EMAIL"; templates: Template[]; canManage?: boolean; canDelete?: boolean }) {
   const router = useRouter()
   const isEmail = channel === "EMAIL"
   const Icon = isEmail ? Mail : MessageSquare
@@ -68,7 +68,7 @@ export default function MessageTemplateManager({ channel, templates }: { channel
           <h1 className="text-2xl font-bold text-slate-900">{isEmail ? "Email Templates" : "SMS Templates"}</h1>
           <p className="text-sm text-slate-500">{templates.length} template{templates.length !== 1 ? "s" : ""}</p>
         </div>
-        <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> New template</Button>
+        {canManage && <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> New template</Button>}
       </div>
 
       {templates.length === 0 ? (
@@ -76,7 +76,7 @@ export default function MessageTemplateManager({ channel, templates }: { channel
           <Icon className="h-10 w-10 text-slate-300 mx-auto" />
           <p className="text-slate-500 font-medium">No {isEmail ? "email" : "SMS"} templates yet</p>
           <p className="text-slate-400 text-sm">Create reusable {isEmail ? "email" : "text"} templates to send and reference across the app.</p>
-          <div className="pt-2"><Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> New template</Button></div>
+          {canManage && <div className="pt-2"><Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> New template</Button></div>}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -90,7 +90,7 @@ export default function MessageTemplateManager({ channel, templates }: { channel
                   <p className="text-sm font-semibold text-slate-900 truncate">{t.name}</p>
                   {isEmail && <p className="text-xs text-slate-400 truncate">{t.subject || "No subject"}</p>}
                 </div>
-                <button onClick={() => toggle(t)} disabled={pending} title={t.isActive ? "Active" : "Inactive"}
+                <button onClick={() => toggle(t)} disabled={pending || !canManage} title={t.isActive ? "Active" : "Inactive"}
                   className="shrink-0 flex items-center gap-1 text-[11px] font-medium">
                   <span className={cn("w-2 h-2 rounded-full", t.isActive ? "bg-emerald-500" : "bg-slate-300")} />
                   <span className={t.isActive ? "text-emerald-700" : "text-slate-400"}>{t.isActive ? "On" : "Off"}</span>
@@ -98,8 +98,8 @@ export default function MessageTemplateManager({ channel, templates }: { channel
               </div>
               <p className="text-xs text-slate-500 line-clamp-3 flex-1">{stripHtml(t.body) || "—"}</p>
               <div className="flex items-center justify-end gap-0.5 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEdit(t)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
-                <button onClick={() => remove(t.id)} className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+                {canManage && <button onClick={() => openEdit(t)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>}
+                {canDelete && <button onClick={() => remove(t.id)} className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>}
               </div>
             </div>
           ))}

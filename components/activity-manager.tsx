@@ -727,7 +727,7 @@ const DEFAULT_ACTIVITY_COLS = ["date", "account", "location", "providers", "type
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags, savedViews: initialSavedViews, shareUsers, shareTeams }: Props) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true }: Props & { canManage?: boolean }) {
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
@@ -1403,9 +1403,11 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               <X className="h-3.5 w-3.5" /> Clear
             </button>
           )}
-          <Button onClick={openNew} className="ml-auto">
-            <Plus className="h-4 w-4 mr-2" />New Activity
-          </Button>
+          {canManage && (
+            <Button onClick={openNew} className="ml-auto">
+              <Plus className="h-4 w-4 mr-2" />New Activity
+            </Button>
+          )}
         </div>
 
         {/* Tag filter chips */}

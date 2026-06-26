@@ -196,12 +196,13 @@ function TaskRow({ task, currentUserId, users, onStatusChange, onEdit, onDelete,
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function TasksClient({ tasks: initialTasks, users, currentUserId, highlight, initialFilter }: {
+export default function TasksClient({ tasks: initialTasks, users, currentUserId, highlight, initialFilter, canManage = true }: {
   tasks: Task[]
   users: User[]
   currentUserId: string
   highlight?: string
   initialFilter?: string
+  canManage?: boolean
 }) {
   const [isPending, startTransition] = useTransition()
   const [tasks, setTasks] = useState(initialTasks)
@@ -283,9 +284,11 @@ export default function TasksClient({ tasks: initialTasks, users, currentUserId,
           ))}
         </div>
 
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />New Task
-        </Button>
+        {canManage && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />New Task
+          </Button>
+        )}
       </div>
 
       {/* Task list */}

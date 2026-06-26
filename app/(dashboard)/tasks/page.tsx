@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { TaskStatus, TaskPriority } from "@prisma/client"
+import { userCanLevel } from "@/lib/permissions"
 import TasksClient from "@/components/tasks-client"
 
 export default async function TasksPage({ searchParams }: { searchParams: { filter?: string; highlight?: string } }) {
@@ -31,6 +32,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { filt
         currentUserId={userId}
         highlight={searchParams.highlight}
         initialFilter={searchParams.filter}
+        canManage={userCanLevel(session?.user as any, "TASKS", "EDIT")}
       />
     </div>
   )

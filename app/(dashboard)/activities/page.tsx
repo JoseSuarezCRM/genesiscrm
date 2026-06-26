@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { userCanLevel } from "@/lib/permissions"
 import ActivityManager from "@/components/activity-manager"
 import { listActivityTags } from "@/app/actions/tags"
 import { getActivityViews } from "@/app/actions/activity-views"
@@ -74,6 +75,7 @@ export default async function ActivitiesPage() {
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}
+        canManage={userCanLevel(session?.user as any, "ACTIVITIES", "EDIT")}
       />
     </div>
   )
