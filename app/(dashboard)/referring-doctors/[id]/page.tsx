@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { userCan } from "@/lib/permissions"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Building2, MapPin } from "lucide-react"
@@ -25,7 +26,7 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 
 export default async function ProviderDetailPage({ params }: Props) {
   const session = await auth()
-  const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
+  const isAdmin = userCan(session?.user as any, "MANAGE_PROVIDERS")
 
   const [provider, activities, allPractices, customProperties] = await Promise.all([
     prisma.referringDoctor.findUnique({

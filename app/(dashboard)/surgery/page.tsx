@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth"
+import { userCan } from "@/lib/permissions"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { getSurgeryCases } from "@/app/actions/surgery"
@@ -30,6 +31,8 @@ function toArray(val: string | string[] | undefined): string[] {
 export default async function SurgeryPage({ searchParams }: PageProps) {
   const session = await auth()
   if (!session) redirect("/login")
+  const canManage = userCan(session.user as any, "MANAGE_SURGERY")
+  const canImport = userCan(session.user as any, "IMPORT_DATA")
 
   const statuses = toArray(searchParams.status)
   const statusMode: "any" | "none" = searchParams.statusMode === "none" ? "none" : "any"
@@ -74,8 +77,8 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           <p className="text-sm text-slate-500">{total} case{total !== 1 ? "s" : ""}</p>
         </div>
         <div className="flex items-center gap-2">
-          <SurgeryCreateDialog />
-          <SurgeryImportDialog />
+          {canManage && <SurgeryCreateDialog />}
+          {canImport && <SurgeryImportDialog />}
         </div>
       </div>
 
@@ -97,8 +100,8 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           <p className="text-slate-500 font-medium">No surgery cases yet</p>
           <p className="text-slate-400 text-sm">Add a case manually or import a CSV or XLSX file to get started.</p>
           <div className="flex items-center justify-center gap-2 pt-2">
-            <SurgeryCreateDialog />
-            <SurgeryImportDialog />
+            {canManage && <SurgeryCreateDialog />}
+            {canImport && <SurgeryImportDialog />}
           </div>
         </div>
       ) : (

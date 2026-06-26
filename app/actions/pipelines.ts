@@ -1,5 +1,6 @@
 "use server"
 
+import { requirePermission } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
@@ -18,6 +19,7 @@ export async function getPipelines() {
 }
 
 export async function createPipeline(data: { name: string; color: string }) {
+  await requirePermission("MANAGE_PIPELINES")
   await requireAdmin()
   if (!data.name.trim()) return { error: "Name is required" }
   const maxOrder = await prisma.pipeline.aggregate({ _max: { order: true } })
@@ -34,6 +36,7 @@ export async function createPipeline(data: { name: string; color: string }) {
 }
 
 export async function updatePipeline(id: string, data: { name?: string; color?: string }) {
+  await requirePermission("MANAGE_PIPELINES")
   await requireAdmin()
   const pipeline = await prisma.pipeline.update({
     where: { id },
@@ -48,6 +51,7 @@ export async function updatePipeline(id: string, data: { name?: string; color?: 
 }
 
 export async function deletePipeline(id: string) {
+  await requirePermission("MANAGE_PIPELINES")
   await requireAdmin()
   const count = await prisma.referral.count({ where: { pipelineId: id } })
   if (count > 0) return { error: `Cannot delete — ${count} referral${count !== 1 ? "s" : ""} are assigned to this pipeline.` }

@@ -1,5 +1,6 @@
 "use server"
 
+import { requirePermission } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -26,6 +27,7 @@ export async function listActivityTags() {
 }
 
 export async function createTag(data: { name: string; color: string }) {
+  await requirePermission("MANAGE_TAGS")
   await requireAuth()
   if (!data.name.trim()) return { error: "Name is required" }
   const existing = await (prisma.tag as any).findFirst({ where: { name: data.name.trim(), scope: "REFERRAL" } })
@@ -36,6 +38,7 @@ export async function createTag(data: { name: string; color: string }) {
 }
 
 export async function upsertActivityTag(name: string, color: string) {
+  await requirePermission("MANAGE_TAGS")
   await requireAuth()
   const tag = await (prisma.tag as any).upsert({
     where: { name_scope: { name: name.trim().toLowerCase(), scope: "ACTIVITY" } },
@@ -47,6 +50,7 @@ export async function upsertActivityTag(name: string, color: string) {
 }
 
 export async function updateTagColor(id: string, color: string) {
+  await requirePermission("MANAGE_TAGS")
   await requireAuth()
   await prisma.tag.update({ where: { id }, data: { color } })
   revalidatePath("/activities")
@@ -65,6 +69,7 @@ export async function setActivityTags(activityId: string, tagIds: string[]) {
 }
 
 export async function deleteTag(id: string) {
+  await requirePermission("MANAGE_TAGS")
   await requireAuth()
   await prisma.tag.delete({ where: { id } })
   revalidatePath("/referrals")

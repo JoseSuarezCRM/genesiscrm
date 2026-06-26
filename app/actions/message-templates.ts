@@ -1,5 +1,6 @@
 "use server"
 
+import { requirePermission } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
@@ -24,6 +25,7 @@ export async function createMessageTemplate(data: {
   subject?: string | null
   body: string
 }) {
+  await requirePermission("MANAGE_TEMPLATES")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
   if (!data.name?.trim()) return { error: "Template name is required" }
@@ -46,6 +48,7 @@ export async function updateMessageTemplate(id: string, data: {
   subject?: string | null
   body: string
 }) {
+  await requirePermission("MANAGE_TEMPLATES")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
   if (!data.name?.trim()) return { error: "Template name is required" }
@@ -63,6 +66,7 @@ export async function updateMessageTemplate(id: string, data: {
 }
 
 export async function toggleMessageTemplate(id: string, isActive: boolean) {
+  await requirePermission("MANAGE_TEMPLATES")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
   const tpl = await prisma.messageTemplate.update({ where: { id }, data: { isActive } })
@@ -71,6 +75,7 @@ export async function toggleMessageTemplate(id: string, isActive: boolean) {
 }
 
 export async function deleteMessageTemplate(id: string) {
+  await requirePermission("MANAGE_TEMPLATES")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
   const tpl = await prisma.messageTemplate.delete({ where: { id } })

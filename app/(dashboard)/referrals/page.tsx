@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { ReferralStatus } from "@prisma/client"
+import { auth } from "@/lib/auth"
+import { userCan } from "@/lib/permissions"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
@@ -146,6 +148,9 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
 }
 
 export default async function ReferralsPage({ searchParams }: PageProps) {
+  const session = await auth()
+  const canCreate = userCan(session?.user as any, "MANAGE_REFERRALS")
+  const canExport = userCan(session?.user as any, "EXPORT_DATA")
   const {
     referrals,
     total,
@@ -213,13 +218,15 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <ReferralsExportButton exportParams={exportParams.toString()} />
-          <Button asChild>
-            <Link href={`/referrals/new${pipelineId ? `?pipeline=${pipelineId}` : ""}`}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Referral
-            </Link>
-          </Button>
+          {canExport && <ReferralsExportButton exportParams={exportParams.toString()} />}
+          {canCreate && (
+            <Button asChild>
+              <Link href={`/referrals/new${pipelineId ? `?pipeline=${pipelineId}` : ""}`}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Referral
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { userCan } from "@/lib/permissions"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
@@ -9,7 +10,7 @@ interface Props { params: { id: string } }
 
 export default async function PracticeDetailPage({ params }: Props) {
   const session = await auth()
-  const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
+  const isAdmin = userCan(session?.user as any, "MANAGE_PRACTICES")
 
   const [practice, referrals] = await Promise.all([
     prisma.referringPractice.findUnique({

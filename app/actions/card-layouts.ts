@@ -1,5 +1,6 @@
 "use server"
 
+import { requirePermission } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -51,6 +52,7 @@ export async function createCardLayout(
   fields: string[],
   section: CardSection = "LEFT"
 ) {
+  await requirePermission("MANAGE_VIEWS")
   await requireAdmin()
 
   const count = await prisma.cardLayout.count({ where: { entityType, section } })
@@ -75,6 +77,7 @@ export async function updateCardLayout(
   title: string,
   fields: string[]
 ) {
+  await requirePermission("MANAGE_VIEWS")
   await requireAdmin()
 
   await prisma.cardLayout.upsert({
@@ -88,6 +91,7 @@ export async function updateCardLayout(
 }
 
 export async function deleteCardLayout(entityType: EntityType, cardName: string) {
+  await requirePermission("MANAGE_VIEWS")
   await requireAdmin()
 
   await prisma.cardLayout.deleteMany({ where: { entityType, cardName } })
@@ -102,6 +106,7 @@ export async function setCardVisibility(
   title: string,
   visible: boolean
 ) {
+  await requirePermission("MANAGE_VIEWS")
   await requireAdmin()
 
   await prisma.cardLayout.upsert({

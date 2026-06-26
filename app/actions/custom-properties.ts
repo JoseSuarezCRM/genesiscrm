@@ -1,5 +1,6 @@
 "use server"
 
+import { requirePermission } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -33,6 +34,7 @@ export async function listCustomProperties(entityType: "REFERRAL" | "PROVIDER" |
 }
 
 export async function createCustomProperty(data: CreateCustomPropertyInput) {
+  await requirePermission("MANAGE_CUSTOM_PROPERTIES")
   await requireAdmin()
 
   // Check for duplicate
@@ -62,6 +64,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
 }
 
 export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
+  await requirePermission("MANAGE_CUSTOM_PROPERTIES")
   await requireAdmin()
   const { id, ...rest } = data
 
@@ -83,6 +86,7 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
 }
 
 export async function deleteCustomProperty(id: string) {
+  await requirePermission("MANAGE_CUSTOM_PROPERTIES")
   await requireAdmin()
 
   try {
