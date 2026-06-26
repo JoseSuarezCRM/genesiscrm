@@ -4,6 +4,15 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { userCan } from "@/lib/permissions"
+
+// Throw unless the current user (admin or permitted) can perform the action.
+async function requirePermission(key: string) {
+  const session = await auth()
+  if (!session?.user) throw new Error("Unauthorized")
+  if (!userCan(session.user as any, key)) throw new Error("You don't have permission to do this")
+  return session
+}
 
 // Words that should stay lowercase in title case (unless first word)
 const LOWER_WORDS = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "so", "the", "to", "up", "yet"])
@@ -38,8 +47,7 @@ const PracticeSchema = z.object({
 })
 
 export async function createPractice(data: unknown) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PRACTICES")
 
   const parsed = PracticeSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -63,8 +71,7 @@ export async function createPractice(data: unknown) {
 }
 
 export async function updatePractice(id: string, data: unknown) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PRACTICES")
 
   const parsed = PracticeSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -84,8 +91,7 @@ export async function updatePractice(id: string, data: unknown) {
 }
 
 export async function deletePractice(id: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PRACTICES")
 
   const [referralCount, locationCount, doctorCount] = await Promise.all([
     prisma.referral.count({ where: { referringPracticeId: id } }),
@@ -122,8 +128,7 @@ const LocationSchema = z.object({
 })
 
 export async function createLocation(data: unknown) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PRACTICES")
 
   const parsed = LocationSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -164,8 +169,7 @@ export async function createLocation(data: unknown) {
 }
 
 export async function updateLocation(id: string, data: unknown) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PRACTICES")
 
   const parsed = LocationSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -186,8 +190,7 @@ export async function updateLocation(id: string, data: unknown) {
 }
 
 export async function deleteLocation(id: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PRACTICES")
 
   const [referralCount, doctorCount] = await Promise.all([
     prisma.referral.count({ where: { referringLocationId: id } }),
@@ -212,8 +215,7 @@ export async function deleteLocation(id: string) {
 }
 
 export async function mergeLocation(sourceId: string, targetId: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MERGE_RECORDS")
 
   if (sourceId === targetId) return { error: "Cannot merge a location into itself." }
 
@@ -254,8 +256,7 @@ export async function mergeLocation(sourceId: string, targetId: string) {
 }
 
 export async function mergePractice(sourceId: string, targetId: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MERGE_RECORDS")
 
   if (sourceId === targetId) return { error: "Cannot merge a practice into itself." }
 
@@ -318,8 +319,7 @@ const DoctorSchema = z.object({
 })
 
 export async function createDoctor(data: unknown) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PROVIDERS")
 
   const parsed = DoctorSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -357,8 +357,7 @@ export async function createDoctor(data: unknown) {
 }
 
 export async function updateDoctor(id: string, data: unknown) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PROVIDERS")
 
   const parsed = DoctorSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -391,8 +390,7 @@ const EDITABLE_DOCTOR_FIELDS = ["name", "title", "npi", "phone", "email"] as con
 
 // Updates a single doctor field without touching practice or location links
 export async function updateDoctorField(id: string, field: string, value: string | null) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PROVIDERS")
 
   if (!(EDITABLE_DOCTOR_FIELDS as readonly string[]).includes(field)) {
     return { error: "Invalid field" }
@@ -416,8 +414,7 @@ export async function updateDoctorField(id: string, field: string, value: string
 }
 
 export async function mergeDoctor(sourceId: string, targetId: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MERGE_RECORDS")
 
   if (sourceId === targetId) return { error: "Cannot merge a provider into itself." }
 
@@ -450,8 +447,7 @@ export async function mergeDoctor(sourceId: string, targetId: string) {
 }
 
 export async function createProviderNote(providerId: string, content: string) {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  const session = await requirePermission("MANAGE_PROVIDERS")
   if (!content.trim()) return { error: "Note cannot be empty" }
 
   // Look up the provider's practice so the activity is linked to it too

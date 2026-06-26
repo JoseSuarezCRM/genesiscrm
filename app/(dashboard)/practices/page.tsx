@@ -3,10 +3,11 @@ import { auth } from "@/lib/auth"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
+import { userCan } from "@/lib/permissions"
 
 export default async function PracticesPage() {
   const session = await auth()
-  const isAdmin = (session?.user as { role?: string })?.role === "ADMIN"
+  const canManage = userCan(session?.user as any, "MANAGE_PRACTICES")
   const currentUserId = (session?.user as any)?.id ?? ""
 
   const [practices, savedViews, shareOptions] = await Promise.all([
@@ -69,7 +70,7 @@ export default async function PracticesPage() {
 
       <PracticeManager
         practices={enriched as any}
-        isAdmin={isAdmin}
+        isAdmin={canManage}
         currentUserId={currentUserId}
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}

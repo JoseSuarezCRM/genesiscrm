@@ -17,6 +17,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2, Loader2, KeyRound, ShieldCheck, Users, Pencil, X, ChevronDown, ChevronUp, Crown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { NAV_PERMISSIONS, FEATURE_PERMISSIONS, ALL_PERMISSIONS } from "@/lib/permissions"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,26 +53,6 @@ interface Props {
 
 // ── Permission definitions ────────────────────────────────────────────────────
 
-const NAV_PERMISSIONS: { key: string; label: string; description: string }[] = [
-  { key: "NAV_REFERRALS",    label: "Referrals",    description: "Dashboard, Referrals, Providers, Activities, Tasks, SMS, Reports, Broadcasts" },
-  { key: "NAV_APPOINTMENTS", label: "Appointments", description: "Completed appointments and referring providers" },
-  { key: "NAV_SCHEDULING",   label: "Scheduling",   description: "Weekly schedule and staff roster" },
-  { key: "NAV_SURGERY",      label: "Surgery",      description: "Surgery cases tracker with file import, call log, and documents" },
-  { key: "NAV_COMMUNICATIONS", label: "Communications", description: "Reusable SMS and Email templates" },
-  { key: "NAV_ADMIN",        label: "Admin",        description: "User management, automations, templates, and settings" },
-]
-
-const FEATURE_PERMISSIONS: { key: string; label: string; description: string }[] = [
-  { key: "MANAGE_PRACTICES",   label: "Manage Practices",   description: "Create, edit, merge, and delete practices, locations, and providers" },
-  { key: "MERGE_RECORDS",      label: "Merge Records",      description: "Merge duplicate practices, locations, and providers" },
-  { key: "VIEW_REPORTS",       label: "View Reports",       description: "Access the Reports page" },
-  { key: "MANAGE_AUTOMATIONS", label: "Manage Automations", description: "Create and edit automation rules" },
-  { key: "EXPORT_DATA",        label: "Export Data",        description: "Export referral lists to CSV" },
-  { key: "MANAGE_BROADCASTS",  label: "Manage Broadcasts",  description: "Create and send patient broadcasts" },
-  { key: "MANAGE_SCHEDULING",  label: "Manage Scheduling",  description: "Access the staff scheduler, assign staff, and auto-generate schedules" },
-]
-
-const ALL_PERMISSIONS = [...NAV_PERMISSIONS, ...FEATURE_PERMISSIONS]
 
 // ── Permission checklist ───────────────────────────────────────────────────────
 
