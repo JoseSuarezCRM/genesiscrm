@@ -14,6 +14,7 @@ import {
   ClipboardList,
   Stethoscope,
   Settings,
+  MessageCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -44,6 +45,11 @@ const surgeryItems = [
   { href: "/surgery/reports", label: "Surgery Reports" },
 ]
 
+const communicationsItems = [
+  { href: "/communications/sms",   label: "SMS" },
+  { href: "/communications/email", label: "Email" },
+]
+
 const adminItems = [
   { href: "/settings/outreach",   label: "Outreach Templates" },
   { href: "/settings/embed",      label: "Embed Referral Form" },
@@ -58,6 +64,7 @@ const sections = [
   { key: "NAV_APPOINTMENTS", title: "Appointments", icon: ClipboardList, items: appointmentItems },
   { key: "NAV_SCHEDULING",   title: "Scheduling",   icon: CalendarRange, items: schedulingItems },
   { key: "NAV_SURGERY",      title: "Surgery",      icon: Stethoscope,   items: surgeryItems },
+  { key: "NAV_COMMUNICATIONS", title: "Communications", icon: MessageCircle, items: communicationsItems },
   { key: "NAV_ADMIN",        title: "Admin",        icon: Settings,      items: adminItems },
 ]
 
