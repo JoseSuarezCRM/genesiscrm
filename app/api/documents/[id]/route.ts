@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { del } from "@vercel/blob"
 import { auth } from "@/lib/auth"
+import { userCanLevel } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { createAuditLog } from "@/lib/audit"
 import { AuditAction } from "@prisma/client"
@@ -12,6 +13,9 @@ export async function DELETE(
   const session = await auth()
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  if (!userCanLevel(session.user as any, "REFERRALS", "EDIT")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const doc = await prisma.document.findUnique({

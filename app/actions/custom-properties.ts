@@ -104,6 +104,9 @@ export async function saveCustomPropertyValue(
   customPropertyId: string,
   value: any
 ) {
+  // Filling a property value is editing that record — gate by the object's Edit access.
+  const objectFor = { REFERRAL: "REFERRALS", PROVIDER: "PROVIDERS", PRACTICE: "PRACTICES" } as const
+  await requireAccess(objectFor[entityType], "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 

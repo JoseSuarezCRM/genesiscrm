@@ -58,6 +58,7 @@ export async function updateTagColor(id: string, color: string) {
 }
 
 export async function setActivityTags(activityId: string, tagIds: string[]) {
+  await requireAccess("ACTIVITIES", "EDIT")
   await requireAuth()
   await prisma.activityTag.deleteMany({ where: { activityId } })
   if (tagIds.length > 0) {

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requireAccess } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { CallOutcome } from "@prisma/client"
 import { runTrigger_CallAttemptsReached } from "@/lib/automation-engine"
@@ -17,6 +18,7 @@ export async function logCallAttempt(data: {
   outcome: CallOutcome
   notes?: string
 }) {
+  await requireAccess("REFERRALS", "EDIT")
   const session = await requireAuth()
 
   const count = await prisma.callAttempt.count({
@@ -44,7 +46,7 @@ export async function logCallAttempt(data: {
 }
 
 export async function deleteCallAttempt(id: string, referralId: string) {
-  await requireAuth()
+  await requireAccess("REFERRALS", "EDIT")
   await prisma.callAttempt.delete({ where: { id } })
   revalidatePath(`/referrals/${referralId}`)
   revalidatePath("/referrals")
