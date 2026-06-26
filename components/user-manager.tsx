@@ -108,9 +108,13 @@ function ObjectAccessMatrix({ perms, onChange, disabled }: { perms: string[]; on
           return (
             <div key={o.key} className="grid grid-cols-[1fr_auto_auto] gap-3 items-center px-3 py-2">
               <span className="text-sm text-slate-700">{o.label}</span>
-              <StyledSelect value={level} onChange={(e) => setLevel(o.key, e.target.value as AccessLevel)} className="w-40 h-8">
+              <select
+                value={level}
+                onChange={(e) => setLevel(o.key, e.target.value as AccessLevel)}
+                className="w-40 h-8 px-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:border-slate-400"
+              >
                 {ACCESS_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-              </StyledSelect>
+              </select>
               <div className="flex justify-center w-14">
                 <Checkbox checked={canDel} disabled={level === "NONE"} onCheckedChange={(c) => toggleDelete(o.key, !!c)} />
               </div>
