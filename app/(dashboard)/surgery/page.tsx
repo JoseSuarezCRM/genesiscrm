@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth"
-import { userCan } from "@/lib/permissions"
+import { userCan, userCanLevel } from "@/lib/permissions"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { getSurgeryCases } from "@/app/actions/surgery"
@@ -31,7 +31,7 @@ function toArray(val: string | string[] | undefined): string[] {
 export default async function SurgeryPage({ searchParams }: PageProps) {
   const session = await auth()
   if (!session) redirect("/login")
-  const canManage = userCan(session.user as any, "MANAGE_SURGERY")
+  const canManage = userCanLevel(session.user as any, "SURGERY", "EDIT")
   const canImport = userCan(session.user as any, "IMPORT_DATA")
 
   const statuses = toArray(searchParams.status)

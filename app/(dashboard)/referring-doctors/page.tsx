@@ -3,13 +3,13 @@ import { auth } from "@/lib/auth"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
-import { userCan } from "@/lib/permissions"
+import { userCan, userCanLevel } from "@/lib/permissions"
 
 export default async function ReferringDoctorsPage() {
   const session = await auth()
   // "isAdmin" here gates the manage controls — true for admins OR anyone granted
   // the Manage Providers permission (directly or via a team).
-  const canManage = userCan(session?.user as any, "MANAGE_PROVIDERS")
+  const canManage = userCanLevel(session?.user as any, "PROVIDERS", "EDIT")
   const currentUserId = (session?.user as any)?.id ?? ""
 
   const [practices, savedViews, shareOptions] = await Promise.all([

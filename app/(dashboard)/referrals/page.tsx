@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { ReferralStatus } from "@prisma/client"
 import { auth } from "@/lib/auth"
-import { userCan } from "@/lib/permissions"
+import { userCan, userCanLevel } from "@/lib/permissions"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
@@ -149,7 +149,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
 
 export default async function ReferralsPage({ searchParams }: PageProps) {
   const session = await auth()
-  const canCreate = userCan(session?.user as any, "MANAGE_REFERRALS")
+  const canCreate = userCanLevel(session?.user as any, "REFERRALS", "EDIT")
   const canExport = userCan(session?.user as any, "EXPORT_DATA")
   const {
     referrals,

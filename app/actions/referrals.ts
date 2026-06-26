@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
@@ -78,7 +78,7 @@ interface PendingFile {
 }
 
 export async function createReferral(data: unknown, pendingFile?: PendingFile | null) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -171,7 +171,7 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
 }
 
 export async function updateReferral(id: string, data: unknown) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const { session } = await assertReferralAccess(id)
 
   const parsed = ReferralSchema.safeParse(data)
@@ -242,7 +242,7 @@ const EDITABLE_REFERRAL_DATE_FIELDS = ["patientDob", "referralDate", "appointmen
 
 // Updates a single referral field (inline editing on the detail page)
 export async function updateReferralField(id: string, field: string, value: string | null) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const { session } = await assertReferralAccess(id)
 
   const isText = (EDITABLE_REFERRAL_TEXT_FIELDS as readonly string[]).includes(field)
@@ -276,7 +276,7 @@ export async function updateReferralField(id: string, field: string, value: stri
 }
 
 export async function updateReferralNotes(id: string, notes: string) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const { session } = await assertReferralAccess(id)
 
   await prisma.referral.update({
@@ -297,7 +297,7 @@ export async function updateReferralNotes(id: string, notes: string) {
 }
 
 export async function updateReferralStatus(id: string, status: ReferralStatus) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const { session } = await assertReferralAccess(id)
 
   const prev = await prisma.referral.findUnique({ where: { id }, select: { status: true } })
@@ -327,7 +327,7 @@ export async function updateReferralStatus(id: string, status: ReferralStatus) {
 }
 
 export async function deleteReferral(id: string) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireDelete("REFERRALS")
   const { session } = await assertReferralAccess(id)
 
   await prisma.referral.delete({ where: { id } })
@@ -345,7 +345,7 @@ export async function deleteReferral(id: string) {
 }
 
 export async function moveReferralsToPipeline(ids: string[], pipelineId: string | null) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -378,7 +378,7 @@ export async function moveReferralsToPipeline(ids: string[], pipelineId: string 
 }
 
 export async function bulkUpdateStatus(ids: string[], status: ReferralStatus) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -393,7 +393,7 @@ export async function bulkUpdateStatus(ids: string[], status: ReferralStatus) {
 }
 
 export async function assignReferral(referralId: string, assignedToId: string | null) {
-  await requirePermission("MANAGE_REFERRALS")
+  await requireAccess("REFERRALS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 

@@ -3,11 +3,11 @@ import { auth } from "@/lib/auth"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
-import { userCan } from "@/lib/permissions"
+import { userCan, userCanLevel } from "@/lib/permissions"
 
 export default async function PracticesPage() {
   const session = await auth()
-  const canManage = userCan(session?.user as any, "MANAGE_PRACTICES")
+  const canManage = userCanLevel(session?.user as any, "PRACTICES", "EDIT")
   const currentUserId = (session?.user as any)?.id ?? ""
 
   const [practices, savedViews, shareOptions] = await Promise.all([

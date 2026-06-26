@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
@@ -147,7 +147,7 @@ export async function createBroadcast(data: {
   filters: BroadcastFilters
   scheduledAt?: string | null
 }) {
-  await requirePermission("MANAGE_BROADCASTS")
+  await requireAccess("BROADCASTS", "EDIT")
   const session = await requireAuth()
 
   const recipients = await previewBroadcastRecipients(data.filters)
@@ -185,7 +185,7 @@ export async function createBroadcast(data: {
 
 // Send all pending recipients for a broadcast
 export async function sendBroadcastEmails(broadcastId: string) {
-  await requirePermission("MANAGE_BROADCASTS")
+  await requireAccess("BROADCASTS", "EDIT")
   const broadcast = await prisma.emailBroadcast.findUnique({
     where: { id: broadcastId },
     include: { recipients: true },
@@ -252,7 +252,7 @@ export async function listBroadcasts() {
 }
 
 export async function deleteBroadcast(id: string) {
-  await requirePermission("MANAGE_BROADCASTS")
+  await requireAccess("BROADCASTS", "EDIT")
   await requireAuth()
   await prisma.emailBroadcast.delete({ where: { id } })
   revalidatePath("/broadcasts")

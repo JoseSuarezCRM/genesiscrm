@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
@@ -17,7 +17,7 @@ const TaskSchema = z.object({
 })
 
 export async function createTask(data: unknown) {
-  await requirePermission("MANAGE_TASKS")
+  await requireAccess("TASKS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -56,7 +56,7 @@ export async function createTask(data: unknown) {
 }
 
 export async function updateTask(id: string, data: unknown) {
-  await requirePermission("MANAGE_TASKS")
+  await requireAccess("TASKS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -100,7 +100,7 @@ export async function updateTask(id: string, data: unknown) {
 }
 
 export async function updateTaskStatus(id: string, status: TaskStatus) {
-  await requirePermission("MANAGE_TASKS")
+  await requireAccess("TASKS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -110,7 +110,7 @@ export async function updateTaskStatus(id: string, status: TaskStatus) {
 }
 
 export async function deleteTask(id: string) {
-  await requirePermission("MANAGE_TASKS")
+  await requireDelete("TASKS")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 

@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -70,7 +70,7 @@ export async function createSurgeryCase(data: {
   email?: string | null
   notes?: string | null
 }) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireAccess("SURGERY", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
   if (!data.patientName?.trim()) return { error: "Patient name is required" }
@@ -111,7 +111,7 @@ export async function updateSurgeryCase(
     notes?: string | null
   }
 ) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireAccess("SURGERY", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -143,7 +143,7 @@ export async function updateSurgeryCase(
 }
 
 export async function bulkUpdateSurgeryCases(ids: string[], status: string) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireAccess("SURGERY", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -156,7 +156,7 @@ export async function bulkUpdateSurgeryCases(ids: string[], status: string) {
 }
 
 export async function bulkDeleteSurgeryCases(ids: string[]) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireDelete("SURGERY")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -168,7 +168,7 @@ export async function bulkDeleteSurgeryCases(ids: string[]) {
 }
 
 export async function deleteSurgeryCase(id: string) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireDelete("SURGERY")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -177,7 +177,7 @@ export async function deleteSurgeryCase(id: string) {
 }
 
 export async function addSurgeryCallAttempt(caseId: string, outcome: string, notes: string) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireAccess("SURGERY", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -197,7 +197,7 @@ export async function addSurgeryCallAttempt(caseId: string, outcome: string, not
 }
 
 export async function deleteSurgeryCallAttempt(id: string, caseId: string) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireDelete("SURGERY")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -206,7 +206,7 @@ export async function deleteSurgeryCallAttempt(id: string, caseId: string) {
 }
 
 export async function deleteSurgeryDocument(id: string, caseId: string) {
-  await requirePermission("MANAGE_SURGERY")
+  await requireDelete("SURGERY")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 

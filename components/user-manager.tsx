@@ -17,7 +17,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Trash2, Loader2, KeyRound, ShieldCheck, Users, Pencil, X, ChevronDown, ChevronUp, Crown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { NAV_PERMISSIONS, FEATURE_PERMISSIONS, ALL_PERMISSIONS } from "@/lib/permissions"
+import {
+  NAV_PERMISSIONS, CAPABILITIES, ACCESS_OBJECTS, ACCESS_LEVELS,
+  type PermissionDef, type AccessLevel, accessLevelFromPerms, canDeleteFromPerms,
+} from "@/lib/permissions"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,7 +61,7 @@ interface Props {
 
 function PermissionChecklist({
   selected, onChange, disabled, items,
-}: { selected: string[]; onChange: (v: string[]) => void; disabled?: boolean; items: typeof ALL_PERMISSIONS }) {
+}: { selected: string[]; onChange: (v: string[]) => void; disabled?: boolean; items: PermissionDef[] }) {
   return (
     <div className="space-y-3">
       {items.map((p) => (
@@ -76,6 +79,68 @@ function PermissionChecklist({
           </div>
         </label>
       ))}
+    </div>
+  )
+}
+
+// Per-object access: a level (No access / View / View & Edit) + a separate Delete toggle.
+function ObjectAccessMatrix({ perms, onChange, disabled }: { perms: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  const setLevel = (obj: string, level: AccessLevel) => {
+    const next = perms.filter((p) => p !== `${obj}:VIEW` && p !== `${obj}:EDIT`)
+    if (level === "VIEW") next.push(`${obj}:VIEW`)
+    if (level === "EDIT") next.push(`${obj}:EDIT`)
+    // Delete makes no sense without at least view — drop it if access is removed.
+    onChange(level === "NONE" ? next.filter((p) => p !== `${obj}:DELETE`) : next)
+  }
+  const toggleDelete = (obj: string, on: boolean) => {
+    const key = `${obj}:DELETE`
+    onChange(on ? [...perms, key] : perms.filter((p) => p !== key))
+  }
+  return (
+    <div className={cn("border border-slate-200 rounded-lg overflow-hidden", disabled && "opacity-40 pointer-events-none")}>
+      <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <span>Object</span><span>Access</span><span className="text-center">Delete</span>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {ACCESS_OBJECTS.map((o) => {
+          const level = accessLevelFromPerms(perms, o.key)
+          const canDel = canDeleteFromPerms(perms, o.key)
+          return (
+            <div key={o.key} className="grid grid-cols-[1fr_auto_auto] gap-3 items-center px-3 py-2">
+              <span className="text-sm text-slate-700">{o.label}</span>
+              <StyledSelect value={level} onChange={(e) => setLevel(o.key, e.target.value as AccessLevel)} className="w-40 h-8">
+                {ACCESS_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </StyledSelect>
+              <div className="flex justify-center w-14">
+                <Checkbox checked={canDel} disabled={level === "NONE"} onCheckedChange={(c) => toggleDelete(o.key, !!c)} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// The full permission editor: menu access + object access matrix + capabilities.
+function PermissionEditor({ perms, onChange, disabled }: { perms: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <Label className="mb-1 block">Menu Access</Label>
+        <p className="text-xs text-slate-500 mb-3">Which sections of the navigation this {disabled ? "user" : "set"} can see.</p>
+        <PermissionChecklist selected={perms} onChange={onChange} items={NAV_PERMISSIONS} disabled={disabled} />
+      </div>
+      <div>
+        <Label className="mb-1 block">Object Access</Label>
+        <p className="text-xs text-slate-500 mb-3">Per-object access level, plus whether they can delete records.</p>
+        <ObjectAccessMatrix perms={perms} onChange={onChange} disabled={disabled} />
+      </div>
+      <div>
+        <Label className="mb-1 block">Other Capabilities</Label>
+        <p className="text-xs text-slate-500 mb-3">Standalone abilities that aren’t a view/edit spectrum.</p>
+        <PermissionChecklist selected={perms} onChange={onChange} items={CAPABILITIES} disabled={disabled} />
+      </div>
     </div>
   )
 }
@@ -118,19 +183,7 @@ function TeamForm({
         </div>
       </div>
 
-      {/* Menu access */}
-      <div>
-        <Label className="mb-1 block">Menu Access</Label>
-        <p className="text-xs text-slate-500 mb-3">Which sections of the navigation this team can see.</p>
-        <PermissionChecklist selected={perms} onChange={setPerms} items={NAV_PERMISSIONS} />
-      </div>
-
-      {/* Feature permissions */}
-      <div>
-        <Label className="mb-1 block">Feature Permissions</Label>
-        <p className="text-xs text-slate-500 mb-3">Additional capabilities available to team members.</p>
-        <PermissionChecklist selected={perms} onChange={setPerms} items={FEATURE_PERMISSIONS} />
-      </div>
+      <PermissionEditor perms={perms} onChange={setPerms} />
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
@@ -155,7 +208,8 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
   const nonMembers = users.filter(u => !memberIds.has(u.id))
 
   const navPerms = team.permissions.filter(p => p.startsWith("NAV_"))
-  const featurePerms = team.permissions.filter(p => !p.startsWith("NAV_"))
+  const objectGrants = ACCESS_OBJECTS.filter(o => team.permissions.some(p => p.startsWith(o.key + ":"))).length
+  const capPerms = team.permissions.filter(p => CAPABILITIES.some(c => c.key === p))
 
   function handleAddMember() {
     if (!addUserId) return
@@ -198,13 +252,16 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
                 {NAV_PERMISSIONS.find(x => x.key === p)?.label ?? p}
               </span>
             ))}
-            {featurePerms.slice(0, 2).map(p => (
+            {objectGrants > 0 && (
+              <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{objectGrants} object{objectGrants !== 1 ? "s" : ""}</span>
+            )}
+            {capPerms.slice(0, 2).map(p => (
               <span key={p} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                {FEATURE_PERMISSIONS.find(x => x.key === p)?.label ?? p}
+                {CAPABILITIES.find(x => x.key === p)?.label ?? p}
               </span>
             ))}
-            {featurePerms.length > 2 && (
-              <span className="text-xs text-slate-400">+{featurePerms.length - 2} more</span>
+            {capPerms.length > 2 && (
+              <span className="text-xs text-slate-400">+{capPerms.length - 2} more</span>
             )}
           </div>
           {expanded ? <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />}
@@ -611,7 +668,7 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
                   <div className="space-y-5">
                     <div>
                       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Individual overrides (in addition to team permissions)</p>
-                      <PermissionChecklist selected={selectedPerms} onChange={setSelectedPerms} items={ALL_PERMISSIONS} />
+                      <PermissionEditor perms={selectedPerms} onChange={setSelectedPerms} />
                     </div>
                   </div>
                 )}

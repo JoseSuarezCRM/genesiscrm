@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -75,7 +75,7 @@ export async function createThread(
 }
 
 export async function markThreadRead(threadId: string) {
-  await requirePermission("SEND_SMS")
+  await requireAccess("SMS", "EDIT")
   const session = await auth()
   if (!session?.user) return
 
@@ -127,7 +127,7 @@ export async function sendSms(
     revalidatePath("/messages")
     return { success: true }
   } catch (e: any) {
-  await requirePermission("SEND_SMS")
+  await requireAccess("SMS", "EDIT")
     return { success: false, error: e?.message ?? "Failed to send SMS." }
   }
 }
@@ -176,7 +176,7 @@ export async function searchReferralsForSms(query: string) {
 }
 
 export async function deleteThread(threadId: string) {
-  await requirePermission("SEND_SMS")
+  await requireAccess("SMS", "EDIT")
   const session = await auth()
   if ((session?.user as any)?.role !== "ADMIN") return { error: "Unauthorized" }
 

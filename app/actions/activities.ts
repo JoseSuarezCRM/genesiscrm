@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -19,7 +19,7 @@ const ActivitySchema = z.object({
 })
 
 export async function createActivity(data: unknown) {
-  await requirePermission("MANAGE_ACTIVITIES")
+  await requireAccess("ACTIVITIES", "EDIT")
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
 
@@ -51,7 +51,7 @@ export async function createActivity(data: unknown) {
 }
 
 export async function updateActivity(id: string, data: unknown) {
-  await requirePermission("MANAGE_ACTIVITIES")
+  await requireAccess("ACTIVITIES", "EDIT")
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
 
@@ -85,7 +85,7 @@ export async function updateActivity(id: string, data: unknown) {
 }
 
 export async function deleteActivity(id: string) {
-  await requirePermission("MANAGE_ACTIVITIES")
+  await requireDelete("ACTIVITIES")
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
 

@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
@@ -17,7 +17,7 @@ export async function createAutomation(data: {
   flow?: Record<string, unknown> | null
   graph?: Record<string, unknown> | null
 }) {
-  await requirePermission("MANAGE_AUTOMATIONS")
+  await requireAccess("AUTOMATIONS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -50,7 +50,7 @@ export async function updateAutomation(id: string, data: {
   graph?: Record<string, unknown> | null
   isActive: boolean
 }) {
-  await requirePermission("MANAGE_AUTOMATIONS")
+  await requireAccess("AUTOMATIONS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -77,7 +77,7 @@ export async function updateAutomation(id: string, data: {
 // server-side — it never travels over the wire — so this works regardless of
 // the Server Action body-size limit. The clone starts paused (isActive: false).
 export async function cloneAutomation(id: string) {
-  await requirePermission("MANAGE_AUTOMATIONS")
+  await requireAccess("AUTOMATIONS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -104,7 +104,7 @@ export async function cloneAutomation(id: string) {
 }
 
 export async function toggleAutomation(id: string, isActive: boolean) {
-  await requirePermission("MANAGE_AUTOMATIONS")
+  await requireAccess("AUTOMATIONS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -114,7 +114,7 @@ export async function toggleAutomation(id: string, isActive: boolean) {
 }
 
 export async function deleteAutomation(id: string) {
-  await requirePermission("MANAGE_AUTOMATIONS")
+  await requireDelete("AUTOMATIONS")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
@@ -124,7 +124,7 @@ export async function deleteAutomation(id: string) {
 }
 
 export async function runScheduledAutomationsAction() {
-  await requirePermission("MANAGE_AUTOMATIONS")
+  await requireAccess("AUTOMATIONS", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
