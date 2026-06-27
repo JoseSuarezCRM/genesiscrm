@@ -36,6 +36,19 @@ import {
 } from "@/components/ui/select"
 import { sendManualOutreach } from "@/app/actions/outreach"
 import { getEmailTemplates } from "@/app/actions/outreach-templates"
+import { getMessageTemplates } from "@/app/actions/message-templates"
+
+// Map Communications-template engine tokens → the outreach {{...}} tokens this
+// dialog substitutes, so a loaded template still personalizes on send.
+const ENGINE_TO_OUTREACH: Record<string, string> = {
+  "{patient_first_name}": "{{firstName}}",
+  "{patient_name}": "{{fullName}}",
+  "{provider_name}": "{{providerName}}",
+  "{practice_name}": "{{practiceName}}",
+}
+function convertTokens(body: string): string {
+  return body.replace(/\{[a-z_]+\}/g, (m) => ENGINE_TO_OUTREACH[m] ?? m)
+}
 import { OutreachTrigger } from "@prisma/client"
 
 type Channel = "SMS" | "EMAIL" | "BOTH"
@@ -76,6 +89,7 @@ export default function OutreachDialog({ referral }: Props) {
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle")
   const [errorMsg, setErrorMsg] = useState("")
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
+  const [smsTemplates, setSmsTemplates] = useState<{ id: string; name: string; body: string }[]>([])
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [, startLoadTransition] = useTransition()
 
@@ -88,8 +102,12 @@ export default function OutreachDialog({ referral }: Props) {
     if (isOpen && !templatesLoaded) {
       startLoadTransition(async () => {
         try {
-          const templates = await getEmailTemplates()
-          setEmailTemplates(templates)
+          const [emailTpls, smsTpls] = await Promise.all([
+            getEmailTemplates(),
+            getMessageTemplates("SMS"),
+          ])
+          setEmailTemplates(emailTpls)
+          setSmsTemplates(smsTpls.map((t: any) => ({ id: t.id, name: t.name, body: t.body })))
           setTemplatesLoaded(true)
         } catch {
           // Non-fatal — dialog still works without templates
@@ -110,6 +128,12 @@ export default function OutreachDialog({ referral }: Props) {
     if (!t) return
     setSubject(t.subject ?? "")
     setMessage(t.body)
+  }
+
+  function applySmsTemplate(templateId: string) {
+    const t = smsTemplates.find((e) => e.id === templateId)
+    if (!t) return
+    setMessage(convertTokens(t.body))
   }
 
   async function handleSend() {
@@ -203,6 +227,23 @@ export default function OutreachDialog({ referral }: Props) {
                     <SelectItem key={t.id} value={t.id}>
                       {TRIGGER_LABELS[t.trigger]}
                     </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* SMS template selector — from the Communications SMS templates */}
+          {(channel === "SMS" || channel === "BOTH") && smsTemplates.length > 0 && (
+            <div>
+              <Label className="mb-2 block">Load SMS template</Label>
+              <Select onValueChange={applySmsTemplate}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a template to pre-fill..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {smsTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
