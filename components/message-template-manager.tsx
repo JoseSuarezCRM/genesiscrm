@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Loader2, X, Pencil, Trash2, MessageSquare, Mail } from "lucide-react"
+import { Plus, Loader2, X, Pencil, Trash2, MessageSquare, Mail, Braces, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
 import {
@@ -38,6 +38,21 @@ export default function MessageTemplateManager({ channel, templates, canManage =
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState("")
   const [form, setForm] = useState({ name: "", subject: "", body: "" })
+  const [tokenOpen, setTokenOpen] = useState(false)
+  const smsRef = useRef<HTMLTextAreaElement>(null)
+
+  // Insert a personalization token at the SMS textarea's cursor.
+  function insertToken(value: string) {
+    const el = smsRef.current
+    const start = el?.selectionStart ?? form.body.length
+    const end = el?.selectionEnd ?? form.body.length
+    const next = form.body.slice(0, start) + value + form.body.slice(end)
+    setForm((f) => ({ ...f, body: next }))
+    setTokenOpen(false)
+    requestAnimationFrame(() => {
+      if (el) { el.focus(); const pos = start + value.length; el.setSelectionRange(pos, pos) }
+    })
+  }
 
   function openNew() { setEditId(null); setForm({ name: "", subject: "", body: "" }); setError(""); setOpen(true) }
   function openEdit(t: Template) { setEditId(t.id); setForm({ name: t.name, subject: t.subject ?? "", body: t.body }); setError(""); setOpen(true) }
@@ -126,12 +141,36 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                 </div>
               )}
               <div>
-                <label className={labelCls}>{isEmail ? "Body" : "Message"}</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={cn(labelCls, "mb-0")}>{isEmail ? "Body" : "Message"}</label>
+                  {!isEmail && (
+                    <div className="relative">
+                      <button type="button" onClick={() => setTokenOpen((o) => !o)}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 border border-slate-200 rounded-md px-2 py-1 hover:border-slate-400">
+                        <Braces className="h-3 w-3" /> Fields <ChevronDown className="h-3 w-3 opacity-60" />
+                      </button>
+                      {tokenOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setTokenOpen(false)} />
+                          <div className="absolute right-0 top-8 z-50 w-48 bg-white border border-slate-200 rounded-lg shadow-xl py-1">
+                            {TOKENS.map((t) => (
+                              <button key={t.value} type="button" onClick={() => insertToken(t.value)}
+                                className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center justify-between">
+                                <span className="text-slate-700">{t.label}</span>
+                                <span className="text-[11px] text-slate-400 font-mono">{t.value}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {isEmail ? (
                   <RichTextEditor value={form.body} onChange={(html) => setForm({ ...form, body: html })} tokens={TOKENS} minHeight={200} />
                 ) : (
                   <>
-                    <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={5}
+                    <textarea ref={smsRef} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={5}
                       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400 resize-none"
                       placeholder="Type your text message…" />
                     <p className="text-xs text-slate-400 mt-1">{form.body.length} characters · {Math.max(1, Math.ceil(form.body.length / 160))} SMS segment{form.body.length > 160 ? "s" : ""}</p>
