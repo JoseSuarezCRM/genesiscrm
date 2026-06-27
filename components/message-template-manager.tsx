@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Loader2, X, Pencil, Trash2, MessageSquare, Mail, Braces, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
+import { RichTextEditor } from "@/components/rich-text-editor"
 import {
   createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, toggleMessageTemplate,
 } from "@/app/actions/message-templates"
@@ -20,12 +20,35 @@ interface Template {
   updatedAt: string | Date
 }
 
-// Keys here must match what the automation engine's resolveTemplate substitutes.
-const TOKENS = tokensFromStrings([
-  "{patient_first_name}", "{patient_name}", "{provider_name}", "{practice_name}",
-  "{surgery_date}", "{procedure}", "{body_part}", "{surgical_provider}", "{facility}",
-  "{referral_url}",
-])
+// Grouped personalization fields. Keys must match what the automation engine's
+// resolveTemplate substitutes.
+const TOKEN_GROUPS = [
+  {
+    group: "Patient / Referral",
+    tokens: [
+      { label: "Patient first name", value: "{patient_first_name}" },
+      { label: "Patient name", value: "{patient_name}" },
+      { label: "Referral link", value: "{referral_url}" },
+    ],
+  },
+  {
+    group: "Provider / Practice",
+    tokens: [
+      { label: "Provider name", value: "{provider_name}" },
+      { label: "Practice name", value: "{practice_name}" },
+    ],
+  },
+  {
+    group: "Surgery",
+    tokens: [
+      { label: "Surgery date", value: "{surgery_date}" },
+      { label: "Procedure", value: "{procedure}" },
+      { label: "Body part", value: "{body_part}" },
+      { label: "Surgical provider", value: "{surgical_provider}" },
+      { label: "Facility", value: "{facility}" },
+    ],
+  },
+]
 
 const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 const inputCls = "w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400"
@@ -157,13 +180,18 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                       {tokenOpen && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setTokenOpen(false)} />
-                          <div className="absolute right-0 top-8 z-50 w-48 bg-white border border-slate-200 rounded-lg shadow-xl py-1">
-                            {TOKENS.map((t) => (
-                              <button key={t.value} type="button" onClick={() => insertToken(t.value)}
-                                className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center justify-between">
-                                <span className="text-slate-700">{t.label}</span>
-                                <span className="text-[11px] text-slate-400 font-mono">{t.value}</span>
-                              </button>
+                          <div className="absolute right-0 top-8 z-50 w-60 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl py-1">
+                            {TOKEN_GROUPS.map((g) => (
+                              <div key={g.group}>
+                                <p className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{g.group}</p>
+                                {g.tokens.map((t) => (
+                                  <button key={t.value} type="button" onClick={() => insertToken(t.value)}
+                                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center justify-between gap-2">
+                                    <span className="text-slate-700 truncate">{t.label}</span>
+                                    <span className="text-[11px] text-slate-400 font-mono shrink-0">{t.value}</span>
+                                  </button>
+                                ))}
+                              </div>
                             ))}
                           </div>
                         </>
@@ -172,7 +200,7 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                   )}
                 </div>
                 {isEmail ? (
-                  <RichTextEditor value={form.body} onChange={(html) => setForm({ ...form, body: html })} tokens={TOKENS} minHeight={200} />
+                  <RichTextEditor value={form.body} onChange={(html) => setForm({ ...form, body: html })} tokenGroups={TOKEN_GROUPS} minHeight={200} />
                 ) : (
                   <>
                     <textarea ref={smsRef} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={5}
