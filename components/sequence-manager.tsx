@@ -15,6 +15,7 @@ import {
   SequenceInput, SequenceStepInput,
 } from "@/app/actions/sequences"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
+import TokenTextarea from "@/components/ui/token-textarea"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -199,12 +200,12 @@ function StepCard({
             {step.channel === "EMAIL" ? (
               <RichTextEditor value={step.body} onChange={(html) => onUpdate({ ...step, body: html })} minHeight={120} placeholder="Hi {patient_first_name}, this is Genesis Ortho…" tokens={tokensFromStrings(TEMPLATE_VARS)} />
             ) : (
-              <textarea
+              <TokenTextarea
                 value={step.body}
-                onChange={(e) => onUpdate({ ...step, body: e.target.value })}
+                onChange={(v) => onUpdate({ ...step, body: v })}
                 rows={3}
                 placeholder="Hi {patient_first_name}, this is Genesis Ortho…"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                tokens={tokensFromStrings(TEMPLATE_VARS)}
               />
             )}
           </div>

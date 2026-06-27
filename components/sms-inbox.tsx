@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Send, MessageSquare, Plus, X, Phone, Trash2,
-  ExternalLink, Search, Link2, Unlink, Loader2, FileText,
+  ExternalLink, Search, Link2, Unlink, Loader2, FileText, Braces,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -207,6 +207,7 @@ export default function SmsInbox({ initialThreads, isAdmin, templates = [] }: Pr
   const [draftBody, setDraftBody] = useState("")
   const [sending, setSending] = useState(false)
   const [tplOpen, setTplOpen] = useState(false)
+  const [fieldsOpen, setFieldsOpen] = useState(false)
   const [sendError, setSendError] = useState("")
   const [showNew, setShowNew] = useState(false)
   const [showLinkReferral, setShowLinkReferral] = useState(false)
@@ -217,6 +218,25 @@ export default function SmsInbox({ initialThreads, isAdmin, templates = [] }: Pr
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const activeThread = threads.find((t) => t.id === activeId) ?? null
+
+  // 1:1 personalization: insert the actual recipient name (no send-time templating here).
+  const recipientName = activeThread?.referral
+    ? `${activeThread.referral.patientFirstName} ${activeThread.referral.patientLastName}`.trim()
+    : (activeThread?.contactName ?? "")
+  const recipientFields = [
+    { label: "First name", value: activeThread?.referral?.patientFirstName ?? recipientName.split(/\s+/)[0] ?? "" },
+    { label: "Last name", value: activeThread?.referral?.patientLastName ?? recipientName.split(/\s+/).slice(1).join(" ") },
+    { label: "Full name", value: recipientName },
+  ].filter((f) => f.value)
+
+  function insertAtCursor(text: string) {
+    const el = inputRef.current
+    const start = el?.selectionStart ?? draftBody.length
+    const end = el?.selectionEnd ?? draftBody.length
+    setDraftBody(draftBody.slice(0, start) + text + draftBody.slice(end))
+    setFieldsOpen(false)
+    requestAnimationFrame(() => { if (el) { el.focus(); const p = start + text.length; el.setSelectionRange(p, p) } })
+  }
 
   // ── Auto-scroll to bottom of messages ──────────────────────────────────
   useEffect(() => {
@@ -567,6 +587,33 @@ export default function SmsInbox({ initialThreads, isAdmin, templates = [] }: Pr
                 <p className="text-xs text-red-600 mb-2">{sendError}</p>
               )}
               <div className="flex items-end gap-2">
+                {recipientFields.length > 0 && (
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFieldsOpen((o) => !o)}
+                      title="Insert recipient field"
+                      className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700 transition-colors"
+                    >
+                      <Braces className="h-4 w-4" />
+                    </button>
+                    {fieldsOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setFieldsOpen(false)} />
+                        <div className="absolute bottom-11 left-0 z-50 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1">
+                          <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Insert recipient field</p>
+                          {recipientFields.map((f) => (
+                            <button key={f.label} type="button" onClick={() => insertAtCursor(f.value)}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between gap-2">
+                              <span className="text-sm text-slate-700">{f.label}</span>
+                              <span className="text-xs text-slate-400 truncate">{f.value}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 {templates.length > 0 && (
                   <div className="relative shrink-0">
                     <button
