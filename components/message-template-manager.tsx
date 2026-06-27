@@ -20,7 +20,12 @@ interface Template {
   updatedAt: string | Date
 }
 
-const TOKENS = tokensFromStrings(["first_name", "last_name", "patient_name", "provider_name", "practice_name"])
+// Keys here must match what the automation engine's resolveTemplate substitutes.
+const TOKENS = tokensFromStrings([
+  "{patient_first_name}", "{patient_name}", "{provider_name}", "{practice_name}",
+  "{surgery_date}", "{procedure}", "{body_part}", "{surgical_provider}", "{facility}",
+  "{referral_url}",
+])
 
 const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 const inputCls = "w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400"
