@@ -798,18 +798,15 @@ function ActionConfigFields({
     else { const c = { ...config }; delete c.templateId; delete c.templateName; onChange(c) }
   }
   const TemplatePicker = (type === "SEND_EMAIL" || (type as string) === "SEND_SMS") ? (
-    <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg">
-      <label className="text-xs font-semibold text-violet-700 block mb-1.5">Template</label>
-      <StyledSelect value={templateId} onChange={e => pickTemplate(e.target.value)} className="w-full">
+    <div className="flex items-center gap-2">
+      <label className="text-xs font-medium text-slate-600 shrink-0">Template</label>
+      <StyledSelect value={templateId} onChange={e => pickTemplate(e.target.value)} className="flex-1 h-8">
         <option value="">— Write a custom message —</option>
         {channelTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
       </StyledSelect>
       {templateId && (
-        <p className="text-xs text-violet-600 mt-1.5">
-          Content comes from this template — edit it under Communications. Recipients{type === "SEND_EMAIL" ? ", sender and send-time" : ""} stay set here.
-        </p>
+        <span className="text-[11px] text-slate-400 shrink-0">from template</span>
       )}
-      {channelTemplates.length === 0 && <p className="text-xs text-violet-400 mt-1.5">No {type === "SEND_SMS" ? "SMS" : "email"} templates yet — create one under Communications.</p>}
     </div>
   ) : null
   const [showVars, setShowVars] = useState(false)
