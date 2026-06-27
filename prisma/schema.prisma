@@ -998,15 +998,18 @@ model OutreachTemplate {
 
 // Reusable marketing templates (SMS / Email) managed under the Marketing section.
 model MessageTemplate {
-  id          String          @id @default(cuid())
-  name        String
-  channel     OutreachChannel
-  subject     String?         // email subject (email only)
-  body        String
-  isActive    Boolean         @default(true)
-  createdById String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  name           String
+  channel        OutreachChannel
+  subject        String?         // email subject (email only)
+  body           String
+  isActive       Boolean         @default(true)
+  createdById    String?
+  updatedById    String?
+  lastViewedById String?
+  lastViewedAt   DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([channel])
 }

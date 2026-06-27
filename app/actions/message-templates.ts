@@ -13,10 +13,30 @@ function pathFor(channel: OutreachChannel) {
 export async function getMessageTemplates(channel: OutreachChannel) {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
-  return prisma.messageTemplate.findMany({
+  const templates = await prisma.messageTemplate.findMany({
     where: { channel },
     orderBy: { updatedAt: "desc" },
   })
+  // Resolve the audit user ids → display names.
+  const ids = Array.from(new Set(templates.flatMap((t) => [t.createdById, t.updatedById, t.lastViewedById]).filter(Boolean) as string[]))
+  const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }) : []
+  const nameById = Object.fromEntries(users.map((u) => [u.id, u.name ?? u.email]))
+  return templates.map((t) => ({
+    ...t,
+    createdByName: t.createdById ? nameById[t.createdById] ?? null : null,
+    updatedByName: t.updatedById ? nameById[t.updatedById] ?? null : null,
+    lastViewedByName: t.lastViewedById ? nameById[t.lastViewedById] ?? null : null,
+  }))
+}
+
+// Record that the current user viewed a template (for "Last viewed by").
+export async function recordTemplateView(id: string) {
+  const session = await auth()
+  if (!session?.user) return
+  await prisma.messageTemplate.update({
+    where: { id },
+    data: { lastViewedById: session.user.id, lastViewedAt: new Date() },
+  }).catch(() => {})
 }
 
 export async function createMessageTemplate(data: {
@@ -59,6 +79,7 @@ export async function updateMessageTemplate(id: string, data: {
       name: data.name.trim(),
       subject: data.subject?.trim() || null,
       body: data.body ?? "",
+      updatedById: session.user.id,
     },
   })
   revalidatePath(pathFor(tpl.channel))
