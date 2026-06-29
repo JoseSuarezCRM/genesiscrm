@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import ExportDialog from "@/components/ui/export-dialog"
 import { useState, useTransition, useRef, useEffect } from "react"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
@@ -16,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save, Globe, Users, UserCog, Lock } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save, Globe, Users, UserCog, Lock, Download } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -323,6 +324,11 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const [tab] = useState<"practices" | "providers">(view)
   const [providerSort, setProviderSort] = useState<"name" | "referrals">("name")
   const [addProviderOpen, setAddProviderOpen] = useState(false)
+  // Provider filters + export
+  const [filterPractice, setFilterPractice] = useState("")
+  const [filterSpecialty, setFilterSpecialty] = useState("")
+  const [filterRefs, setFilterRefs] = useState("") // "" | "has" | "none"
+  const [exportOpen, setExportOpen] = useState(false)
 
   // Provider table columns + saved views
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_PROVIDER_COLUMNS)
@@ -463,6 +469,33 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
       )
   })()
 
+  // Distinct values for the provider filters.
+  const providerPractices = Array.from(new Set(allProviders.map((d) => d.practiceName).filter(Boolean))).sort()
+  const providerSpecialties = Array.from(new Set(allProviders.map((d) => (d as any).specialty as string).filter(Boolean))).sort()
+
+  // Providers after search + filters — used by both the table and the export.
+  const filteredProviders = allProviders.filter((d) => {
+    const q = search.toLowerCase().trim()
+    if (q && !(d.name.toLowerCase().includes(q) || d.practiceName.toLowerCase().includes(q) || d.npi?.includes(q))) return false
+    if (filterPractice && d.practiceName !== filterPractice) return false
+    if (filterSpecialty && (d as any).specialty !== filterSpecialty) return false
+    if (filterRefs === "has" && d._count.referrals === 0) return false
+    if (filterRefs === "none" && d._count.referrals > 0) return false
+    return true
+  })
+  const providerFiltersActive = !!(filterPractice || filterSpecialty || filterRefs)
+  function clearProviderFilters() { setFilterPractice(""); setFilterSpecialty(""); setFilterRefs("") }
+
+  function buildProviderExport() {
+    const headers = ["Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Email", "Locations", "Referrals"]
+    const rows = filteredProviders.map((d) => [
+      d.name, (d as any).title ?? "", d.practiceName, (d as any).specialty ?? "", d.npi ?? "",
+      (d as any).phone ?? "", (d as any).email ?? "",
+      d.locations?.map((l) => l.location.name).join("; ") ?? "", d._count.referrals,
+    ])
+    return { headers, rows }
+  }
+
   return (
     <div className="space-y-4">
       {/* Error message + action button */}
@@ -582,6 +615,15 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                 </div>
               )}
             </div>
+            {/* Export */}
+            <button
+              onClick={() => setExportOpen(true)}
+              disabled={filteredProviders.length === 0}
+              title="Export current view to CSV"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" /> Export
+            </button>
             {isAdmin && (
               <Dialog open={addProviderOpen} onOpenChange={setAddProviderOpen}>
                 <DialogTrigger asChild>
@@ -624,6 +666,33 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           </button>
         )}
       </div>
+
+      {/* ── Filters (providers only) ───────────────────────────────────────── */}
+      {tab === "providers" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <StyledSelect value={filterPractice} onChange={(e) => setFilterPractice(e.target.value)} className="w-52 h-8">
+            <option value="">All practices</option>
+            {providerPractices.map((p) => <option key={p} value={p}>{p}</option>)}
+          </StyledSelect>
+          {providerSpecialties.length > 0 && (
+            <StyledSelect value={filterSpecialty} onChange={(e) => setFilterSpecialty(e.target.value)} className="w-44 h-8">
+              <option value="">All specialties</option>
+              {providerSpecialties.map((s) => <option key={s} value={s}>{s}</option>)}
+            </StyledSelect>
+          )}
+          <StyledSelect value={filterRefs} onChange={(e) => setFilterRefs(e.target.value)} className="w-40 h-8">
+            <option value="">Any referrals</option>
+            <option value="has">Has referrals</option>
+            <option value="none">No referrals</option>
+          </StyledSelect>
+          {providerFiltersActive && (
+            <button onClick={clearProviderFilters} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg hover:bg-slate-100">
+              <X className="h-3.5 w-3.5" /> Clear
+            </button>
+          )}
+          <span className="text-xs text-slate-400 ml-auto">{filteredProviders.length} of {allProviders.length}</span>
+        </div>
+      )}
 
       {/* ── Views bar (providers only) ─────────────────────────────────────── */}
       {tab === "providers" && (
@@ -692,20 +761,13 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
 
       {/* ── Providers tab ──────────────────────────────────────────────────── */}
       {tab === "providers" && (() => {
-        const q = search.toLowerCase().trim()
-        const filtered = q
-          ? allProviders.filter((d) =>
-              d.name.toLowerCase().includes(q) ||
-              d.practiceName.toLowerCase().includes(q) ||
-              d.npi?.includes(q)
-            )
-          : allProviders
+        const filtered = filteredProviders
         const shows = (key: string) => visibleCols.includes(key)
         return (
           <div className="bg-white border rounded-lg overflow-hidden">
             {filtered.length === 0 ? (
               <div className="px-6 py-10 text-center text-slate-400">
-                {q ? `No providers matching "${search}"` : "No providers yet."}
+                {search || providerFiltersActive ? "No providers match your search or filters." : "No providers yet."}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -910,6 +972,14 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
       </div>}
 
       {/* Dialogs */}
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        subject="providers"
+        defaultName="providers"
+        getData={buildProviderExport}
+      />
+
       <Dialog open={!!editPractice} onOpenChange={(o) => !o && setEditPractice(null)}>
         <DialogContent><DialogHeader><DialogTitle>Edit Practice</DialogTitle></DialogHeader>
           {editPractice && <PracticeForm defaultValues={editPractice} onSubmit={async (d) => { run(() => updatePractice(editPractice.id, d)); setEditPractice(null) }} isPending={isPending} onClose={() => setEditPractice(null)} />}
