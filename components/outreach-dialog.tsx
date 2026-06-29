@@ -38,17 +38,6 @@ import { sendManualOutreach } from "@/app/actions/outreach"
 import { getEmailTemplates } from "@/app/actions/outreach-templates"
 import { getMessageTemplates } from "@/app/actions/message-templates"
 
-// Map Communications-template engine tokens → the outreach {{...}} tokens this
-// dialog substitutes, so a loaded template still personalizes on send.
-const ENGINE_TO_OUTREACH: Record<string, string> = {
-  "{patient_first_name}": "{{firstName}}",
-  "{patient_name}": "{{fullName}}",
-  "{provider_name}": "{{providerName}}",
-  "{practice_name}": "{{practiceName}}",
-}
-function convertTokens(body: string): string {
-  return body.replace(/\{[a-z_]+\}/g, (m) => ENGINE_TO_OUTREACH[m] ?? m)
-}
 import { OutreachTrigger } from "@prisma/client"
 
 type Channel = "SMS" | "EMAIL" | "BOTH"
@@ -133,7 +122,9 @@ export default function OutreachDialog({ referral }: Props) {
   function applySmsTemplate(templateId: string) {
     const t = smsTemplates.find((e) => e.id === templateId)
     if (!t) return
-    setMessage(convertTokens(t.body))
+    // Keep the template's tokens as authored ({patient_first_name}, …); the server
+    // resolves them on send.
+    setMessage(t.body)
   }
 
   async function handleSend() {

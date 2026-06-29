@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import TokenTextarea from "@/components/ui/token-textarea"
+import { MESSAGE_TOKEN_GROUPS } from "@/lib/message-tokens"
 import ExportDialog from "@/components/ui/export-dialog"
 import {
   createMessageTemplate, updateMessageTemplate, deleteMessageTemplate, toggleMessageTemplate, recordTemplateView,
@@ -50,33 +51,7 @@ function fmtDate(d: string | Date | null | undefined) {
 
 // Grouped personalization fields. Keys must match what the automation engine's
 // resolveTemplate substitutes.
-const TOKEN_GROUPS = [
-  {
-    group: "Patient / Referral",
-    tokens: [
-      { label: "Patient first name", value: "{patient_first_name}" },
-      { label: "Patient name", value: "{patient_name}" },
-      { label: "Referral link", value: "{referral_url}" },
-    ],
-  },
-  {
-    group: "Provider / Practice",
-    tokens: [
-      { label: "Provider name", value: "{provider_name}" },
-      { label: "Practice name", value: "{practice_name}" },
-    ],
-  },
-  {
-    group: "Surgery",
-    tokens: [
-      { label: "Surgery date", value: "{surgery_date}" },
-      { label: "Procedure", value: "{procedure}" },
-      { label: "Body part", value: "{body_part}" },
-      { label: "Surgical provider", value: "{surgical_provider}" },
-      { label: "Facility", value: "{facility}" },
-    ],
-  },
-]
+const TOKEN_GROUPS = MESSAGE_TOKEN_GROUPS
 
 const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
 const inputCls = "w-full h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400"

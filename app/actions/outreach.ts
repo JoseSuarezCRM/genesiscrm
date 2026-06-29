@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { sendSMS } from "@/lib/twilio"
 import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
-import { substitutePersonalization } from "@/lib/personalization"
+import { buildReferralVars, resolveMessageTokens, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
 import {
   AuditAction,
   OutreachChannel,
@@ -36,42 +36,28 @@ export async function sendManualOutreach(
 
   const referral = await prisma.referral.findUnique({
     where: { id: referralId },
-    select: {
-      patientFirstName: true,
-      patientLastName: true,
-      patientPhone: true,
-      patientEmail: true,
-      appointmentDate: true,
-      insuranceProvider: true,
-      referringPractice: { select: { name: true } },
-      referringDoctor: { select: { name: true } },
-    },
+    select: REFERRAL_TOKEN_SELECT,
   })
 
   if (!referral) return { error: "Referral not found" }
 
-  const personalization: Record<string, string> = {
-    firstName: referral.patientFirstName ?? "",
-    lastName: referral.patientLastName ?? "",
-    fullName: `${referral.patientFirstName ?? ""} ${referral.patientLastName ?? ""}`.trim(),
-    appointmentDate: referral.appointmentDate ? format(referral.appointmentDate, "MMMM d, yyyy") : "",
-    insurance: referral.insuranceProvider ?? "",
-    practiceName: referral.referringPractice?.name ?? "",
-    providerName: referral.referringDoctor?.name ?? "",
-  }
+  const base = (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).replace(/\/$/, "")
+  const vars = buildReferralVars(referral, { referralUrl: base ? `${base}/referrals/${referralId}` : undefined })
+
+  // Resolve personalization tokens once — applies to SMS and email alike.
+  const resolvedMessage = resolveMessageTokens(message, vars)
 
   const results: { success: boolean; channel: OutreachChannel; recipient: string; error?: string }[] = []
 
   if ((channel === "SMS" || channel === "BOTH") && referral.patientPhone) {
-    const result = await sendSMS(referral.patientPhone, message)
+    const result = await sendSMS(referral.patientPhone, resolvedMessage)
     results.push({ ...result, channel: OutreachChannel.SMS, recipient: referral.patientPhone })
   }
 
   if ((channel === "EMAIL" || channel === "BOTH") && referral.patientEmail) {
-    const emailSubject = substitutePersonalization(subject?.trim() || "Message from Genesis Ortho", personalization)
-    const resolved = substitutePersonalization(message, personalization)
+    const emailSubject = resolveMessageTokens(subject?.trim() || "Message from Genesis Ortho", vars)
     // Message may already be HTML (rich text editor) or plain text (SMS/BOTH textarea).
-    const html = /<[a-z][\s\S]*>/i.test(resolved) ? resolved : `<p>${resolved.replace(/\n/g, "<br>")}</p>`
+    const html = /<[a-z][\s\S]*>/i.test(resolvedMessage) ? resolvedMessage : `<p>${resolvedMessage.replace(/\n/g, "<br>")}</p>`
     const result = await sendEmail(referral.patientEmail, emailSubject, html, {
       sender: (sender as any) || "referrals",
       attachments,
@@ -92,7 +78,7 @@ export async function sendManualOutreach(
         trigger: OutreachTrigger.MANUAL,
         status: r.success ? OutreachStatus.SENT : OutreachStatus.FAILED,
         recipient: r.recipient,
-        message,
+        message: resolvedMessage,
         error: r.error ?? null,
         sentById: session.user.id,
       },

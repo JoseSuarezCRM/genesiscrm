@@ -2,18 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
 import { sendSMS } from "@/lib/twilio"
+import { buildReferralVars, resolveMessageTokens, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
 
-function resolveBody(template: string, referral: {
-  patientFirstName: string
-  patientLastName: string
-  referringDoctorName?: string | null
-  referringPractice?: { name: string } | null
-}): string {
-  return template
-    .replace(/\{patient_first_name\}/g, referral.patientFirstName)
-    .replace(/\{patient_name\}/g, `${referral.patientFirstName} ${referral.patientLastName}`)
-    .replace(/\{provider_name\}/g, referral.referringDoctorName ?? "your provider")
-    .replace(/\{practice_name\}/g, referral.referringPractice?.name ?? "the referring practice")
+function resolveBody(template: string, referral: any): string {
+  return resolveMessageTokens(template, buildReferralVars(referral))
 }
 
 export async function GET(req: NextRequest) {
@@ -35,12 +27,7 @@ export async function GET(req: NextRequest) {
           referral: {
             select: {
               id: true,
-              patientFirstName: true,
-              patientLastName: true,
-              patientPhone: true,
-              patientEmail: true,
-              referringDoctorName: true,
-              referringPractice: { select: { name: true } },
+              ...REFERRAL_TOKEN_SELECT,
             },
           },
         },
