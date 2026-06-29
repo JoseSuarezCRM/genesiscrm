@@ -2,6 +2,8 @@
 
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
+import FilterBuilder from "@/components/ui/filter-builder"
+import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount } from "@/lib/filters"
 import { useState, useTransition, useRef, useEffect } from "react"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
@@ -325,9 +327,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const [providerSort, setProviderSort] = useState<"name" | "referrals">("name")
   const [addProviderOpen, setAddProviderOpen] = useState(false)
   // Provider filters + export
-  const [filterPractice, setFilterPractice] = useState("")
-  const [filterSpecialty, setFilterSpecialty] = useState("")
-  const [filterRefs, setFilterRefs] = useState("") // "" | "has" | "none"
+  const [providerFilter, setProviderFilter] = useState<FilterState>(emptyFilter())
   const [exportOpen, setExportOpen] = useState(false)
 
   // Provider table columns + saved views
@@ -469,22 +469,31 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
       )
   })()
 
-  // Distinct values for the provider filters.
+  // Distinct values for the select-type filter fields.
   const providerPractices = Array.from(new Set(allProviders.map((d) => d.practiceName).filter(Boolean))).sort()
   const providerSpecialties = Array.from(new Set(allProviders.map((d) => (d as any).specialty as string).filter(Boolean))).sort()
 
-  // Providers after search + filters — used by both the table and the export.
+  // Filter schema — one entry per column/property, type-aware. New (custom)
+  // properties should be appended here so they become filter criteria automatically.
+  const providerFilterFields: FilterField[] = [
+    { key: "name", label: "Name", type: "text", getValue: (d) => d.name },
+    { key: "title", label: "Title", type: "text", getValue: (d) => (d as any).title },
+    { key: "practice", label: "Practice", type: "select", options: providerPractices.map((p) => ({ label: p, value: p })), getValue: (d) => d.practiceName },
+    { key: "specialty", label: "Specialty", type: "select", options: providerSpecialties.map((s) => ({ label: s, value: s })), getValue: (d) => (d as any).specialty },
+    { key: "npi", label: "NPI", type: "text", getValue: (d) => d.npi },
+    { key: "phone", label: "Phone", type: "text", getValue: (d) => (d as any).phone },
+    { key: "email", label: "Email", type: "text", getValue: (d) => (d as any).email },
+    { key: "referrals", label: "Referrals", type: "number", getValue: (d) => d._count.referrals },
+    { key: "locations", label: "Locations (count)", type: "number", getValue: (d) => d.locations?.length ?? 0 },
+  ]
+
+  // Providers after search + advanced filters — used by both the table and the export.
   const filteredProviders = allProviders.filter((d) => {
     const q = search.toLowerCase().trim()
     if (q && !(d.name.toLowerCase().includes(q) || d.practiceName.toLowerCase().includes(q) || d.npi?.includes(q))) return false
-    if (filterPractice && d.practiceName !== filterPractice) return false
-    if (filterSpecialty && (d as any).specialty !== filterSpecialty) return false
-    if (filterRefs === "has" && d._count.referrals === 0) return false
-    if (filterRefs === "none" && d._count.referrals > 0) return false
-    return true
+    return matchesFilter(d, providerFilter, providerFilterFields)
   })
-  const providerFiltersActive = !!(filterPractice || filterSpecialty || filterRefs)
-  function clearProviderFilters() { setFilterPractice(""); setFilterSpecialty(""); setFilterRefs("") }
+  const providerFiltersActive = activeConditionCount(providerFilter, providerFilterFields) > 0
 
   function buildProviderExport() {
     const headers = ["Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Email", "Locations", "Referrals"]
@@ -670,27 +679,10 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
       {/* ── Filters (providers only) ───────────────────────────────────────── */}
       {tab === "providers" && (
         <div className="flex flex-wrap items-center gap-2">
-          <StyledSelect value={filterPractice} onChange={(e) => setFilterPractice(e.target.value)} className="w-52 h-8">
-            <option value="">All practices</option>
-            {providerPractices.map((p) => <option key={p} value={p}>{p}</option>)}
-          </StyledSelect>
-          {providerSpecialties.length > 0 && (
-            <StyledSelect value={filterSpecialty} onChange={(e) => setFilterSpecialty(e.target.value)} className="w-44 h-8">
-              <option value="">All specialties</option>
-              {providerSpecialties.map((s) => <option key={s} value={s}>{s}</option>)}
-            </StyledSelect>
-          )}
-          <StyledSelect value={filterRefs} onChange={(e) => setFilterRefs(e.target.value)} className="w-40 h-8">
-            <option value="">Any referrals</option>
-            <option value="has">Has referrals</option>
-            <option value="none">No referrals</option>
-          </StyledSelect>
+          <FilterBuilder fields={providerFilterFields} value={providerFilter} onChange={setProviderFilter} />
           {providerFiltersActive && (
-            <button onClick={clearProviderFilters} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg hover:bg-slate-100">
-              <X className="h-3.5 w-3.5" /> Clear
-            </button>
+            <span className="text-xs text-slate-400">{filteredProviders.length} of {allProviders.length}</span>
           )}
-          <span className="text-xs text-slate-400 ml-auto">{filteredProviders.length} of {allProviders.length}</span>
         </div>
       )}
 
