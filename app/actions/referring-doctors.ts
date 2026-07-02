@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { requireAccess, requireDelete, requirePermission } from "@/lib/auth-guard"
+import { requireAccess, requireDelete, requirePermission, requireAnyAccess, requireAnyDelete } from "@/lib/auth-guard"
+
+// A location is reachable both as a first-class Locations object and from within
+// its Practice, so writes are allowed with edit/delete on either.
+const LOCATION_OBJECTS = ["LOCATIONS", "PRACTICES"]
 
 // Words that should stay lowercase in title case (unless first word)
 const LOWER_WORDS = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "so", "the", "to", "up", "yet"])
@@ -120,7 +124,7 @@ const LocationSchema = z.object({
 })
 
 export async function createLocation(data: unknown) {
-  const session = await requireAccess("PRACTICES", "EDIT")
+  const session = await requireAnyAccess(LOCATION_OBJECTS, "EDIT")
 
   const parsed = LocationSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -157,11 +161,12 @@ export async function createLocation(data: unknown) {
   })
 
   revalidatePath("/referring-doctors")
+  revalidatePath("/locations")
   return { success: true, id: location.id }
 }
 
 export async function updateLocation(id: string, data: unknown) {
-  const session = await requireAccess("PRACTICES", "EDIT")
+  const session = await requireAnyAccess(LOCATION_OBJECTS, "EDIT")
 
   const parsed = LocationSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -178,11 +183,12 @@ export async function updateLocation(id: string, data: unknown) {
   })
 
   revalidatePath("/referring-doctors")
+  revalidatePath("/locations")
   return { success: true }
 }
 
 export async function deleteLocation(id: string) {
-  const session = await requireDelete("PRACTICES")
+  const session = await requireAnyDelete(LOCATION_OBJECTS)
 
   const [referralCount, doctorCount] = await Promise.all([
     prisma.referral.count({ where: { referringLocationId: id } }),
@@ -200,10 +206,64 @@ export async function deleteLocation(id: string) {
   try {
     await prisma.practiceLocation.delete({ where: { id } })
     revalidatePath("/referring-doctors")
+    revalidatePath("/locations")
     return { success: true }
   } catch (e: any) {
     return { error: e?.message ?? "Failed to delete location." }
   }
+}
+
+// Bulk delete for the Locations list. Skips any location still linked to
+// referrals or providers and reports how many were blocked.
+export async function bulkDeleteLocations(ids: string[]) {
+  await requireAnyDelete(LOCATION_OBJECTS)
+  if (!ids.length) return { success: true, deleted: 0, blocked: 0 }
+
+  let deleted = 0
+  let blocked = 0
+  for (const id of ids) {
+    const [referralCount, doctorCount] = await Promise.all([
+      prisma.referral.count({ where: { referringLocationId: id } }),
+      prisma.doctorLocation.count({ where: { locationId: id } }),
+    ])
+    if (referralCount > 0 || doctorCount > 0) { blocked += 1; continue }
+    try {
+      await prisma.practiceLocation.delete({ where: { id } })
+      deleted += 1
+    } catch { blocked += 1 }
+  }
+
+  revalidatePath("/referring-doctors")
+  revalidatePath("/locations")
+  return { success: true, deleted, blocked }
+}
+
+// First-class Locations object list. One row per location with its practice,
+// provider/referral/activity counts — the data source for the /locations page.
+export async function getLocations() {
+  await requireAccess("LOCATIONS", "VIEW")
+
+  const locations = await prisma.practiceLocation.findMany({
+    orderBy: [{ referrals: { _count: "desc" } }, { name: "asc" }],
+    include: {
+      practice: { select: { id: true, name: true } },
+      _count: { select: { referrals: true, doctors: true, activities: true } },
+    },
+  })
+
+  return locations.map((l) => ({
+    id: l.id,
+    name: l.name,
+    phone: l.phone,
+    fax: l.fax,
+    address: l.address,
+    practiceId: l.practiceId,
+    practiceName: l.practice.name,
+    createdAt: l.createdAt,
+    referralCount: l._count.referrals,
+    providerCount: l._count.doctors,
+    activityCount: l._count.activities,
+  }))
 }
 
 export async function mergeLocation(sourceId: string, targetId: string) {
@@ -240,6 +300,7 @@ export async function mergeLocation(sourceId: string, targetId: string) {
     await prisma.practiceLocation.delete({ where: { id: sourceId } })
 
     revalidatePath("/referring-doctors")
+    revalidatePath("/locations")
     return { success: true }
   } catch (e: any) {
     console.error("mergeLocation error:", e)

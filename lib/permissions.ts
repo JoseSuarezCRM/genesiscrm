@@ -28,7 +28,8 @@ const RANK: Record<AccessLevel, number> = { NONE: 0, VIEW: 1, EDIT: 2 }
 export const ACCESS_OBJECTS: { key: string; label: string }[] = [
   { key: "REFERRALS",         label: "Referrals" },
   { key: "PROVIDERS",         label: "Providers" },
-  { key: "PRACTICES",         label: "Practices & Locations" },
+  { key: "PRACTICES",         label: "Practices" },
+  { key: "LOCATIONS",         label: "Locations" },
   { key: "ACTIVITIES",        label: "Activities" },
   { key: "SURGERY",           label: "Surgery Cases" },
   { key: "TASKS",             label: "Tasks" },
@@ -54,7 +55,7 @@ export const CAPABILITIES: PermissionDef[] = [
 
 // Nav sections (control sidebar visibility). Keep keys in sync with sidebar.tsx.
 export const NAV_PERMISSIONS: PermissionDef[] = [
-  { key: "NAV_REFERRALS",    label: "Referrals",    description: "Dashboard, Referrals, Providers, Activities, Tasks, SMS, Reports, Broadcasts" },
+  { key: "NAV_REFERRALS",    label: "Referrals",    description: "Dashboard, Referrals, Practices, Locations, Providers, Activities, Tasks, SMS, Reports, Broadcasts" },
   { key: "NAV_APPOINTMENTS", label: "Appointments", description: "Completed appointments and referring providers" },
   { key: "NAV_SCHEDULING",   label: "Scheduling",   description: "Weekly schedule and staff roster" },
   { key: "NAV_SURGERY",      label: "Surgery",      description: "Surgery cases tracker with file import, call log, and documents" },

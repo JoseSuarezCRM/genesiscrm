@@ -25,6 +25,7 @@ const referralItems: NavItem[] = [
   { href: "/",                  label: "Dashboard" },
   { href: "/referrals",         label: "Referrals",  object: "REFERRALS" },
   { href: "/practices",         label: "Practices",  object: "PRACTICES" },
+  { href: "/locations",         label: "Locations",  object: "LOCATIONS" },
   { href: "/referring-doctors", label: "Providers",  object: "PROVIDERS" },
   { href: "/activities",        label: "Activities", object: "ACTIVITIES" },
   { href: "/tasks",             label: "Tasks",      object: "TASKS" },
