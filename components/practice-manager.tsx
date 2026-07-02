@@ -63,6 +63,7 @@ const PROVIDER_COLUMNS: { key: string; label: string }[] = [
   { key: "practice", label: "Practice" },
   { key: "npi", label: "NPI" },
   { key: "phone", label: "Phone" },
+  { key: "officePhone", label: "Office Phone" },
   { key: "email", label: "Email" },
   { key: "locations", label: "Locations" },
   { key: "referrals", label: "Referrals" },
@@ -147,7 +148,7 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
   practiceId: string
   locations: LocationWithCount[]
   defaultValues?: Partial<ReferringDoctor> & { locationIds?: string[] }
-  onSubmit: (d: { name: string; title: string; npi: string; specialty: string; phone: string; email: string; practiceId: string; locationIds: string[] }) => Promise<void>
+  onSubmit: (d: { name: string; title: string; npi: string; specialty: string; phone: string; officePhone: string; email: string; practiceId: string; locationIds: string[] }) => Promise<void>
   isPending: boolean
   onClose: () => void
   practices?: PracticeWithRelations[]  // when provided, shows a practice selector
@@ -157,6 +158,7 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
   const [npi, setNpi] = useState((defaultValues as any)?.npi ?? "")
   const [specialty, setSpecialty] = useState(defaultValues?.specialty ?? "")
   const [phone, setPhone] = useState(defaultValues?.phone ?? "")
+  const [officePhone, setWorkPhone] = useState((defaultValues as any)?.officePhone ?? "")
   const [email, setEmail] = useState(defaultValues?.email ?? "")
   const [selectedLocs, setSelectedLocs] = useState<string[]>(defaultValues?.locationIds ?? [])
   const [err, setErr] = useState("")
@@ -170,7 +172,7 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
   }
 
   return (
-    <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, title, npi, specialty, phone, email, practiceId: selectedPracticeId, locationIds: selectedLocs }) }} className="space-y-4">
+    <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, title, npi, specialty, phone, officePhone, email, practiceId: selectedPracticeId, locationIds: selectedLocs }) }} className="space-y-4">
       {practices && (
         <Field label="Practice *">
           <StyledSelect
@@ -201,7 +203,10 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
       <Field label="NPI (National Provider Identifier)">
         <Input value={npi} onChange={(e) => setNpi(e.target.value)} placeholder="1234567890" maxLength={10} />
       </Field>
-      <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
+        <Field label="Office Phone"><PhoneInput value={officePhone} onChange={setWorkPhone} /></Field>
+      </div>
       <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="dr.johnson@clinic.com" /></Field>
       <div className="space-y-1.5">
         <Label>Locations (check all that apply)</Label>
@@ -482,6 +487,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     { key: "specialty", label: "Specialty", type: "select", options: providerSpecialties.map((s) => ({ label: s, value: s })), getValue: (d) => (d as any).specialty },
     { key: "npi", label: "NPI", type: "text", getValue: (d) => d.npi },
     { key: "phone", label: "Phone", type: "text", getValue: (d) => (d as any).phone },
+    { key: "officePhone", label: "Office Phone", type: "text", getValue: (d) => (d as any).officePhone },
     { key: "email", label: "Email", type: "text", getValue: (d) => (d as any).email },
     { key: "referrals", label: "Referrals", type: "number", getValue: (d) => d._count.referrals },
     { key: "locations", label: "Locations (count)", type: "number", getValue: (d) => d.locations?.length ?? 0 },
@@ -496,10 +502,10 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const providerFiltersActive = activeConditionCount(providerFilter, providerFilterFields) > 0
 
   function buildProviderExport() {
-    const headers = ["Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Email", "Locations", "Referrals"]
+    const headers = ["Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Office Phone", "Email", "Locations", "Referrals"]
     const rows = filteredProviders.map((d) => [
       d.name, (d as any).title ?? "", d.practiceName, (d as any).specialty ?? "", d.npi ?? "",
-      (d as any).phone ?? "", (d as any).email ?? "",
+      (d as any).phone ?? "", (d as any).officePhone ?? "", (d as any).email ?? "",
       d.locations?.map((l) => l.location.name).join("; ") ?? "", d._count.referrals,
     ])
     return { headers, rows }
@@ -771,6 +777,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                       {shows("practice") && <th className="px-4 py-2.5 font-semibold">Practice</th>}
                       {shows("npi") && <th className="px-4 py-2.5 font-semibold">NPI</th>}
                       {shows("phone") && <th className="px-4 py-2.5 font-semibold">Phone</th>}
+                      {shows("officePhone") && <th className="px-4 py-2.5 font-semibold">Office Phone</th>}
                       {shows("email") && <th className="px-4 py-2.5 font-semibold">Email</th>}
                       {shows("locations") && <th className="px-4 py-2.5 font-semibold">Locations</th>}
                       {shows("referrals") && <th className="px-4 py-2.5 font-semibold text-right">Referrals</th>}
@@ -794,6 +801,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                         )}
                         {shows("npi") && <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{d.npi || "—"}</td>}
                         {shows("phone") && <td className="px-4 py-2.5 text-slate-500">{(d as any).phone || "—"}</td>}
+                        {shows("officePhone") && <td className="px-4 py-2.5 text-slate-500">{(d as any).officePhone || "—"}</td>}
                         {shows("email") && <td className="px-4 py-2.5 text-slate-500 truncate max-w-[200px]">{(d as any).email || "—"}</td>}
                         {shows("locations") && (
                           <td className="px-4 py-2.5 text-slate-500 text-xs">

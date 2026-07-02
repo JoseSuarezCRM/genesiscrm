@@ -409,6 +409,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
   const [titleCustom, setTitleCustom] = useState("")
   const [npi, setNpi] = useState("")
   const [phone, setPhone] = useState("")
+  const [officePhone, setOfficePhone] = useState("")
   const [email, setEmail] = useState("")
   const [locationIds, setLocationIds] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
@@ -425,7 +426,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
     e.preventDefault()
     if (!name.trim()) { setErr("Name is required"); return }
     startTransition(async () => {
-      const res = await createDoctor({ name, title: finalTitle, npi, phone, email, practiceId, locationIds })
+      const res = await createDoctor({ name, title: finalTitle, npi, phone, officePhone, email, practiceId, locationIds })
       if (!res || res.error || !res.id) { setErr("Failed to create provider"); return }
       onCreate({ id: res.id!, label: name + (finalTitle ? `, ${finalTitle}` : ""), name, title: finalTitle || null })
     })
@@ -464,6 +465,10 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
         <div>
           <label className={labelCls}>Phone</label>
           <PhoneInput value={phone} onChange={setPhone} className="h-[38px] text-sm bg-white" />
+        </div>
+        <div>
+          <label className={labelCls}>Office Phone</label>
+          <PhoneInput value={officePhone} onChange={setOfficePhone} className="h-[38px] text-sm bg-white" />
         </div>
         <div>
           <label className={labelCls}>Email</label>

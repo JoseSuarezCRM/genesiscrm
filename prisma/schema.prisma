@@ -288,6 +288,7 @@ model ReferringDoctor {
   npi                String?            // National Provider Identifier (10 digits)
   specialty          String?
   phone              String?
+  officePhone        String?            // office / practice direct line
   email              String?
   contactType        ContactType        @default(PROVIDER)
   customProperties   Json               @default("{}") // custom property values

@@ -304,6 +304,7 @@ const DoctorSchema = z.object({
   npi: z.string().optional(),
   specialty: z.string().optional(),
   phone: z.string().optional(),
+  officePhone: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   contactType: z.enum(["PROVIDER", "STAFF"]).optional().default("PROVIDER"),
   practiceId: z.string().min(1, "Practice is required"),
@@ -335,6 +336,7 @@ export async function createDoctor(data: unknown) {
       npi: rest.npi || null,
       specialty: rest.specialty || null,
       phone: rest.phone || null,
+      officePhone: rest.officePhone || null,
       email: rest.email || null,
       contactType: rest.contactType,
       practiceId: rest.practiceId,
@@ -364,6 +366,7 @@ export async function updateDoctor(id: string, data: unknown) {
       npi: rest.npi || null,
       specialty: rest.specialty || null,
       phone: rest.phone || null,
+      officePhone: rest.officePhone || null,
       email: rest.email || null,
       contactType: rest.contactType,
       practiceId: rest.practiceId,
@@ -378,7 +381,7 @@ export async function updateDoctor(id: string, data: unknown) {
   return { success: true }
 }
 
-const EDITABLE_DOCTOR_FIELDS = ["name", "title", "npi", "phone", "email"] as const
+const EDITABLE_DOCTOR_FIELDS = ["name", "title", "npi", "phone", "officePhone", "email"] as const
 
 // Updates a single doctor field without touching practice or location links
 export async function updateDoctorField(id: string, field: string, value: string | null) {
