@@ -137,6 +137,17 @@ const PENDING_PRACTICE_ID = "__pending_practice__"
 const PENDING_LOCATION_ID = "__pending_location__"
 const PENDING_DOCTOR_ID = "__pending_doctor__"
 
+// Generic words that appear across many practice names. They carry almost no
+// identifying signal, so a name match resting only on these must NOT link two
+// different organizations during fax auto-matching.
+const GENERIC_ORG_WORDS = new Set([
+  "family", "practice", "practices", "medical", "medicine", "center", "centre",
+  "group", "clinic", "clinics", "associates", "association", "health", "healthcare",
+  "care", "physicians", "physician", "services", "service", "specialists", "specialty",
+  "hospital", "community", "regional", "the", "and", "for", "inc", "llc", "pllc",
+  "pc", "ltd", "of", "primary",
+])
+
 // Normalize name to Proper Case (handles ALL CAPS and all lowercase)
 function toProperCase(str: string): string {
   if (!str) return str
@@ -239,11 +250,16 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
           else if (b.includes(a) || a.includes(b)) score = 60
           else {
             // Word-overlap: count shared meaningful words (length > 2) to catch
-            // location-specific names like "Vna Health Highland Fp" → "VNA Health Care"
+            // location-specific names like "Vna Health Highland Fp" → "VNA Health Care".
+            // Generic industry words (family, practice, medical…) are shared by most
+            // org names, so a match on those ALONE must not link two different orgs
+            // ("Golden Rule Family Practice" ≠ "Hidden Pine Family Practice"). Require
+            // at least one distinctive (non-generic) word in common.
             const aWords = new Set(a.split(/\W+/).filter((w) => w.length > 2))
-            const bWords = b.split(/\W+/).filter((w) => w.length > 2)
-            const shared = bWords.filter((w) => aWords.has(w)).length
-            if (shared >= 2) score = 40 + Math.min(shared * 5, 15)
+            const bWords = new Set(b.split(/\W+/).filter((w) => w.length > 2))
+            const shared = Array.from(bWords).filter((w) => aWords.has(w))
+            const distinctiveShared = shared.filter((w) => !GENERIC_ORG_WORDS.has(w)).length
+            if (shared.length >= 2 && distinctiveShared >= 1) score = 40 + Math.min(distinctiveShared * 8, 20)
           }
           return { p, score }
         }).filter((x) => x.score > 0)
