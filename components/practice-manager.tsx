@@ -3,7 +3,7 @@
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
-import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount } from "@/lib/filters"
+import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { useState, useTransition, useRef, useEffect } from "react"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
@@ -54,6 +54,7 @@ interface Props {
   savedViews: SavedProviderView[]
   shareUsers: ShareUser[]
   shareTeams: ShareTeam[]
+  providerCustomPropertyDefs?: CustomPropDef[]
 }
 
 // ─── Provider table columns ─────────────────────────────────────────────────────
@@ -323,7 +324,7 @@ function SearchablePicker({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, view = "practices" }: Props & { view?: "practices" | "providers" }) {
+export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], view = "practices" }: Props & { view?: "practices" | "providers" }) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
@@ -491,6 +492,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     { key: "email", label: "Email", type: "text", getValue: (d) => (d as any).email },
     { key: "referrals", label: "Referrals", type: "number", getValue: (d) => d._count.referrals },
     { key: "locations", label: "Locations (count)", type: "number", getValue: (d) => d.locations?.length ?? 0 },
+    ...customPropertyFilterFields(providerCustomPropertyDefs),
   ]
 
   // Providers after search + advanced filters — used by both the table and the export.

@@ -179,10 +179,12 @@ function evalCondition(row: any, cond: Condition, fields: FilterField[]): boolea
     case "select": {
       const vals = Array.isArray(cond.value) ? cond.value : cond.value ? [cond.value] : []
       if (vals.length === 0) return true
-      const a = String(raw ?? "")
+      // The record's value may be a single value or an array (e.g. a multi-select
+      // custom property), so compare the operand against every value it holds.
+      const rawArr = Array.isArray(raw) ? raw.map((x) => String(x)) : [String(raw ?? "")]
       switch (cond.operator) {
-        case "is_any_of": return vals.includes(a)
-        case "is_none_of": return !vals.includes(a)
+        case "is_any_of": return rawArr.some((a) => vals.includes(a))
+        case "is_none_of": return !rawArr.some((a) => vals.includes(a))
       }
       return true
     }
@@ -226,4 +228,30 @@ export function matchesFilter(row: any, state: FilterState, fields: FilterField[
   return state.combinator === "OR"
     ? active.some((g) => evalGroup(row, g, fields))
     : active.every((g) => evalGroup(row, g, fields))
+}
+
+// ── Custom properties → filter fields ────────────────────────────────────────
+// Turn an entity's custom-property definitions into FilterFields so any new
+// property automatically becomes a filter criterion (per the standard-list rule).
+// Values are read from a JSON bag on the row (default `customProperties`), keyed
+// by the property id.
+export interface CustomPropDef { id: string; name: string; type: string; options?: string[] }
+
+const CP_TYPE_TO_FIELD: Record<string, FieldType> = {
+  TEXT: "text", LONG_TEXT: "text", EMAIL: "text", PHONE: "text", URL: "text",
+  NUMBER: "number", DATE: "date", CHECKBOX: "boolean",
+  DROPDOWN: "select", MULTI_SELECT: "select",
+}
+
+export function customPropertyFilterFields(defs: CustomPropDef[], bagKey = "customProperties"): FilterField[] {
+  return defs.map((d) => {
+    const type = CP_TYPE_TO_FIELD[d.type] ?? "text"
+    return {
+      key: `cp_${d.id}`,
+      label: d.name,
+      type,
+      options: type === "select" ? (d.options ?? []).map((o) => ({ label: o, value: o })) : undefined,
+      getValue: (row: any) => row?.[bagKey]?.[d.id],
+    }
+  })
 }

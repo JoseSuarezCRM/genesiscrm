@@ -13,7 +13,7 @@ import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount } from "@/lib/filters"
+import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { cn } from "@/lib/utils"
 
 export interface LocationRow {
@@ -25,6 +25,7 @@ export interface LocationRow {
   practiceId: string
   practiceName: string
   createdAt: string | Date
+  customProperties?: Record<string, any>
   referralCount: number
   providerCount: number
   activityCount: number
@@ -35,6 +36,7 @@ interface PracticeOption { id: string; name: string }
 interface Props {
   locations: LocationRow[]
   practices: PracticeOption[]
+  customPropertyDefs?: CustomPropDef[]
   canEdit: boolean
   canDelete: boolean
 }
@@ -58,7 +60,7 @@ function fmtDate(d: string | Date | null | undefined) {
 
 type SortKey = "name" | "practice" | "providers" | "referrals" | "activities" | "created"
 
-export default function LocationManager({ locations, practices, canEdit, canDelete }: Props) {
+export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -107,6 +109,7 @@ export default function LocationManager({ locations, practices, canEdit, canDele
     { key: "providers", label: "Providers", type: "number", getValue: (l) => l.providerCount },
     { key: "referrals", label: "Referrals", type: "number", getValue: (l) => l.referralCount },
     { key: "activities", label: "Activities", type: "number", getValue: (l) => l.activityCount },
+    ...customPropertyFilterFields(customPropertyDefs),
   ]
 
   const filtered = locations.filter((l) => {

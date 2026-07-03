@@ -260,6 +260,7 @@ export async function getLocations() {
     practiceId: l.practiceId,
     practiceName: l.practice.name,
     createdAt: l.createdAt,
+    customProperties: (l.customProperties as Record<string, any>) ?? {},
     referralCount: l._count.referrals,
     providerCount: l._count.doctors,
     activityCount: l._count.activities,
