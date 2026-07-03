@@ -9,6 +9,8 @@ import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
 import { format } from "date-fns"
 import LocationInfoEditor from "@/components/location-info-editor"
+import CustomPropertiesDisplay from "@/components/custom-properties-display"
+import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 
 interface Props { params: { id: string } }
 
@@ -26,7 +28,7 @@ export default async function LocationDetailPage({ params }: Props) {
   const user = session?.user as any
   const canEdit = userCanLevel(user, "LOCATIONS", "EDIT") || userCanLevel(user, "PRACTICES", "EDIT")
 
-  const [location, practices] = await Promise.all([
+  const [location, practices, customProperties] = await Promise.all([
     prisma.practiceLocation.findUnique({
       where: { id: params.id },
       include: {
@@ -50,6 +52,7 @@ export default async function LocationDetailPage({ params }: Props) {
       },
     }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    loadCustomPropertiesForDetail("LOCATION", params.id),
   ])
 
   if (!location) notFound()
@@ -88,6 +91,15 @@ export default async function LocationDetailPage({ params }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Custom Properties */}
+      {customProperties.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <CustomPropertiesDisplay entityType="LOCATION" entityId={location.id} properties={customProperties as any} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Providers at this location */}
       <Card>

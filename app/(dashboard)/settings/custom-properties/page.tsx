@@ -9,10 +9,11 @@ export default async function CustomPropertiesPage() {
     redirect("/")
   }
 
-  const [referralProps, providerProps, practiceProps] = await Promise.all([
+  const [referralProps, providerProps, practiceProps, locationProps] = await Promise.all([
     listCustomProperties("REFERRAL"),
     listCustomProperties("PROVIDER"),
     listCustomProperties("PRACTICE"),
+    listCustomProperties("LOCATION"),
   ])
 
   return (
@@ -20,7 +21,7 @@ export default async function CustomPropertiesPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Custom Properties</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Create and manage custom fields for referrals, providers, and practices
+          Create and manage custom fields for referrals, providers, practices, and locations
         </p>
       </div>
 
@@ -28,6 +29,7 @@ export default async function CustomPropertiesPage() {
         referralProps={referralProps}
         providerProps={providerProps}
         practiceProps={practiceProps}
+        locationProps={locationProps}
       />
     </div>
   )

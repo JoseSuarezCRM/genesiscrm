@@ -143,6 +143,7 @@ enum CustomPropertyEntityType {
   REFERRAL
   PROVIDER
   PRACTICE
+  LOCATION
 }
 
 model CustomProperty {
@@ -262,11 +263,12 @@ model ReferringPractice {
 
 // A specific office/campus of a practice
 model PracticeLocation {
-  id         String            @id @default(cuid())
-  name       String            // e.g. "Main Office", "North Campus"
-  phone      String?
-  fax        String?
-  address    String?
+  id               String            @id @default(cuid())
+  name             String            // e.g. "Main Office", "North Campus"
+  phone            String?
+  fax              String?
+  address          String?
+  customProperties Json              @default("{}") // custom property values
   practiceId String
   practice   ReferringPractice @relation(fields: [practiceId], references: [id])
   doctors    DoctorLocation[]

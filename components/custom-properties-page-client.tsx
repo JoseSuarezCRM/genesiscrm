@@ -19,12 +19,14 @@ interface Props {
   referralProps: CustomProperty[]
   providerProps: CustomProperty[]
   practiceProps: CustomProperty[]
+  locationProps: CustomProperty[]
 }
 
 export default function CustomPropertiesPageClient({
   referralProps: initialReferralProps,
   providerProps: initialProviderProps,
   practiceProps: initialPracticeProps,
+  locationProps: initialLocationProps,
 }: Props) {
   const [search, setSearch] = useState("")
 
@@ -38,6 +40,7 @@ export default function CustomPropertiesPageClient({
   const referralProps = filterProps(initialReferralProps)
   const providerProps = filterProps(initialProviderProps)
   const practiceProps = filterProps(initialPracticeProps)
+  const locationProps = filterProps(initialLocationProps)
 
   return (
     <div className="flex flex-col h-full">
@@ -63,7 +66,7 @@ export default function CustomPropertiesPageClient({
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Custom Properties</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Create and manage custom fields for referrals, providers, and practices
+            Create and manage custom fields for referrals, providers, practices, and locations
           </p>
         </div>
 
@@ -71,6 +74,7 @@ export default function CustomPropertiesPageClient({
           referralProps={referralProps}
           providerProps={providerProps}
           practiceProps={practiceProps}
+          locationProps={locationProps}
         />
       </div>
     </div>

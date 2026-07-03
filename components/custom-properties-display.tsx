@@ -20,7 +20,7 @@ interface PropertyDisplay {
 }
 
 interface Props {
-  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE"
+  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION"
   entityId: string
   properties: Array<CustomProperty & { display: PropertyDisplay; value?: any }>
 }

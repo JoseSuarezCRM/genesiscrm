@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 
-type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE"
+type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION"
 
 export async function loadCustomPropertiesForDetail(
   entityType: EntityType,
@@ -22,6 +22,11 @@ export async function loadCustomPropertiesForDetail(
       })
     } else if (entityType === "PROVIDER") {
       entity = await prisma.referringDoctor.findUnique({
+        where: { id: entityId },
+        select: { customProperties: true },
+      })
+    } else if (entityType === "LOCATION") {
+      entity = await prisma.practiceLocation.findUnique({
         where: { id: entityId },
         select: { customProperties: true },
       })

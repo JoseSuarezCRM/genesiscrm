@@ -20,6 +20,7 @@ interface Props {
   referralProps: CustomProperty[]
   providerProps: CustomProperty[]
   practiceProps: CustomProperty[]
+  locationProps: CustomProperty[]
 }
 
 const PROPERTY_TYPES = [
@@ -239,6 +240,7 @@ export default function CustomPropertyManager({
   referralProps,
   providerProps,
   practiceProps,
+  locationProps,
 }: Props) {
   const [activeForm, setActiveForm] = useState<string | null>(null)
 
@@ -246,6 +248,7 @@ export default function CustomPropertyManager({
     { type: "REFERRAL", label: "Referrals", icon: "📋", props: referralProps },
     { type: "PROVIDER", label: "Providers", icon: "👨‍⚕️", props: providerProps },
     { type: "PRACTICE", label: "Practices", icon: "🏥", props: practiceProps },
+    { type: "LOCATION", label: "Locations", icon: "📍", props: locationProps },
   ]
 
   return (

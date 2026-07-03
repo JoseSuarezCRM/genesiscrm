@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache"
 interface CreateCustomPropertyInput {
   name: string
   type: "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL"
-  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE"
+  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION"
   required?: boolean
   description?: string
   options?: string[]
@@ -26,7 +26,7 @@ async function requireAdmin() {
   }
 }
 
-export async function listCustomProperties(entityType: "REFERRAL" | "PROVIDER" | "PRACTICE") {
+export async function listCustomProperties(entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION") {
   return prisma.customProperty.findMany({
     where: { entityType },
     orderBy: { createdAt: "asc" },
@@ -99,13 +99,13 @@ export async function deleteCustomProperty(id: string) {
 }
 
 export async function saveCustomPropertyValue(
-  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE",
+  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION",
   entityId: string,
   customPropertyId: string,
   value: any
 ) {
   // Filling a property value is editing that record — gate by the object's Edit access.
-  const objectFor = { REFERRAL: "REFERRALS", PROVIDER: "PROVIDERS", PRACTICE: "PRACTICES" } as const
+  const objectFor = { REFERRAL: "REFERRALS", PROVIDER: "PROVIDERS", PRACTICE: "PRACTICES", LOCATION: "LOCATIONS" } as const
   await requireAccess(objectFor[entityType], "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
@@ -121,6 +121,11 @@ export async function saveCustomPropertyValue(
       const props = (current?.customProperties as Record<string, any>) || {}
       props[customPropertyId] = value
       await prisma.referringDoctor.update({ where: { id: entityId }, data: { customProperties: props } })
+    } else if (entityType === "LOCATION") {
+      const current = await prisma.practiceLocation.findUnique({ where: { id: entityId }, select: { customProperties: true } })
+      const props = (current?.customProperties as Record<string, any>) || {}
+      props[customPropertyId] = value
+      await prisma.practiceLocation.update({ where: { id: entityId }, data: { customProperties: props } })
     } else {
       const current = await prisma.referringPractice.findUnique({ where: { id: entityId }, select: { customProperties: true } })
       const props = (current?.customProperties as Record<string, any>) || {}
@@ -128,7 +133,8 @@ export async function saveCustomPropertyValue(
       await prisma.referringPractice.update({ where: { id: entityId }, data: { customProperties: props } })
     }
 
-    revalidatePath(`/${entityType === "REFERRAL" ? "referrals" : entityType === "PROVIDER" ? "referring-doctors" : "practices"}/${entityId}`)
+    const basePath = entityType === "REFERRAL" ? "referrals" : entityType === "PROVIDER" ? "referring-doctors" : entityType === "LOCATION" ? "locations" : "practices"
+    revalidatePath(`/${basePath}/${entityId}`)
     return { success: true }
   } catch (err: any) {
     return { error: err.message }
