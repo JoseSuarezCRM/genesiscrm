@@ -234,16 +234,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
       case "ctRequired": return <span className="text-slate-600">{c.ctRequired ?? "—"}</span>
       case "glp1": return <span className="text-slate-600">{c.glp1 ?? "—"}</span>
       case "dme": return <span className="text-slate-600">{c.dme ?? "—"}</span>
-      case "physicalTherapy":
-        return (
-          <span className="text-slate-600">
-            {c.physicalTherapy
-              ? c.physicalTherapy === "External" && c.physicalTherapyDetail
-                ? `External — ${c.physicalTherapyDetail}`
-                : c.physicalTherapy
-              : "—"}
-          </span>
-        )
+      case "physicalTherapy": return <span className="text-slate-600">{c.physicalTherapy ?? "—"}</span>
       case "email": return <span className="text-slate-600">{c.email ?? "—"}</span>
       case "expires": return <span className="text-slate-600">{fmt(c.expires)}</span>
       case "calls":

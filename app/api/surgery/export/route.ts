@@ -39,14 +39,6 @@ export async function GET(req: NextRequest) {
   const fmt = (d: string | Date | null | undefined) =>
     d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" }) : ""
 
-  // Conditional fields fold their free-text detail into the same cell, so the
-  // "External" Physical Therapy note isn't lost in the export.
-  const physicalTherapyValue = (c: any) =>
-    !c.physicalTherapy ? ""
-      : c.physicalTherapy === "External" && c.physicalTherapyDetail
-        ? `External — ${c.physicalTherapyDetail}`
-        : c.physicalTherapy
-
   // One definition per column, keyed to match the table's column keys so the
   // export can mirror the on-screen view (the `cols` param lists what to include).
   const COLUMN_DEFS: Record<string, { header: string; value: (c: any) => string | number | null | undefined }> = {
@@ -66,7 +58,7 @@ export async function GET(req: NextRequest) {
     ctRequired:       { header: "CT Required",         value: (c) => c.ctRequired },
     glp1:             { header: "GLP-1",               value: (c) => c.glp1 },
     dme:              { header: "DME",                 value: (c) => c.dme },
-    physicalTherapy:  { header: "Physical Therapy",    value: physicalTherapyValue },
+    physicalTherapy:  { header: "Physical Therapy",    value: (c) => c.physicalTherapy },
     email:            { header: "Email",               value: (c) => c.email },
     expires:          { header: "Expires",             value: (c) => fmt(c.expires) },
     calls:            { header: "Calls",               value: (c) => c._count.callAttempts },

@@ -153,31 +153,32 @@ function ReferralField({
   )
 }
 
-// Physical Therapy: a select whose "External" option reveals a free-text detail box.
+// Physical Therapy: like the Referral Source field — a select whose "External"
+// option reveals a free-text box; the typed value is stored in the single field.
 function PhysicalTherapyField({
-  value, detail, onValueChange, onDetailChange,
+  selectVal, externalVal, onSelectChange, onExternalChange,
 }: {
-  value: string
-  detail: string
-  onValueChange: (v: string) => void
-  onDetailChange: (v: string) => void
+  selectVal: string
+  externalVal: string
+  onSelectChange: (v: string) => void
+  onExternalChange: (v: string) => void
 }) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Physical Therapy</label>
       <StyledSelect
-        value={value}
-        onChange={(e) => onValueChange(e.target.value)}
+        value={selectVal}
+        onChange={(e) => onSelectChange(e.target.value)}
         className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
       >
         <option value="">— Not set —</option>
         {PHYSICAL_THERAPY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
       </StyledSelect>
-      {value === "External" && (
+      {selectVal === "External" && (
         <input
           type="text"
-          value={detail}
-          onChange={(e) => onDetailChange(e.target.value)}
+          value={externalVal}
+          onChange={(e) => onExternalChange(e.target.value)}
           placeholder="External PT details..."
           className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
         />
@@ -202,8 +203,12 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [ctRequired, setCtRequired] = useState(surgeryCase.ctRequired ?? "")
   const [glp1, setGlp1] = useState(surgeryCase.glp1 ?? "")
   const [dme, setDme] = useState(surgeryCase.dme ?? "")
-  const [physicalTherapy, setPhysicalTherapy] = useState((surgeryCase as any).physicalTherapy ?? "")
-  const [physicalTherapyDetail, setPhysicalTherapyDetail] = useState((surgeryCase as any).physicalTherapyDetail ?? "")
+  // Physical Therapy mirrors Referral Source: "External" stores the typed value.
+  const storedPt = (surgeryCase as any).physicalTherapy ?? ""
+  const ptIsExternal = storedPt !== "" && !PHYSICAL_THERAPY_OPTIONS.includes(storedPt)
+  const [ptSelect, setPtSelect] = useState(ptIsExternal ? "External" : storedPt)
+  const [ptExternal, setPtExternal] = useState(ptIsExternal ? storedPt : "")
+  const physicalTherapyValue = ptSelect === "External" ? ptExternal : ptSelect
   const referralPresets = REFERRAL_PRESETS
   const storedReferral = surgeryCase.referral ?? ""
   const initIsOther = storedReferral !== "" && !referralPresets.includes(storedReferral)
@@ -249,8 +254,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         ctRequired: ctRequired || null,
         glp1: glp1 || null,
         dme: dme || null,
-        physicalTherapy: physicalTherapy || null,
-        physicalTherapyDetail: physicalTherapy === "External" ? (physicalTherapyDetail || null) : null,
+        physicalTherapy: physicalTherapyValue || null,
         referral: referralValue || null,
         facility: facility || null,
         procedure: procedure || null,
@@ -414,10 +418,10 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
               options={toOptions(DME_OPTIONS)}
             />
             <PhysicalTherapyField
-              value={physicalTherapy}
-              detail={physicalTherapyDetail}
-              onValueChange={setPhysicalTherapy}
-              onDetailChange={setPhysicalTherapyDetail}
+              selectVal={ptSelect}
+              externalVal={ptExternal}
+              onSelectChange={setPtSelect}
+              onExternalChange={setPtExternal}
             />
             <ReferralField
               presets={referralPresets}
