@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
-import { PROCEDURE_DATA, findProcedureLocation } from "@/lib/surgery-procedures"
+import { PROCEDURE_DATA, findProcedureLocation, DME_OPTIONS, REFERRAL_PRESETS, toOptions } from "@/lib/surgery-procedures"
 import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
 import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -169,7 +169,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [ctRequired, setCtRequired] = useState(surgeryCase.ctRequired ?? "")
   const [glp1, setGlp1] = useState(surgeryCase.glp1 ?? "")
   const [dme, setDme] = useState(surgeryCase.dme ?? "")
-  const referralPresets = ["LCHC","PCC","VNA","PIC","AHC","ZocDoc","Molina","Meridian","Aetna Better Health","JenCare","GFH","Advocate","OSH","Aunt Martha's","Esperanza","Access","Rush","Mercy","Google","GOSM Website"]
+  const referralPresets = REFERRAL_PRESETS
   const storedReferral = surgeryCase.referral ?? ""
   const initIsOther = storedReferral !== "" && !referralPresets.includes(storedReferral)
   const [referralSelect, setReferralSelect] = useState(initIsOther ? "Other" : storedReferral)
@@ -374,11 +374,7 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
               label="DME"
               value={dme}
               onChange={setDme}
-              options={[
-                { value: "Incomplete", label: "Incomplete" },
-                { value: "Ordered", label: "Ordered" },
-                { value: "Requested", label: "Requested" },
-              ]}
+              options={toOptions(DME_OPTIONS)}
             />
             <ReferralField
               presets={referralPresets}

@@ -83,7 +83,7 @@ export const DENTAL_CLEARANCE_OPTIONS = [
 ]
 export const CT_REQUIRED_OPTIONS = ["Yes", "No", "Received"]
 export const GLP1_OPTIONS = ["Yes", "No"]
-export const DME_OPTIONS = ["Incomplete", "Ordered", "Requested"]
+export const DME_OPTIONS = ["Incomplete", "Ordered", "Requested", "N/A"]
 export const FACILITY_OPTIONS = [
   "Glen Oaks Hospital", "Humboldt Park Hospital", "Mercy Aurora Hospital",
   "Good Samaritan Hospital", "Oak Brook Surgical Center", "Aiden Center For Day Surgery",
@@ -92,7 +92,7 @@ export const FACILITY_OPTIONS = [
 export const REFERRAL_PRESETS = [
   "LCHC", "PCC", "VNA", "PIC", "AHC", "ZocDoc", "Molina", "Meridian",
   "Aetna Better Health", "JenCare", "GFH", "Advocate", "OSH", "Aunt Martha's",
-  "Esperanza", "Access", "Rush", "Mercy", "Google", "GOSM Website",
+  "Esperanza", "Access", "Rush", "Mercy", "Google", "GOSM Website", "BCC", "BCBS",
 ]
 
 export function toOptions(values: string[]): { value: string; label: string }[] {
