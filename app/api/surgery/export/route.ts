@@ -39,10 +39,47 @@ export async function GET(req: NextRequest) {
   const fmt = (d: string | Date | null | undefined) =>
     d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" }) : ""
 
-  const headers = [
-    "Patient", "MRN", "Status", "Surgery Date", "Language", "Procedure",
-    "Facility", "Ordering Provider", "Diagnosis", "Expires", "Calls", "Documents",
-  ]
+  // Conditional fields fold their free-text detail into the same cell, so the
+  // "External" Physical Therapy note isn't lost in the export.
+  const physicalTherapyValue = (c: any) =>
+    !c.physicalTherapy ? ""
+      : c.physicalTherapy === "External" && c.physicalTherapyDetail
+        ? `External — ${c.physicalTherapyDetail}`
+        : c.physicalTherapy
+
+  // One definition per column, keyed to match the table's column keys so the
+  // export can mirror the on-screen view (the `cols` param lists what to include).
+  const COLUMN_DEFS: Record<string, { header: string; value: (c: any) => string | number | null | undefined }> = {
+    patient:          { header: "Patient",             value: (c) => c.patientName },
+    mrn:              { header: "MRN",                  value: (c) => c.mrn },
+    status:           { header: "Status",              value: (c) => SURGERY_STATUS_LABELS[c.status] ?? c.status },
+    surgeryDate:      { header: "Surgery Date",        value: (c) => fmt(c.surgeryDate) },
+    language:         { header: "Language",            value: (c) => LANGUAGE_LABELS[c.language ?? "EN"] ?? c.language },
+    procedure:        { header: "Procedure",           value: (c) => c.procedure },
+    facility:         { header: "Facility",            value: (c) => c.facility },
+    orderingProvider: { header: "Ordering Provider",   value: (c) => c.orderingProvider },
+    diagnosis:        { header: "Diagnosis",           value: (c) => (c.diagnosis ?? "").replace(/\s+/g, " ").trim() },
+    referral:         { header: "Referral Source",     value: (c) => c.referral },
+    medicalClearance: { header: "Medical Clearance",   value: (c) => c.medicalClearance },
+    secondaryClearance: { header: "Secondary Clearance", value: (c) => c.secondaryClearance },
+    dentalClearance:  { header: "Dental Clearance",    value: (c) => c.dentalClearance },
+    ctRequired:       { header: "CT Required",         value: (c) => c.ctRequired },
+    glp1:             { header: "GLP-1",               value: (c) => c.glp1 },
+    dme:              { header: "DME",                 value: (c) => c.dme },
+    physicalTherapy:  { header: "Physical Therapy",    value: physicalTherapyValue },
+    email:            { header: "Email",               value: (c) => c.email },
+    expires:          { header: "Expires",             value: (c) => fmt(c.expires) },
+    calls:            { header: "Calls",               value: (c) => c._count.callAttempts },
+    docs:             { header: "Documents",           value: (c) => c._count.documents },
+  }
+  const ALL_KEYS = Object.keys(COLUMN_DEFS)
+
+  // Which columns to export: the on-screen selection passed via `cols`, filtered
+  // to known keys; fall back to the full set when none is provided.
+  const requested = (searchParams.get("cols") ?? "").split(",").map((k) => k.trim()).filter((k) => COLUMN_DEFS[k])
+  const keys = requested.length > 0 ? requested : ALL_KEYS
+
+  const headers = keys.map((k) => COLUMN_DEFS[k].header)
 
   function escape(val: string | number | null | undefined): string {
     if (val == null) return ""
@@ -53,20 +90,7 @@ export async function GET(req: NextRequest) {
     return str
   }
 
-  const rows = (cases as any[]).map((c) => [
-    c.patientName,
-    c.mrn,
-    SURGERY_STATUS_LABELS[c.status] ?? c.status,
-    fmt(c.surgeryDate),
-    LANGUAGE_LABELS[c.language ?? "EN"] ?? c.language,
-    c.procedure,
-    c.facility,
-    c.orderingProvider,
-    (c.diagnosis ?? "").replace(/\s+/g, " ").trim(),
-    fmt(c.expires),
-    c._count.callAttempts,
-    c._count.documents,
-  ])
+  const rows = (cases as any[]).map((c) => keys.map((k) => COLUMN_DEFS[k].value(c)))
 
   const csv = [headers, ...rows].map((row) => row.map(escape).join(",")).join("\n")
 

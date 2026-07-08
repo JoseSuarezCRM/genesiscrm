@@ -36,6 +36,15 @@ const SURGERY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "facility",         label: "Facility" },
   { key: "orderingProvider", label: "Ordering Provider" },
   { key: "diagnosis",        label: "Diagnosis" },
+  { key: "referral",         label: "Referral Source" },
+  { key: "medicalClearance", label: "Medical Clearance" },
+  { key: "secondaryClearance", label: "Secondary Clearance" },
+  { key: "dentalClearance",  label: "Dental Clearance" },
+  { key: "ctRequired",       label: "CT Required" },
+  { key: "glp1",             label: "GLP-1" },
+  { key: "dme",              label: "DME" },
+  { key: "physicalTherapy",  label: "Physical Therapy" },
+  { key: "email",            label: "Email" },
   { key: "expires",          label: "Expires" },
   { key: "calls",            label: "Calls" },
   { key: "docs",             label: "Docs" },
@@ -53,6 +62,16 @@ interface SurgeryCase {
   facility: string | null
   orderingProvider: string | null
   diagnosis: string | null
+  referral: string | null
+  medicalClearance: string | null
+  secondaryClearance: string | null
+  dentalClearance: string | null
+  ctRequired: string | null
+  glp1: string | null
+  dme: string | null
+  physicalTherapy: string | null
+  physicalTherapyDetail: string | null
+  email: string | null
   expires: string | Date | null
   _count: { callAttempts: number; documents: number }
 }
@@ -174,6 +193,8 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
     if (v) exportParams.set(k, v)
   }
   searchParams.getAll("status").forEach((s) => exportParams.append("status", s))
+  // Mirror the on-screen view: export exactly the columns that are shown, in order.
+  exportParams.set("cols", cols.map((c) => c.key).join(","))
   const exportHref = `/api/surgery/export${exportParams.toString() ? `?${exportParams.toString()}` : ""}`
 
   // Rows render in the server-provided order.
@@ -206,6 +227,24 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
       case "facility": return <span className="text-slate-600">{c.facility ?? "—"}</span>
       case "orderingProvider": return <span className="text-slate-600">{c.orderingProvider ?? "—"}</span>
       case "diagnosis": return <span className="text-slate-600">{c.diagnosis ?? "—"}</span>
+      case "referral": return <span className="text-slate-600">{c.referral ?? "—"}</span>
+      case "medicalClearance": return <span className="text-slate-600">{c.medicalClearance ?? "—"}</span>
+      case "secondaryClearance": return <span className="text-slate-600">{c.secondaryClearance ?? "—"}</span>
+      case "dentalClearance": return <span className="text-slate-600">{c.dentalClearance ?? "—"}</span>
+      case "ctRequired": return <span className="text-slate-600">{c.ctRequired ?? "—"}</span>
+      case "glp1": return <span className="text-slate-600">{c.glp1 ?? "—"}</span>
+      case "dme": return <span className="text-slate-600">{c.dme ?? "—"}</span>
+      case "physicalTherapy":
+        return (
+          <span className="text-slate-600">
+            {c.physicalTherapy
+              ? c.physicalTherapy === "External" && c.physicalTherapyDetail
+                ? `External — ${c.physicalTherapyDetail}`
+                : c.physicalTherapy
+              : "—"}
+          </span>
+        )
+      case "email": return <span className="text-slate-600">{c.email ?? "—"}</span>
       case "expires": return <span className="text-slate-600">{fmt(c.expires)}</span>
       case "calls":
         return c._count.callAttempts > 0 ? (
