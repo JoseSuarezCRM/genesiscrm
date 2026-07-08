@@ -102,6 +102,8 @@ export async function updateSurgeryCase(
     ctRequired?: string | null
     glp1?: string | null
     dme?: string | null
+    physicalTherapy?: string | null
+    physicalTherapyDetail?: string | null
     referral?: string | null
     facility?: string | null
     procedure?: string | null

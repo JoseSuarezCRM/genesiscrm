@@ -84,6 +84,7 @@ export const DENTAL_CLEARANCE_OPTIONS = [
 export const CT_REQUIRED_OPTIONS = ["Yes", "No", "Received"]
 export const GLP1_OPTIONS = ["Yes", "No"]
 export const DME_OPTIONS = ["Incomplete", "Ordered", "Requested", "N/A"]
+export const PHYSICAL_THERAPY_OPTIONS = ["Internal/GOSM", "External", "NA", "Undecided"]
 export const FACILITY_OPTIONS = [
   "Glen Oaks Hospital", "Humboldt Park Hospital", "Mercy Aurora Hospital",
   "Good Samaritan Hospital", "Oak Brook Surgical Center", "Aiden Center For Day Surgery",

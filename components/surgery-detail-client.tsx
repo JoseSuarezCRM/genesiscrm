@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
-import { PROCEDURE_DATA, findProcedureLocation, DME_OPTIONS, REFERRAL_PRESETS, toOptions } from "@/lib/surgery-procedures"
+import { PROCEDURE_DATA, findProcedureLocation, DME_OPTIONS, REFERRAL_PRESETS, PHYSICAL_THERAPY_OPTIONS, toOptions } from "@/lib/surgery-procedures"
 import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
 import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -153,6 +153,39 @@ function ReferralField({
   )
 }
 
+// Physical Therapy: a select whose "External" option reveals a free-text detail box.
+function PhysicalTherapyField({
+  value, detail, onValueChange, onDetailChange,
+}: {
+  value: string
+  detail: string
+  onValueChange: (v: string) => void
+  onDetailChange: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Physical Therapy</label>
+      <StyledSelect
+        value={value}
+        onChange={(e) => onValueChange(e.target.value)}
+        className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
+      >
+        <option value="">— Not set —</option>
+        {PHYSICAL_THERAPY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+      </StyledSelect>
+      {value === "External" && (
+        <input
+          type="text"
+          value={detail}
+          onChange={(e) => onDetailChange(e.target.value)}
+          placeholder="External PT details..."
+          className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
+        />
+      )}
+    </div>
+  )
+}
+
 export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -169,6 +202,8 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const [ctRequired, setCtRequired] = useState(surgeryCase.ctRequired ?? "")
   const [glp1, setGlp1] = useState(surgeryCase.glp1 ?? "")
   const [dme, setDme] = useState(surgeryCase.dme ?? "")
+  const [physicalTherapy, setPhysicalTherapy] = useState((surgeryCase as any).physicalTherapy ?? "")
+  const [physicalTherapyDetail, setPhysicalTherapyDetail] = useState((surgeryCase as any).physicalTherapyDetail ?? "")
   const referralPresets = REFERRAL_PRESETS
   const storedReferral = surgeryCase.referral ?? ""
   const initIsOther = storedReferral !== "" && !referralPresets.includes(storedReferral)
@@ -214,6 +249,8 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         ctRequired: ctRequired || null,
         glp1: glp1 || null,
         dme: dme || null,
+        physicalTherapy: physicalTherapy || null,
+        physicalTherapyDetail: physicalTherapy === "External" ? (physicalTherapyDetail || null) : null,
         referral: referralValue || null,
         facility: facility || null,
         procedure: procedure || null,
@@ -375,6 +412,12 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
               value={dme}
               onChange={setDme}
               options={toOptions(DME_OPTIONS)}
+            />
+            <PhysicalTherapyField
+              value={physicalTherapy}
+              detail={physicalTherapyDetail}
+              onValueChange={setPhysicalTherapy}
+              onDetailChange={setPhysicalTherapyDetail}
             />
             <ReferralField
               presets={referralPresets}

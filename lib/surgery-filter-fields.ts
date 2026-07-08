@@ -5,6 +5,7 @@
 import type { FilterField } from "./filters"
 import { SURGERY_STATUS_LABELS } from "./surgery-constants"
 import { LANGUAGE_OPTIONS } from "./automation-properties"
+import { PHYSICAL_THERAPY_OPTIONS } from "./surgery-procedures"
 
 // getValue is unused for surgery (filtering happens in the DB), so it's a no-op.
 const none = () => null
@@ -33,4 +34,8 @@ export const SURGERY_FILTER_FIELDS: FilterField[] = [
   { key: "ctRequired", label: "CT Required", type: "text", column: "ctRequired", getValue: none },
   { key: "glp1", label: "GLP-1", type: "text", column: "glp1", getValue: none },
   { key: "dme", label: "DME", type: "text", column: "dme", getValue: none },
+  {
+    key: "physicalTherapy", label: "Physical Therapy", type: "select", column: "physicalTherapy", getValue: none,
+    options: PHYSICAL_THERAPY_OPTIONS.map((v) => ({ value: v, label: v })),
+  },
 ]

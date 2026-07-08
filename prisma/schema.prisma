@@ -1091,6 +1091,8 @@ model SurgeryCase {
   ctRequired        String?
   glp1              String?
   dme               String?
+  physicalTherapy       String?    // Internal/GOSM | External | NA | Undecided
+  physicalTherapyDetail String?    // free text shown when physicalTherapy = External
   referral          String?
   facility          String?
   procedure         String?
