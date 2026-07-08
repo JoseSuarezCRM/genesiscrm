@@ -14,6 +14,7 @@ interface Doctor {
   npi: string | null
   specialty: string | null
   phone: string | null
+  officePhone: string | null
   email: string | null
   practiceId: string
   practiceName: string
@@ -73,11 +74,12 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
     name: "Name",
     title: "Title",
     npi: "NPI",
-    phone: "Phone",
+    phone: "Cell Phone",
+    officePhone: "Office Phone",
     email: "Email",
   }
 
-  const displayFields = ["name", "title", "npi", "phone", "email"] as const
+  const displayFields = ["name", "title", "npi", "phone", "officePhone", "email"] as const
 
   return (
     <div className="space-y-3 border border-slate-200 rounded-lg bg-slate-50 p-4">
@@ -135,7 +137,7 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
                         {isEditing ? (
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-1.5">
-                              {field === "phone" ? (
+                              {field === "phone" || field === "officePhone" ? (
                                 <div
                                   className="flex-1"
                                   onKeyDown={(e) => {
@@ -197,7 +199,7 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
                             className="flex-1 text-left text-sm text-slate-700 cursor-text rounded px-1 py-0.5 -mx-1 hover:bg-blue-50/70 hover:ring-1 hover:ring-blue-200 transition-colors"
                             title={`Click to edit ${fieldLabels[field]}`}
                           >
-                            {value ? (field === "phone" ? formatPhone(String(value)) : value) : <span className="text-slate-400">—</span>}
+                            {value ? (field === "phone" || field === "officePhone" ? formatPhone(String(value)) : value) : <span className="text-slate-400">—</span>}
                           </button>
                         )}
                       </div>

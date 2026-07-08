@@ -41,6 +41,7 @@ interface Doctor {
   npi: string | null
   specialty: string | null
   phone: string | null
+  officePhone: string | null
   email: string | null
   practiceId: string
   practiceName: string
@@ -871,6 +872,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       npi: null,
       specialty: null,
       phone: null,
+      officePhone: null,
       email: null,
       practiceId: form.practiceId,
       practiceName,
