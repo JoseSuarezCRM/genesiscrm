@@ -8,6 +8,7 @@ import SurgeryImportDialog from "@/components/surgery-import-dialog"
 import SurgeryCreateDialog from "@/components/surgery-create-dialog"
 import SurgeryFilters from "@/components/surgery-filters"
 import SurgeryTable from "@/components/surgery-table"
+import { decodeFilterParam } from "@/lib/filter-to-prisma"
 import { Stethoscope, ChevronLeft, ChevronRight } from "lucide-react"
 import { Suspense } from "react"
 
@@ -18,6 +19,7 @@ interface PageProps {
     statusMode?: string
     from?: string
     to?: string
+    filter?: string
     page?: string
     sort?: string
     dir?: string
@@ -40,12 +42,14 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
   const page = Math.max(1, parseInt(searchParams.page ?? "1"))
 
   const dir: "asc" | "desc" = searchParams.dir === "asc" ? "asc" : "desc"
+  const advancedFilter = decodeFilterParam(searchParams.filter)
   const { cases, total, allMatchingIds, pageSize } = await getSurgeryCases({
     search: searchParams.search,
     statuses,
     statusMode,
     from: searchParams.from,
     to: searchParams.to,
+    filter: advancedFilter,
     page,
     sort: searchParams.sort,
     dir,

@@ -163,7 +163,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
 
   // Server-side export: hit the route with the current filters + sort (all matching rows).
   const exportParams = new URLSearchParams()
-  for (const k of ["search", "statusMode", "from", "to", "sort", "dir"]) {
+  for (const k of ["search", "statusMode", "from", "to", "sort", "dir", "filter"]) {
     const v = searchParams.get(k)
     if (v) exportParams.set(k, v)
   }

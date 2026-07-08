@@ -19,6 +19,9 @@ export interface FilterField {
   // Pulls the comparable value out of a record. Return string | number | boolean |
   // Date | null. For `select` return the option `value`.
   getValue: (row: any) => unknown
+  // Optional DB column name — set when the filter is evaluated server-side by
+  // translating the FilterState into a Prisma `where` (see lib/filter-to-prisma).
+  column?: string
 }
 
 export interface Operator {

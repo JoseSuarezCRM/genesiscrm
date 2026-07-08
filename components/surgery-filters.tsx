@@ -3,6 +3,10 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { Search, ChevronDown, X, Check, Calendar } from "lucide-react"
+import FilterBuilder from "@/components/ui/filter-builder"
+import { type FilterState, emptyFilter, activeConditionCount } from "@/lib/filters"
+import { decodeFilterParam } from "@/lib/filter-to-prisma"
+import { SURGERY_FILTER_FIELDS } from "@/lib/surgery-filter-fields"
 
 const STATUS_OPTIONS = [
   { id: "NEW",                  label: "New" },
@@ -256,6 +260,27 @@ export default function SurgeryFilters({
 
   const navigate = (p: URLSearchParams) => router.push(`${pathname}?${p.toString()}`)
 
+  // Advanced filter builder — held locally for responsive editing, then synced
+  // to the URL (debounced) since surgery filtering runs server-side.
+  const filterParam = params.get("filter")
+  const [filterState, setFilterState] = useState<FilterState>(() => decodeFilterParam(filterParam) ?? emptyFilter())
+  const filterDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    setFilterState(decodeFilterParam(filterParam) ?? emptyFilter())
+  }, [filterParam])
+  const advancedActive = activeConditionCount(filterState, SURGERY_FILTER_FIELDS) > 0
+  const onFilterChange = (next: FilterState) => {
+    setFilterState(next)
+    if (filterDebounce.current) clearTimeout(filterDebounce.current)
+    filterDebounce.current = setTimeout(() => {
+      const p = new URLSearchParams(params.toString())
+      if (activeConditionCount(next, SURGERY_FILTER_FIELDS) > 0) p.set("filter", JSON.stringify(next))
+      else p.delete("filter")
+      p.delete("page")
+      router.push(`${pathname}?${p.toString()}`)
+    }, 400)
+  }
+
   const toggleStatus = (id: string) => {
     const p = new URLSearchParams(params.toString())
     const current = p.getAll("status")
@@ -290,10 +315,11 @@ export default function SurgeryFilters({
     navigate(p)
   }
 
-  const hasFilters = !!currentSearch || currentStatuses.length > 0 || currentFrom || currentTo
+  const hasFilters = !!currentSearch || currentStatuses.length > 0 || !!currentFrom || !!currentTo || advancedActive
 
   const clearAll = () => {
     setSearchValue("")
+    setFilterState(emptyFilter())
     router.push(pathname)
   }
 
@@ -353,6 +379,9 @@ export default function SurgeryFilters({
           to={currentTo}
           onApply={setDateRange}
         />
+
+        {/* Advanced filter builder */}
+        <FilterBuilder fields={SURGERY_FILTER_FIELDS} value={filterState} onChange={onFilterChange} />
 
         {/* Clear all */}
         {hasFilters && (
