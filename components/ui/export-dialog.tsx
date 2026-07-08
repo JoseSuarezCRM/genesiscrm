@@ -15,10 +15,13 @@ interface Props {
   getData?: () => { headers: string[]; rows: (string | number | null | undefined)[][] }
   // Server-side export: download from this URL instead (filename appended).
   href?: string
+  // Row count to display for server-side (href) exports, where the rows aren't
+  // available client-side. Ignored when getData is provided (that count wins).
+  count?: number
 }
 
 // HubSpot-style export modal (a16z styling): name the file, pick a format, export.
-export default function ExportDialog({ open, onClose, subject, defaultName, getData, href }: Props) {
+export default function ExportDialog({ open, onClose, subject, defaultName, getData, href, count }: Props) {
   const [name, setName] = useState(defaultName)
   const [format, setFormat] = useState("csv")
   const [busy, setBusy] = useState(false)
@@ -28,6 +31,9 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
   if (open && getData && rowCount === null) {
     try { setRowCount(getData().rows.length) } catch { setRowCount(0) }
   }
+
+  // For server-side exports, fall back to the count passed in by the caller.
+  const shownCount = getData ? rowCount : (count ?? null)
 
   function handleClose() {
     setRowCount(null)
@@ -67,7 +73,7 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-zinc-500">
             Exporting <span className="font-medium text-zinc-800 capitalize">{subject}</span>
-            {rowCount !== null && <> · {rowCount.toLocaleString()} row{rowCount === 1 ? "" : "s"}</>}
+            {shownCount !== null && <> · {shownCount.toLocaleString()} row{shownCount === 1 ? "" : "s"}</>}
           </p>
 
           <div>

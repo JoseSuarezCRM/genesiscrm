@@ -220,6 +220,7 @@ model User {
   directEmails          DirectEmail[]
   activityViews         ActivityView[]
   providerViews         ProviderView[]
+  surgeryViews          SurgeryView[]
   savedReports          SavedReport[]        @relation("SavedReportCreatedBy")
   dashboards            Dashboard[]          @relation("DashboardCreatedBy")
   surgeryCases          SurgeryCase[]        @relation("SurgeryCaseCreatedBy")
@@ -646,6 +647,20 @@ model ActivityView {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   filters       Json
+  visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
+  teamId        String?
+  sharedUserIds String[] @default([])
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SurgeryView {
+  id            String   @id @default(cuid())
+  name          String
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  config        Json     // { query, columns, viewMode }
   visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[] @default([])

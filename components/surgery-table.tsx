@@ -40,7 +40,7 @@ const SURGERY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "calls",            label: "Calls" },
   { key: "docs",             label: "Docs" },
 ]
-const DEFAULT_SURGERY_COLS = ["patient", "mrn", "status", "surgeryDate", "language", "procedure", "diagnosis", "calls", "docs"]
+export const DEFAULT_SURGERY_COLS = ["patient", "mrn", "status", "surgeryDate", "language", "procedure", "diagnosis", "calls", "docs"]
 
 interface SurgeryCase {
   id: string
@@ -92,12 +92,18 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
 
   // Persist view prefs across navigation (loaded after mount to avoid hydration mismatch).
   useEffect(() => {
-    try {
-      const v = localStorage.getItem("surgeryViewMode")
-      if (v === "cards" || v === "table") setViewMode(v)
-      const c = localStorage.getItem("surgeryCols")
-      if (c) { const arr = JSON.parse(c); if (Array.isArray(arr) && arr.length) setVisibleCols(arr) }
-    } catch {}
+    function loadPrefs() {
+      try {
+        const v = localStorage.getItem("surgeryViewMode")
+        if (v === "cards" || v === "table") setViewMode(v)
+        const c = localStorage.getItem("surgeryCols")
+        if (c) { const arr = JSON.parse(c); if (Array.isArray(arr) && arr.length) setVisibleCols(arr) }
+      } catch {}
+    }
+    loadPrefs()
+    // Re-read when a saved view is applied (the views bar writes localStorage + fires this).
+    window.addEventListener("surgery-view-applied", loadPrefs)
+    return () => window.removeEventListener("surgery-view-applied", loadPrefs)
   }, [])
   useEffect(() => { try { localStorage.setItem("surgeryViewMode", viewMode) } catch {} }, [viewMode])
   useEffect(() => { try { localStorage.setItem("surgeryCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
@@ -376,6 +382,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
         subject="surgery cases"
         defaultName={`surgery-cases-${new Date().toISOString().slice(0, 10)}`}
         href={exportHref}
+        count={total}
       />
     </>
   )

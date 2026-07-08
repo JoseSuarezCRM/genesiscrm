@@ -8,6 +8,9 @@ import SurgeryImportDialog from "@/components/surgery-import-dialog"
 import SurgeryCreateDialog from "@/components/surgery-create-dialog"
 import SurgeryFilters from "@/components/surgery-filters"
 import SurgeryTable from "@/components/surgery-table"
+import SurgeryViewsBar from "@/components/surgery-views-bar"
+import { getSurgeryViews } from "@/app/actions/surgery-views"
+import { getViewShareOptions } from "@/app/actions/view-share-options"
 import { decodeFilterParam } from "@/lib/filter-to-prisma"
 import { Stethoscope, ChevronLeft, ChevronRight } from "lucide-react"
 import { Suspense } from "react"
@@ -55,6 +58,8 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
     dir,
   })
 
+  const [savedViews, shareOptions] = await Promise.all([getSurgeryViews(), getViewShareOptions()])
+
   const totalPages = Math.ceil(total / pageSize)
 
   function buildUrl(overrides: Record<string, string | undefined>) {
@@ -95,6 +100,15 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           currentStatusMode={statusMode}
           currentFrom={searchParams.from}
           currentTo={searchParams.to}
+        />
+      </Suspense>
+
+      {/* Saved views */}
+      <Suspense>
+        <SurgeryViewsBar
+          views={savedViews as any}
+          shareUsers={shareOptions.users as any}
+          shareTeams={shareOptions.teams as any}
         />
       </Suspense>
 
