@@ -165,3 +165,74 @@ export async function sendEmail(
     return { success: false, error: message }
   }
 }
+
+// RFC 2047 encoded-word so non-ASCII subjects are safe in a MIME header.
+function encodeHeaderWord(s: string): string {
+  return /^[\x20-\x7E]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, "utf8").toString("base64")}?=`
+}
+
+// base64 body wrapped at 76 chars per MIME.
+function b64Wrapped(s: string): string {
+  return Buffer.from(s, "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n")
+}
+
+// Send a real calendar meeting request (iTIP). Unlike attaching the .ics, this
+// puts the calendar as a `text/calendar; method=REQUEST` alternative body inside
+// a raw MIME message, so Outlook/Gmail render it as an invite (Accept/Decline)
+// and auto-add it. Uses Graph's MIME sendMail — only needs Mail.Send.
+export async function sendCalendarInvite(
+  to: string[],
+  subject: string,
+  html: string,
+  ics: string,
+  sender?: EmailSender,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const fromEmail = SENDER_EMAILS[sender ?? "referrals"]
+    const token = await getAccessToken()
+    const boundary = "gomtg" + Math.random().toString(36).slice(2)
+    const mime = [
+      "MIME-Version: 1.0",
+      `Date: ${new Date().toUTCString()}`,
+      `From: Genesis Ortho <${fromEmail}>`,
+      `To: ${to.join(", ")}`,
+      `Subject: ${encodeHeaderWord(subject)}`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      "",
+      `--${boundary}`,
+      `Content-Type: text/html; charset="utf-8"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      b64Wrapped(html),
+      "",
+      `--${boundary}`,
+      `Content-Type: text/calendar; charset="utf-8"; method=REQUEST`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      b64Wrapped(ics),
+      "",
+      `--${boundary}--`,
+      "",
+    ].join("\r\n")
+
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}/sendMail`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
+        body: Buffer.from(mime, "utf8").toString("base64"),
+      },
+    )
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      const msg = `Graph MIME sendMail HTTP ${res.status}${text ? `: ${text.slice(0, 300)}` : ""}`
+      console.error("[GRAPH_MAIL] invite", msg)
+      return { success: false, error: msg }
+    }
+    return { success: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[GRAPH_MAIL] invite", message)
+    return { success: false, error: message }
+  }
+}

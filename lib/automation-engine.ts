@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
-import { sendEmail, senderEmail, type EmailSender } from "@/lib/graph-mailer"
+import { sendEmail, sendCalendarInvite, senderEmail, type EmailSender } from "@/lib/graph-mailer"
 import { buildIcs } from "@/lib/ics"
 import { zonedParts, zonedWallToUtc } from "@/lib/tz"
 import { sendSMS } from "@/lib/twilio"
@@ -581,14 +581,7 @@ async function runSingleAction(
     ].filter(Boolean).join("")
     const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${inner}</div>`
 
-    const result = await sendEmail(inviteTo, title, html, {
-      sender,
-      attachments: [{
-        name: "invite.ics",
-        contentType: "text/calendar; method=REQUEST; charset=utf-8",
-        contentBase64: Buffer.from(ics, "utf8").toString("base64"),
-      }],
-    })
+    const result = await sendCalendarInvite(inviteTo, title, html, ics, sender)
     if (!result.success) {
       return `Meeting invite failed to ${inviteTo.join(", ")}: ${result.error ?? "unknown error"}`
     }
