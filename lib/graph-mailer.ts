@@ -21,6 +21,11 @@ const SENDER_EMAILS: Record<EmailSender, string> = {
   tpl:       process.env.MS_TPL_FROM_EMAIL      ?? "tpl@genesisortho.com",
 }
 
+// The from-address for a given sender key (used e.g. as the ICS organizer).
+export function senderEmail(sender?: EmailSender): string {
+  return SENDER_EMAILS[sender ?? "referrals"]
+}
+
 // Single token cache — same Azure app for all three mailboxes
 let cachedToken: { value: string; expiresAt: number } | null = null
 
@@ -64,33 +69,43 @@ async function getAccessToken(): Promise<string> {
   return cachedToken.value
 }
 
-// An attachment reference: a file already uploaded to Blob storage.
+// An attachment: either a file already in Blob storage (url) or inline bytes
+// generated on the fly (contentBase64), e.g. a calendar invite (.ics).
 export interface EmailAttachment {
   name: string
   contentType: string
-  url: string
+  url?: string
+  contentBase64?: string
 }
 
-// Fetch each attachment URL and convert to a Graph fileAttachment (base64).
+// Convert each attachment to a Graph fileAttachment (base64). Inline content is
+// used directly; url-backed attachments are fetched from Blob first.
 // Graph's simple sendMail supports a total message size up to ~3-4 MB, so this
-// is intended for modestly-sized files (PDFs, images). Larger files are skipped.
+// is intended for modestly-sized files (PDFs, images, .ics). Larger files skip.
 async function buildGraphAttachments(attachments: EmailAttachment[]): Promise<any[]> {
   const out: any[] = []
   // Private Blob store requires the token in the Authorization header to read bytes.
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN
   for (const att of attachments) {
     try {
-      const res = await fetch(att.url, blobToken ? { headers: { Authorization: `Bearer ${blobToken}` } } : undefined)
-      if (!res.ok) { console.error("[GRAPH_MAIL] attachment fetch failed", att.url); continue }
-      const buf = Buffer.from(await res.arrayBuffer())
+      let contentBytes: string
+      if (att.contentBase64) {
+        contentBytes = att.contentBase64
+      } else if (att.url) {
+        const res = await fetch(att.url, blobToken ? { headers: { Authorization: `Bearer ${blobToken}` } } : undefined)
+        if (!res.ok) { console.error("[GRAPH_MAIL] attachment fetch failed", att.url); continue }
+        contentBytes = Buffer.from(await res.arrayBuffer()).toString("base64")
+      } else {
+        continue
+      }
       out.push({
         "@odata.type": "#microsoft.graph.fileAttachment",
         name: att.name,
         contentType: att.contentType || "application/octet-stream",
-        contentBytes: buf.toString("base64"),
+        contentBytes,
       })
     } catch (e) {
-      console.error("[GRAPH_MAIL] attachment error", att.url, e)
+      console.error("[GRAPH_MAIL] attachment error", att.name, e)
     }
   }
   return out

@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/automations"
 import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
@@ -104,6 +105,7 @@ const ACTION_LABELS: Record<string, string> = {
   ADD_TAG: "Add tag to referral",
   SEND_EMAIL: "Send email",
   SEND_SMS: "Send SMS to patient",
+  SEND_MEETING_INVITE: "Send meeting invite",
 }
 
 // Actions that act on a specific referral — only offered for referral workflows.
@@ -143,6 +145,7 @@ const ACTION_COLORS: Record<string, string> = {
   ADD_TAG: "bg-slate-100 text-slate-700",
   SEND_EMAIL: "bg-sky-100 text-sky-700",
   SEND_SMS: "bg-green-100 text-green-700",
+  SEND_MEETING_INVITE: "bg-cyan-100 text-cyan-700",
 }
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -447,6 +450,7 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "ADD_TAG") return { tagId: "" }
   if (type === "SEND_EMAIL") return { recipients: [{ type: "all_admins", value: "" }], cc: [], bcc: [], subject: "", body: "" }
   if (type === "SEND_SMS") return { body: "" }
+  if (type === "SEND_MEETING_INVITE") return { recipients: [{ type: "all_admins", value: "" }], sender: "referrals", title: "", location: "", description: "", eventMode: "fixed", eventDatetime: null, eventField: "", eventTime: "", durationMinutes: 30 }
   return {}
 }
 
@@ -1139,6 +1143,113 @@ function ActionConfigFields({
     )
   }
 
+  if (type === "SEND_MEETING_INVITE") {
+    const toRows = (config.recipients as Recipient[]) ?? [{ type: "all_admins", value: "" }]
+    const eventMode = (config.eventMode as string) || "fixed"
+    const hasExternal = toRows.some(r => r.type === "record_email" || r.type === "email")
+    return (
+      <div className="space-y-3">
+        {/* Organizer */}
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <label className="text-xs font-semibold text-blue-700 block mb-1.5">Organizer (from)</label>
+          <StyledSelect value={(config.sender as string) || "referrals"} onChange={e => set("sender", e.target.value)} className="w-full">
+            <option value="referrals">Referrals@genesisortho.com</option>
+            <option value="surgery">surgery@genesisortho.com</option>
+            <option value="tpl">tpl@genesisortho.com</option>
+          </StyledSelect>
+        </div>
+
+        {/* Attendees */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-slate-600">Attendees *</label>
+            <button type="button" onClick={() => set("recipients", [...toRows, { type: "all_admins", value: "" }])} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <Plus className="h-3 w-3" /> Add
+            </button>
+          </div>
+          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} />
+          {hasExternal && (
+            <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+              ⚠️ An external recipient is selected. Don&apos;t include patient PHI (name, diagnosis, etc.) in invites sent outside the organization.
+            </p>
+          )}
+        </div>
+
+        {/* Title */}
+        <div>
+          <label className="text-xs font-medium text-slate-600 block mb-1">Title *</label>
+          <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. Follow-up with {provider_name}"
+            value={(config.title as string) || ""} onChange={e => set("title", e.target.value)} />
+        </div>
+
+        {/* When */}
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
+          <label className="text-xs font-semibold text-slate-600 block">Event date &amp; time</label>
+          <StyledSelect value={eventMode} onChange={e => set("eventMode", e.target.value)} className="w-full">
+            <option value="fixed">At a specific date &amp; time</option>
+            <option value="field">On a date from the record</option>
+          </StyledSelect>
+          {eventMode === "fixed" && (
+            <input type="datetime-local"
+              value={config.eventDatetime ? clinicDatetimeLocalValue(new Date(config.eventDatetime as string)) : ""}
+              onChange={e => set("eventDatetime", clinicDatetimeLocalToISO(e.target.value))}
+              className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 bg-white" />
+          )}
+          {eventMode === "field" && (
+            <div className="space-y-2">
+              <StyledSelect className="w-full" value={(config.eventField as string) || ""} onChange={e => set("eventField", e.target.value)}>
+                <option value="">Select a date property…</option>
+                {dateProps.map(p => <option key={p.id} value={p.path}>{p.label}</option>)}
+              </StyledSelect>
+              {dateProps.length === 0 && <p className="text-xs text-amber-700">This object has no date properties.</p>}
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500">at</label>
+                <input type="time" value={(config.eventTime as string) || ""} onChange={e => set("eventTime", e.target.value)}
+                  className="border border-zinc-200 rounded-lg px-3 py-2 text-sm bg-white" />
+                <span className="text-xs text-slate-400">optional — defaults to the time on the date</span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">Duration</label>
+            <input type="number" min={5} step={5} value={Number(config.durationMinutes) || 30}
+              onChange={e => set("durationMinutes", Math.max(5, Number(e.target.value) || 30))}
+              className="w-20 border border-zinc-200 rounded-lg px-3 py-2 text-sm bg-white" />
+            <span className="text-xs text-slate-400">minutes</span>
+          </div>
+        </div>
+
+        {/* Location */}
+        <div>
+          <label className="text-xs font-medium text-slate-600 block mb-1">Location / link</label>
+          <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. Genesis Ortho — Main Office, or a video link"
+            value={(config.location as string) || ""} onChange={e => set("location", e.target.value)} />
+        </div>
+
+        {/* Description */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-medium text-slate-600">Description</label>
+            <button type="button" onClick={() => setShowVars(v => !v)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <Info className="h-3 w-3" /> Template vars
+            </button>
+          </div>
+          {showVars && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {tokens.map(v => (
+                <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
+                  onClick={() => set("description", ((config.description as string) || "") + v)}>{v}</span>
+              ))}
+            </div>
+          )}
+          <textarea rows={3} className="w-full border rounded-md px-3 py-2 text-sm resize-none"
+            placeholder="Agenda / notes for the meeting…"
+            value={(config.description as string) || ""} onChange={e => set("description", e.target.value)} />
+        </div>
+      </div>
+    )
+  }
+
   return null
 }
 
@@ -1202,6 +1313,7 @@ function actionSummary(type: AutomationAction, config: Record<string, unknown>):
   if ((type === "SEND_EMAIL" || (type as string) === "SEND_SMS") && config.templateName) return `${type === "SEND_EMAIL" ? "Send email" : "Send SMS"}: ${config.templateName} (template)`
   if (type === "SEND_EMAIL" && config.subject) return `Send email: ${config.subject}`
   if (type === "SEND_SMS") return "Send SMS"
+  if (type === "SEND_MEETING_INVITE") return config.title ? `Send meeting invite: ${config.title}` : "Send meeting invite"
   if (type === "ADD_TAG") return "Add tag"
   if (type === "UPDATE_REFERRAL_STATUS" && config.status) return `Set status: ${config.status}`
   if (type === "ASSIGN_REFERRAL") return "Assign referral"

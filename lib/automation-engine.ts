@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
-import { sendEmail } from "@/lib/graph-mailer"
+import { sendEmail, senderEmail, type EmailSender } from "@/lib/graph-mailer"
+import { buildIcs } from "@/lib/ics"
+import { zonedParts, zonedWallToUtc } from "@/lib/tz"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
@@ -167,11 +169,13 @@ const ACTION_STEP_LABELS: Record<string, string> = {
   ADD_TAG: "Add tag",
   SEND_EMAIL: "Send email",
   SEND_SMS: "Send SMS",
+  SEND_MEETING_INVITE: "Send meeting invite",
 }
 
 function stepLabel(type: string, cfg: Record<string, unknown>): string {
   const base = ACTION_STEP_LABELS[type] ?? type
   if (type === "SEND_EMAIL" && cfg.subject) return `${base}: ${String(cfg.subject).slice(0, 60)}`
+  if (type === "SEND_MEETING_INVITE" && cfg.title) return `${base}: ${String(cfg.title).slice(0, 60)}`
   if (type === "CREATE_TASK" && cfg.title) return `${base}: ${String(cfg.title).slice(0, 60)}`
   if (type === "UPDATE_REFERRAL_STATUS" && cfg.status) return `${base} → ${cfg.status}`
   return base
@@ -339,6 +343,40 @@ function recordEmail(record?: Record<string, unknown> | null): string | null {
   return e && e.trim() ? e.trim() : null
 }
 
+// Resolve a recipient-picker list (record email / admins / assigned user /
+// specific users / literal email) into a deduplicated list of email addresses.
+// Shared by Send Email and Send Meeting Invite.
+async function resolveRecipients(
+  list: unknown,
+  record: Record<string, unknown> | null | undefined,
+  referralId: string | null,
+): Promise<string[]> {
+  const emailSet = new Set<string>()
+  if (Array.isArray(list)) {
+    for (const r of list as { type: string; value: string | string[] }[]) {
+      if (r.type === "record_email") {
+        const e = recordEmail(record)
+        if (e) emailSet.add(e)
+      } else if (r.type === "all_admins") {
+        const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
+        admins.forEach((a) => emailSet.add(a.email))
+      } else if (r.type === "assigned_to" && referralId) {
+        const ref = await prisma.referral.findUnique({ where: { id: referralId }, select: { assignedTo: { select: { email: true } } } })
+        if (ref?.assignedTo?.email) emailSet.add(ref.assignedTo.email)
+      } else if (r.type === "user") {
+        const ids = Array.isArray(r.value) ? r.value : (r.value ? [r.value] : [])
+        for (const id of ids) {
+          const u = await prisma.user.findUnique({ where: { id }, select: { email: true } })
+          if (u?.email) emailSet.add(u.email)
+        }
+      } else if (r.type === "email" && r.value) {
+        emailSet.add(String(r.value).trim())
+      }
+    }
+  }
+  return Array.from(emailSet)
+}
+
 // Runs one action of the given type with its config.
 // Returns a human-readable issue string if the action couldn't complete (e.g.
 // an email that didn't send), or null on success.
@@ -448,36 +486,9 @@ async function runSingleAction(
     const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${inner}</div>`
     const emailAttachments = (Array.isArray(cfg.attachments) ? cfg.attachments : []) as any
 
-    const resolveRecipientList = async (list: unknown): Promise<string[]> => {
-      const emailSet = new Set<string>()
-      if (Array.isArray(list)) {
-        for (const r of list as { type: string; value: string }[]) {
-          if (r.type === "record_email") {
-            const e = recordEmail(record)
-            if (e) emailSet.add(e)
-          } else if (r.type === "all_admins") {
-            const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
-            admins.forEach(a => emailSet.add(a.email))
-          } else if (r.type === "assigned_to" && referralId) {
-            const ref = await prisma.referral.findUnique({ where: { id: referralId }, select: { assignedTo: { select: { email: true } } } })
-            if (ref?.assignedTo?.email) emailSet.add(ref.assignedTo.email)
-          } else if (r.type === "user") {
-            const ids = Array.isArray(r.value) ? r.value : (r.value ? [r.value] : [])
-            for (const id of ids) {
-              const u = await prisma.user.findUnique({ where: { id }, select: { email: true } })
-              if (u?.email) emailSet.add(u.email)
-            }
-          } else if (r.type === "email" && r.value) {
-            emailSet.add(r.value.trim())
-          }
-        }
-      }
-      return Array.from(emailSet)
-    }
-
     let toEmails: string[]
     if (Array.isArray(cfg.recipients)) {
-      toEmails = await resolveRecipientList(cfg.recipients)
+      toEmails = await resolveRecipients(cfg.recipients, record, referralId)
     } else {
       // Legacy single-recipient format (backward compat)
       const toType = cfg.toType as string
@@ -497,8 +508,8 @@ async function runSingleAction(
       toEmails = Array.from(legacySet)
     }
 
-    const ccEmails = await resolveRecipientList(cfg.cc)
-    const bccEmails = await resolveRecipientList(cfg.bcc)
+    const ccEmails = await resolveRecipients(cfg.cc, record, referralId)
+    const bccEmails = await resolveRecipients(cfg.bcc, record, referralId)
 
     if (!toEmails.length) {
       return "Email not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
@@ -506,6 +517,80 @@ async function runSingleAction(
     const result = await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails, sender: (cfg.sender as any) || "referrals", attachments: emailAttachments })
     if (!result.success) {
       return `Email failed to ${toEmails.join(", ")} via ${(cfg.sender as string) || "referrals"}: ${result.error ?? "unknown error"}`
+    }
+  }
+
+  if ((automation.actionType as string) === "SEND_MEETING_INVITE") {
+    const inviteTo = await resolveRecipients(cfg.recipients, record, referralId)
+    if (!inviteTo.length) {
+      return "Meeting invite not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
+    }
+
+    const title = resolveTemplate((cfg.title as string) || "Meeting", vars)
+    const location = cfg.location ? resolveTemplate(cfg.location as string, vars) : ""
+    const description = cfg.description ? resolveTemplate(cfg.description as string, vars) : ""
+
+    // Resolve the event start: either a fixed date/time or a date property on the
+    // record (optionally overridden with a specific time-of-day in clinic time).
+    let start: Date | null = null
+    const eventMode = (cfg.eventMode as string) || "fixed"
+    if (eventMode === "field") {
+      const fieldPath = cfg.eventField as string | undefined
+      const raw = fieldPath ? (record?.[fieldPath] as unknown) : null
+      const base = raw ? new Date(raw as string) : null
+      if (!base || Number.isNaN(base.getTime())) {
+        return `Meeting invite not sent: the record has no value for the chosen date field${fieldPath ? ` (${fieldPath})` : ""}.`
+      }
+      const tm = String(cfg.eventTime ?? "").match(/^(\d{1,2}):(\d{2})$/)
+      if (tm) {
+        const p = zonedParts(base)
+        start = zonedWallToUtc(p.year, p.month, p.day, Number(tm[1]), Number(tm[2]))
+      } else {
+        start = base
+      }
+    } else {
+      const iso = cfg.eventDatetime as string | undefined
+      start = iso ? new Date(iso) : null
+      if (!start || Number.isNaN(start.getTime())) {
+        return "Meeting invite not sent: no event date/time configured."
+      }
+    }
+
+    const durationMinutes = Math.max(5, Number(cfg.durationMinutes) || 30)
+    const end = new Date(start.getTime() + durationMinutes * 60000)
+    const sender = (cfg.sender as EmailSender) || "referrals"
+    const organizer = senderEmail(sender)
+    const uid = `${referralId ?? "rec"}-${start.getTime()}-${Math.random().toString(36).slice(2, 8)}@genesisortho.com`
+
+    const ics = buildIcs({
+      uid, start, end, title, description, location,
+      organizer: { email: organizer, name: "Genesis Ortho" },
+      attendees: inviteTo.map((e) => ({ email: e })),
+    })
+
+    const when = start.toLocaleString("en-US", {
+      weekday: "short", month: "short", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit", timeZone: "America/Chicago",
+    })
+    const inner = [
+      `<p style="font-size:15px;font-weight:600;">${title}</p>`,
+      `<p><strong>When:</strong> ${when} (CT) · ${durationMinutes} min</p>`,
+      location ? `<p><strong>Where:</strong> ${location}</p>` : "",
+      description ? `<p>${description.replace(/\n/g, "<br/>")}</p>` : "",
+      `<p style="color:#64748b;font-size:13px;">Open the attached invite to add this to your calendar.</p>`,
+    ].filter(Boolean).join("")
+    const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${inner}</div>`
+
+    const result = await sendEmail(inviteTo, title, html, {
+      sender,
+      attachments: [{
+        name: "invite.ics",
+        contentType: "text/calendar; method=REQUEST; charset=utf-8",
+        contentBase64: Buffer.from(ics, "utf8").toString("base64"),
+      }],
+    })
+    if (!result.success) {
+      return `Meeting invite failed to ${inviteTo.join(", ")}: ${result.error ?? "unknown error"}`
     }
   }
 
