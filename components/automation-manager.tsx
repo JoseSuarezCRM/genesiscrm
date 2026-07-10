@@ -14,6 +14,7 @@ import {
 import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
+import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
@@ -793,6 +794,21 @@ function ActionConfigFields({
   templates?: MessageTemplateOption[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
+  // Sender choices for email/invite actions: the record owner, a shared mailbox,
+  // or any user's integrated address (the value is that address).
+  const workflowSenderOptions = (
+    <>
+      <option value="record_owner">Record owner (assigned or creator)</option>
+      <optgroup label="Shared mailboxes">
+        {EMAIL_SENDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </optgroup>
+      {users.length > 0 && (
+        <optgroup label="People">
+          {users.filter(u => u.email).map(u => <option key={u.id} value={u.email}>{u.email}</option>)}
+        </optgroup>
+      )}
+    </>
+  )
   const templateId = (config.templateId as string) || ""
   // Template picker shown for email/SMS actions; references a Communications template by id.
   const channelTemplates = templates.filter(t => t.channel === (type === "SEND_SMS" ? "SMS" : "EMAIL"))
@@ -1030,9 +1046,7 @@ function ActionConfigFields({
           <label className="text-xs font-semibold text-blue-700 block mb-1.5">From (sender email)</label>
           <StyledSelect value={(config.sender as string) || "referrals"} onChange={e => set("sender", e.target.value)}
             className="w-full">
-            <option value="referrals">Referrals@genesisortho.com</option>
-            <option value="surgery">surgery@genesisortho.com</option>
-            <option value="tpl">tpl@genesisortho.com</option>
+            {workflowSenderOptions}
           </StyledSelect>
         </div>
 
@@ -1153,9 +1167,7 @@ function ActionConfigFields({
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <label className="text-xs font-semibold text-blue-700 block mb-1.5">Organizer (from)</label>
           <StyledSelect value={(config.sender as string) || "referrals"} onChange={e => set("sender", e.target.value)} className="w-full">
-            <option value="referrals">Referrals@genesisortho.com</option>
-            <option value="surgery">surgery@genesisortho.com</option>
-            <option value="tpl">tpl@genesisortho.com</option>
+            {workflowSenderOptions}
           </StyledSelect>
         </div>
 

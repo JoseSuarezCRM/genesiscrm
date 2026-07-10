@@ -22,17 +22,16 @@ export interface SenderChoice {
 
 export const SELF_SENDER_VALUE = "self"
 
-// The sender options this user is allowed to pick, most-personal first.
+// The sender options a user can pick, most-personal first. Everyone may pick any
+// integrated address; their own address is listed first so record-based sends
+// default to it.
 export function availableSendersFor(user: SenderUser | null | undefined): SenderChoice[] {
   const out: SenderChoice[] = []
-  if (user?.emailSendingEnabled && user.email) {
+  if (user?.email) {
     out.push({ value: SELF_SENDER_VALUE, email: user.email, label: `${user.email} (you)`, kind: "self" })
   }
-  // Shared org mailboxes — super admins only.
-  if (user?.role === "ADMIN") {
-    for (const o of EMAIL_SENDER_OPTIONS) {
-      out.push({ value: o.value, email: o.label, label: o.label, kind: "shared" })
-    }
+  for (const o of EMAIL_SENDER_OPTIONS) {
+    out.push({ value: o.value, email: o.label, label: o.label, kind: "shared" })
   }
   return out
 }

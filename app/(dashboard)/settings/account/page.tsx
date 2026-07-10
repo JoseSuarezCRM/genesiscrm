@@ -9,7 +9,7 @@ export default async function AccountSettingsPage() {
 
   const user = await prisma.user.findUnique({
     where: { id: (session.user as any).id },
-    select: { name: true, email: true, role: true, emailSendingEnabled: true },
+    select: { name: true, email: true },
   })
   if (!user) redirect("/login")
 
@@ -20,10 +20,7 @@ export default async function AccountSettingsPage() {
         <p className="text-sm text-slate-500">{user.name ?? user.email}</p>
       </div>
 
-      <AccountEmailSettings
-        email={user.email}
-        enabled={user.emailSendingEnabled}
-      />
+      <AccountEmailSettings email={user.email} />
     </div>
   )
 }

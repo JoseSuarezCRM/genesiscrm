@@ -377,6 +377,41 @@ async function resolveRecipients(
   return Array.from(emailSet)
 }
 
+// The email of the record's owner — the assigned user, else the creator.
+async function recordOwnerEmail(record: Record<string, unknown> | null | undefined, referralId: string | null): Promise<string | null> {
+  if (referralId) {
+    const r = await prisma.referral.findUnique({
+      where: { id: referralId },
+      select: { assignedTo: { select: { email: true } }, createdBy: { select: { email: true } } },
+    })
+    return r?.assignedTo?.email ?? r?.createdBy?.email ?? null
+  }
+  const uid = (record?.assignedToId ?? record?.createdById) as string | undefined
+  if (uid) {
+    const u = await prisma.user.findUnique({ where: { id: uid }, select: { email: true } })
+    return u?.email ?? null
+  }
+  return null
+}
+
+// Resolve a workflow action's sender setting to a concrete from-address:
+//  • "record_owner" → the record owner's email
+//  • an "@" address  → that integrated email
+//  • a legacy key    → a shared org mailbox
+async function resolveWorkflowSender(
+  value: unknown,
+  record: Record<string, unknown> | null | undefined,
+  referralId: string | null,
+): Promise<{ fromEmail?: string; senderKey?: EmailSender }> {
+  const v = (typeof value === "string" && value.trim()) || "referrals"
+  if (v === "record_owner") {
+    const email = await recordOwnerEmail(record, referralId)
+    return email ? { fromEmail: email } : { senderKey: "referrals" }
+  }
+  if (v.includes("@")) return { fromEmail: v }
+  return { senderKey: v as EmailSender }
+}
+
 // Runs one action of the given type with its config.
 // Returns a human-readable issue string if the action couldn't complete (e.g.
 // an email that didn't send), or null on success.
@@ -514,9 +549,14 @@ async function runSingleAction(
     if (!toEmails.length) {
       return "Email not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
     }
-    const result = await sendEmail(toEmails, subject, html, { cc: ccEmails, bcc: bccEmails, sender: (cfg.sender as any) || "referrals", attachments: emailAttachments })
+    const from = await resolveWorkflowSender(cfg.sender, record, referralId)
+    const result = await sendEmail(toEmails, subject, html, {
+      cc: ccEmails, bcc: bccEmails,
+      ...(from.fromEmail ? { fromEmail: from.fromEmail } : { sender: from.senderKey }),
+      attachments: emailAttachments,
+    })
     if (!result.success) {
-      return `Email failed to ${toEmails.join(", ")} via ${(cfg.sender as string) || "referrals"}: ${result.error ?? "unknown error"}`
+      return `Email failed to ${toEmails.join(", ")} from ${from.fromEmail ?? from.senderKey}: ${result.error ?? "unknown error"}`
     }
   }
 
@@ -558,8 +598,8 @@ async function runSingleAction(
 
     const durationMinutes = Math.max(5, Number(cfg.durationMinutes) || 30)
     const end = new Date(start.getTime() + durationMinutes * 60000)
-    const sender = (cfg.sender as EmailSender) || "referrals"
-    const organizer = senderEmail(sender)
+    const from = await resolveWorkflowSender(cfg.sender, record, referralId)
+    const organizer = from.fromEmail ?? senderEmail(from.senderKey)
     const uid = `${referralId ?? "rec"}-${start.getTime()}-${Math.random().toString(36).slice(2, 8)}@genesisortho.com`
 
     const ics = buildIcs({
@@ -581,7 +621,7 @@ async function runSingleAction(
     ].filter(Boolean).join("")
     const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${inner}</div>`
 
-    const result = await sendCalendarInvite(inviteTo, title, html, ics, sender)
+    const result = await sendCalendarInvite(inviteTo, title, html, ics, from.senderKey, from.fromEmail)
     if (!result.success) {
       return `Meeting invite failed to ${inviteTo.join(", ")}: ${result.error ?? "unknown error"}`
     }
