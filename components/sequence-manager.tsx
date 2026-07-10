@@ -1,7 +1,8 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
+import { getWorkflowSenderOptions } from "@/app/actions/account"
 import {
   Plus, Trash2, Pencil, Play, Pause, ChevronDown, ChevronRight,
   MessageSquare, Mail, Clock, Users, X, AlertCircle, CheckCircle2,
@@ -67,11 +68,13 @@ function StepCard({
   index,
   onUpdate,
   onRemove,
+  senderOptions,
 }: {
   step: StepDraft
   index: number
   onUpdate: (s: StepDraft) => void
   onRemove: () => void
+  senderOptions: { value: string; label: string }[]
 }) {
   const [open, setOpen] = useState(true)
 
@@ -159,9 +162,9 @@ function StepCard({
                   onChange={(e) => onUpdate({ ...step, fromSender: e.target.value } as any)}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="referrals">Referrals@genesisortho.com</option>
-                  <option value="surgery">surgery@genesisortho.com</option>
-                  <option value="tpl">tpl@genesisortho.com</option>
+                  {senderOptions.length === 0
+                    ? <option value="referrals">Referrals@genesisortho.com</option>
+                    : senderOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </StyledSelect>
               </div>
               <div>
@@ -240,6 +243,8 @@ function SequenceForm({
   const [steps, setSteps] = useState<StepDraft[]>(
     initial?.steps.map((s) => ({ ...s, subject: s.subject ?? "" })) ?? []
   )
+  const [senderOptions, setSenderOptions] = useState<{ value: string; label: string }[]>([])
+  useEffect(() => { getWorkflowSenderOptions().then(setSenderOptions).catch(() => {}) }, [])
 
   function addStep() {
     setSteps((prev) => [
@@ -391,6 +396,7 @@ function SequenceForm({
                 index={i}
                 onUpdate={(s) => setSteps((prev) => prev.map((x, j) => j === i ? s : x))}
                 onRemove={() => setSteps((prev) => prev.filter((_, j) => j !== i))}
+                senderOptions={senderOptions}
               />
             ))}
           </div>

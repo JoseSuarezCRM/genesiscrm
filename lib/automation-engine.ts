@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { AutomationTrigger, AutomationAction, ReferralStatus, TaskPriority } from "@prisma/client"
 import { sendEmail, sendCalendarInvite, senderEmail, type EmailSender } from "@/lib/graph-mailer"
 import { buildIcs } from "@/lib/ics"
+import { resolveWorkflowSender } from "@/lib/sender-resolve"
 import { zonedParts, zonedWallToUtc } from "@/lib/tz"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
@@ -375,41 +376,6 @@ async function resolveRecipients(
     }
   }
   return Array.from(emailSet)
-}
-
-// The email of the record's owner — the assigned user, else the creator.
-async function recordOwnerEmail(record: Record<string, unknown> | null | undefined, referralId: string | null): Promise<string | null> {
-  if (referralId) {
-    const r = await prisma.referral.findUnique({
-      where: { id: referralId },
-      select: { assignedTo: { select: { email: true } }, createdBy: { select: { email: true } } },
-    })
-    return r?.assignedTo?.email ?? r?.createdBy?.email ?? null
-  }
-  const uid = (record?.assignedToId ?? record?.createdById) as string | undefined
-  if (uid) {
-    const u = await prisma.user.findUnique({ where: { id: uid }, select: { email: true } })
-    return u?.email ?? null
-  }
-  return null
-}
-
-// Resolve a workflow action's sender setting to a concrete from-address:
-//  • "record_owner" → the record owner's email
-//  • an "@" address  → that integrated email
-//  • a legacy key    → a shared org mailbox
-async function resolveWorkflowSender(
-  value: unknown,
-  record: Record<string, unknown> | null | undefined,
-  referralId: string | null,
-): Promise<{ fromEmail?: string; senderKey?: EmailSender }> {
-  const v = (typeof value === "string" && value.trim()) || "referrals"
-  if (v === "record_owner") {
-    const email = await recordOwnerEmail(record, referralId)
-    return email ? { fromEmail: email } : { senderKey: "referrals" }
-  }
-  if (v.includes("@")) return { fromEmail: v }
-  return { senderKey: v as EmailSender }
 }
 
 // Runs one action of the given type with its config.

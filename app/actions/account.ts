@@ -4,7 +4,25 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
 import { availableSendersFor, resolveFromEmail, type SenderChoice } from "@/lib/email-senders"
+import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
 import { revalidatePath } from "next/cache"
+
+// Sender options for workflow/sequence email steps: the record owner, the shared
+// mailboxes, or any active user's integrated address (value = that address).
+export async function getWorkflowSenderOptions(): Promise<{ value: string; label: string }[]> {
+  const session = await auth()
+  if (!session?.user) return []
+  const users = await prisma.user.findMany({
+    where: { isActive: true },
+    select: { email: true },
+    orderBy: { email: "asc" },
+  })
+  return [
+    { value: "record_owner", label: "Record owner (assigned or creator)" },
+    ...EMAIL_SENDER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    ...users.map((u) => ({ value: u.email, label: u.email })),
+  ]
+}
 
 // The From-address options the signed-in user is allowed to pick.
 export async function getMySenders(): Promise<SenderChoice[]> {

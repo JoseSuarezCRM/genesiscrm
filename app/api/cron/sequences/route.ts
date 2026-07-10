@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
+import { resolveWorkflowSender } from "@/lib/sender-resolve"
 import { sendSMS } from "@/lib/twilio"
 import { buildReferralVars, resolveMessageTokens, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
 
@@ -74,8 +75,9 @@ export async function GET(req: NextRequest) {
           : `Message from Genesis Ortho`
         // Body may already be HTML (rich text editor); only wrap plain text.
         const html = /<[a-z][\s\S]*>/i.test(body) ? body : `<p>${body.replace(/\n/g, "<br/>")}</p>`
+        const from = await resolveWorkflowSender((step as any).fromSender, null, referral.id)
         await sendEmail(referral.patientEmail, subject, html, {
-          sender: (step as any).fromSender || "referrals",
+          ...(from.fromEmail ? { fromEmail: from.fromEmail } : { sender: from.senderKey }),
           attachments: ((step as any).attachments ?? []) as any,
         })
       }
