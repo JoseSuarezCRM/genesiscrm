@@ -201,6 +201,10 @@ model User {
   lockedUntil           DateTime?
   lastLoginAt           DateTime?
   isActive              Boolean        @default(true)
+  // Invite flow: a pending user is created with isActive=false + a token; they
+  // set their own password via the accept-invite link, which activates them.
+  inviteToken           String?        @unique
+  inviteTokenExpires    DateTime?
   // Notification preferences
   notifyOnEmbedReferral Boolean        @default(false)
   referralsCreated      Referral[]     @relation("ReferralCreatedBy")

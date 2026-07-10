@@ -3,7 +3,7 @@
 import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Role } from "@prisma/client"
-import { createUser, updateUserRole, updateUserPermissions, deleteUser, resetPassword } from "@/app/actions/users"
+import { inviteUser, resendInvite, updateUserRole, updateUserPermissions, deleteUser, resetPassword } from "@/app/actions/users"
 import { createTeam, updateTeam, deleteTeam, addTeamMember, removeTeamMember } from "@/app/actions/teams"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Trash2, Loader2, KeyRound, ShieldCheck, Users, Pencil, X, ChevronDown, ChevronUp, Crown } from "lucide-react"
+import { Plus, Trash2, Loader2, KeyRound, ShieldCheck, Users, Pencil, X, ChevronDown, ChevronUp, Crown, Mail } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   NAV_PERMISSIONS, CAPABILITIES, ACCESS_OBJECTS, ACCESS_LEVELS,
@@ -30,6 +30,7 @@ type UserRow = {
   email: string
   role: Role
   permissions: string[]
+  isActive: boolean
   createdAt: Date
   _count: { referralsCreated: number }
   teamMemberships: { team: { id: string; name: string } }[]
@@ -375,7 +376,7 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
     setAddErrors({})
     startTransition(async () => {
       const role = newIsSuperAdmin ? Role.ADMIN : Role.STAFF
-      const result = await createUser({ name: newName, email: newEmail, password: newPassword, role })
+      const result = await inviteUser({ name: newName, email: newEmail, role })
       if (result?.error) {
         setAddErrors(result.error as Record<string, string[]>)
       } else {
@@ -385,9 +386,22 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
         setAddOpen(false)
         setNewName(""); setNewEmail(""); setNewPassword("")
         setNewIsSuperAdmin(false); setNewTeamId("")
-        setSuccess("User created successfully.")
-        setTimeout(() => setSuccess(null), 4000)
+        setSuccess(result.emailSent
+          ? `Invitation sent to ${newEmail}.`
+          : `User created, but the invite email failed to send. Share this link: ${result.inviteLink}`)
+        setTimeout(() => setSuccess(null), result.emailSent ? 4000 : 20000)
       }
+    })
+  }
+
+  async function handleResendInvite(userId: string, email: string) {
+    startTransition(async () => {
+      const res = await resendInvite(userId)
+      if ((res as any)?.error) { setError((res as any).error); setTimeout(() => setError(null), 4000); return }
+      setSuccess((res as any).emailSent
+        ? `Invitation re-sent to ${email}.`
+        : `Invite link (email failed): ${(res as any).inviteLink}`)
+      setTimeout(() => setSuccess(null), (res as any).emailSent ? 4000 : 20000)
     })
   }
 
@@ -466,11 +480,14 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
           {tab === "users" && (
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild>
-                <Button><Plus className="h-4 w-4 mr-2" />Add User</Button>
+                <Button><Plus className="h-4 w-4 mr-2" />Invite User</Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Create New User</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Invite a User</DialogTitle></DialogHeader>
                 <form onSubmit={handleAddUser} className="space-y-4">
+                  <p className="text-sm text-slate-500">
+                    They&apos;ll get an email with a link to set their own password and activate their account.
+                  </p>
                   <div className="space-y-1.5">
                     <Label>Full Name *</Label>
                     <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Jane Smith" required />
@@ -480,11 +497,6 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
                     <Label>Email *</Label>
                     <Input value={newEmail} onChange={e => setNewEmail(e.target.value)} type="email" placeholder="jane@genesisortho.com" required />
                     {addErrors.email && <p className="text-xs text-red-600">{addErrors.email[0]}</p>}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Password *</Label>
-                    <Input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" placeholder="Min. 6 characters" required />
-                    {addErrors.password && <p className="text-xs text-red-600">{addErrors.password[0]}</p>}
                   </div>
 
                   <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-slate-200 px-3 py-2.5 hover:bg-slate-50">
@@ -518,7 +530,7 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
                     <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
                     <Button type="submit" disabled={isPending}>
                       {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Create User
+                      Send Invite
                     </Button>
                   </DialogFooter>
                 </form>
@@ -566,6 +578,7 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
                         <span className="font-medium text-slate-900">
                           {u.name ?? "—"}
                           {u.id === currentUserId && <span className="ml-1 text-xs text-slate-400">(you)</span>}
+                          {!u.isActive && <span className="ml-2 text-xs font-medium bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full align-middle">Invited</span>}
                         </span>
                       </div>
                     </td>
@@ -608,13 +621,26 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
                         >
                           <ShieldCheck className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon" variant="ghost" className="h-8 w-8"
-                          title="Reset password"
-                          onClick={() => { setResetUserId(u.id); setNewPw("") }}
-                        >
-                          <KeyRound className="h-4 w-4" />
-                        </Button>
+                        {!u.isActive && (
+                          <Button
+                            size="icon" variant="ghost"
+                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                            title="Resend invitation"
+                            disabled={isPending}
+                            onClick={() => handleResendInvite(u.id, u.email)}
+                          >
+                            <Mail className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {u.isActive && (
+                          <Button
+                            size="icon" variant="ghost" className="h-8 w-8"
+                            title="Reset password"
+                            onClick={() => { setResetUserId(u.id); setNewPw("") }}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        )}
                         {u.id !== currentUserId && (
                           <Button
                             size="icon" variant="ghost"
