@@ -1,11 +1,16 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Pencil, Loader2, Check, Link2 } from "lucide-react"
+import Link from "next/link"
+import { Pencil, Loader2, Check, Plus, X, Search, ExternalLink } from "lucide-react"
 import { updateCustomObjectRecord } from "@/app/actions/custom-object-records"
+import { searchAssociableRecords, associateRecords, unassociateRecords } from "@/app/actions/associations"
 import type { CustomObjectProperty } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
+
+interface AssocRecord { id: string; name: string; url: string }
+interface AssocGroup { type: string; label: string; records: AssocRecord[] }
 
 interface RecordData {
   id: string
@@ -29,6 +34,7 @@ interface Props {
   record: RecordData
   users: { id: string; label: string }[]
   canEdit: boolean
+  associations: AssocGroup[]
 }
 
 function fmtDate(d: string | Date | null | undefined) {
@@ -49,7 +55,7 @@ function display(p: CustomObjectProperty, v: any, userMap: Record<string, string
 
 const inputCls = "h-9 w-full px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
 
-export default function CustomObjectDetail({ objectKey, singular, ownerLabel, properties, record, users, canEdit }: Props) {
+export default function CustomObjectDetail({ objectKey, singular, ownerLabel, properties, record, users, canEdit, associations }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
@@ -141,10 +147,16 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
             </div>
           </div>
 
-          {/* Associations (Phase 3) */}
-          <div className="bg-white border border-dashed border-slate-200 rounded-xl px-5 py-4 text-sm text-slate-400 flex items-center gap-2">
-            <Link2 className="h-4 w-4" /> Associated records will appear here once the data model is set up.
-          </div>
+          {/* Associations */}
+          {associations.length === 0 ? (
+            <div className="bg-white border border-dashed border-slate-200 rounded-xl px-5 py-4 text-sm text-slate-400">
+              No relationships defined for {singular}. Set them up in Settings → Data Model.
+            </div>
+          ) : (
+            associations.map((g) => (
+              <AssociationCard key={g.type} objectKey={objectKey} recordId={record.id} group={g} canEdit={canEdit} />
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -190,4 +202,82 @@ function PropInput({ p, value, users, onChange }: { p: CustomObjectProperty; val
     </StyledSelect>
   )
   return <input className={inputCls} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+}
+
+function AssociationCard({ objectKey, recordId, group, canEdit }: { objectKey: string; recordId: string; group: AssocGroup; canEdit: boolean }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [adding, setAdding] = useState(false)
+  const [q, setQ] = useState("")
+  const [results, setResults] = useState<AssocRecord[]>([])
+  const [searching, setSearching] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const typeKey = `CO:${objectKey}`
+  const existingIds = new Set(group.records.map((r) => r.id))
+
+  useEffect(() => {
+    if (!adding) return
+    let active = true
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const r = await searchAssociableRecords(group.type, q)
+      if (active) { setResults(r); setSearching(false) }
+    }, 250)
+    return () => { active = false; clearTimeout(t) }
+  }, [adding, q, group.type])
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setAdding(false) }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [])
+
+  function add(rec: AssocRecord) {
+    startTransition(async () => { await associateRecords(typeKey, recordId, group.type, rec.id); setAdding(false); setQ(""); router.refresh() })
+  }
+  function remove(id: string) {
+    startTransition(async () => { await unassociateRecords(typeKey, recordId, group.type, id); router.refresh() })
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl">
+      <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-900">{group.label} <span className="text-slate-400 font-normal">({group.records.length})</span></h2>
+        {canEdit && (
+          <div className="relative" ref={ref}>
+            <button onClick={() => setAdding((v) => !v)} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"><Plus className="h-3.5 w-3.5" /> Add</button>
+            {adding && (
+              <div className="absolute right-0 top-7 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                <div className="relative border-b border-slate-100 p-1.5">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${group.label.toLowerCase()}…`} className="w-full pl-7 pr-2 py-1.5 text-sm rounded-md focus:outline-none" />
+                </div>
+                <div className="max-h-64 overflow-y-auto py-1">
+                  {searching ? <p className="px-3 py-2 text-xs text-slate-400">Searching…</p>
+                    : results.filter((r) => !existingIds.has(r.id)).length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No matches</p>
+                    : results.filter((r) => !existingIds.has(r.id)).map((r) => (
+                      <button key={r.id} onClick={() => add(r)} className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 truncate">{r.name}</button>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="p-3">
+        {group.records.length === 0 ? (
+          <p className="px-2 py-3 text-sm text-slate-400">No associated {group.label.toLowerCase()}.</p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {group.records.map((r) => (
+              <div key={r.id} className="flex items-center gap-2 py-2 px-2">
+                <Link href={r.url} className="flex-1 min-w-0 text-sm text-blue-600 hover:underline truncate inline-flex items-center gap-1">{r.name}<ExternalLink className="h-3 w-3 text-slate-400 shrink-0" /></Link>
+                {canEdit && <button onClick={() => remove(r.id)} disabled={isPending} className="h-6 w-6 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded"><X className="h-3.5 w-3.5" /></button>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }

@@ -202,6 +202,33 @@ model CustomObjectRecord {
   @@index([objectDefId])
 }
 
+// ── Data model: associations between objects (custom + built-in) ─────────────
+// A defined relationship between two object types. `typeA`/`typeB` are registry
+// keys: "CO:<key>" for custom objects, or a built-in like "REFERRAL"/"PROVIDER".
+model ObjectAssociationDef {
+  id        String   @id @default(cuid())
+  typeA     String
+  typeB     String
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@unique([typeA, typeB])
+}
+
+// A link between two specific records (heterogeneous — no FKs).
+model ObjectAssociation {
+  id        String   @id @default(cuid())
+  fromType  String
+  fromId    String
+  toType    String
+  toId      String
+  createdAt DateTime @default(now())
+
+  @@unique([fromType, fromId, toType, toId])
+  @@index([fromType, fromId])
+  @@index([toType, toId])
+}
+
 model CustomObjectView {
   id            String   @id @default(cuid())
   objectKey     String                    // which custom object this view belongs to

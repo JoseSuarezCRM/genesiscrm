@@ -6,6 +6,7 @@ import { userCanLevel } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { getCustomObjectRecord, recordCustomObjectView } from "@/app/actions/custom-object-records"
+import { getAssociationsFor } from "@/app/actions/associations"
 import CustomObjectDetail from "@/components/custom-object-detail"
 
 interface Props { params: { key: string; id: string } }
@@ -21,7 +22,10 @@ export default async function CustomRecordDetailPage({ params }: Props) {
   if (!record) notFound()
   await recordCustomObjectView(params.key, params.id)
 
-  const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } })
+  const [users, associations] = await Promise.all([
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+    getAssociationsFor(`CO:${params.key}`, params.id),
+  ])
 
   return (
     <div className="p-6 max-w-6xl space-y-4">
@@ -37,6 +41,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
         record={record as any}
         users={users.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
         canEdit={canEdit}
+        associations={associations as any}
       />
     </div>
   )

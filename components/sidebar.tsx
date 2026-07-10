@@ -58,6 +58,7 @@ const communicationsItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
   { href: "/settings/objects",    label: "Custom Objects" },
+  { href: "/settings/data-model", label: "Data Model" },
   { href: "/settings/outreach",   label: "Outreach Templates" },
   { href: "/settings/embed",      label: "Embed Referral Form" },
   { href: "/automations",         label: "Automations", object: "AUTOMATIONS" },
