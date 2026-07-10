@@ -36,6 +36,7 @@ interface SentEmail {
 interface Props {
   contacts: Contact[]
   sentEmails: SentEmail[]
+  senders: { value: string; email: string; label: string }[]
 }
 
 // ── Recipient chip input ───────────────────────────────────────────────────────
@@ -196,12 +197,12 @@ function SentEmailRow({ email }: { email: SentEmail }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
+export default function DirectEmailComposer({ contacts, sentEmails, senders }: Props) {
   const [to, setTo] = useState<string[]>([])
   const [cc, setCc] = useState<string[]>([])
   const [bcc, setBcc] = useState<string[]>([])
   const [showCcBcc, setShowCcBcc] = useState(false)
-  const [fromSender, setFromSender] = useState("referrals")
+  const [fromSender, setFromSender] = useState(senders[0]?.value ?? "")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [attachments, setAttachments] = useState<AttachmentRef[]>([])
@@ -258,12 +259,14 @@ export default function DirectEmailComposer({ contacts, sentEmails }: Props) {
 
           <div className="px-4 py-2 flex items-center gap-2 bg-slate-50">
             <span className="text-xs font-medium text-slate-500 w-10 shrink-0">From</span>
-            <StyledSelect value={fromSender} onChange={e => setFromSender(e.target.value)}
-              className="flex-1 h-8 px-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:border-slate-400">
-              <option value="referrals">Referrals@genesisortho.com</option>
-              <option value="surgery">surgery@genesisortho.com</option>
-              <option value="tpl">tpl@genesisortho.com</option>
-            </StyledSelect>
+            {senders.length === 0 ? (
+              <span className="text-xs text-amber-600">No sending address. Enable it in <a href="/settings/account" className="underline">My Account</a>.</span>
+            ) : (
+              <StyledSelect value={fromSender} onChange={e => setFromSender(e.target.value)}
+                className="flex-1 h-8 px-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:border-slate-400">
+                {senders.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </StyledSelect>
+            )}
           </div>
 
           <div className="px-4 py-2">

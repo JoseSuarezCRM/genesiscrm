@@ -15,6 +15,7 @@ import IvrBuilder from "@/components/ivr-builder"
 import SmsAutoReplyManager from "@/components/sms-auto-reply-manager"
 import SequenceManager from "@/components/sequence-manager"
 import DirectEmailComposer from "@/components/direct-email-composer"
+import { getMySenders } from "@/app/actions/account"
 
 const STATUS_CONFIG: Record<BroadcastStatus, { label: string; icon: React.ReactNode; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   DRAFT:     { label: "Draft",     icon: <Clock className="h-3 w-3" />,        variant: "secondary" },
@@ -39,6 +40,7 @@ interface Props {
 export default async function BroadcastsPage({ searchParams }: Props) {
   await requireView("BROADCASTS")
   const tab = searchParams.tab ?? "email"
+  const mySenders = tab === "compose" ? await getMySenders() : []
 
   const [broadcasts, ivrConfig, smsRules, sequences, practices, composeContacts, sentEmails] = await Promise.all([
     tab === "email"     ? listBroadcasts()        : Promise.resolve([]),
@@ -189,7 +191,7 @@ export default async function BroadcastsPage({ searchParams }: Props) {
 
       {/* Compose tab */}
       {tab === "compose" && (
-        <DirectEmailComposer contacts={contacts} sentEmails={sentEmails as any} />
+        <DirectEmailComposer contacts={contacts} sentEmails={sentEmails as any} senders={mySenders} />
       )}
 
       {/* SMS auto-reply tab */}

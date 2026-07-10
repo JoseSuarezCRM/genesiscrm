@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { sendSMS } from "@/lib/twilio"
 import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
+import { resolveMyFromEmail } from "@/app/actions/account"
 import { buildReferralVars, resolveMessageTokens, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
 import {
   AuditAction,
@@ -58,11 +59,13 @@ export async function sendManualOutreach(
     const emailSubject = resolveMessageTokens(subject?.trim() || "Message from Genesis Ortho", vars)
     // Message may already be HTML (rich text editor) or plain text (SMS/BOTH textarea).
     const html = /<[a-z][\s\S]*>/i.test(resolvedMessage) ? resolvedMessage : `<p>${resolvedMessage.replace(/\n/g, "<br>")}</p>`
-    const result = await sendEmail(referral.patientEmail, emailSubject, html, {
-      sender: (sender as any) || "referrals",
-      attachments,
-    })
-    results.push({ ...result, channel: OutreachChannel.EMAIL, recipient: referral.patientEmail })
+    const fromEmail = await resolveMyFromEmail(sender)
+    if (!fromEmail) {
+      results.push({ success: false, channel: OutreachChannel.EMAIL, recipient: referral.patientEmail, error: "You don't have a sending address. Enable it in My Account, or ask an admin." })
+    } else {
+      const result = await sendEmail(referral.patientEmail, emailSubject, html, { fromEmail, attachments })
+      results.push({ ...result, channel: OutreachChannel.EMAIL, recipient: referral.patientEmail })
+    }
   }
 
   if (results.length === 0) {

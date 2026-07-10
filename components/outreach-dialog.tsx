@@ -1,7 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { sendManualOutreach } from "@/app/actions/outreach"
+import { getMySenders } from "@/app/actions/account"
 import { getEmailTemplates } from "@/app/actions/outreach-templates"
 import { getMessageTemplates } from "@/app/actions/message-templates"
 
@@ -71,7 +72,14 @@ export default function OutreachDialog({ referral }: Props) {
   const [channel, setChannel] = useState<Channel>(
     referral.patientPhone ? "SMS" : "EMAIL"
   )
-  const [fromSender, setFromSender] = useState("referrals")
+  const [fromSender, setFromSender] = useState("")
+  const [senders, setSenders] = useState<{ value: string; email: string; label: string }[]>([])
+  useEffect(() => {
+    getMySenders().then((s) => {
+      setSenders(s)
+      setFromSender((cur) => cur || s[0]?.value || "")
+    }).catch(() => {})
+  }, [])
   const [subject, setSubject] = useState("")
   const [message, setMessage] = useState("")
   const [attachments, setAttachments] = useState<AttachmentRef[]>([])
@@ -245,12 +253,14 @@ export default function OutreachDialog({ referral }: Props) {
           {showEmailFields && (
             <div>
               <Label className="mb-2 block">From</Label>
-              <StyledSelect value={fromSender} onChange={(e) => setFromSender(e.target.value)} disabled={status === "sending" || status === "success"}
-                className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                <option value="referrals">Referrals@genesisortho.com</option>
-                <option value="surgery">surgery@genesisortho.com</option>
-                <option value="tpl">tpl@genesisortho.com</option>
-              </StyledSelect>
+              {senders.length === 0 ? (
+                <p className="text-xs text-amber-600">No sending address. Enable it in <a href="/settings/account" className="underline">My Account</a>, or ask an admin.</p>
+              ) : (
+                <StyledSelect value={fromSender} onChange={(e) => setFromSender(e.target.value)} disabled={status === "sending" || status === "success"}
+                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                  {senders.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </StyledSelect>
+              )}
             </div>
           )}
 

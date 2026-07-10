@@ -15,6 +15,7 @@ import {
   Stethoscope,
   Settings,
   MessageCircle,
+  UserCog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { userCanLevel } from "@/lib/permissions"
@@ -224,6 +225,18 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
               </div>
             </div>
           )}
+          <Link
+            href="/settings/account"
+            title={collapsed ? "My Account" : undefined}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+              isItemActive("/settings/account", pathname) ? "bg-slate-700 text-white" : "text-slate-300 hover:text-white hover:bg-slate-800",
+              collapsed && "justify-center px-2"
+            )}
+          >
+            <UserCog className="h-4 w-4 shrink-0" />
+            {!collapsed && "My Account"}
+          </Link>
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
             title={collapsed ? "Sign Out" : undefined}

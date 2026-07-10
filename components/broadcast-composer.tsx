@@ -1,7 +1,8 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
+import { getMySenders } from "@/app/actions/account"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -80,7 +81,11 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
   const [selectedProviderPracticeId, setSelectedProviderPracticeId] = useState("")
 
   // Compose
-  const [fromSender, setFromSender] = useState("referrals")
+  const [fromSender, setFromSender] = useState("")
+  const [senders, setSenders] = useState<{ value: string; email: string; label: string }[]>([])
+  useEffect(() => {
+    getMySenders().then((s) => { setSenders(s); setFromSender((cur) => cur || s[0]?.value || "") }).catch(() => {})
+  }, [])
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [attachments, setAttachments] = useState<AttachmentRef[]>([])
@@ -340,12 +345,14 @@ export default function BroadcastComposer({ practices, insuranceOptions, emailTe
 
         <div>
           <Label className="mb-1.5 block text-sm">From *</Label>
-          <StyledSelect value={fromSender} onChange={(e) => setFromSender(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-            <option value="referrals">Referrals@genesisortho.com</option>
-            <option value="surgery">surgery@genesisortho.com</option>
-            <option value="tpl">tpl@genesisortho.com</option>
-          </StyledSelect>
+          {senders.length === 0 ? (
+            <p className="text-xs text-amber-600">No sending address. Enable it in <a href="/settings/account" className="underline">My Account</a>, or ask an admin.</p>
+          ) : (
+            <StyledSelect value={fromSender} onChange={(e) => setFromSender(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+              {senders.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </StyledSelect>
+          )}
         </div>
         <div>
           <Label htmlFor="subject" className="mb-1.5 block text-sm">Subject *</Label>

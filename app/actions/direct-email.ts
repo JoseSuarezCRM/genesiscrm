@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { sendEmail, type EmailSender, type EmailAttachment } from "@/lib/graph-mailer"
+import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
+import { resolveMyFromEmail } from "@/app/actions/account"
 import { revalidatePath } from "next/cache"
 import { substitutePersonalization, splitName } from "@/lib/personalization"
 import { format } from "date-fns"
@@ -66,7 +67,7 @@ export async function sendDirectEmail(input: {
   bcc: string[]
   subject: string
   body: string
-  sender?: EmailSender
+  sender?: string
   attachments?: EmailAttachment[]
 }): Promise<{ success: boolean; error?: string }> {
   const session = await auth()
@@ -75,6 +76,9 @@ export async function sendDirectEmail(input: {
   if (input.to.length === 0) return { success: false, error: "At least one recipient required." }
   if (!input.subject.trim()) return { success: false, error: "Subject is required." }
   if (!input.body.trim()) return { success: false, error: "Body is required." }
+
+  const fromEmail = await resolveMyFromEmail(input.sender)
+  if (!fromEmail) return { success: false, error: "You don't have a sending address. Enable it in My Account, or ask an admin." }
 
   const hasTokens = /\{\{\s*\w+\s*\}\}/.test(input.subject) || /\{\{\s*\w+\s*\}\}/.test(input.body)
 
@@ -93,7 +97,7 @@ export async function sendDirectEmail(input: {
       const r = await sendEmail(recipient, subject, toHtml(body), {
         cc: i === 0 ? input.cc : [],
         bcc: i === 0 ? input.bcc : [],
-        sender: input.sender || "referrals",
+        fromEmail,
         attachments: input.attachments,
       })
       if (r.success) anySuccess = true
@@ -104,7 +108,7 @@ export async function sendDirectEmail(input: {
     result = await sendEmail(input.to, input.subject, toHtml(input.body), {
       cc: input.cc,
       bcc: input.bcc,
-      sender: input.sender || "referrals",
+      fromEmail,
       attachments: input.attachments,
     })
   }

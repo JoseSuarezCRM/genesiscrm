@@ -207,6 +207,9 @@ model User {
   inviteTokenExpires    DateTime?
   // Notification preferences
   notifyOnEmbedReferral Boolean        @default(false)
+  // When on, the user can send app emails from their own @genesisortho.com
+  // mailbox (via the org's Microsoft 365 connection — no separate credentials).
+  emailSendingEnabled   Boolean        @default(false)
   referralsCreated      Referral[]     @relation("ReferralCreatedBy")
   referralsAssigned     Referral[]     @relation("ReferralAssignedTo")
   providerNotes         ProviderNote[]

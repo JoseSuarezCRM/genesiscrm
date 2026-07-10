@@ -4,6 +4,7 @@ import { requireAccess } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { sendEmail, type EmailAttachment } from "@/lib/graph-mailer"
+import { resolveMyFromEmail } from "@/app/actions/account"
 import { BroadcastStatus, OutreachStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 import { substitutePersonalization, splitName } from "@/lib/personalization"
@@ -150,6 +151,11 @@ export async function createBroadcast(data: {
   await requireAccess("BROADCASTS", "EDIT")
   const session = await requireAuth()
 
+  // Resolve + enforce the chosen sender to a concrete from-address the creator is
+  // allowed to use; stored (and later sent) as that address.
+  const fromEmail = await resolveMyFromEmail(data.fromSender)
+  if (!fromEmail) return { error: "You don't have a sending address. Enable it in My Account, or ask an admin." }
+
   const recipients = await previewBroadcastRecipients(data.filters)
   if (recipients.length === 0) return { error: "No recipients match the selected filters" }
 
@@ -159,7 +165,7 @@ export async function createBroadcast(data: {
     data: {
       subject: data.subject,
       body: data.body,
-      fromSender: data.fromSender || "referrals",
+      fromSender: fromEmail,
       attachments: (data.attachments ?? []) as object,
       status,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
@@ -201,12 +207,16 @@ export async function sendBroadcastEmails(broadcastId: string) {
   let failedCount = 0
 
   const broadcastAttachments = ((broadcast as any).attachments ?? []) as EmailAttachment[]
+  // fromSender now stores a concrete address (contains "@"); legacy rows may hold
+  // a sender key ("referrals"/…), so support both.
+  const fromValue = (broadcast as any).fromSender as string | undefined
+  const sendFrom = fromValue?.includes("@") ? { fromEmail: fromValue } : { sender: (fromValue as any) || "referrals" }
   for (const recipient of broadcast.recipients) {
     const data = ((recipient as any).data ?? {}) as Record<string, string>
     const subject = substitutePersonalization(broadcast.subject, data)
     const body = substitutePersonalization(broadcast.body, data)
     const result = await sendEmail(recipient.email, subject, toHtml(body), {
-      sender: (broadcast as any).fromSender || "referrals",
+      ...sendFrom,
       attachments: broadcastAttachments,
     })
     await prisma.emailBroadcastRecipient.update({

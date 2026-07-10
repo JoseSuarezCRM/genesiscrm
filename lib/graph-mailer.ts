@@ -115,10 +115,11 @@ export async function sendEmail(
   to: string | string[],
   subject: string,
   html: string,
-  options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender; attachments?: EmailAttachment[] }
+  options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender; fromEmail?: string; attachments?: EmailAttachment[] }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const fromEmail = SENDER_EMAILS[options?.sender ?? "referrals"]
+    // An explicit fromEmail (e.g. a user's own mailbox) overrides the sender key.
+    const fromEmail = options?.fromEmail || SENDER_EMAILS[options?.sender ?? "referrals"]
     const token = await getAccessToken()
     const toList = Array.isArray(to) ? to : [to]
     const toRecipients = toList.map(a => ({ emailAddress: { address: a } }))
@@ -186,15 +187,16 @@ export async function sendCalendarInvite(
   html: string,
   ics: string,
   sender?: EmailSender,
+  fromEmail?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const fromEmail = SENDER_EMAILS[sender ?? "referrals"]
+    const from = fromEmail || SENDER_EMAILS[sender ?? "referrals"]
     const token = await getAccessToken()
     const boundary = "gomtg" + Math.random().toString(36).slice(2)
     const mime = [
       "MIME-Version: 1.0",
       `Date: ${new Date().toUTCString()}`,
-      `From: Genesis Ortho <${fromEmail}>`,
+      `From: Genesis Ortho <${from}>`,
       `To: ${to.join(", ")}`,
       `Subject: ${encodeHeaderWord(subject)}`,
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
@@ -216,7 +218,7 @@ export async function sendCalendarInvite(
     ].join("\r\n")
 
     const res = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}/sendMail`,
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
