@@ -32,6 +32,7 @@ export default async function CustomObjectListPage({ params }: Props) {
       <CustomObjectList
         objectKey={def.key}
         singular={def.singular}
+        plural={def.plural}
         ownerLabel={def.ownerLabel}
         properties={def.properties}
         records={records as any}

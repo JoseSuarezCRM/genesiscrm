@@ -3,11 +3,15 @@
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown, ExternalLink, X } from "lucide-react"
+import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown, ExternalLink } from "lucide-react"
 import { createCustomObjectRecord, bulkDeleteCustomObjectRecords } from "@/app/actions/custom-object-records"
 import type { CustomObjectProperty } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import FilterBuilder from "@/components/ui/filter-builder"
+import ExportDialog from "@/components/ui/export-dialog"
+import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
+import { Search, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface RecordRow {
@@ -24,6 +28,7 @@ interface RecordRow {
 interface Props {
   objectKey: string
   singular: string
+  plural: string
   ownerLabel: string
   properties: CustomObjectProperty[]
   records: RecordRow[]
@@ -48,7 +53,7 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
   }
 }
 
-export default function CustomObjectList({ objectKey, singular, ownerLabel, properties, records, users, canEdit, canDelete }: Props) {
+export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
@@ -68,8 +73,38 @@ export default function CustomObjectList({ objectKey, singular, ownerLabel, prop
   }, [])
   const cols = allCols.filter((c) => visibleCols.includes(c.key))
 
+  // Filter + search + export.
+  const filterFields: FilterField[] = [
+    { key: "__recordNumber", label: "Record ID", type: "number", getValue: (r) => r.recordNumber },
+    { key: "__owner", label: ownerLabel, type: "select", options: users.map((u) => ({ value: u.id, label: u.label })), getValue: (r) => r.ownerId },
+    { key: "__created", label: "Created", type: "date", getValue: (r) => r.createdAt },
+    ...customPropertyFilterFields(properties.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })), "values"),
+  ]
+  const [filter, setFilter] = useState<FilterState>(emptyFilter())
+  const [search, setSearch] = useState("")
+  const [exportOpen, setExportOpen] = useState(false)
+  const filtered = records.filter((r) => {
+    const q = search.toLowerCase().trim()
+    if (q) {
+      const hay = Object.values(r.values).map((v) => (Array.isArray(v) ? v.join(" ") : String(v ?? ""))).join(" ").toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return matchesFilter(r, filter, filterFields)
+  })
+  const filtersActive = activeConditionCount(filter, filterFields) > 0
+
+  function buildExport() {
+    const headers = ["Record ID", primary?.name ?? "Name", ...cols.map((c) => c.label)]
+    const rows = filtered.map((r) => [
+      r.recordNumber != null ? `#${r.recordNumber}` : "",
+      primary ? displayValue(primary, r.values[primary.id], userMap) : "",
+      ...cols.map((c) => c.key === "__owner" ? (r.ownerName ?? "") : c.key === "__created" ? fmtDate(r.createdAt) : displayValue(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)),
+    ])
+    return { headers, rows }
+  }
+
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const allChecked = records.length > 0 && records.every((r) => selected.has(r.id))
+  const allChecked = filtered.length > 0 && filtered.every((r) => selected.has(r.id))
   function toggleRow(id: string) { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   function bulkDelete() {
     if (!confirm(`Delete ${selected.size} record${selected.size !== 1 ? "s" : ""}?`)) return
@@ -81,6 +116,7 @@ export default function CustomObjectList({ objectKey, singular, ownerLabel, prop
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
+        <FilterBuilder fields={filterFields} value={filter} onChange={setFilter} />
         <div className="relative" ref={colRef}>
           <button onClick={() => setColMenu((v) => !v)}
             className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
@@ -100,13 +136,25 @@ export default function CustomObjectList({ objectKey, singular, ownerLabel, prop
             </div>
           )}
         </div>
+        <button onClick={() => setExportOpen(true)} disabled={filtered.length === 0} title="Export current view to CSV"
+          className="ml-auto inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50">
+          <Download className="h-3.5 w-3.5" /> Export
+        </button>
         {canEdit && (
           <button onClick={() => setAddOpen(true)}
-            className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800">
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800">
             <Plus className="h-3.5 w-3.5" /> Add {singular}
           </button>
         )}
       </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+        <input type="text" placeholder={`Search ${plural.toLowerCase()}…`} value={search} onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      {(filtersActive || search) && <p className="text-xs text-slate-400 -mt-1">{filtered.length} of {records.length}</p>}
 
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm">
@@ -120,8 +168,10 @@ export default function CustomObjectList({ objectKey, singular, ownerLabel, prop
         </div>
       )}
 
-      {records.length === 0 ? (
-        <div className="bg-white border rounded-xl py-16 text-center text-slate-400">No {singular.toLowerCase()} records yet.</div>
+      {filtered.length === 0 ? (
+        <div className="bg-white border rounded-xl py-16 text-center text-slate-400">
+          {records.length === 0 ? `No ${singular.toLowerCase()} records yet.` : "No records match your search or filters."}
+        </div>
       ) : (
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
@@ -129,7 +179,7 @@ export default function CustomObjectList({ objectKey, singular, ownerLabel, prop
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-4 py-3 w-10">
-                    <input type="checkbox" checked={allChecked} onChange={() => setSelected(allChecked ? new Set() : new Set(records.map((r) => r.id)))} className="rounded border-slate-300 cursor-pointer" />
+                    <input type="checkbox" checked={allChecked} onChange={() => setSelected(allChecked ? new Set() : new Set(filtered.map((r) => r.id)))} className="rounded border-slate-300 cursor-pointer" />
                   </th>
                   <th className="px-4 py-3 font-semibold w-24">Record ID</th>
                   <th className="px-4 py-3 font-semibold">{primary?.name ?? "Name"}</th>
@@ -137,7 +187,7 @@ export default function CustomObjectList({ objectKey, singular, ownerLabel, prop
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {records.map((r) => (
+                {filtered.map((r) => (
                   <tr key={r.id} className={cn("transition-colors", selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50")}>
                     <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
                     <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{r.recordNumber != null ? `#${r.recordNumber}` : "—"}</td>
@@ -166,6 +216,8 @@ export default function CustomObjectList({ objectKey, singular, ownerLabel, prop
         <AddRecordDialog objectKey={objectKey} singular={singular} ownerLabel={ownerLabel} properties={properties} users={users}
           onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); router.refresh() }} />
       )}
+
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={plural} defaultName={objectKey} getData={buildExport} />
     </div>
   )
 }
