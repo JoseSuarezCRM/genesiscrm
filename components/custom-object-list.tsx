@@ -10,8 +10,10 @@ import StyledSelect from "@/components/ui/styled-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import ExportDialog from "@/components/ui/export-dialog"
+import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
+import { createCustomObjectView, deleteCustomObjectView } from "@/app/actions/custom-object-views"
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
-import { Search, Download } from "lucide-react"
+import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface RecordRow {
@@ -35,6 +37,17 @@ interface Props {
   users: { id: string; label: string }[]
   canEdit: boolean
   canDelete: boolean
+  savedViews?: SavedView[]
+  shareUsers?: ShareUser[]
+  shareTeams?: ShareTeam[]
+}
+
+interface SavedView {
+  id: string
+  name: string
+  config: { filter: FilterState; columns: string[] }
+  visibility?: string
+  isOwner?: boolean
 }
 
 function fmtDate(d: string | Date | null | undefined) {
@@ -53,7 +66,7 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
   }
 }
 
-export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete }: Props) {
+export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [] }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
@@ -92,6 +105,27 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     return matchesFilter(r, filter, filterFields)
   })
   const filtersActive = activeConditionCount(filter, filterFields) > 0
+
+  // Saved views (applied in-memory).
+  const [showSaveForm, setShowSaveForm] = useState(false)
+  const [newViewName, setNewViewName] = useState("")
+  const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
+  const [savingView, setSavingView] = useState(false)
+  const currentKey = JSON.stringify({ filter, columns: visibleCols })
+  const activeViewId = savedViews.find((v) => JSON.stringify({ filter: v.config.filter, columns: v.config.columns }) === currentKey)?.id
+    ?? (!filtersActive && !search ? "__default__" : null)
+  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); setVisibleCols(v.config.columns ?? allCols.map((c) => c.key)); setSearch("") }
+  function applyDefault() { setFilter(emptyFilter()); setVisibleCols(allCols.map((c) => c.key)); setSearch("") }
+  function saveView() {
+    if (!newViewName.trim()) return
+    setSavingView(true)
+    startTransition(async () => {
+      await createCustomObjectView(objectKey, newViewName.trim(), { filter, columns: visibleCols }, newViewAccess)
+      setSavingView(false); setShowSaveForm(false); setNewViewName(""); setNewViewAccess({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
+      router.refresh()
+    })
+  }
+  function deleteView(id: string) { startTransition(async () => { await deleteCustomObjectView(id); router.refresh() }) }
 
   function buildExport() {
     const headers = ["Record ID", primary?.name ?? "Name", ...cols.map((c) => c.label)]
@@ -155,6 +189,51 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
           className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
       {(filtersActive || search) && <p className="text-xs text-slate-400 -mt-1">{filtered.length} of {records.length}</p>}
+
+      {/* Saved views */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={applyDefault}
+          className={cn("inline-flex items-center h-8 px-3 rounded-lg border text-sm font-medium transition-all", activeViewId === "__default__" ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+          Default
+        </button>
+        {savedViews.map((v) => (
+          <div key={v.id} className={cn("inline-flex items-center h-8 rounded-lg border text-sm font-medium overflow-hidden", activeViewId === v.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+            <button className={cn("pl-3 h-full", v.isOwner === false ? "pr-3" : "pr-1.5")} onClick={() => applyView(v)}>
+              {v.name}
+              {v.isOwner === false && v.visibility && v.visibility !== "PRIVATE" && (
+                <span className="ml-1.5 opacity-60">
+                  {v.visibility === "EVERYONE" ? <Globe className="inline h-3 w-3" /> : v.visibility === "TEAM" ? <Users className="inline h-3 w-3" /> : <UserCog className="inline h-3 w-3" />}
+                </span>
+              )}
+            </button>
+            {v.isOwner !== false && (
+              <button onClick={() => deleteView(v.id)} title="Delete view" className={cn("pr-2 pl-0.5 h-full", activeViewId === v.id ? "hover:text-zinc-300" : "hover:text-red-500")}><X className="h-3 w-3" /></button>
+            )}
+          </div>
+        ))}
+        <div className="relative">
+          <button onClick={() => setShowSaveForm((v) => !v)}
+            className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 flex items-center gap-1.5">
+            <Plus className="h-3.5 w-3.5" /> Save view
+          </button>
+          {showSaveForm && (
+            <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
+              <p className="text-xs text-slate-500">Saves the current filters and columns.</p>
+              <input autoFocus value={newViewName} onChange={(e) => setNewViewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveView(); if (e.key === "Escape") setShowSaveForm(false) }}
+                placeholder="View name…" className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400" />
+              <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
+              <div className="flex gap-2 pt-1">
+                <button onClick={saveView} disabled={savingView || !newViewName.trim()}
+                  className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save view
+                </button>
+                <button onClick={() => { setShowSaveForm(false); setNewViewName("") }} className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm">

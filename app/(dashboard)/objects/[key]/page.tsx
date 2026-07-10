@@ -4,6 +4,8 @@ import { userCanLevel, userCanDelete } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { listCustomObjectRecords } from "@/app/actions/custom-object-records"
+import { getCustomObjectViews } from "@/app/actions/custom-object-views"
+import { getViewShareOptions } from "@/app/actions/view-share-options"
 import CustomObjectList from "@/components/custom-object-list"
 
 interface Props { params: { key: string } }
@@ -17,9 +19,11 @@ export default async function CustomObjectListPage({ params }: Props) {
   const canEdit = userCanLevel(user, `CO:${params.key}`, "EDIT")
   const canDelete = userCanDelete(user, `CO:${params.key}`)
 
-  const [records, users] = await Promise.all([
+  const [records, users, savedViews, shareOptions] = await Promise.all([
     listCustomObjectRecords(params.key),
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+    getCustomObjectViews(params.key),
+    getViewShareOptions(),
   ])
 
   return (
@@ -39,6 +43,9 @@ export default async function CustomObjectListPage({ params }: Props) {
         users={users.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
         canEdit={canEdit}
         canDelete={canDelete}
+        savedViews={savedViews as any}
+        shareUsers={shareOptions.users as any}
+        shareTeams={shareOptions.teams as any}
       />
     </div>
   )

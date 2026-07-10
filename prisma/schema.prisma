@@ -202,6 +202,22 @@ model CustomObjectRecord {
   @@index([objectDefId])
 }
 
+model CustomObjectView {
+  id            String   @id @default(cuid())
+  objectKey     String                    // which custom object this view belongs to
+  name          String
+  userId        String
+  user          User     @relation("CustomObjectViewCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+  config        Json                       // { filter, columns }
+  visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
+  teamId        String?
+  sharedUserIds String[] @default([])
+  createdAt     DateTime @default(now())
+
+  @@index([objectKey])
+  @@index([userId])
+}
+
 model PropertyDisplayConfig {
   id               String                     @id @default(cuid())
   customPropertyId String
@@ -278,6 +294,7 @@ model User {
   customObjectDefs      CustomObjectDef[]    @relation("CustomObjectDefCreatedBy")
   customRecordsCreated  CustomObjectRecord[] @relation("CustomObjectRecordCreatedBy")
   customRecordsOwned    CustomObjectRecord[] @relation("CustomObjectRecordOwner")
+  customObjectViews     CustomObjectView[]   @relation("CustomObjectViewCreatedBy")
 }
 
 model Team {
