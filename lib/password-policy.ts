@@ -29,6 +29,16 @@ export function validatePassword(password: string): {
   return { valid: errors.length === 0, errors }
 }
 
+// Per-rule checks for a live UI checklist (same rules as validatePassword).
+export interface PasswordCheck { label: string; test: (pw: string) => boolean }
+export const PASSWORD_CHECKS: PasswordCheck[] = [
+  { label: `At least ${PASSWORD_RULES.minLength} characters`, test: (p) => p.length >= PASSWORD_RULES.minLength },
+  { label: "One uppercase letter", test: (p) => /[A-Z]/.test(p) },
+  { label: "One lowercase letter", test: (p) => /[a-z]/.test(p) },
+  { label: "One number", test: (p) => /[0-9]/.test(p) },
+  { label: "One special character", test: (p) => /[!@#$%^&*()_+\-=\[\]{}|;':",./<>?]/.test(p) },
+]
+
 export const PasswordSchema = z
   .string()
   .min(PASSWORD_RULES.minLength, `Password must be at least ${PASSWORD_RULES.minLength} characters`)
