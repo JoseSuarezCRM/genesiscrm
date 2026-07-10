@@ -161,6 +161,47 @@ model CustomProperty {
   @@unique([name, entityType])
 }
 
+// ── Custom objects (HubSpot-style) ───────────────────────────────────────────
+// An admin-defined object type. Its property schema lives in `properties` (JSON)
+// so no per-object table is needed. Records are CustomObjectRecord rows.
+model CustomObjectDef {
+  id          String   @id @default(cuid())
+  key         String   @unique              // url slug, e.g. "visits"
+  singular    String                        // "Visit"
+  plural      String                        // "Visits"
+  icon        String?                       // lucide icon name
+  ownerLabel  String                        // "Visit Owner"
+  // [{ id, name, type, options?, required?, primary? }] — the record schema.
+  properties  Json     @default("[]")
+  order       Int      @default(0)          // nav ordering
+  createdById String?
+  createdBy   User?    @relation("CustomObjectDefCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  records     CustomObjectRecord[]
+}
+
+model CustomObjectRecord {
+  id             String          @id @default(cuid())
+  recordNumber   Int?            // per-object sequential "Record ID" (unique id)
+  objectDefId    String
+  objectDef      CustomObjectDef @relation(fields: [objectDefId], references: [id], onDelete: Cascade)
+  values         Json            @default("{}") // { propertyId: value }
+  // Default properties every record gets:
+  ownerId        String?         // Record Owner (defaults to creator)
+  owner          User?           @relation("CustomObjectRecordOwner", fields: [ownerId], references: [id])
+  createdById    String?
+  createdBy      User?           @relation("CustomObjectRecordCreatedBy", fields: [createdById], references: [id])
+  updatedById    String?         // resolved to a name at read time
+  lastViewedById String?
+  lastViewedAt   DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([objectDefId, recordNumber])
+  @@index([objectDefId])
+}
+
 model PropertyDisplayConfig {
   id               String                     @id @default(cuid())
   customPropertyId String
@@ -234,6 +275,9 @@ model User {
   surgeryCases          SurgeryCase[]        @relation("SurgeryCaseCreatedBy")
   surgeryCallAttempts   SurgeryCallAttempt[] @relation("SurgeryCallAttemptCalledBy")
   surgeryDocuments      SurgeryDocument[]    @relation("SurgeryDocumentUploadedBy")
+  customObjectDefs      CustomObjectDef[]    @relation("CustomObjectDefCreatedBy")
+  customRecordsCreated  CustomObjectRecord[] @relation("CustomObjectRecordCreatedBy")
+  customRecordsOwned    CustomObjectRecord[] @relation("CustomObjectRecordOwner")
 }
 
 model Team {

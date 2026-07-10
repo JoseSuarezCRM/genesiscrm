@@ -20,6 +20,11 @@ export default async function DashboardLayout({
     select: { id: true, message: true, link: true, read: true, createdAt: true },
   })
 
+  const customObjects = await (prisma as any).customObjectDef.findMany({
+    orderBy: [{ order: "asc" }, { plural: "asc" }],
+    select: { key: true, plural: true },
+  })
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       <Sidebar
@@ -27,6 +32,7 @@ export default async function DashboardLayout({
         userEmail={session.user.email}
         userRole={(session.user as any).role ?? "STAFF"}
         userPermissions={(session.user as any).permissions ?? []}
+        customObjects={customObjects}
       />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopToolbar

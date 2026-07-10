@@ -1,7 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
-import { useState, useTransition } from "react"
+import { useState, useTransition, createContext, useContext } from "react"
 import { Role } from "@prisma/client"
 import { inviteUser, resendInvite, updateUserRole, updateUserPermissions, deleteUser, resetPassword } from "@/app/actions/users"
 import { createTeam, updateTeam, deleteTeam, addTeamMember, removeTeamMember } from "@/app/actions/teams"
@@ -21,6 +21,9 @@ import {
   NAV_PERMISSIONS, CAPABILITIES, ACCESS_OBJECTS, ACCESS_LEVELS,
   type PermissionDef, type AccessLevel, accessLevelFromPerms, canDeleteFromPerms,
 } from "@/lib/permissions"
+
+// Custom objects appear in the access matrix as extra rows (key "CO:<key>").
+const ExtraAccessContext = createContext<{ key: string; label: string }[]>([])
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +56,7 @@ interface Props {
   users: UserRow[]
   teams: TeamRow[]
   currentUserId: string
+  customObjects?: { key: string; label: string }[]
 }
 
 // ── Permission definitions ────────────────────────────────────────────────────
@@ -103,7 +107,7 @@ function ObjectAccessMatrix({ perms, onChange, disabled }: { perms: string[]; on
         <span>Object</span><span>Access</span><span className="text-center">Delete</span>
       </div>
       <div className="divide-y divide-slate-100">
-        {ACCESS_OBJECTS.map((o) => {
+        {[...ACCESS_OBJECTS, ...useContext(ExtraAccessContext)].map((o) => {
           const level = accessLevelFromPerms(perms, o.key)
           const canDel = canDeleteFromPerms(perms, o.key)
           return (
@@ -347,7 +351,7 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function UserManager({ users, teams, currentUserId }: Props) {
+export default function UserManager({ users, teams, currentUserId, customObjects = [] }: Props) {
   const [tab, setTab] = useState<"users" | "teams">("users")
   const [isPending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
@@ -450,6 +454,7 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
   }
 
   return (
+    <ExtraAccessContext.Provider value={customObjects}>
     <div className="space-y-4">
       {/* Tabs + action */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -737,5 +742,6 @@ export default function UserManager({ users, teams, currentUserId }: Props) {
         </DialogContent>
       </Dialog>
     </div>
+    </ExtraAccessContext.Provider>
   )
 }

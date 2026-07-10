@@ -16,6 +16,7 @@ import {
   Settings,
   MessageCircle,
   UserCog,
+  Box,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { userCanLevel } from "@/lib/permissions"
@@ -56,6 +57,7 @@ const communicationsItems: NavItem[] = [
 ]
 
 const adminItems: NavItem[] = [
+  { href: "/settings/objects",    label: "Custom Objects" },
   { href: "/settings/outreach",   label: "Outreach Templates" },
   { href: "/settings/embed",      label: "Embed Referral Form" },
   { href: "/automations",         label: "Automations", object: "AUTOMATIONS" },
@@ -78,13 +80,14 @@ interface SidebarProps {
   userEmail: string
   userRole: string
   userPermissions: string[]
+  customObjects?: { key: string; plural: string }[]
 }
 
 function isItemActive(href: string, pathname: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/")
 }
 
-export default function Sidebar({ userName, userEmail, userRole, userPermissions }: SidebarProps) {
+export default function Sidebar({ userName, userEmail, userRole, userPermissions, customObjects = [] }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(true)
   const [openSection, setOpenSection] = useState<string | null>(null)
@@ -99,8 +102,12 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
   const canViewItem = (item: { object?: string }) =>
     isSuperAdmin || !item.object || userCanLevel({ role: userRole, permissions: userPermissions }, item.object, "VIEW")
 
-  const visibleSections = sections
-    .filter((s) => can(s.key))
+  // Custom objects form their own section, gated per-object by CO:<key> view access.
+  const objectsSection = customObjects.length > 0
+    ? [{ key: "OBJECTS", title: "Objects", icon: Box, items: customObjects.map((o) => ({ href: `/objects/${o.key}`, label: o.plural, object: `CO:${o.key}` })) }]
+    : []
+
+  const visibleSections = [...sections.filter((s) => can(s.key)), ...objectsSection]
     .map((s) => ({ ...s, items: s.items.filter(canViewItem) }))
     .filter((s) => s.items.length > 0)
   const activeFlyout = visibleSections.find((s) => s.title === openSection)

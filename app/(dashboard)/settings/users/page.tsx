@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import UserManager from "@/components/user-manager"
 import { getTeams } from "@/app/actions/teams"
+import { listCustomObjects } from "@/app/actions/custom-objects"
 
 export default async function UsersPage() {
   const session = await auth()
@@ -27,6 +28,7 @@ export default async function UsersPage() {
     }),
     getTeams(),
   ])
+  const customObjects = (await listCustomObjects()).map((o) => ({ key: `CO:${o.key}`, label: o.plural }))
 
   return (
     <div className="p-6 space-y-6">
@@ -37,7 +39,7 @@ export default async function UsersPage() {
         </p>
       </div>
 
-      <UserManager users={users} teams={teams} currentUserId={session!.user.id} />
+      <UserManager users={users} teams={teams} currentUserId={session!.user.id} customObjects={customObjects} />
     </div>
   )
 }
