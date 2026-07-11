@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { getCustomObjectRecord, recordCustomObjectView } from "@/app/actions/custom-object-records"
 import { getAssociationsFor } from "@/app/actions/associations"
+import { listRecordActivities } from "@/app/actions/record-activity"
 import CustomObjectDetail from "@/components/custom-object-detail"
 
 interface Props { params: { key: string; id: string } }
@@ -22,9 +23,10 @@ export default async function CustomRecordDetailPage({ params }: Props) {
   if (!record) notFound()
   await recordCustomObjectView(params.key, params.id)
 
-  const [users, associations] = await Promise.all([
+  const [users, associations, activityItems] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
     getAssociationsFor(`CO:${params.key}`, params.id),
+    listRecordActivities(`CO:${params.key}`, params.id),
   ])
 
   return (
@@ -43,6 +45,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
         users={users.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
         canEdit={canEdit}
         associations={associations as any}
+        activityItems={activityItems as any}
       />
     </div>
   )

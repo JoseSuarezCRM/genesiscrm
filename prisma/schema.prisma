@@ -218,6 +218,20 @@ model ObjectAssociationDef {
 }
 
 // A link between two specific records (heterogeneous — no FKs).
+// A note on any record (custom or built-in) — the first engagement type in the
+// unified activity feed. recordType is a registry key ("CO:<key>" or built-in).
+model RecordNote {
+  id          String   @id @default(cuid())
+  recordType  String
+  recordId    String
+  body        String
+  createdById String?
+  createdBy   User?    @relation("RecordNoteCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([recordType, recordId])
+}
+
 model ObjectAssociation {
   id        String   @id @default(cuid())
   fromType  String
@@ -324,6 +338,7 @@ model User {
   customRecordsCreated  CustomObjectRecord[] @relation("CustomObjectRecordCreatedBy")
   customRecordsOwned    CustomObjectRecord[] @relation("CustomObjectRecordOwner")
   customObjectViews     CustomObjectView[]   @relation("CustomObjectViewCreatedBy")
+  recordNotes           RecordNote[]         @relation("RecordNoteCreatedBy")
 }
 
 model Team {

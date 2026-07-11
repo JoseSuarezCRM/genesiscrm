@@ -6,6 +6,8 @@ import Link from "next/link"
 import { Loader2, Check, Plus, X, Search, ExternalLink } from "lucide-react"
 import { updateCustomObjectRecord } from "@/app/actions/custom-object-records"
 import { searchAssociableRecords, associateRecords, unassociateRecords } from "@/app/actions/associations"
+import RecordActivityFeed from "@/components/record-activity-feed"
+import type { ActivityItem } from "@/app/actions/record-activity"
 import type { CustomObjectProperty, CustomObjectCard } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
@@ -37,6 +39,7 @@ interface Props {
   users: { id: string; label: string }[]
   canEdit: boolean
   associations: AssocGroup[]
+  activityItems: ActivityItem[]
 }
 
 function fmtDate(d: string | Date | null | undefined) {
@@ -57,7 +60,7 @@ function display(p: CustomObjectProperty, v: any, userMap: Record<string, string
 
 const inputCls = "h-9 w-full px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
 
-export default function CustomObjectDetail({ objectKey, singular, ownerLabel, properties, cards, record, users, canEdit, associations }: Props) {
+export default function CustomObjectDetail({ objectKey, singular, ownerLabel, properties, cards, record, users, canEdit, associations, activityItems }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
@@ -155,9 +158,7 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
               {middleCards.map(renderCard)}
             </div>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-xl px-5 py-10 text-center text-sm text-slate-400">
-              Activities — notes, tasks, emails, SMS, and meetings for this record — are coming next.
-            </div>
+            <RecordActivityFeed recordType={`CO:${objectKey}`} recordId={record.id} items={activityItems} canEdit={canEdit} />
           )}
         </div>
 
