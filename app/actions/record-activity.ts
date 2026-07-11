@@ -61,11 +61,19 @@ export async function listRecordActivities(recordType: string, recordId: string)
       items.push({ id: t.id, kind: "TASK", title: t.title, body: bits.join(" · "), date: t.createdAt, by: t.createdBy?.name ?? t.createdBy?.email ?? null })
     }
   }
-  if (activityIds.length) {
-    const acts = await prisma.activity.findMany({ where: { id: { in: activityIds } }, include: { createdBy: { select: { name: true, email: true } }, practice: { select: { name: true } }, location: { select: { name: true } } } })
+
+  // Activities: association-linked, plus native FK links for built-in record types.
+  const nativeWhere =
+    recordType === "PROVIDER" ? { providers: { some: { doctorId: recordId } } } :
+    recordType === "PRACTICE" ? { practiceId: recordId } :
+    recordType === "LOCATION" ? { locationId: recordId } : null
+  const actWhere: any = nativeWhere && activityIds.length ? { OR: [nativeWhere, { id: { in: activityIds } }] }
+    : nativeWhere ? nativeWhere : activityIds.length ? { id: { in: activityIds } } : null
+  if (actWhere) {
+    const acts = await prisma.activity.findMany({ where: actWhere, include: { createdBy: { select: { name: true, email: true } }, practice: { select: { name: true } }, location: { select: { name: true } } } })
     for (const a of acts) {
       const where = [a.practice?.name, a.location?.name].filter(Boolean).join(" · ")
-      items.push({ id: a.id, kind: "ACTIVITY", title: a.nextStep ? `Activity — next: ${a.nextStep}` : "Activity", body: [where, a.notes].filter(Boolean).join("\n"), date: a.date, by: a.createdBy?.name ?? a.createdBy?.email ?? null })
+      items.push({ id: a.id, kind: "ACTIVITY", title: a.nextStep ? `Activity — next: ${a.nextStep}` : "Activity logged", body: [where, a.notes].filter(Boolean).join("\n"), date: a.date, by: a.createdBy?.name ?? a.createdBy?.email ?? null })
     }
   }
 

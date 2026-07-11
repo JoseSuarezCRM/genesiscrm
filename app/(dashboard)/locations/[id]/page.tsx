@@ -7,10 +7,11 @@ import { ChevronLeft, Building2, MapPin, ExternalLink } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
-import { format } from "date-fns"
 import LocationInfoEditor from "@/components/location-info-editor"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
+import RecordActivityFeed from "@/components/record-activity-feed"
+import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
 
@@ -56,6 +57,11 @@ export default async function LocationDetailPage({ params }: Props) {
   ])
 
   if (!location) notFound()
+
+  const [activityItems, feedUsers] = await Promise.all([
+    listRecordActivities("LOCATION", location.id),
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+  ])
 
   const providers = location.doctors.map((dl) => dl.doctor)
   const completed = location.referrals.filter((r) => r.status === "COMPLETED").length
@@ -151,31 +157,17 @@ export default async function LocationDetailPage({ params }: Props) {
         </CardContent>
       </Card>
 
-      {/* Activities */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Activities ({location._count.activities})</CardTitle></CardHeader>
-        <CardContent>
-          {location.activities.length === 0 ? (
-            <p className="text-sm text-slate-400">No activities logged at this location yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {location.activities.map((a) => (
-                <div key={a.id} className="flex items-start gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <div className="shrink-0 w-12 text-center">
-                    <p className="text-xs font-semibold text-blue-600 uppercase">{format(a.date, "MMM")}</p>
-                    <p className="text-xl font-bold text-slate-800 leading-none">{format(a.date, "d")}</p>
-                    <p className="text-xs text-slate-400">{format(a.date, "yyyy")}</p>
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    {a.notes && <p className="text-sm text-slate-600">{a.notes}</p>}
-                    <p className="text-xs text-slate-400">Logged by {a.createdBy.name ?? a.createdBy.email}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Activity feed (notes, tasks, activities) */}
+      <div>
+        <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
+        <RecordActivityFeed
+          recordType="LOCATION"
+          recordId={location.id}
+          items={activityItems as any}
+          users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+          canEdit={canEdit}
+        />
+      </div>
     </div>
   )
 }
