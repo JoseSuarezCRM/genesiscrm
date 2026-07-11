@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Pencil, Loader2, Check, Plus, X, Search, ExternalLink } from "lucide-react"
+import { Loader2, Check, Plus, X, Search, ExternalLink } from "lucide-react"
 import { updateCustomObjectRecord } from "@/app/actions/custom-object-records"
 import { searchAssociableRecords, associateRecords, unassociateRecords } from "@/app/actions/associations"
 import type { CustomObjectProperty, CustomObjectCard } from "@/app/actions/custom-objects"
@@ -64,10 +64,15 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
   const propById = Object.fromEntries(properties.map((p) => [p.id, p]))
   const primary = properties.find((p) => p.primary) ?? properties[0]
 
-  const [editing, setEditing] = useState(false)
   const [tab, setTab] = useState<"overview" | "activities">("overview")
   const [values, setValues] = useState<Record<string, any>>(record.values)
-  const set = (id: string, v: any) => setValues((p) => ({ ...p, [id]: v }))
+
+  // Inline save of a single property value.
+  function saveField(propId: string, val: any) {
+    const next = { ...values, [propId]: val }
+    setValues(next)
+    startTransition(async () => { await updateCustomObjectRecord(objectKey, record.id, { values: next }); router.refresh() })
+  }
 
   // Group properties into cards; anything not placed in a card falls into an
   // auto "Details" card in the middle so nothing is ever hidden.
@@ -85,37 +90,15 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
     return (
       <div key={card.id} className="bg-white border border-slate-200 rounded-xl">
         <div className="px-5 py-3 border-b border-slate-100"><h2 className="text-sm font-semibold text-slate-900">{card.title}</h2></div>
-        <div className="p-5">
-          {editing ? (
-            <div className="space-y-3">
-              {props.map((p) => (
-                <div key={p.id}>
-                  <label className="text-xs font-medium text-slate-600 block mb-1">{p.name}</label>
-                  <PropInput p={p} value={values[p.id]} users={users} onChange={(v) => set(p.id, v)} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {props.map((p) => (
-                <div key={p.id} className="flex justify-between gap-4 py-2 text-sm">
-                  <span className="text-slate-500 shrink-0">{p.name}</span>
-                  <span className="text-slate-900 font-medium text-right break-words">{display(p, record.values[p.id], userMap)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="p-5 divide-y divide-slate-100">
+          {props.map((p) => (
+            <FieldRow key={p.id} p={p} value={values[p.id]} users={users} userMap={userMap} canEdit={canEdit} onSave={saveField} />
+          ))}
         </div>
       </div>
     )
   }
 
-  function saveProps() {
-    startTransition(async () => {
-      await updateCustomObjectRecord(objectKey, record.id, { values })
-      setEditing(false); router.refresh()
-    })
-  }
   function saveOwner(ownerId: string) {
     startTransition(async () => { await updateCustomObjectRecord(objectKey, record.id, { ownerId: ownerId || null }); router.refresh() })
   }
@@ -169,20 +152,6 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
 
           {tab === "overview" ? (
             <div className="space-y-4">
-              {canEdit && (
-                <div className="flex justify-end">
-                  {editing ? (
-                    <div className="flex gap-2">
-                      <button onClick={saveProps} disabled={isPending} className="h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 inline-flex items-center gap-1.5">
-                        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
-                      </button>
-                      <button onClick={() => setEditing(false)} className="h-8 px-3 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => { setValues(record.values); setEditing(true) }} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:border-slate-300"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                  )}
-                </div>
-              )}
               {middleCards.map(renderCard)}
             </div>
           ) : (
@@ -214,6 +183,51 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-4">
       <span className="text-slate-500 shrink-0">{label}</span>
       <span className="text-slate-900 font-medium text-right">{value}</span>
+    </div>
+  )
+}
+
+function FieldRow({ p, value, users, userMap, canEdit, onSave }: {
+  p: CustomObjectProperty; value: any; users: { id: string; label: string }[]; userMap: Record<string, string>; canEdit: boolean; onSave: (id: string, v: any) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<any>(value)
+  useEffect(() => { setDraft(value) }, [value])
+
+  const label = <span className="text-slate-500 shrink-0">{p.name}</span>
+  const shown = display(p, value, userMap)
+
+  if (!canEdit) {
+    return <div className="flex justify-between gap-4 py-2 text-sm">{label}<span className="text-slate-900 font-medium text-right break-words">{shown}</span></div>
+  }
+  if (p.type === "CHECKBOX") {
+    return (
+      <div className="flex justify-between gap-4 py-2 text-sm items-center">{label}
+        <input type="checkbox" checked={!!value} onChange={(e) => onSave(p.id, e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+      </div>
+    )
+  }
+
+  const multiline = p.type === "LONG_TEXT" || p.type === "MULTI_SELECT"
+  const commit = () => { onSave(p.id, draft); setEditing(false) }
+  const cancel = () => { setDraft(value); setEditing(false) }
+
+  return (
+    <div className="flex justify-between gap-4 py-2 text-sm">{label}
+      {editing ? (
+        <div className="flex-1 max-w-[65%]" onKeyDown={(e) => { if (e.key === "Enter" && !multiline) { e.preventDefault(); commit() } if (e.key === "Escape") cancel() }}>
+          <PropInput p={p} value={draft} users={users} onChange={setDraft} />
+          <div className="flex gap-1.5 mt-1.5 justify-end">
+            <button onClick={commit} className="h-7 px-2.5 rounded-md bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 inline-flex items-center gap-1"><Check className="h-3 w-3" /> Save</button>
+            <button onClick={cancel} className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setEditing(true)}
+          className="text-right text-slate-900 font-medium break-words rounded px-1 -mx-1 hover:bg-blue-50/70 hover:ring-1 hover:ring-blue-200 cursor-text max-w-[65%]">
+          {shown === "—" ? <span className="text-slate-400 font-normal">—</span> : shown}
+        </button>
+      )}
     </div>
   )
 }
