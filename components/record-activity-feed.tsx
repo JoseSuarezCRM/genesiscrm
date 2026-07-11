@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Loader2, Send, Trash2 } from "lucide-react"
-import { addRecordNote, deleteRecordNote, type ActivityItem, type ActivityKind } from "@/app/actions/record-activity"
+import { addRecordNote, deleteRecordNote, createTaskForRecord, type ActivityItem, type ActivityKind } from "@/app/actions/record-activity"
+import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
 
 const KIND_META: Record<ActivityKind, { label: string; icon: typeof StickyNote }> = {
@@ -28,13 +29,17 @@ function fmt(d: string | Date) {
   return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
 }
 
-export default function RecordActivityFeed({ recordType, recordId, items, canEdit }: {
-  recordType: string; recordId: string; items: ActivityItem[]; canEdit: boolean
+export default function RecordActivityFeed({ recordType, recordId, items, users = [], canEdit }: {
+  recordType: string; recordId: string; items: ActivityItem[]; users?: { id: string; label: string }[]; canEdit: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [sub, setSub] = useState<"ALL" | ActivityKind>("ALL")
+  const [mode, setMode] = useState<"NOTE" | "TASK">("NOTE")
   const [note, setNote] = useState("")
+  const [taskTitle, setTaskTitle] = useState("")
+  const [taskDue, setTaskDue] = useState("")
+  const [taskAssignee, setTaskAssignee] = useState("")
 
   const filtered = sub === "ALL" ? items : items.filter((i) => i.kind === sub)
 
@@ -45,23 +50,56 @@ export default function RecordActivityFeed({ recordType, recordId, items, canEdi
       if (!(res as any)?.error) { setNote(""); router.refresh() }
     })
   }
+  function addTask() {
+    if (!taskTitle.trim()) return
+    startTransition(async () => {
+      const res = await createTaskForRecord(recordType, recordId, { title: taskTitle, dueDate: taskDue || undefined, assignedToId: taskAssignee || undefined })
+      if (!(res as any)?.error) { setTaskTitle(""); setTaskDue(""); setTaskAssignee(""); router.refresh() }
+    })
+  }
   function removeNote(id: string) {
     startTransition(async () => { await deleteRecordNote(id); router.refresh() })
   }
 
+  const inputCls = "text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+
   return (
     <div className="space-y-4">
-      {/* Note composer */}
+      {/* Composer */}
       {canEdit && (
-        <div className="bg-white border border-slate-200 rounded-xl p-3">
-          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…"
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <div className="flex justify-end mt-2">
-            <button onClick={addNote} disabled={isPending || !note.trim()}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
-              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Add note
-            </button>
+        <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-1">
+            {(["NOTE", "TASK"] as const).map((m) => (
+              <button key={m} onClick={() => setMode(m)}
+                className={cn("px-2.5 py-1 rounded-lg text-xs font-medium", mode === m ? "bg-zinc-900 text-white" : "text-slate-500 hover:bg-slate-100")}>
+                {m === "NOTE" ? "Note" : "Task"}
+              </button>
+            ))}
           </div>
+          {mode === "NOTE" ? (
+            <>
+              <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…" className={inputCls + " w-full resize-none"} />
+              <div className="flex justify-end">
+                <button onClick={addNote} disabled={isPending || !note.trim()} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+                  {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Add note
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Task title…" className={inputCls + " w-full"} />
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} className={inputCls} />
+                <StyledSelect value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)} className={inputCls + " min-w-[160px]"}>
+                  <option value="">Unassigned</option>
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+                </StyledSelect>
+                <button onClick={addTask} disabled={isPending || !taskTitle.trim()} className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+                  {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Add task
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

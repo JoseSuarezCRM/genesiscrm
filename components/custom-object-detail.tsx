@@ -158,7 +158,7 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
               {middleCards.map(renderCard)}
             </div>
           ) : (
-            <RecordActivityFeed recordType={`CO:${objectKey}`} recordId={record.id} items={activityItems} canEdit={canEdit} />
+            <RecordActivityFeed recordType={`CO:${objectKey}`} recordId={record.id} items={activityItems} users={users} canEdit={canEdit} />
           )}
         </div>
 
