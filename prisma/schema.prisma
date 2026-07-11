@@ -173,6 +173,8 @@ model CustomObjectDef {
   ownerLabel  String                        // "Visit Owner"
   // [{ id, name, type, options?, required?, primary? }] — the record schema.
   properties  Json     @default("[]")
+  // [{ id, title, column: "LEFT"|"MIDDLE", propertyIds: string[] }] — detail card layout.
+  cards       Json     @default("[]")
   order       Int      @default(0)          // nav ordering
   createdById String?
   createdBy   User?    @relation("CustomObjectDefCreatedBy", fields: [createdById], references: [id])

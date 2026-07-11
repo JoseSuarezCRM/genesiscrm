@@ -38,6 +38,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
         singular={def.singular}
         ownerLabel={def.ownerLabel}
         properties={def.properties}
+        cards={def.cards}
         record={record as any}
         users={users.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
         canEdit={canEdit}

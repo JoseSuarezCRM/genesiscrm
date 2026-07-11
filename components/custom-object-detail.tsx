@@ -6,8 +6,9 @@ import Link from "next/link"
 import { Pencil, Loader2, Check, Plus, X, Search, ExternalLink } from "lucide-react"
 import { updateCustomObjectRecord } from "@/app/actions/custom-object-records"
 import { searchAssociableRecords, associateRecords, unassociateRecords } from "@/app/actions/associations"
-import type { CustomObjectProperty } from "@/app/actions/custom-objects"
+import type { CustomObjectProperty, CustomObjectCard } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
+import { cn } from "@/lib/utils"
 
 interface AssocRecord { id: string; name: string; url: string }
 interface AssocGroup { type: string; label: string; records: AssocRecord[] }
@@ -31,6 +32,7 @@ interface Props {
   singular: string
   ownerLabel: string
   properties: CustomObjectProperty[]
+  cards: CustomObjectCard[]
   record: RecordData
   users: { id: string; label: string }[]
   canEdit: boolean
@@ -55,15 +57,58 @@ function display(p: CustomObjectProperty, v: any, userMap: Record<string, string
 
 const inputCls = "h-9 w-full px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
 
-export default function CustomObjectDetail({ objectKey, singular, ownerLabel, properties, record, users, canEdit, associations }: Props) {
+export default function CustomObjectDetail({ objectKey, singular, ownerLabel, properties, cards, record, users, canEdit, associations }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
+  const propById = Object.fromEntries(properties.map((p) => [p.id, p]))
   const primary = properties.find((p) => p.primary) ?? properties[0]
 
   const [editing, setEditing] = useState(false)
+  const [tab, setTab] = useState<"overview" | "activities">("overview")
   const [values, setValues] = useState<Record<string, any>>(record.values)
   const set = (id: string, v: any) => setValues((p) => ({ ...p, [id]: v }))
+
+  // Group properties into cards; anything not placed in a card falls into an
+  // auto "Details" card in the middle so nothing is ever hidden.
+  const assigned = new Set(cards.flatMap((c) => c.propertyIds))
+  const unassigned = properties.filter((p) => !assigned.has(p.id))
+  const leftCards = cards.filter((c) => c.column === "LEFT")
+  const middleCards = [
+    ...cards.filter((c) => c.column === "MIDDLE"),
+    ...(unassigned.length ? [{ id: "__auto", title: "Details", column: "MIDDLE" as const, propertyIds: unassigned.map((p) => p.id) }] : []),
+  ]
+
+  function renderCard(card: CustomObjectCard) {
+    const props = card.propertyIds.map((id) => propById[id]).filter(Boolean)
+    if (props.length === 0) return null
+    return (
+      <div key={card.id} className="bg-white border border-slate-200 rounded-xl">
+        <div className="px-5 py-3 border-b border-slate-100"><h2 className="text-sm font-semibold text-slate-900">{card.title}</h2></div>
+        <div className="p-5">
+          {editing ? (
+            <div className="space-y-3">
+              {props.map((p) => (
+                <div key={p.id}>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">{p.name}</label>
+                  <PropInput p={p} value={values[p.id]} users={users} onChange={(v) => set(p.id, v)} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {props.map((p) => (
+                <div key={p.id} className="flex justify-between gap-4 py-2 text-sm">
+                  <span className="text-slate-500 shrink-0">{p.name}</span>
+                  <span className="text-slate-900 font-medium text-right break-words">{display(p, record.values[p.id], userMap)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   function saveProps() {
     startTransition(async () => {
@@ -84,9 +129,10 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
         <p className="text-sm text-slate-400 font-mono">Record ID #{record.recordNumber ?? "—"}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: record details */}
-        <div className="space-y-4">
+      {/* Three-Column Layout (like Referrals) */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* LEFT: record details */}
+        <div className="lg:col-span-1 space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl">
             <div className="px-5 py-3 border-b border-slate-100"><h2 className="text-sm font-semibold text-slate-900">Record details</h2></div>
             <div className="p-5 space-y-3 text-sm">
@@ -107,50 +153,50 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
               <Row label="Last viewed by" value={record.lastViewedByName ?? "—"} />
             </div>
           </div>
+          {leftCards.map(renderCard)}
         </div>
 
-        {/* Middle: property card(s) */}
+        {/* MIDDLE: Overview / Activities tabs */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900">Properties</h2>
-              {canEdit && !editing && (
-                <button onClick={() => { setValues(record.values); setEditing(true) }} className="h-7 w-7 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-lg"><Pencil className="h-3.5 w-3.5" /></button>
-              )}
-            </div>
-            <div className="p-5 space-y-3">
-              {editing ? (
-                <>
-                  {properties.map((p) => (
-                    <div key={p.id}>
-                      <label className="text-xs font-medium text-slate-600 block mb-1">{p.name}</label>
-                      <PropInput p={p} value={values[p.id]} users={users} onChange={(v) => set(p.id, v)} />
-                    </div>
-                  ))}
-                  <div className="flex gap-2 pt-1">
-                    <button onClick={saveProps} disabled={isPending} className="h-9 px-4 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 inline-flex items-center gap-1.5">
-                      {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
-                    </button>
-                    <button onClick={() => setEditing(false)} className="h-9 px-3 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
-                  </div>
-                </>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {properties.map((p) => (
-                    <div key={p.id} className="flex justify-between gap-4 py-2 text-sm">
-                      <span className="text-slate-500 shrink-0">{p.name}</span>
-                      <span className="text-slate-900 font-medium text-right break-words">{display(p, record.values[p.id], userMap)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-1 border-b border-slate-200">
+            {(["overview", "activities"] as const).map((t) => (
+              <button key={t} onClick={() => setTab(t)}
+                className={cn("px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize", tab === t ? "border-zinc-900 text-zinc-900" : "border-transparent text-slate-500 hover:text-slate-800")}>
+                {t}
+              </button>
+            ))}
           </div>
 
-          {/* Associations */}
+          {tab === "overview" ? (
+            <div className="space-y-4">
+              {canEdit && (
+                <div className="flex justify-end">
+                  {editing ? (
+                    <div className="flex gap-2">
+                      <button onClick={saveProps} disabled={isPending} className="h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 inline-flex items-center gap-1.5">
+                        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
+                      </button>
+                      <button onClick={() => setEditing(false)} className="h-8 px-3 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setValues(record.values); setEditing(true) }} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:border-slate-300"><Pencil className="h-3.5 w-3.5" /> Edit</button>
+                  )}
+                </div>
+              )}
+              {middleCards.map(renderCard)}
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-xl px-5 py-10 text-center text-sm text-slate-400">
+              Activities — notes, tasks, emails, SMS, and meetings for this record — are coming next.
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT: Associated Objects */}
+        <div className="lg:col-span-1 space-y-4">
           {associations.length === 0 ? (
             <div className="bg-white border border-dashed border-slate-200 rounded-xl px-5 py-4 text-sm text-slate-400">
-              No relationships defined for {singular}. Set them up in Settings → Data Model.
+              No relationships. Set them up in Settings → Data Model.
             </div>
           ) : (
             associations.map((g) => (

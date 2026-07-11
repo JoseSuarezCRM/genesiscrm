@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, Trash2, Loader2, Check, ChevronDown, ChevronRight, Box, GripVertical, ExternalLink } from "lucide-react"
 import {
-  createCustomObject, updateCustomObject, saveCustomObjectProperties, deleteCustomObject,
-  type CustomObjectDefLite, type CustomObjectProperty, type CustomPropType,
+  createCustomObject, updateCustomObject, saveCustomObjectProperties, saveCustomObjectCards, deleteCustomObject,
+  type CustomObjectDefLite, type CustomObjectProperty, type CustomObjectCard, type CustomPropType,
 } from "@/app/actions/custom-objects"
+import StyledSelect from "@/components/ui/styled-select"
 
 const PROP_TYPES: { value: CustomPropType; label: string }[] = [
   { value: "TEXT", label: "Text" },
@@ -105,6 +106,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
   const [singular, setSingular] = useState(object.singular)
   const [plural, setPlural] = useState(object.plural)
   const [props, setProps] = useState<CustomObjectProperty[]>(object.properties)
+  const [cards, setCards] = useState<CustomObjectCard[]>(object.cards)
   const [saved, setSaved] = useState(false)
 
   function patch(id: string, p: Partial<CustomObjectProperty>) {
@@ -116,12 +118,24 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
   function removeProp(id: string) {
     setProps((prev) => prev.filter((x) => x.id !== id))
   }
+  // Card layout
+  function addCard() { setCards((prev) => [...prev, { id: newPropId(), title: "New card", column: "MIDDLE", propertyIds: [] }]) }
+  function patchCard(id: string, c: Partial<CustomObjectCard>) { setCards((prev) => prev.map((x) => (x.id === id ? { ...x, ...c } : x))) }
+  function removeCard(id: string) { setCards((prev) => prev.filter((x) => x.id !== id)) }
+  function toggleCardProp(cardId: string, propId: string) {
+    setCards((prev) => prev.map((c) => {
+      if (c.id === cardId) return { ...c, propertyIds: c.propertyIds.includes(propId) ? c.propertyIds.filter((p) => p !== propId) : [...c.propertyIds, propId] }
+      // A property lives in one card — remove it from others.
+      return { ...c, propertyIds: c.propertyIds.filter((p) => p !== propId) }
+    }))
+  }
   function save() {
     startTransition(async () => {
       if (singular !== object.singular || plural !== object.plural) {
         await updateCustomObject(object.id, { singular, plural })
       }
       await saveCustomObjectProperties(object.id, props.filter((p) => p.name.trim() || p.primary))
+      await saveCustomObjectCards(object.id, cards)
       setSaved(true); setTimeout(() => setSaved(false), 2000)
       router.refresh()
     })
@@ -165,6 +179,36 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
         </div>
         <button onClick={addProp} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
           <Plus className="h-3.5 w-3.5" /> Add property
+        </button>
+      </div>
+
+      {/* Detail card layout */}
+      <div>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Detail cards</p>
+        <p className="text-xs text-slate-400 mb-2">Group properties into cards on the record&apos;s detail page. Anything not placed in a card shows in a default card in the middle.</p>
+        <div className="space-y-2">
+          {cards.map((card) => (
+            <div key={card.id} className="border border-slate-200 rounded-lg bg-white p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <input className={inputCls + " flex-1 min-w-0"} value={card.title} onChange={(e) => patchCard(card.id, { title: e.target.value })} placeholder="Card title" />
+                <StyledSelect className={inputCls + " w-32 shrink-0"} value={card.column} onChange={(e) => patchCard(card.id, { column: e.target.value as "LEFT" | "MIDDLE" })}>
+                  <option value="LEFT">Left column</option>
+                  <option value="MIDDLE">Middle (Overview)</option>
+                </StyledSelect>
+                <button onClick={() => removeCard(card.id)} className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {props.filter((p) => p.name.trim()).map((p) => {
+                  const on = card.propertyIds.includes(p.id)
+                  return <button key={p.id} type="button" onClick={() => toggleCardProp(card.id, p.id)}
+                    className={"px-2 py-0.5 rounded-lg text-xs font-medium border " + (on ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200")}>{p.name}</button>
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={addCard} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
+          <Plus className="h-3.5 w-3.5" /> Add card
         </button>
       </div>
 

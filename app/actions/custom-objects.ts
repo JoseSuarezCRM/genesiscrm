@@ -16,6 +16,13 @@ export interface CustomObjectProperty {
   primary?: boolean
 }
 
+export interface CustomObjectCard {
+  id: string
+  title: string
+  column: "LEFT" | "MIDDLE"
+  propertyIds: string[]
+}
+
 export interface CustomObjectDefLite {
   id: string
   key: string
@@ -24,6 +31,7 @@ export interface CustomObjectDefLite {
   icon: string | null
   ownerLabel: string
   properties: CustomObjectProperty[]
+  cards: CustomObjectCard[]
   order: number
 }
 
@@ -42,8 +50,17 @@ function mapDef(d: any): CustomObjectDefLite {
     id: d.id, key: d.key, singular: d.singular, plural: d.plural,
     icon: d.icon, ownerLabel: d.ownerLabel,
     properties: (d.properties as CustomObjectProperty[]) ?? [],
+    cards: (d.cards as CustomObjectCard[]) ?? [],
     order: d.order,
   }
+}
+
+// Replace the detail card layout (title, column, grouped property ids).
+export async function saveCustomObjectCards(id: string, cards: CustomObjectCard[]) {
+  await requireAdmin()
+  await (prisma as any).customObjectDef.update({ where: { id }, data: { cards } })
+  revalidatePath("/settings/objects")
+  return { success: true }
 }
 
 // All custom object definitions (for nav, settings, permissions).
