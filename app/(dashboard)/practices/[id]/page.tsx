@@ -7,6 +7,8 @@ import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import PracticeDetailClient from "@/components/practice-detail-client"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
+import RecordActivityFeed from "@/components/record-activity-feed"
+import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
 
@@ -50,6 +52,11 @@ export default async function PracticeDetailPage({ params }: Props) {
 
   if (!practice) notFound()
 
+  const [activityItems, feedUsers] = await Promise.all([
+    listRecordActivities("PRACTICE", practice.id),
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+  ])
+
   return (
     <div className="p-6 max-w-5xl space-y-6">
       <div>
@@ -65,6 +72,18 @@ export default async function PracticeDetailPage({ params }: Props) {
       </div>
 
       <PracticeDetailClient practice={practice as any} referrals={referrals as any} isAdmin={isAdmin} customProperties={customProperties} />
+
+      {/* Activity feed (notes, tasks, activities) */}
+      <div>
+        <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
+        <RecordActivityFeed
+          recordType="PRACTICE"
+          recordId={practice.id}
+          items={activityItems as any}
+          users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+          canEdit={isAdmin}
+        />
+      </div>
     </div>
   )
 }

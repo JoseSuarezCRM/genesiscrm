@@ -8,8 +8,9 @@ import { ChevronLeft, Building2, MapPin } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
-import ProviderNotesSection from "@/components/provider-notes-section"
 import ProviderInfoEditor from "@/components/provider-info-editor"
+import RecordActivityFeed from "@/components/record-activity-feed"
+import { listRecordActivities } from "@/app/actions/record-activity"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { format } from "date-fns"
@@ -59,6 +60,11 @@ export default async function ProviderDetailPage({ params }: Props) {
   ])
 
   if (!provider) notFound()
+
+  const [activityItems, feedUsers] = await Promise.all([
+    listRecordActivities("PROVIDER", provider.id),
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+  ])
 
   const isPrefixTitle = provider.title?.startsWith("Dr")
   const displayName = provider.title
@@ -132,43 +138,17 @@ export default async function ProviderDetailPage({ params }: Props) {
         </Card>
       )}
 
-      {/* Activities */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Activities ({activities.length})</CardTitle></CardHeader>
-        <CardContent>
-          {activities.length === 0 ? (
-            <p className="text-sm text-slate-400">No activities logged for this provider yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {activities.map((a) => (
-                <div key={a.id} className="flex items-start gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <div className="shrink-0 w-12 text-center">
-                    <p className="text-xs font-semibold text-blue-600 uppercase">{format(a.date, "MMM")}</p>
-                    <p className="text-xl font-bold text-slate-800 leading-none">{format(a.date, "d")}</p>
-                    <p className="text-xs text-slate-400">{format(a.date, "yyyy")}</p>
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {a.practice && <span className="flex items-center gap-1 text-sm font-medium text-slate-800"><Building2 className="h-3.5 w-3.5 text-slate-400" />{a.practice.name}</span>}
-                      {a.location && <span className="flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3 w-3" />{a.location.name}</span>}
-                    </div>
-                    {a.notes && <p className="text-sm text-slate-600">{a.notes}</p>}
-                    <p className="text-xs text-slate-400">Logged by {a.createdBy.name ?? a.createdBy.email}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Notes */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Notes ({provider.providerNotes.length})</CardTitle></CardHeader>
-        <CardContent>
-          <ProviderNotesSection providerId={provider.id} initialNotes={provider.providerNotes} />
-        </CardContent>
-      </Card>
+      {/* Activity feed (notes, tasks, activities) */}
+      <div>
+        <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
+        <RecordActivityFeed
+          recordType="PROVIDER"
+          recordId={provider.id}
+          items={activityItems as any}
+          users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+          canEdit={isAdmin}
+        />
+      </div>
     </div>
   )
 }

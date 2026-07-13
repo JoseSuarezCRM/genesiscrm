@@ -135,7 +135,7 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
                     {item.body && <p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap break-words">{item.body}</p>}
                     <p className="text-xs text-slate-400 mt-1">{item.by ? `by ${item.by}` : ""}</p>
                   </div>
-                  {canEdit && item.kind === "NOTE" && (
+                  {canEdit && item.kind === "NOTE" && !item.id.startsWith("pn_") && (
                     <button onClick={() => removeNote(item.id)} disabled={isPending} className="h-6 w-6 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
                   )}
                 </div>

@@ -44,6 +44,15 @@ export async function listRecordActivities(recordType: string, recordId: string)
   })
   for (const n of notes) items.push({ id: n.id, kind: "NOTE", title: "Note", body: n.body, date: n.createdAt, by: n.createdBy?.name ?? n.createdBy?.email ?? null })
 
+  // Legacy provider notes surface in the same timeline (read-only).
+  if (recordType === "PROVIDER") {
+    const pn = await prisma.providerNote.findMany({
+      where: { providerId: recordId }, orderBy: { createdAt: "desc" },
+      include: { createdBy: { select: { name: true, email: true } } },
+    })
+    for (const n of pn) items.push({ id: `pn_${n.id}`, kind: "NOTE", title: "Note", body: n.content, date: n.createdAt, by: n.createdBy?.name ?? n.createdBy?.email ?? null })
+  }
+
   // Associated engagements (tasks / activities) via the generic association layer.
   const links = await (prisma as any).objectAssociation.findMany({
     where: { OR: [{ fromType: recordType, fromId: recordId }, { toType: recordType, toId: recordId }] },
