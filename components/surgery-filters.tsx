@@ -1,12 +1,13 @@
 "use client"
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Search, ChevronDown, X, Check, Calendar } from "lucide-react"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { type FilterState, emptyFilter, activeConditionCount } from "@/lib/filters"
-import { decodeFilterParam } from "@/lib/filter-to-prisma"
-import { SURGERY_FILTER_FIELDS } from "@/lib/surgery-filter-fields"
+import { decodeFilterParam } from "@/lib/filters"
+import { surgeryFilterFields } from "@/lib/surgery-filter-fields"
+import type { CustomPropDef } from "@/lib/filters"
 
 const STATUS_OPTIONS = [
   { id: "NEW",                  label: "New" },
@@ -23,6 +24,8 @@ interface SurgeryFiltersProps {
   currentStatusMode: "any" | "none"
   currentFrom?: string
   currentTo?: string
+  users?: { id: string; label: string }[]
+  customPropertyDefs?: CustomPropDef[]
 }
 
 // ─── Multi-select dropdown ────────────────────────────────────────────────────
@@ -235,7 +238,14 @@ export default function SurgeryFilters({
   currentStatusMode,
   currentFrom,
   currentTo,
+  users = [],
+  customPropertyDefs = [],
 }: SurgeryFiltersProps) {
+  // Record Owner + every Surgery custom property show up as filter criteria.
+  const fields = useMemo(
+    () => surgeryFilterFields({ users, customProps: customPropertyDefs }),
+    [users, customPropertyDefs],
+  )
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -268,13 +278,13 @@ export default function SurgeryFilters({
   useEffect(() => {
     setFilterState(decodeFilterParam(filterParam) ?? emptyFilter())
   }, [filterParam])
-  const advancedActive = activeConditionCount(filterState, SURGERY_FILTER_FIELDS) > 0
+  const advancedActive = activeConditionCount(filterState, fields) > 0
   const onFilterChange = (next: FilterState) => {
     setFilterState(next)
     if (filterDebounce.current) clearTimeout(filterDebounce.current)
     filterDebounce.current = setTimeout(() => {
       const p = new URLSearchParams(params.toString())
-      if (activeConditionCount(next, SURGERY_FILTER_FIELDS) > 0) p.set("filter", JSON.stringify(next))
+      if (activeConditionCount(next, fields) > 0) p.set("filter", JSON.stringify(next))
       else p.delete("filter")
       p.delete("page")
       router.push(`${pathname}?${p.toString()}`)
@@ -381,7 +391,7 @@ export default function SurgeryFilters({
         />
 
         {/* Advanced filter builder */}
-        <FilterBuilder fields={SURGERY_FILTER_FIELDS} value={filterState} onChange={onFilterChange} />
+        <FilterBuilder fields={fields} value={filterState} onChange={onFilterChange} />
 
         {/* Clear all */}
         {hasFilters && (

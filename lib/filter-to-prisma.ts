@@ -3,11 +3,55 @@
 // surgery) can use the identical filter UI and have it compose with pagination,
 // sorting, and CSV export. Only fields that carry a `column` are translated.
 
+import { Prisma } from "@prisma/client"
 import { FilterState, FilterField, FilterGroup, Condition } from "./filters"
+
+// Custom properties live in a JSON bag, so they translate to Prisma JSON-path
+// filters rather than plain column filters. Postgres compares the stored JSON
+// value, so string operators are exact-case; numeric/date operators aren't
+// supported on the bag and fall through as "no condition".
+function jsonConditionToWhere(cond: Condition, field: FilterField): Record<string, unknown> | null {
+  const bag = field.jsonBag!
+  const path = [field.column!]
+  const op = cond.operator
+  const v = cond.value
+  const at = (filter: Record<string, unknown>) => ({ [bag]: { path, ...filter } })
+
+  if (op === "is_known") return { NOT: at({ equals: Prisma.DbNull }) }
+  if (op === "is_unknown") return at({ equals: Prisma.DbNull })
+
+  if (field.type === "select") {
+    const arr = (Array.isArray(v) ? v : v ? [v] : []).map(String)
+    if (arr.length === 0) return null
+    const anyOf = { OR: arr.map((s) => at({ equals: s })) }
+    if (op === "is_any_of") return anyOf
+    if (op === "is_none_of") return { NOT: anyOf }
+    return null
+  }
+
+  if (field.type === "boolean") {
+    if (op === "is_true") return at({ equals: true })
+    if (op === "is_false") return at({ equals: false })
+    return null
+  }
+
+  const s = String(v ?? "")
+  if (!s) return null
+  switch (op) {
+    case "contains": return at({ string_contains: s })
+    case "not_contains": return { NOT: at({ string_contains: s }) }
+    case "is": return at({ equals: s })
+    case "is_not": return { NOT: at({ equals: s }) }
+    case "starts_with": return at({ string_starts_with: s })
+    case "ends_with": return at({ string_ends_with: s })
+  }
+  return null
+}
 
 function conditionToWhere(cond: Condition, field: FilterField): Record<string, unknown> | null {
   const col = field.column
   if (!col) return null
+  if (field.jsonBag) return jsonConditionToWhere(cond, field)
   const op = cond.operator
   const v = cond.value
 
@@ -102,14 +146,6 @@ export function filterStateToWhere(state: FilterState | null | undefined, fields
   return state.combinator === "OR" ? { OR: groups } : { AND: groups }
 }
 
-// The filter travels in the URL as a JSON string param. Parse it defensively.
-export function decodeFilterParam(param: string | null | undefined): FilterState | null {
-  if (!param) return null
-  try {
-    const obj = JSON.parse(param)
-    if (obj && Array.isArray(obj.groups) && typeof obj.combinator === "string") return obj as FilterState
-    return null
-  } catch {
-    return null
-  }
-}
+// decodeFilterParam lives in lib/filters (pure) so client components can parse
+// the URL param without importing the Prisma client.
+export { decodeFilterParam } from "./filters"

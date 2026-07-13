@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma"
 import { CallOutcome } from "@prisma/client"
 import { runTrigger_SurgeryStatusChanged, runTrigger_SurgeryCallAttemptsReached } from "@/lib/automation-engine"
 import { type SurgeryFilters, SURGERY_PAGE_SIZE, buildSurgeryWhere, surgeryOrderBy } from "@/lib/surgery-query"
+import { surgeryServerFilterFields } from "@/lib/surgery-server-fields"
 
 export async function getSurgeryCases(filters: SurgeryFilters = {}) {
   const session = await auth()
@@ -14,7 +15,7 @@ export async function getSurgeryCases(filters: SurgeryFilters = {}) {
 
   const { page = 1, sort, dir = "desc" } = filters
   const skip = (page - 1) * SURGERY_PAGE_SIZE
-  const where = buildSurgeryWhere(filters)
+  const where = buildSurgeryWhere(filters, await surgeryServerFilterFields())
   const orderBy = surgeryOrderBy(sort, dir)
 
   const [cases, total, allMatchingIds] = await Promise.all([

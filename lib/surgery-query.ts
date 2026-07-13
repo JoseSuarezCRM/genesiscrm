@@ -2,7 +2,7 @@
 // (app/actions/surgery.ts) and the export route. No "use server" so it can
 // export synchronous functions.
 
-import type { FilterState } from "./filters"
+import type { FilterState, FilterField } from "./filters"
 import { filterStateToWhere } from "./filter-to-prisma"
 import { SURGERY_FILTER_FIELDS } from "./surgery-filter-fields"
 
@@ -23,7 +23,10 @@ export const SURGERY_PAGE_SIZE = 20
 // Shared Prisma `where` so the list and the export filter identically. The quick
 // controls (search / status / date range) and the advanced FilterBuilder are
 // AND-ed together.
-export function buildSurgeryWhere(filters: SurgeryFilters): Record<string, unknown> {
+// `fields` defaults to the fixed columns; callers that know the tenant's Surgery
+// custom properties pass surgeryFilterFields({ customProps }) so those criteria
+// (and Record Owner) translate too.
+export function buildSurgeryWhere(filters: SurgeryFilters, fields: FilterField[] = SURGERY_FILTER_FIELDS): Record<string, unknown> {
   const { search, statuses = [], statusMode = "any", from, to, filter } = filters
   const clauses: Record<string, unknown>[] = []
 
@@ -47,7 +50,7 @@ export function buildSurgeryWhere(filters: SurgeryFilters): Record<string, unkno
     })
   }
 
-  const advanced = filterStateToWhere(filter, SURGERY_FILTER_FIELDS)
+  const advanced = filterStateToWhere(filter, fields)
   if (Object.keys(advanced).length > 0) clauses.push(advanced)
 
   if (clauses.length === 0) return {}

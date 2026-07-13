@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createAuditLog } from "@/lib/audit"
 import { buildSurgeryWhere, surgeryOrderBy } from "@/lib/surgery-query"
-import { decodeFilterParam } from "@/lib/filter-to-prisma"
+import { surgeryServerFilterFields } from "@/lib/surgery-server-fields"
+import { decodeFilterParam } from "@/lib/filters"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
 import { AuditAction } from "@prisma/client"
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
   const dir = searchParams.get("dir") === "asc" ? "asc" : "desc"
   const filter = decodeFilterParam(searchParams.get("filter"))
 
-  const where = buildSurgeryWhere({ search, statuses, statusMode, from, to, filter })
+  const where = buildSurgeryWhere({ search, statuses, statusMode, from, to, filter }, await surgeryServerFilterFields())
 
   const cases = await (prisma as any).surgeryCase.findMany({
     where,

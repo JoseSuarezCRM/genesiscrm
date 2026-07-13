@@ -4,6 +4,7 @@ import { userCan, userCanLevel } from "@/lib/permissions"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { getSurgeryCases } from "@/app/actions/surgery"
+import { prisma } from "@/lib/prisma"
 import SurgeryImportDialog from "@/components/surgery-import-dialog"
 import SurgeryCreateDialog from "@/components/surgery-create-dialog"
 import SurgeryFilters from "@/components/surgery-filters"
@@ -11,7 +12,7 @@ import SurgeryTable from "@/components/surgery-table"
 import SurgeryViewsBar from "@/components/surgery-views-bar"
 import { getSurgeryViews } from "@/app/actions/surgery-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
-import { decodeFilterParam } from "@/lib/filter-to-prisma"
+import { decodeFilterParam } from "@/lib/filters"
 import { Stethoscope, ChevronLeft, ChevronRight } from "lucide-react"
 import { Suspense } from "react"
 
@@ -58,6 +59,12 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
     dir,
   })
 
+  // Record Owner + Surgery custom properties are selectable filter criteria.
+  const [filterUsers, surgeryCustomProps] = await Promise.all([
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+    prisma.customProperty.findMany({ where: { entityType: "SURGERY" }, orderBy: { createdAt: "asc" } }),
+  ])
+
   const [savedViews, shareOptions] = await Promise.all([getSurgeryViews(), getViewShareOptions()])
 
   const totalPages = Math.ceil(total / pageSize)
@@ -100,6 +107,8 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           currentStatusMode={statusMode}
           currentFrom={searchParams.from}
           currentTo={searchParams.to}
+          users={filterUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+          customPropertyDefs={surgeryCustomProps.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options }))}
         />
       </Suspense>
 

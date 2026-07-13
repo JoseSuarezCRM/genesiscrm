@@ -22,6 +22,9 @@ export interface FilterField {
   // Optional DB column name — set when the filter is evaluated server-side by
   // translating the FilterState into a Prisma `where` (see lib/filter-to-prisma).
   column?: string
+  // When the value lives inside a JSON bag (custom properties), this is the bag's
+  // column and `column` is the key within it.
+  jsonBag?: string
 }
 
 export interface Operator {
@@ -255,6 +258,22 @@ export function customPropertyFilterFields(defs: CustomPropDef[], bagKey = "cust
       type,
       options: type === "select" ? (d.options ?? []).map((o) => ({ label: o, value: o })) : undefined,
       getValue: (row: any) => row?.[bagKey]?.[d.id],
+      // Lets server-paginated lists (e.g. surgery) translate this into a Prisma
+      // JSON-path filter; in-memory lists just use getValue and ignore these.
+      column: d.id,
+      jsonBag: bagKey,
     }
   })
+}
+
+// The filter travels in the URL as a JSON string param. Parse it defensively.
+export function decodeFilterParam(param: string | null | undefined): FilterState | null {
+  if (!param) return null
+  try {
+    const obj = JSON.parse(param)
+    if (obj && Array.isArray(obj.groups) && typeof obj.combinator === "string") return obj as FilterState
+    return null
+  } catch {
+    return null
+  }
 }

@@ -2,7 +2,8 @@
 // DB `column` set so the advanced FilterBuilder can be evaluated server-side
 // (see lib/filter-to-prisma). Shared by the filter UI and the server query.
 
-import type { FilterField } from "./filters"
+import type { FilterField, CustomPropDef } from "./filters"
+import { customPropertyFilterFields } from "./filters"
 import { SURGERY_STATUS_LABELS } from "./surgery-constants"
 import { LANGUAGE_OPTIONS } from "./automation-properties"
 
@@ -37,3 +38,21 @@ export const SURGERY_FILTER_FIELDS: FilterField[] = [
   // Referral Source — so it filters as text.
   { key: "physicalTherapy", label: "Physical Therapy", type: "text", column: "physicalTherapy", getValue: none },
 ]
+
+// The full criteria list: the fixed columns above, plus Record Owner and every
+// custom property defined on Surgery Cases (New Object Playbook — custom props
+// always show up as filter criteria). Options are only needed for the UI; the
+// server passes just `customProps` so it can translate the same FilterState.
+export function surgeryFilterFields(opts?: {
+  users?: { id: string; label: string }[]
+  customProps?: CustomPropDef[]
+}): FilterField[] {
+  return [
+    ...SURGERY_FILTER_FIELDS,
+    {
+      key: "ownerId", label: "Surgery Case Owner", type: "select", column: "ownerId", getValue: none,
+      options: (opts?.users ?? []).map((u) => ({ value: u.id, label: u.label })),
+    },
+    ...customPropertyFilterFields(opts?.customProps ?? []),
+  ]
+}
