@@ -17,6 +17,16 @@ export default async function WorkflowEditorPage({ params }: Props) {
     prisma.messageTemplate.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, channel: true } }),
   ])
 
+  // Custom objects are workflow objects too — they offer the generic triggers.
+  const customObjectDefs = await (prisma as any).customObjectDef.findMany({
+    orderBy: { order: "asc" },
+    select: { key: true, singular: true, plural: true, properties: true },
+  })
+  const customObjects = customObjectDefs.map((d: any) => ({
+    key: d.key, singular: d.singular, plural: d.plural,
+    properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options ?? [] })),
+  }))
+
   // Group custom properties by entity type so the editor can show the right
   // set based on which object the workflow runs on.
   const customPropsByEntity: Record<string, { id: string; name: string; type: string; options: string[] }[]> = {}
@@ -47,6 +57,7 @@ export default async function WorkflowEditorPage({ params }: Props) {
       pipelines={pipelines}
       customPropsByEntity={customPropsByEntity}
       templates={templates as any}
+      customObjects={customObjects}
     />
   )
 }

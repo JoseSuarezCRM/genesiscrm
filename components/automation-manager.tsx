@@ -30,7 +30,7 @@ import {
   OBJECT_PROPERTY_DEFS, OBJECT_CUSTOM_ENTITY,
   type PropertyDef, type CustomPropertyInput,
 } from "@/lib/automation-properties"
-import { WORKFLOW_OBJECTS, workflowObjectFor } from "@/lib/workflow-objects"
+import { WORKFLOW_OBJECTS, workflowObjectFor, workflowObjectsWith, isGenericTrigger, type CustomWorkflowObject } from "@/lib/workflow-objects"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -73,6 +73,8 @@ interface Props {
   locations: Location[]
   pipelines?: Pipeline[]
   currentUserId: string
+  // Custom objects are workflow objects too (generic triggers only).
+  customObjects?: (CustomWorkflowObject & { properties?: { id: string; name: string; type: string; options?: string[] }[] })[]
 }
 
 // ─── Label maps ───────────────────────────────────────────────────────────────
@@ -96,6 +98,9 @@ const TRIGGER_LABELS: Record<string, string> = {
   PIPELINE_CHANGED: "Referral moved to pipeline",
   SURGERY_STATUS_CHANGED: "Surgery case status changed",
   SURGERY_CALL_ATTEMPTS_REACHED: "Surgery call attempts reached (4)",
+  RECORD_CREATED: "Record created",
+  RECORD_PROPERTY_CHANGED: "Property changed",
+  RECORD_OWNER_CHANGED: "Record owner changed",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -107,6 +112,8 @@ const ACTION_LABELS: Record<string, string> = {
   SEND_EMAIL: "Send email",
   SEND_SMS: "Send SMS to patient",
   SEND_MEETING_INVITE: "Send meeting invite",
+  SET_PROPERTY: "Set a property value",
+  ASSIGN_OWNER: "Assign record owner",
 }
 
 // Actions that act on a specific referral — only offered for referral workflows.
@@ -440,6 +447,9 @@ function emptyTriggerConfig(type: string): Record<string, unknown> {
   if (type === "PIPELINE_CHANGED") return { fromPipelineId: "", toPipelineId: "", conditions: [] }
   if (type === "SURGERY_STATUS_CHANGED") return { fromStatus: "", toStatus: "", conditionGroups: [] }
   if (type === "SURGERY_CALL_ATTEMPTS_REACHED") return { count: 4, conditionGroups: [] }
+  if (type === "RECORD_CREATED") return { objectType: "", conditionGroups: [] }
+  if (type === "RECORD_PROPERTY_CHANGED") return { objectType: "", property: "", toValue: "", conditionGroups: [] }
+  if (type === "RECORD_OWNER_CHANGED") return { objectType: "", ownerId: "", conditionGroups: [] }
   return { conditions: [] } // REFERRAL_CREATED, DOCUMENT_UPLOADED, EMBED_REFERRAL_RECEIVED
 }
 
@@ -451,6 +461,8 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "ADD_TAG") return { tagId: "" }
   if (type === "SEND_EMAIL") return { recipients: [{ type: "all_admins", value: "" }], cc: [], bcc: [], subject: "", body: "" }
   if (type === "SEND_SMS") return { body: "" }
+  if (type === "SET_PROPERTY") return { property: "", value: "" }
+  if (type === "ASSIGN_OWNER") return { ownerId: "" }
   if (type === "SEND_MEETING_INVITE") return { recipients: [{ type: "all_admins", value: "" }], sender: "referrals", title: "", location: "", description: "", eventMode: "fixed", eventDatetime: null, eventField: "", eventTime: "", durationMinutes: 30 }
   return {}
 }
@@ -480,6 +492,47 @@ function TriggerConfigFields({
   }, [])
 
   function renderPrimary() {
+    if (type === "RECORD_CREATED") {
+      return <p className="text-xs text-slate-500">Fires whenever a new record is created on this object.</p>
+    }
+
+    if (type === "RECORD_PROPERTY_CHANGED") {
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Property to watch</label>
+            <StyledSelect className="w-full" value={(config.property as string) || ""} onChange={e => set("property", e.target.value)}>
+              <option value="">Any property</option>
+              {propDefs.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              {customDefs.length > 0 && <option disabled>──────────</option>}
+              {customDefs.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </StyledSelect>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Only when the new value is (optional)</label>
+            <input
+              className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+              value={(config.toValue as string) || ""}
+              onChange={e => set("toValue", e.target.value)}
+              placeholder="Any value"
+            />
+          </div>
+        </div>
+      )
+    }
+
+    if (type === "RECORD_OWNER_CHANGED") {
+      return (
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Only when assigned to (optional)</label>
+          <StyledSelect className="w-full" value={(config.ownerId as string) || ""} onChange={e => set("ownerId", e.target.value)}>
+            <option value="">Anyone</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+          </StyledSelect>
+        </div>
+      )
+    }
+
     if (type === "REFERRAL_CREATED" || type === "EMBED_REFERRAL_RECEIVED") {
       return (
         <div className="grid grid-cols-2 gap-3">
@@ -782,7 +835,7 @@ function RecipientRows({
 interface MessageTemplateOption { id: string; name: string; channel: string }
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, dateProps = [], templates = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, dateProps = [], templates = [], writableProps = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -792,8 +845,55 @@ function ActionConfigFields({
   tokens?: string[]
   dateProps?: PropertyDef[]
   templates?: MessageTemplateOption[]
+  // Properties of the workflow's object that SET_PROPERTY can write to.
+  writableProps?: PropertyDef[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
+
+  if (type === ("SET_PROPERTY" as AutomationAction)) {
+    const selected = writableProps.find(p => p.id === (config.property as string))
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Property</label>
+          <StyledSelect className="w-full" value={(config.property as string) || ""} onChange={e => set("property", e.target.value)}>
+            <option value="">Select a property…</option>
+            {writableProps.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </StyledSelect>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Set it to</label>
+          {selected?.options?.length ? (
+            <StyledSelect className="w-full" value={(config.value as string) || ""} onChange={e => set("value", e.target.value)}>
+              <option value="">Select a value…</option>
+              {selected.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </StyledSelect>
+          ) : (
+            <input
+              className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+              value={(config.value as string) ?? ""}
+              onChange={e => set("value", e.target.value)}
+              placeholder="Value (tokens like {record_name} work)"
+            />
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (type === ("ASSIGN_OWNER" as AutomationAction)) {
+    return (
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Owner</label>
+        <StyledSelect className="w-full" value={(config.ownerId as string) || ""} onChange={e => set("ownerId", e.target.value)}>
+          <option value="">— Unassigned —</option>
+          <option value="triggering_user">The user who triggered this</option>
+          {users.map(u => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+        </StyledSelect>
+      </div>
+    )
+  }
+
   // Sender choices for email/invite actions: the record owner, a shared mailbox,
   // or any user's integrated address (the value is that address).
   const workflowSenderOptions = (
@@ -1735,6 +1835,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
   const dateProps = propDefs.filter(p => p.type === "date")
+  const writableProps = [...propDefs, ...customDefs]
 
   function updateArm(armId: string, patch: Partial<import("@/lib/automation-graph").BranchArm>) {
     if (draft.kind !== "multi") return
@@ -1759,7 +1860,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} dateProps={dateProps} templates={templates} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} dateProps={dateProps} templates={templates} writableProps={writableProps} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -1936,17 +2037,23 @@ const OBJECT_BADGE_COLORS: Record<string, string> = {
 
 // ─── Full-page workflow editor (HubSpot-style) ───────────────────────────────
 
-export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [], customPropsByEntity = {}, templates = [] }: {
+export function WorkflowEditor({ editing, users, tags, practices, locations, pipelines = [], customPropsByEntity = {}, templates = [], customObjects = [] }: {
   editing: Automation | null
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]; pipelines?: Pipeline[]
   customPropsByEntity?: Record<string, CustomPropertyInput[]>
   templates?: MessageTemplateOption[]
+  customObjects?: (CustomWorkflowObject & { properties?: { id: string; name: string; type: string; options?: string[] }[] })[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState(editing?.name ?? "")
   const [description, setDescription] = useState(editing?.description ?? "")
-  const [objectKey, setObjectKey] = useState(workflowObjectFor(editing?.triggerType ?? "REFERRAL_CREATED").key)
+  const [objectKey, setObjectKey] = useState(
+    workflowObjectFor(
+      editing?.triggerType ?? "REFERRAL_CREATED",
+      (editing?.triggerConfig as Record<string, unknown> | undefined)?.objectType as string | undefined,
+    ).key,
+  )
   const [triggerType, setTriggerType] = useState<string>(editing?.triggerType ?? "REFERRAL_CREATED")
   const [triggerConfig, setTriggerConfig] = useState<Record<string, unknown>>(editing?.triggerConfig ?? emptyTriggerConfig("REFERRAL_CREATED"))
   const editingFlow = (editing?.flow ?? null) as AutomationFlow | null
@@ -1962,8 +2069,20 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const [triggerOpen, setTriggerOpen] = useState(false)
   const [error, setError] = useState("")
 
-  const objectDef = WORKFLOW_OBJECTS.find(o => o.key === objectKey) ?? WORKFLOW_OBJECTS[0]
-  const propDefs = OBJECT_PROPERTY_DEFS[objectKey] ?? REFERRAL_PROPERTY_DEFS
+  const allObjects = workflowObjectsWith(customObjects)
+  const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
+  // A custom object's properties come from its definition, not the static catalog.
+  const customObjectDef = customObjects.find(c => `CO:${c.key}` === objectKey)
+  const propDefs: PropertyDef[] = customObjectDef
+    ? (customObjectDef.properties ?? []).map(p => ({
+        id: p.id,
+        label: p.name,
+        type: (p.type === "NUMBER" ? "number" : p.type === "DATE" ? "date" : p.type === "CHECKBOX" ? "boolean"
+          : p.type === "DROPDOWN" || p.type === "MULTI_SELECT" ? "select" : "text") as PropertyDef["type"],
+        path: p.id,
+        options: (p.options ?? []).map(o => ({ value: o, label: o })),
+      }))
+    : OBJECT_PROPERTY_DEFS[objectKey] ?? REFERRAL_PROPERTY_DEFS
   const objectEntity = OBJECT_CUSTOM_ENTITY[objectKey]
   const customDefs = (objectEntity ? customPropsByEntity[objectEntity] ?? [] : []).map(customPropertyToDef)
   const objectActions = actionsForObject(objectKey)
@@ -1971,14 +2090,15 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
 
   function handleObjectChange(key: string) {
     setObjectKey(key)
-    const first = (WORKFLOW_OBJECTS.find(o => o.key === key) ?? WORKFLOW_OBJECTS[0]).triggers[0]
+    const first = (allObjects.find(o => o.key === key) ?? allObjects[0]).triggers[0]
     setTriggerType(first)
-    setTriggerConfig(emptyTriggerConfig(first))
+    setTriggerConfig({ ...emptyTriggerConfig(first), ...(isGenericTrigger(first) ? { objectType: key } : {}) })
   }
 
   function handleTriggerChange(t: string) {
     setTriggerType(t)
-    setTriggerConfig(emptyTriggerConfig(t))
+    // Generic triggers must remember which object they belong to.
+    setTriggerConfig({ ...emptyTriggerConfig(t), ...(isGenericTrigger(t) ? { objectType: objectKey } : {}) })
   }
 
   function handleSave() {
@@ -1991,7 +2111,8 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
       if (editing) {
         await updateAutomation(editing.id, {
           name: name.trim(), description: description.trim() || undefined,
-          triggerType: triggerType as AutomationTrigger, triggerConfig,
+          triggerType: triggerType as AutomationTrigger,
+          triggerConfig: isGenericTrigger(triggerType) ? { ...triggerConfig, objectType: objectKey } : triggerConfig,
           actionType: effectiveActionType, actionConfig: {},
           flow: null, graph: graph as unknown as Record<string, unknown>,
           isActive: editing.isActive,
@@ -1999,7 +2120,8 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
       } else {
         await createAutomation({
           name: name.trim(), description: description.trim() || undefined,
-          triggerType: triggerType as AutomationTrigger, triggerConfig,
+          triggerType: triggerType as AutomationTrigger,
+          triggerConfig: isGenericTrigger(triggerType) ? { ...triggerConfig, objectType: objectKey } : triggerConfig,
           actionType: effectiveActionType, actionConfig: {},
           flow: null, graph: graph as unknown as Record<string, unknown>,
         })
@@ -2100,7 +2222,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
               <div>
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Runs on object</label>
                 <StyledSelect className="w-full" value={objectKey} onChange={e => handleObjectChange(e.target.value)}>
-                  {WORKFLOW_OBJECTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  {allObjects.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
                 </StyledSelect>
               </div>
               <div>

@@ -1,7 +1,15 @@
 // Workflow object grouping — pure data, safe to import from both server
 // components (logs page) and client components (editor).
 
-export const WORKFLOW_OBJECTS: { key: string; label: string; triggers: string[] }[] = [
+// Object-agnostic triggers: every object gets these, including custom objects.
+// The object itself is stored in triggerConfig.objectType.
+export const GENERIC_TRIGGERS = ["RECORD_CREATED", "RECORD_PROPERTY_CHANGED", "RECORD_OWNER_CHANGED"]
+
+export function isGenericTrigger(trigger: string): boolean {
+  return GENERIC_TRIGGERS.includes(trigger)
+}
+
+const BUILTIN_OBJECTS: { key: string; label: string; triggers: string[] }[] = [
   {
     key: "REFERRAL",
     label: "Referral",
@@ -17,7 +25,28 @@ export const WORKFLOW_OBJECTS: { key: string; label: string; triggers: string[] 
   { key: "SURGERY",  label: "Surgery Case", triggers: ["SURGERY_STATUS_CHANGED", "SURGERY_CALL_ATTEMPTS_REACHED"] },
 ]
 
-export function workflowObjectFor(trigger: string): { key: string; label: string } {
+// Every object also offers the generic triggers.
+export const WORKFLOW_OBJECTS: { key: string; label: string; triggers: string[] }[] =
+  BUILTIN_OBJECTS.map(o => ({ ...o, triggers: [...o.triggers, ...GENERIC_TRIGGERS] }))
+
+// Custom objects are workflow objects too — they only have the generic triggers.
+export interface CustomWorkflowObject { key: string; singular: string; plural: string }
+
+export function workflowObjectsWith(customObjects: CustomWorkflowObject[] = []) {
+  return [
+    ...WORKFLOW_OBJECTS,
+    ...customObjects.map(c => ({ key: `CO:${c.key}`, label: c.singular, triggers: [...GENERIC_TRIGGERS] })),
+  ]
+}
+
+// A generic trigger belongs to whichever object the workflow names in its config,
+// so pass triggerConfig.objectType when the trigger is generic.
+export function workflowObjectFor(trigger: string, objectType?: string | null): { key: string; label: string } {
+  if (isGenericTrigger(trigger) && objectType) {
+    const builtin = WORKFLOW_OBJECTS.find(o => o.key === objectType)
+    if (builtin) return { key: builtin.key, label: builtin.label }
+    if (objectType.startsWith("CO:")) return { key: objectType, label: objectType.slice(3) }
+  }
   const obj = WORKFLOW_OBJECTS.find(o => o.triggers.includes(trigger))
   return obj ? { key: obj.key, label: obj.label } : { key: "REFERRAL", label: "Referral" }
 }
@@ -41,4 +70,7 @@ export const WORKFLOW_TRIGGER_LABELS: Record<string, string> = {
   PIPELINE_CHANGED: "Referral moved to pipeline",
   SURGERY_STATUS_CHANGED: "Surgery case status changed",
   SURGERY_CALL_ATTEMPTS_REACHED: "Surgery call attempts reached",
+  RECORD_CREATED: "Record created",
+  RECORD_PROPERTY_CHANGED: "Property changed",
+  RECORD_OWNER_CHANGED: "Record owner changed",
 }
