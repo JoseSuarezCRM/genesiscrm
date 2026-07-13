@@ -1,9 +1,20 @@
 import { prisma } from "@/lib/prisma"
+import type { CPEntity } from "@/lib/custom-property-entities"
 
-type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION"
+function delegateFor(type: CPEntity): any {
+  return ({
+    REFERRAL: prisma.referral,
+    PROVIDER: prisma.referringDoctor,
+    PRACTICE: prisma.referringPractice,
+    LOCATION: prisma.practiceLocation,
+    SURGERY: prisma.surgeryCase,
+    ACTIVITY: prisma.activity,
+    TASK: prisma.task,
+  } as any)[type]
+}
 
 export async function loadCustomPropertiesForDetail(
-  entityType: EntityType,
+  entityType: CPEntity,
   entityId: string
 ) {
   try {
@@ -13,29 +24,10 @@ export async function loadCustomPropertiesForDetail(
       orderBy: { createdAt: "asc" },
     })
 
-    // Get entity values
-    let entity: any = null
-    if (entityType === "REFERRAL") {
-      entity = await prisma.referral.findUnique({
-        where: { id: entityId },
-        select: { customProperties: true },
-      })
-    } else if (entityType === "PROVIDER") {
-      entity = await prisma.referringDoctor.findUnique({
-        where: { id: entityId },
-        select: { customProperties: true },
-      })
-    } else if (entityType === "LOCATION") {
-      entity = await prisma.practiceLocation.findUnique({
-        where: { id: entityId },
-        select: { customProperties: true },
-      })
-    } else {
-      entity = await prisma.referringPractice.findUnique({
-        where: { id: entityId },
-        select: { customProperties: true },
-      })
-    }
+    const entity = await delegateFor(entityType).findUnique({
+      where: { id: entityId },
+      select: { customProperties: true },
+    })
 
     const values = (entity?.customProperties as Record<string, any>) || {}
 

@@ -1,5 +1,7 @@
 "use client"
 
+import type { CPEntity } from "@/lib/custom-property-entities"
+
 import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Edit2, Check, X } from "lucide-react"
@@ -20,7 +22,7 @@ interface PropertyDisplay {
 }
 
 interface Props {
-  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION"
+  entityType: CPEntity
   entityId: string
   properties: Array<CustomProperty & { display: PropertyDisplay; value?: any }>
 }

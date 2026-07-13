@@ -4,11 +4,25 @@ import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { cpMeta, type CPEntity } from "@/lib/custom-property-entities"
+
+// One delegate per object that carries a customProperties JSON bag.
+function cpDelegate(type: CPEntity): any {
+  return ({
+    REFERRAL: prisma.referral,
+    PROVIDER: prisma.referringDoctor,
+    PRACTICE: prisma.referringPractice,
+    LOCATION: prisma.practiceLocation,
+    SURGERY: prisma.surgeryCase,
+    ACTIVITY: prisma.activity,
+    TASK: prisma.task,
+  } as any)[type]
+}
 
 interface CreateCustomPropertyInput {
   name: string
   type: "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL"
-  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION"
+  entityType: CPEntity
   required?: boolean
   description?: string
   options?: string[]
@@ -26,7 +40,7 @@ async function requireAdmin() {
   }
 }
 
-export async function listCustomProperties(entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION") {
+export async function listCustomProperties(entityType: CPEntity) {
   return prisma.customProperty.findMany({
     where: { entityType },
     orderBy: { createdAt: "asc" },
@@ -99,42 +113,25 @@ export async function deleteCustomProperty(id: string) {
 }
 
 export async function saveCustomPropertyValue(
-  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION",
+  entityType: CPEntity,
   entityId: string,
   customPropertyId: string,
   value: any
 ) {
   // Filling a property value is editing that record — gate by the object's Edit access.
-  const objectFor = { REFERRAL: "REFERRALS", PROVIDER: "PROVIDERS", PRACTICE: "PRACTICES", LOCATION: "LOCATIONS" } as const
-  await requireAccess(objectFor[entityType], "EDIT")
+  const meta = cpMeta(entityType)
+  await requireAccess(meta.object, "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
   try {
-    if (entityType === "REFERRAL") {
-      const current = await prisma.referral.findUnique({ where: { id: entityId }, select: { customProperties: true } })
-      const props = (current?.customProperties as Record<string, any>) || {}
-      props[customPropertyId] = value
-      await prisma.referral.update({ where: { id: entityId }, data: { customProperties: props } })
-    } else if (entityType === "PROVIDER") {
-      const current = await prisma.referringDoctor.findUnique({ where: { id: entityId }, select: { customProperties: true } })
-      const props = (current?.customProperties as Record<string, any>) || {}
-      props[customPropertyId] = value
-      await prisma.referringDoctor.update({ where: { id: entityId }, data: { customProperties: props } })
-    } else if (entityType === "LOCATION") {
-      const current = await prisma.practiceLocation.findUnique({ where: { id: entityId }, select: { customProperties: true } })
-      const props = (current?.customProperties as Record<string, any>) || {}
-      props[customPropertyId] = value
-      await prisma.practiceLocation.update({ where: { id: entityId }, data: { customProperties: props } })
-    } else {
-      const current = await prisma.referringPractice.findUnique({ where: { id: entityId }, select: { customProperties: true } })
-      const props = (current?.customProperties as Record<string, any>) || {}
-      props[customPropertyId] = value
-      await prisma.referringPractice.update({ where: { id: entityId }, data: { customProperties: props } })
-    }
+    const model = cpDelegate(entityType)
+    const current = await model.findUnique({ where: { id: entityId }, select: { customProperties: true } })
+    const props = (current?.customProperties as Record<string, any>) || {}
+    props[customPropertyId] = value
+    await model.update({ where: { id: entityId }, data: { customProperties: props } })
 
-    const basePath = entityType === "REFERRAL" ? "referrals" : entityType === "PROVIDER" ? "referring-doctors" : entityType === "LOCATION" ? "locations" : "practices"
-    revalidatePath(`/${basePath}/${entityId}`)
+    revalidatePath(`/${meta.basePath}/${entityId}`)
     return { success: true }
   } catch (err: any) {
     return { error: err.message }

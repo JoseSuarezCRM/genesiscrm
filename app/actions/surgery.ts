@@ -53,6 +53,8 @@ export async function getSurgeryCase(id: string) {
       },
       documents: { orderBy: { createdAt: "desc" } },
       createdBy: { select: { name: true, email: true } },
+      owner: { select: { id: true, name: true, email: true } },
+      updatedBy: { select: { name: true, email: true } },
     },
   })
 }
@@ -85,6 +87,7 @@ export async function createSurgeryCase(data: {
       surgeryDate: surgeryDate ? new Date(surgeryDate) : null,
       creationDate: new Date(),
       createdById: session.user.id,
+      ownerId: session.user.id,
     },
   })
 
@@ -126,7 +129,7 @@ export async function updateSurgeryCase(
 
   // Only write surgeryDate when the caller actually provided it; otherwise a
   // partial update (e.g. a status-only change) would null out the date.
-  const updateData: Record<string, unknown> = { ...rest }
+  const updateData: Record<string, unknown> = { ...rest, updatedById: session.user.id }
   if ("surgeryDate" in data) {
     updateData.surgeryDate = surgeryDate ? new Date(surgeryDate) : null
   }

@@ -12,6 +12,7 @@ import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordOwnerCard from "@/components/record-owner-card"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
@@ -35,6 +36,9 @@ export default async function LocationDetailPage({ params }: Props) {
       where: { id: params.id },
       include: {
         practice: { select: { id: true, name: true } },
+        owner: { select: { id: true, name: true, email: true } },
+        createdBy: { select: { name: true, email: true } },
+        updatedBy: { select: { name: true, email: true } },
         doctors: {
           include: {
             doctor: { select: { id: true, name: true, title: true, specialty: true, _count: { select: { referrals: true } } } },
@@ -92,7 +96,21 @@ export default async function LocationDetailPage({ params }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <LocationInfoEditor location={location as any} practices={practices} canEdit={canEdit} />
+        <div className="space-y-6">
+          <LocationInfoEditor location={location as any} practices={practices} canEdit={canEdit} />
+          <RecordOwnerCard
+            type="LOCATION"
+            recordId={location.id}
+            ownerLabel="Location Owner"
+            ownerId={location.ownerId}
+            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+            createdByName={location.createdBy?.name ?? location.createdBy?.email ?? null}
+            createdAt={location.createdAt}
+            updatedByName={location.updatedBy?.name ?? location.updatedBy?.email ?? null}
+            updatedAt={location.updatedAt}
+            canEdit={canEdit}
+          />
+        </div>
 
         <Card>
           <CardHeader><CardTitle className="text-base">Referral Summary</CardTitle></CardHeader>

@@ -59,6 +59,8 @@ export async function createPractice(data: unknown) {
       phone: parsed.data.phone || null,
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
+      ownerId: (session?.user as any)?.id ?? null,
+      createdById: (session?.user as any)?.id ?? null,
     },
   })
 
@@ -79,6 +81,7 @@ export async function updatePractice(id: string, data: unknown) {
       phone: parsed.data.phone || null,
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
+      updatedById: (session?.user as any)?.id ?? null,
     },
   })
 
@@ -157,6 +160,8 @@ export async function createLocation(data: unknown) {
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
       practiceId: parsed.data.practiceId,
+      ownerId: (session?.user as any)?.id ?? null,
+      createdById: (session?.user as any)?.id ?? null,
     },
   })
 
@@ -179,6 +184,7 @@ export async function updateLocation(id: string, data: unknown) {
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
       practiceId: parsed.data.practiceId,
+      updatedById: (session?.user as any)?.id ?? null,
     },
   })
 
@@ -402,6 +408,8 @@ export async function createDoctor(data: unknown) {
       email: rest.email || null,
       contactType: rest.contactType,
       practiceId: rest.practiceId,
+      ownerId: (session?.user as any)?.id ?? null,
+      createdById: (session?.user as any)?.id ?? null,
       locations: {
         create: locationIds.map((locationId) => ({ locationId })),
       },
@@ -432,6 +440,7 @@ export async function updateDoctor(id: string, data: unknown) {
       email: rest.email || null,
       contactType: rest.contactType,
       practiceId: rest.practiceId,
+      updatedById: (session?.user as any)?.id ?? null,
       locations: {
         deleteMany: {},
         create: locationIds.map((locationId) => ({ locationId })),

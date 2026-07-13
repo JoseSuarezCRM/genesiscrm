@@ -1,5 +1,7 @@
 "use client"
 
+import { CP_ENTITIES } from "@/lib/custom-property-entities"
+
 import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { createCustomProperty, updateCustomProperty, deleteCustomProperty } from "@/app/actions/custom-properties"
@@ -17,10 +19,7 @@ interface CustomProperty {
 }
 
 interface Props {
-  referralProps: CustomProperty[]
-  providerProps: CustomProperty[]
-  practiceProps: CustomProperty[]
-  locationProps: CustomProperty[]
+  propsByEntity: Record<string, CustomProperty[]>
 }
 
 const PROPERTY_TYPES = [
@@ -236,20 +235,16 @@ function PropertyList({
   )
 }
 
-export default function CustomPropertyManager({
-  referralProps,
-  providerProps,
-  practiceProps,
-  locationProps,
-}: Props) {
+export default function CustomPropertyManager({ propsByEntity }: Props) {
   const [activeForm, setActiveForm] = useState<string | null>(null)
 
-  const sections = [
-    { type: "REFERRAL", label: "Referrals", icon: "📋", props: referralProps },
-    { type: "PROVIDER", label: "Providers", icon: "👨‍⚕️", props: providerProps },
-    { type: "PRACTICE", label: "Practices", icon: "🏥", props: practiceProps },
-    { type: "LOCATION", label: "Locations", icon: "📍", props: locationProps },
-  ]
+  // Every object supports custom properties (New Object Playbook).
+  const sections = CP_ENTITIES.map((e) => ({
+    type: e.type,
+    label: e.label,
+    icon: e.icon,
+    props: propsByEntity[e.type] ?? [],
+  }))
 
   return (
     <div className="space-y-6">

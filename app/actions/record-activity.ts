@@ -65,6 +65,10 @@ async function contactInfoFor(recordType: string, recordId: string): Promise<{ e
     const l = await prisma.practiceLocation.findUnique({ where: { id: recordId }, select: { phone: true } })
     return { emails: [], phones: [l?.phone].filter(Boolean) as string[] }
   }
+  if (recordType === "SURGERY") {
+    const s = await (prisma as any).surgeryCase.findUnique({ where: { id: recordId }, select: { email: true } })
+    return { emails: [s?.email].filter(Boolean) as string[], phones: [] }
+  }
   if (recordType.startsWith("CO:")) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) } })
     const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId } })

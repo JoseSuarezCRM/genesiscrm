@@ -8,6 +8,14 @@ import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import SurgeryDetailClient from "@/components/surgery-detail-client"
+import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordOwnerCard from "@/components/record-owner-card"
+import RecordActivityFeed from "@/components/record-activity-feed"
+import CustomPropertiesDisplay from "@/components/custom-properties-display"
+import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
+import { listRecordActivities } from "@/app/actions/record-activity"
+import { userCanLevel } from "@/lib/permissions"
+import { prisma } from "@/lib/prisma"
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: "bg-zinc-100 text-zinc-700",
@@ -38,6 +46,14 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
 
   const surgeryCase = await getSurgeryCase(params.id)
   if (!surgeryCase) notFound()
+
+  const canEdit = userCanLevel(session.user as any, "SURGERY", "EDIT")
+  const [customProperties, activityItems, feedUsers] = await Promise.all([
+    loadCustomPropertiesForDetail("SURGERY", params.id),
+    listRecordActivities("SURGERY", params.id),
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+  ])
+  const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
@@ -75,6 +91,25 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
             </Button>
           </form>
         </div>
+
+        <div className="mt-4">
+          <RecordEngagementBar recordType="SURGERY" recordId={params.id} users={userOptions} canEdit={canEdit} />
+        </div>
+      </div>
+
+      <div className="max-w-md">
+        <RecordOwnerCard
+          type="SURGERY"
+          recordId={params.id}
+          ownerLabel="Surgery Case Owner"
+          ownerId={surgeryCase.ownerId ?? null}
+          users={userOptions}
+          createdByName={surgeryCase.createdBy?.name ?? surgeryCase.createdBy?.email ?? null}
+          createdAt={surgeryCase.createdAt}
+          updatedByName={surgeryCase.updatedBy?.name ?? surgeryCase.updatedBy?.email ?? null}
+          updatedAt={surgeryCase.updatedAt}
+          canEdit={canEdit}
+        />
       </div>
 
       {/* From-file info */}
@@ -95,6 +130,28 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
 
       {/* Editable clinical + scheduling fields, call tracker, documents */}
       <SurgeryDetailClient surgeryCase={surgeryCase} />
+
+      {/* Custom Properties */}
+      {customProperties.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <CustomPropertiesDisplay entityType="SURGERY" entityId={params.id} properties={customProperties as any} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Activity feed */}
+      <div>
+        <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
+        <RecordActivityFeed
+          recordType="SURGERY"
+          recordId={params.id}
+          items={activityItems as any}
+          users={userOptions}
+          canEdit={canEdit}
+          showActions={false}
+        />
+      </div>
     </div>
   )
 }

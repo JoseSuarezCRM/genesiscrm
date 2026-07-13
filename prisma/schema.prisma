@@ -145,6 +145,9 @@ enum CustomPropertyEntityType {
   PROVIDER
   PRACTICE
   LOCATION
+  SURGERY
+  ACTIVITY
+  TASK
 }
 
 model CustomProperty {
@@ -344,6 +347,21 @@ model User {
   customRecordsOwned    CustomObjectRecord[] @relation("CustomObjectRecordOwner")
   customObjectViews     CustomObjectView[]   @relation("CustomObjectViewCreatedBy")
   recordNotes           RecordNote[]         @relation("RecordNoteCreatedBy")
+
+  // Record ownership + audit trail on the built-in objects
+  providersOwned        ReferringDoctor[]    @relation("ProviderOwner")
+  providersCreated      ReferringDoctor[]    @relation("ProviderCreatedBy")
+  providersUpdated      ReferringDoctor[]    @relation("ProviderUpdatedBy")
+  practicesOwned        ReferringPractice[]  @relation("PracticeOwner")
+  practicesCreated      ReferringPractice[]  @relation("PracticeCreatedBy")
+  practicesUpdated      ReferringPractice[]  @relation("PracticeUpdatedBy")
+  locationsOwned        PracticeLocation[]   @relation("LocationOwner")
+  locationsCreated      PracticeLocation[]   @relation("LocationCreatedBy")
+  locationsUpdated      PracticeLocation[]   @relation("LocationUpdatedBy")
+  surgeryCasesOwned     SurgeryCase[]        @relation("SurgeryCaseOwner")
+  surgeryCasesUpdated   SurgeryCase[]        @relation("SurgeryCaseUpdatedBy")
+  activitiesUpdated     Activity[]           @relation("ActivityUpdatedBy")
+  tasksUpdated          Task[]               @relation("TaskUpdatedBy")
 }
 
 model Team {
@@ -373,7 +391,14 @@ model ReferringPractice {
   fax                String?
   address            String?
   customProperties   Json               @default("{}") // custom property values
+  ownerId            String?
+  owner              User?              @relation("PracticeOwner", fields: [ownerId], references: [id])
+  createdById        String?
+  createdBy          User?              @relation("PracticeCreatedBy", fields: [createdById], references: [id])
+  updatedById        String?
+  updatedBy          User?              @relation("PracticeUpdatedBy", fields: [updatedById], references: [id])
   createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @default(now()) @updatedAt
   locations          PracticeLocation[]
   doctors            ReferringDoctor[]
   referrals          Referral[]
@@ -393,7 +418,15 @@ model PracticeLocation {
   doctors    DoctorLocation[]
   referrals  Referral[]
   activities Activity[]
-  createdAt  DateTime          @default(now())
+
+  ownerId     String?
+  owner       User?    @relation("LocationOwner", fields: [ownerId], references: [id])
+  createdById String?
+  createdBy   User?    @relation("LocationCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?    @relation("LocationUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 }
 
 enum ContactType {
@@ -419,7 +452,15 @@ model ReferringDoctor {
   referrals          Referral[]
   providerNotes      ProviderNote[]
   activities         ActivityProvider[]
-  createdAt          DateTime           @default(now())
+
+  ownerId     String?
+  owner       User?    @relation("ProviderOwner", fields: [ownerId], references: [id])
+  createdById String?
+  createdBy   User?    @relation("ProviderCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?    @relation("ProviderUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 }
 
 // Join table: doctor <-> location (many-to-many)
@@ -644,6 +685,9 @@ model Task {
   assignedTo    User?         @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
   referralId    String?
   referral      Referral?     @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  customProperties Json       @default("{}") // custom property values
+  updatedById   String?
+  updatedBy     User?         @relation("TaskUpdatedBy", fields: [updatedById], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   notifications Notification[]
@@ -734,9 +778,13 @@ model Activity {
   frontDesk   String?
   flyer       String?
   notes       String?
+  customProperties Json          @default("{}") // custom property values
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?              @relation("ActivityUpdatedBy", fields: [updatedById], references: [id])
   createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @default(now()) @updatedAt
   providers   ActivityProvider[]
   tags        ActivityTag[]
 
@@ -1218,8 +1266,13 @@ model SurgeryCase {
   language          String?        @default("EN")
   email             String?
   notes             String?
+  customProperties  Json           @default("{}") // custom property values
+  ownerId           String?
+  owner             User?          @relation("SurgeryCaseOwner", fields: [ownerId], references: [id])
   createdById       String?
   createdBy         User?          @relation("SurgeryCaseCreatedBy", fields: [createdById], references: [id])
+  updatedById       String?
+  updatedBy         User?          @relation("SurgeryCaseUpdatedBy", fields: [updatedById], references: [id])
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   callAttempts      SurgeryCallAttempt[]

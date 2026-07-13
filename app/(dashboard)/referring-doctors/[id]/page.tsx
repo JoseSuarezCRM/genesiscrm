@@ -11,6 +11,7 @@ import { formatDate } from "@/lib/utils"
 import ProviderInfoEditor from "@/components/provider-info-editor"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordOwnerCard from "@/components/record-owner-card"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
@@ -36,6 +37,9 @@ export default async function ProviderDetailPage({ params }: Props) {
       where: { id: params.id },
       include: {
         practice: true,
+        owner: { select: { id: true, name: true, email: true } },
+        createdBy: { select: { name: true, email: true } },
+        updatedBy: { select: { name: true, email: true } },
         locations: { include: { location: true } },
         referrals: { orderBy: { referralDate: "desc" } },
         providerNotes: {
@@ -92,11 +96,25 @@ export default async function ProviderDetailPage({ params }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProviderInfoEditor
-          provider={provider as any}
-          allPractices={allPractices as any}
-          isAdmin={isAdmin}
-        />
+        <div className="space-y-6">
+          <ProviderInfoEditor
+            provider={provider as any}
+            allPractices={allPractices as any}
+            isAdmin={isAdmin}
+          />
+          <RecordOwnerCard
+            type="PROVIDER"
+            recordId={provider.id}
+            ownerLabel="Provider Owner"
+            ownerId={provider.ownerId}
+            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+            createdByName={provider.createdBy?.name ?? provider.createdBy?.email ?? null}
+            createdAt={provider.createdAt}
+            updatedByName={provider.updatedBy?.name ?? provider.updatedBy?.email ?? null}
+            updatedAt={provider.updatedAt}
+            canEdit={isAdmin}
+          />
+        </div>
 
         {/* Referral Summary */}
         <Card>

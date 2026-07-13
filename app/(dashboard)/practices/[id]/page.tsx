@@ -9,6 +9,7 @@ import PracticeDetailClient from "@/components/practice-detail-client"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordOwnerCard from "@/components/record-owner-card"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
@@ -22,6 +23,9 @@ export default async function PracticeDetailPage({ params }: Props) {
       where: { id: params.id },
       include: {
         _count: { select: { referrals: true } },
+        owner: { select: { id: true, name: true, email: true } },
+        createdBy: { select: { name: true, email: true } },
+        updatedBy: { select: { name: true, email: true } },
         locations: {
           orderBy: { name: "asc" },
           include: { _count: { select: { referrals: true } } },
@@ -78,6 +82,21 @@ export default async function PracticeDetailPage({ params }: Props) {
             canEdit={isAdmin}
           />
         </div>
+      </div>
+
+      <div className="max-w-md">
+        <RecordOwnerCard
+          type="PRACTICE"
+          recordId={practice.id}
+          ownerLabel="Practice Owner"
+          ownerId={practice.ownerId}
+          users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+          createdByName={practice.createdBy?.name ?? practice.createdBy?.email ?? null}
+          createdAt={practice.createdAt}
+          updatedByName={practice.updatedBy?.name ?? practice.updatedBy?.email ?? null}
+          updatedAt={practice.updatedAt}
+          canEdit={isAdmin}
+        />
       </div>
 
       <PracticeDetailClient practice={practice as any} referrals={referrals as any} isAdmin={isAdmin} customProperties={customProperties} />
