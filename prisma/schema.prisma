@@ -97,6 +97,10 @@ enum AutomationTrigger {
   RECORD_CREATED
   RECORD_PROPERTY_CHANGED
   RECORD_OWNER_CHANGED
+  // Engagement triggers
+  SMS_RECEIVED       // inbound text from a patient
+  ENGAGEMENT_LOGGED  // note / call / meeting logged on a record
+  TASK_OVERDUE       // task past its due date and still open
 }
 
 enum AutomationAction {

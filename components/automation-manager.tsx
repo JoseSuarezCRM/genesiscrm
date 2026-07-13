@@ -101,6 +101,9 @@ const TRIGGER_LABELS: Record<string, string> = {
   RECORD_CREATED: "Record created",
   RECORD_PROPERTY_CHANGED: "Property changed",
   RECORD_OWNER_CHANGED: "Record owner changed",
+  SMS_RECEIVED: "Patient replies by SMS",
+  ENGAGEMENT_LOGGED: "Note / call / meeting logged",
+  TASK_OVERDUE: "Task is overdue",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -450,6 +453,9 @@ function emptyTriggerConfig(type: string): Record<string, unknown> {
   if (type === "RECORD_CREATED") return { objectType: "", conditionGroups: [] }
   if (type === "RECORD_PROPERTY_CHANGED") return { objectType: "", property: "", toValue: "", conditionGroups: [] }
   if (type === "RECORD_OWNER_CHANGED") return { objectType: "", ownerId: "", conditionGroups: [] }
+  if (type === "ENGAGEMENT_LOGGED") return { objectType: "", kind: "", conditionGroups: [] }
+  if (type === "SMS_RECEIVED") return { keyword: "", matchType: "contains", conditionGroups: [] }
+  if (type === "TASK_OVERDUE") return { priority: "", conditionGroups: [] }
   return { conditions: [] } // REFERRAL_CREATED, DOCUMENT_UPLOADED, EMBED_REFERRAL_RECEIVED
 }
 
@@ -517,6 +523,57 @@ function TriggerConfigFields({
               placeholder="Any value"
             />
           </div>
+        </div>
+      )
+    }
+
+    if (type === "ENGAGEMENT_LOGGED") {
+      return (
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Engagement type</label>
+          <StyledSelect className="w-full" value={(config.kind as string) || ""} onChange={e => set("kind", e.target.value)}>
+            <option value="">Any (note, call or meeting)</option>
+            <option value="NOTE">Note</option>
+            <option value="CALL">Call</option>
+            <option value="MEETING">Meeting</option>
+          </StyledSelect>
+        </div>
+      )
+    }
+
+    if (type === "SMS_RECEIVED") {
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Message contains (optional)</label>
+            <input
+              className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+              value={(config.keyword as string) || ""}
+              onChange={e => set("keyword", e.target.value)}
+              placeholder="Any message"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Match</label>
+            <StyledSelect className="w-full" value={(config.matchType as string) || "contains"} onChange={e => set("matchType", e.target.value)}>
+              <option value="contains">contains</option>
+              <option value="exact">is exactly</option>
+              <option value="starts_with">starts with</option>
+            </StyledSelect>
+          </div>
+        </div>
+      )
+    }
+
+    if (type === "TASK_OVERDUE") {
+      return (
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Only for priority (optional)</label>
+          <StyledSelect className="w-full" value={(config.priority as string) || ""} onChange={e => set("priority", e.target.value)}>
+            <option value="">Any priority</option>
+            {["LOW", "NORMAL", "HIGH", "URGENT"].map(p => <option key={p} value={p}>{p[0] + p.slice(1).toLowerCase()}</option>)}
+          </StyledSelect>
+          <p className="text-xs text-slate-400 mt-1">Checked once a day; each task fires this workflow only once.</p>
         </div>
       )
     }

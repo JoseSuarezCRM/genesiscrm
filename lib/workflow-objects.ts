@@ -3,7 +3,7 @@
 
 // Object-agnostic triggers: every object gets these, including custom objects.
 // The object itself is stored in triggerConfig.objectType.
-export const GENERIC_TRIGGERS = ["RECORD_CREATED", "RECORD_PROPERTY_CHANGED", "RECORD_OWNER_CHANGED"]
+export const GENERIC_TRIGGERS = ["RECORD_CREATED", "RECORD_PROPERTY_CHANGED", "RECORD_OWNER_CHANGED", "ENGAGEMENT_LOGGED"]
 
 export function isGenericTrigger(trigger: string): boolean {
   return GENERIC_TRIGGERS.includes(trigger)
@@ -17,12 +17,14 @@ const BUILTIN_OBJECTS: { key: string; label: string; triggers: string[] }[] = [
       "REFERRAL_CREATED", "REFERRAL_STATUS_CHANGED", "REFERRAL_ASSIGNED", "REFERRAL_NO_ACTIVITY",
       "APPOINTMENT_UPCOMING", "APPOINTMENT_OVERDUE", "REFERRAL_STALE", "CALL_ATTEMPTS_REACHED",
       "TAG_ADDED", "DOCUMENT_UPLOADED", "AUTH_STATUS_CHANGED", "EMBED_REFERRAL_RECEIVED", "PIPELINE_CHANGED",
+      "SMS_RECEIVED",
     ],
   },
   { key: "PROVIDER", label: "Provider",     triggers: ["PROVIDER_REFERRAL_COUNT"] },
   { key: "PRACTICE", label: "Practice",     triggers: ["PRACTICE_REFERRAL_COUNT"] },
   { key: "LOCATION", label: "Location",     triggers: ["LOCATION_REFERRAL_COUNT"] },
   { key: "SURGERY",  label: "Surgery Case", triggers: ["SURGERY_STATUS_CHANGED", "SURGERY_CALL_ATTEMPTS_REACHED"] },
+  { key: "TASK",     label: "Task",         triggers: ["TASK_OVERDUE"] },
 ]
 
 // Every object also offers the generic triggers.
@@ -73,4 +75,7 @@ export const WORKFLOW_TRIGGER_LABELS: Record<string, string> = {
   RECORD_CREATED: "Record created",
   RECORD_PROPERTY_CHANGED: "Property changed",
   RECORD_OWNER_CHANGED: "Record owner changed",
+  SMS_RECEIVED: "Patient replies by SMS",
+  ENGAGEMENT_LOGGED: "Note / call / meeting logged",
+  TASK_OVERDUE: "Task is overdue",
 }

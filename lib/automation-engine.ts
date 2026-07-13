@@ -1127,6 +1127,7 @@ export async function runScheduledTriggers() {
   await runTrigger_AppointmentUpcoming()
   await runTrigger_AppointmentOverdue()
   await runTrigger_ReferralStale()
+  await runTrigger_TaskOverdue()
   await runDueWorkflowResumes()
 }
 
@@ -1403,4 +1404,104 @@ export async function runTrigger_RecordOwnerChanged(
     (cfg) => !cfg.ownerId || cfg.ownerId === ownerId,
     triggeredByUserId,
   )
+}
+
+// ─── Engagement triggers ──────────────────────────────────────────────────────
+
+function smsMatches(body: string, keyword: string, mode: string): boolean {
+  if (!keyword) return true
+  const b = body.toLowerCase().trim()
+  const k = keyword.toLowerCase().trim()
+  if (mode === "exact") return b === k
+  if (mode === "starts_with") return b.startsWith(k)
+  return b.includes(k)
+}
+
+// A patient texted back. If the thread is tied to a referral, the workflow's
+// referral actions operate on it; otherwise only the generic actions apply.
+export async function runTrigger_SmsReceived(threadId: string, body: string) {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "SMS_RECEIVED" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const thread = await prisma.smsThread.findUnique({ where: { id: threadId } })
+  if (!thread) return
+
+  const referral = thread.referralId ? await fetchReferralForEngine(thread.referralId) : null
+  const vars: TemplateVars = {
+    patient_name: referral ? `${referral.patientFirstName} ${referral.patientLastName}` : (thread.contactName ?? "the patient"),
+    patient_first_name: referral?.patientFirstName ?? (thread.contactName ?? "there"),
+    provider_name: referral?.referringDoctor?.name ?? "",
+    practice_name: referral?.referringPractice?.name ?? "",
+    record_name: thread.contactName ?? thread.phone,
+    ...(thread.referralId ? { referral_url: buildReferralUrl(thread.referralId) } : {}),
+  }
+
+  for (const auto of automations) {
+    const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
+    if (!smsMatches(body, (cfg.keyword as string) ?? "", (cfg.matchType as string) ?? "contains")) continue
+    if (referral && !checkConditions(referral as unknown as Record<string, unknown>, cfg)) continue
+
+    const ref: RecordRef | null = thread.referralId ? { type: "REFERRAL", id: thread.referralId } : null
+    const log = await executeAction(auto, thread.referralId ?? null, vars, undefined, referral as any, ref)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, ...runData(log, "sms", threadId, `Inbound SMS from ${thread.phone}`) },
+    }).catch(() => {})
+  }
+}
+
+// A note / call / meeting was logged on a record (any object).
+export async function runTrigger_EngagementLogged(
+  recordType: string,
+  recordId: string,
+  kind: "NOTE" | "CALL" | "MEETING",
+  triggeredByUserId?: string,
+) {
+  await runRecordTrigger(
+    "ENGAGEMENT_LOGGED" as AutomationTrigger,
+    recordType, recordId, `${kind[0]}${kind.slice(1).toLowerCase()} logged`, {},
+    (cfg) => !cfg.kind || cfg.kind === kind,
+    triggeredByUserId,
+  )
+}
+
+// Swept by the automations cron: tasks past due and still open. A workflow fires
+// once per task — a previous run for the same task is treated as already handled.
+export async function runTrigger_TaskOverdue() {
+  const automations = await prisma.automation.findMany({
+    where: { triggerType: "TASK_OVERDUE" as AutomationTrigger, isActive: true },
+  })
+  if (!automations.length) return
+
+  const overdue = await prisma.task.findMany({
+    where: { dueDate: { lt: new Date() }, status: { not: "DONE" } },
+    include: { assignedTo: { select: { name: true, email: true } }, referral: { select: { id: true, patientFirstName: true, patientLastName: true } } },
+    take: 200,
+  })
+  if (!overdue.length) return
+
+  for (const auto of automations) {
+    const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
+    for (const task of overdue) {
+      if (cfg.priority && task.priority !== cfg.priority) continue
+
+      const already = await prisma.automationRun.findFirst({
+        where: { automationId: auto.id, contextType: "task", contextId: task.id },
+        select: { id: true },
+      })
+      if (already) continue
+
+      const vars: TemplateVars = {
+        record_name: task.title,
+        patient_name: task.referral ? `${task.referral.patientFirstName} ${task.referral.patientLastName}` : "",
+        ...(task.referralId ? { referral_url: buildReferralUrl(task.referralId) } : {}),
+      }
+      const ref: RecordRef = { type: "TASK", id: task.id }
+      const log = await executeAction(auto, task.referralId ?? null, vars, undefined, task as any, ref)
+      await prisma.automationRun.create({
+        data: { automationId: auto.id, ...runData(log, "task", task.id, `Task overdue: ${task.title}`) },
+      }).catch(() => {})
+    }
+  }
 }

@@ -8,6 +8,7 @@ import { buildIcs } from "@/lib/ics"
 import { sendSMS } from "@/lib/twilio"
 import { resolveMyFromEmail } from "@/app/actions/account"
 import { revalidatePath } from "next/cache"
+import { runTrigger_EngagementLogged } from "@/lib/automation-engine"
 
 export type ActivityKind = "NOTE" | "TASK" | "ACTIVITY" | "EMAIL" | "SMS" | "MEETING" | "CALL"
 
@@ -196,6 +197,7 @@ export async function addRecordNote(recordType: string, recordId: string, body: 
   const uid = (session!.user as any).id
   if (!body.trim()) return { error: "Note is empty." }
   await (prisma as any).recordNote.create({ data: { recordType, recordId, body: body.trim(), createdById: uid } })
+  await runTrigger_EngagementLogged(recordType, recordId, "NOTE", uid).catch(() => {})
   const p = pathFor(recordType, recordId)
   if (p) revalidatePath(p)
   return { success: true }
@@ -293,6 +295,7 @@ export async function logCall(recordType: string, recordId: string, data: { body
       createdById: uid,
     },
   })
+  await runTrigger_EngagementLogged(recordType, recordId, "CALL", uid).catch(() => {})
   const p = pathFor(recordType, recordId)
   if (p) revalidatePath(p)
   return { success: true }
@@ -347,6 +350,7 @@ export async function logMeeting(recordType: string, recordId: string, data: {
       createdById: uid,
     },
   })
+  await runTrigger_EngagementLogged(recordType, recordId, "MEETING", uid).catch(() => {})
 
   const p = pathFor(recordType, recordId)
   if (p) revalidatePath(p)

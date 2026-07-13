@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import twilio from "twilio"
 import { prisma } from "@/lib/prisma"
+import { runTrigger_SmsReceived } from "@/lib/automation-engine"
 
 function matchesRule(body: string, trigger: string, matchType: string): boolean {
   const text = body.trim().toLowerCase()
@@ -90,6 +91,9 @@ export async function POST(req: NextRequest) {
         data:  { lastMessageAt: new Date(), unreadCount: { increment: 1 } },
       }),
     ])
+
+    // ── Workflows that listen for inbound texts ────────────────────────────
+    await runTrigger_SmsReceived(thread.id, messageBody).catch((e) => console.error("[twilio] SMS_RECEIVED trigger failed:", e))
 
     // ── Check SMS auto-response rules ──────────────────────────────────────
     const rules = await prisma.smsAutoResponse.findMany({
