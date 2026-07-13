@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CallOutcome } from "@prisma/client"
-import { runTrigger_SurgeryStatusChanged, runTrigger_SurgeryCallAttemptsReached } from "@/lib/automation-engine"
+import { runTrigger_SurgeryStatusChanged, runTrigger_SurgeryCallAttemptsReached, runTrigger_RecordCreated, runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 import { type SurgeryFilters, SURGERY_PAGE_SIZE, buildSurgeryWhere, surgeryOrderBy } from "@/lib/surgery-query"
 import { surgeryServerFilterFields } from "@/lib/surgery-server-fields"
 
@@ -92,6 +92,7 @@ export async function createSurgeryCase(data: {
     },
   })
 
+  await runTrigger_RecordCreated("SURGERY", created.id, session.user.id).catch(() => {})
   revalidatePath("/surgery")
   return { success: true, id: created.id }
 }
@@ -142,6 +143,12 @@ export async function updateSurgeryCase(
 
   if (data.status && prev?.status && prev.status !== data.status) {
     await runTrigger_SurgeryStatusChanged(id, prev.status, data.status, session.user.id).catch(() => {})
+  }
+
+  // Generic property-changed trigger — covers any field a workflow watches.
+  const changed = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined))
+  if (Object.keys(changed).length) {
+    await runTrigger_RecordPropertyChanged("SURGERY", id, changed, session.user.id).catch(() => {})
   }
 
   revalidatePath(`/surgery/${id}`)

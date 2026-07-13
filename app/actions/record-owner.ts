@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
+import { runTrigger_RecordOwnerChanged } from "@/lib/automation-engine"
 
 export type OwnableObject = "PROVIDER" | "PRACTICE" | "LOCATION" | "SURGERY"
 
@@ -24,6 +25,8 @@ export async function setRecordOwner(type: OwnableObject, id: string, ownerId: s
     where: { id },
     data: { ownerId: ownerId || null, updatedById: uid },
   })
+
+  await runTrigger_RecordOwnerChanged(type, id, ownerId || null, uid ?? undefined).catch(() => {})
 
   revalidatePath(`/${meta.basePath}/${id}`)
   return { success: true }

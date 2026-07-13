@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
+import { runTrigger_RecordCreated, runTrigger_RecordPropertyChanged, runTrigger_RecordOwnerChanged } from "@/lib/automation-engine"
 
 // Records are gated by the object's own permission key: "CO:<objectKey>".
 function objKey(key: string) { return `CO:${key}` }
@@ -87,16 +88,40 @@ export async function createCustomObjectRecord(objectKey: string, values: Record
       createdById: uid,
     },
   })
+  await runTrigger_RecordCreated(`CO:${objectKey}`, rec.id, uid).catch(() => {})
   revalidatePath(`/objects/${objectKey}`)
   return { success: true, id: rec.id }
 }
 
 export async function updateCustomObjectRecord(objectKey: string, id: string, data: { values?: Record<string, any>; ownerId?: string | null }) {
   const session = await requireAccess(objKey(objectKey), "EDIT")
-  const patch: Record<string, unknown> = { updatedById: (session!.user as any).id }
+  const uid = (session!.user as any).id
+
+  const before = await (prisma as any).customObjectRecord.findUnique({
+    where: { id }, select: { values: true, ownerId: true },
+  })
+
+  const patch: Record<string, unknown> = { updatedById: uid }
   if (data.values !== undefined) patch.values = data.values
   if (data.ownerId !== undefined) patch.ownerId = data.ownerId || null
   await (prisma as any).customObjectRecord.update({ where: { id }, data: patch })
+
+  // Fire the generic workflow triggers for whatever actually changed.
+  const type = `CO:${objectKey}`
+  if (data.values !== undefined) {
+    const prev: Record<string, any> = (before?.values as any) ?? {}
+    const changes: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(data.values)) {
+      if (JSON.stringify(prev[k] ?? null) !== JSON.stringify(v ?? null)) changes[k] = v
+    }
+    if (Object.keys(changes).length) {
+      await runTrigger_RecordPropertyChanged(type, id, changes, uid).catch(() => {})
+    }
+  }
+  if (data.ownerId !== undefined && (data.ownerId || null) !== (before?.ownerId ?? null)) {
+    await runTrigger_RecordOwnerChanged(type, id, data.ownerId || null, uid).catch(() => {})
+  }
+
   revalidatePath(`/objects/${objectKey}`)
   revalidatePath(`/objects/${objectKey}/${id}`)
   return { success: true }

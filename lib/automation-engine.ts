@@ -9,6 +9,7 @@ import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/automation-graph"
 import { findProcedureLocation } from "@/lib/surgery-procedures"
+import { type RecordRef, loadRecord, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner } from "@/lib/automation-records"
 
 // Attach derived surgical provider + body part (from the stored procedure) so
 // criteria can filter on them even though the case only stores `procedure`.
@@ -59,6 +60,8 @@ interface TemplateVars {
   surgical_provider?: string
   surgery_date?: string
   facility?: string
+  // Generic record triggers (any object)
+  record_name?: string
 }
 
 function resolveTemplate(template: string, vars: TemplateVars): string {
@@ -82,6 +85,7 @@ function resolveTemplate(template: string, vars: TemplateVars): string {
     .replace(/\{surgical_provider\}/g, vars.surgical_provider ?? "")
     .replace(/\{surgery_date\}/g, vars.surgery_date ?? "")
     .replace(/\{facility\}/g, vars.facility ?? "")
+    .replace(/\{record_name\}/g, vars.record_name ?? "the record")
     .replace(/\{referral_url\}/g, vars.referral_url ?? "")
     .replace(/\{referral_button\}/g, btnHtml)
 }
@@ -201,7 +205,8 @@ async function executeAction(
   referralId: string | null,
   vars: TemplateVars,
   triggeredByUserId?: string,
-  conditionRecord?: Record<string, unknown> | null
+  conditionRecord?: Record<string, unknown> | null,
+  recordRef?: RecordRef | null,
 ): Promise<RunLog> {
   // For referral workflows that didn't pass a record, fall back to fetching it.
   const record = conditionRecord !== undefined
@@ -211,7 +216,7 @@ async function executeAction(
 
   const steps: RunStep[] = []
   const run = async (type: AutomationAction, cfg: Record<string, unknown>) => {
-    const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record)
+    const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record, recordRef)
     steps.push({ label: stepLabel(type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
   }
 
@@ -223,7 +228,7 @@ async function executeAction(
       await run(action.type as AutomationAction, (action.config ?? {}) as Record<string, unknown>)
     }
     if (resumeAt && resumeNodeId) {
-      await scheduleResume(automation.id, resumeNodeId, resumeAt, referralId, record, vars, recordLabelFor(record, vars))
+      await scheduleResume(automation.id, resumeNodeId, resumeAt, referralId, record, vars, recordLabelFor(record, vars), recordRef)
       steps.push({ label: waitLabel ?? "Wait", status: "ok" })
     }
   } else {
@@ -270,6 +275,7 @@ async function scheduleResume(
   record: Record<string, unknown> | null,
   vars: TemplateVars,
   recordLabel: string,
+  recordRef?: RecordRef | null,
 ) {
   await prisma.workflowResume.create({
     data: {
@@ -277,6 +283,8 @@ async function scheduleResume(
       resumeNodeId,
       resumeAt,
       referralId: referralId ?? null,
+      recordType: recordRef?.type ?? null,
+      recordId: recordRef?.id ?? null,
       recordLabel,
       vars: vars as any,
       record: (record ?? {}) as any,
@@ -309,7 +317,8 @@ export async function runDueWorkflowResumes() {
     const steps: RunStep[] = []
     for (const a of actions) {
       const cfg = (a.config ?? {}) as Record<string, unknown>
-      const issue = await runSingleAction(a.type as AutomationAction, cfg, r.referralId, vars, undefined, record)
+      const ref = r.recordType && r.recordId ? { type: r.recordType, id: r.recordId } : null
+      const issue = await runSingleAction(a.type as AutomationAction, cfg, r.referralId, vars, undefined, record, ref)
       steps.push({ label: stepLabel(a.type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
     }
 
@@ -387,7 +396,8 @@ async function runSingleAction(
   referralId: string | null,
   vars: TemplateVars,
   triggeredByUserId?: string,
-  record?: Record<string, unknown> | null
+  record?: Record<string, unknown> | null,
+  recordRef?: RecordRef | null,
 ): Promise<string | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
 
@@ -610,6 +620,34 @@ async function runSingleAction(
         create: { referralId, tagId },
         update: {},
       })
+    }
+  }
+
+  // ── Generic writes against the triggering record (any object) ───────────────
+  const target: RecordRef | null = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
+
+  if ((automation.actionType as string) === "SET_PROPERTY") {
+    if (!target) return "Set property: no record in context"
+    const property = cfg.property as string
+    if (!property) return "Set property: no property selected"
+    const raw = cfg.value
+    const value = typeof raw === "string" ? resolveTemplate(raw, vars) : raw
+    try {
+      await setRecordProperty(target.type, target.id, property, value)
+    } catch (err: any) {
+      return `Set property failed: ${err.message}`
+    }
+  }
+
+  if ((automation.actionType as string) === "ASSIGN_OWNER") {
+    if (!target) return "Assign owner: no record in context"
+    // "triggering_user" assigns whoever caused the workflow to fire.
+    const raw = (cfg.ownerId as string) || ""
+    const ownerId = raw === "triggering_user" ? (triggeredByUserId ?? null) : (raw || null)
+    try {
+      await setGenericOwner(target.type, target.id, ownerId)
+    } catch (err: any) {
+      return `Assign owner failed: ${err.message}`
     }
   }
 
@@ -1279,4 +1317,90 @@ async function runTrigger_ReferralStale() {
       })
     }
   }
+}
+
+// ─── Generic, object-agnostic triggers ────────────────────────────────────────
+// These work for any object — built-in or custom. The workflow names its object
+// in triggerConfig.objectType (a registry key like "SURGERY" or "CO:visits"), so
+// one trigger covers the whole data model instead of one per object.
+
+async function runRecordTrigger(
+  triggerType: AutomationTrigger,
+  recordType: string,
+  recordId: string,
+  detail: string,
+  extraVars: Partial<TemplateVars>,
+  match: (cfg: Record<string, unknown>) => boolean,
+  triggeredByUserId?: string,
+) {
+  const automations = await prisma.automation.findMany({ where: { triggerType, isActive: true } })
+  const forThisObject = automations.filter((a) => {
+    const cfg = (a.triggerConfig ?? {}) as Record<string, unknown>
+    return cfg.objectType === recordType && match(cfg)
+  })
+  if (!forThisObject.length) return
+
+  const record = await loadRecord(recordType, recordId)
+  if (!record) return
+
+  const label = await genericRecordLabel(recordType, recordId, record)
+  const vars: TemplateVars = { ...extraVars, record_name: label } as TemplateVars
+  const ref: RecordRef = { type: recordType, id: recordId }
+
+  for (const auto of forThisObject) {
+    const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
+    if (!checkConditions(record, cfg)) continue
+
+    const log = await executeAction(auto, null, vars, triggeredByUserId, record, ref)
+    await prisma.automationRun.create({
+      data: { automationId: auto.id, ...runData(log, recordType, recordId, detail) },
+    }).catch(() => {})
+  }
+}
+
+export async function runTrigger_RecordCreated(recordType: string, recordId: string, triggeredByUserId?: string) {
+  await runRecordTrigger(
+    "RECORD_CREATED" as AutomationTrigger,
+    recordType, recordId, "Record created", {},
+    () => true,
+    triggeredByUserId,
+  )
+}
+
+// `changes` is the set of properties the update touched, so a workflow can watch
+// one property (and optionally require a specific new value).
+export async function runTrigger_RecordPropertyChanged(
+  recordType: string,
+  recordId: string,
+  changes: Record<string, unknown>,
+  triggeredByUserId?: string,
+) {
+  const keys = Object.keys(changes ?? {})
+  if (!keys.length) return
+  await runRecordTrigger(
+    "RECORD_PROPERTY_CHANGED" as AutomationTrigger,
+    recordType, recordId, `Property changed: ${keys.join(", ")}`, {},
+    (cfg) => {
+      const watched = cfg.property as string
+      if (!watched) return true // no property named → any change fires it
+      if (!keys.includes(watched)) return false
+      if (cfg.toValue == null || cfg.toValue === "") return true
+      return String(changes[watched] ?? "") === String(cfg.toValue)
+    },
+    triggeredByUserId,
+  )
+}
+
+export async function runTrigger_RecordOwnerChanged(
+  recordType: string,
+  recordId: string,
+  ownerId: string | null,
+  triggeredByUserId?: string,
+) {
+  await runRecordTrigger(
+    "RECORD_OWNER_CHANGED" as AutomationTrigger,
+    recordType, recordId, "Record owner changed", {},
+    (cfg) => !cfg.ownerId || cfg.ownerId === ownerId,
+    triggeredByUserId,
+  )
 }

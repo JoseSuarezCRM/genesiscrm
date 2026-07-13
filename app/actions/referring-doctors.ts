@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { runTrigger_RecordCreated, runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
@@ -64,6 +65,7 @@ export async function createPractice(data: unknown) {
     },
   })
 
+  await runTrigger_RecordCreated("PRACTICE", practice.id, (session?.user as any)?.id).catch(() => {})
   revalidatePath("/referring-doctors")
   return { success: true, id: practice.id }
 }
@@ -85,6 +87,7 @@ export async function updatePractice(id: string, data: unknown) {
     },
   })
 
+  await runTrigger_RecordPropertyChanged("PRACTICE", id, parsed.data as Record<string, unknown>, (session?.user as any)?.id).catch(() => {})
   revalidatePath("/referring-doctors")
   return { success: true }
 }
@@ -165,6 +168,7 @@ export async function createLocation(data: unknown) {
     },
   })
 
+  await runTrigger_RecordCreated("LOCATION", location.id, (session?.user as any)?.id).catch(() => {})
   revalidatePath("/referring-doctors")
   revalidatePath("/locations")
   return { success: true, id: location.id }
@@ -188,6 +192,7 @@ export async function updateLocation(id: string, data: unknown) {
     },
   })
 
+  await runTrigger_RecordPropertyChanged("LOCATION", id, parsed.data as Record<string, unknown>, (session?.user as any)?.id).catch(() => {})
   revalidatePath("/referring-doctors")
   revalidatePath("/locations")
   return { success: true }
@@ -418,6 +423,7 @@ export async function createDoctor(data: unknown) {
     },
   })
 
+  await runTrigger_RecordCreated("PROVIDER", doctor.id, (session?.user as any)?.id).catch(() => {})
   revalidatePath("/referring-doctors")
   return { success: true, id: doctor.id }
 }
@@ -450,6 +456,7 @@ export async function updateDoctor(id: string, data: unknown) {
     },
   })
 
+  await runTrigger_RecordPropertyChanged("PROVIDER", id, rest as Record<string, unknown>, (session?.user as any)?.id).catch(() => {})
   revalidatePath("/referring-doctors")
   return { success: true }
 }

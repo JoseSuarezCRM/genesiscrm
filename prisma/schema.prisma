@@ -91,6 +91,12 @@ enum AutomationTrigger {
   PIPELINE_CHANGED
   SURGERY_STATUS_CHANGED
   SURGERY_CALL_ATTEMPTS_REACHED
+  // Generic, object-agnostic triggers: work for any built-in object or custom
+  // object. The object is named in triggerConfig.objectType (e.g. "SURGERY",
+  // "CO:visits").
+  RECORD_CREATED
+  RECORD_PROPERTY_CHANGED
+  RECORD_OWNER_CHANGED
 }
 
 enum AutomationAction {
@@ -102,6 +108,10 @@ enum AutomationAction {
   UPDATE_REFERRAL_STATUS
   ASSIGN_REFERRAL
   ADD_TAG
+  // Generic writes against the record that triggered the workflow — these work
+  // on any object, including custom properties.
+  SET_PROPERTY
+  ASSIGN_OWNER
 }
 
 enum TaskPriority {
@@ -758,6 +768,8 @@ model WorkflowResume {
   resumeNodeId String     // node to continue from when resumed
   resumeAt     DateTime   // when to continue
   referralId   String?    // referral that referral-actions operate on (if any)
+  recordType   String?    // generic record the workflow acts on (e.g. "CO:visits")
+  recordId     String?
   recordLabel  String?
   vars         Json       // template vars captured at enrollment
   record       Json       // record snapshot for branch evaluation
