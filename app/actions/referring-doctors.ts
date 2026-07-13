@@ -253,6 +253,7 @@ export async function getLocations() {
     orderBy: [{ referrals: { _count: "desc" } }, { name: "asc" }],
     include: {
       practice: { select: { id: true, name: true } },
+      owner: { select: { id: true, name: true, email: true } },
       _count: { select: { referrals: true, doctors: true, activities: true } },
     },
   })
@@ -265,6 +266,7 @@ export async function getLocations() {
     address: l.address,
     practiceId: l.practiceId,
     practiceName: l.practice.name,
+    ownerName: l.owner?.name ?? l.owner?.email ?? null,
     createdAt: l.createdAt,
     customProperties: (l.customProperties as Record<string, any>) ?? {},
     referralCount: l._count.referrals,

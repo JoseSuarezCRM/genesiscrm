@@ -24,6 +24,7 @@ export interface LocationRow {
   address: string | null
   practiceId: string
   practiceName: string
+  ownerName?: string | null
   createdAt: string | Date
   customProperties?: Record<string, any>
   referralCount: number
@@ -49,6 +50,7 @@ const LOCATION_COLUMNS: { key: string; label: string; sortable?: boolean; align?
   { key: "providers", label: "Providers", sortable: true, align: "right" },
   { key: "referrals", label: "Referrals", sortable: true, align: "right" },
   { key: "activities", label: "Activities", sortable: true, align: "right" },
+  { key: "owner", label: "Location Owner", sortable: true },
   { key: "created", label: "Created", sortable: true },
 ]
 const DEFAULT_LOCATION_COLS = ["practice", "address", "phone", "providers", "referrals"]
@@ -58,7 +60,7 @@ function fmtDate(d: string | Date | null | undefined) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
 }
 
-type SortKey = "name" | "practice" | "providers" | "referrals" | "activities" | "created"
+type SortKey = "name" | "practice" | "providers" | "referrals" | "activities" | "owner" | "created"
 
 export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete }: Props) {
   const router = useRouter()
@@ -100,6 +102,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const practiceNames = Array.from(new Set(locations.map((l) => l.practiceName).filter(Boolean))).sort()
+  const ownerNames = Array.from(new Set(locations.map((l) => l.ownerName).filter(Boolean) as string[])).sort()
   const filterFields: FilterField[] = [
     { key: "name", label: "Name", type: "text", getValue: (l) => l.name },
     { key: "practice", label: "Practice", type: "select", options: practiceNames.map((p) => ({ label: p, value: p })), getValue: (l) => l.practiceName },
@@ -109,6 +112,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
     { key: "providers", label: "Providers", type: "number", getValue: (l) => l.providerCount },
     { key: "referrals", label: "Referrals", type: "number", getValue: (l) => l.referralCount },
     { key: "activities", label: "Activities", type: "number", getValue: (l) => l.activityCount },
+    { key: "owner", label: "Location Owner", type: "select", options: ownerNames.map((o) => ({ label: o, value: o })), getValue: (l) => l.ownerName ?? "" },
     ...customPropertyFilterFields(customPropertyDefs),
   ]
 
@@ -127,6 +131,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
       case "providers": av = a.providerCount; bv = b.providerCount; break
       case "referrals": av = a.referralCount; bv = b.referralCount; break
       case "activities": av = a.activityCount; bv = b.activityCount; break
+      case "owner": av = (a.ownerName ?? "").toLowerCase(); bv = (b.ownerName ?? "").toLowerCase(); break
       case "created": av = new Date(a.createdAt).getTime(); bv = new Date(b.createdAt).getTime(); break
     }
     const cmp = av < bv ? -1 : av > bv ? 1 : 0
@@ -161,10 +166,10 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
   // ── Export ───────────────────────────────────────────────────────────────────
   function buildExport() {
-    const headers = ["Name", "Practice", "Address", "Phone", "Fax", "Providers", "Referrals", "Activities", "Created"]
+    const headers = ["Name", "Practice", "Address", "Phone", "Fax", "Providers", "Referrals", "Activities", "Location Owner", "Created"]
     const rows = sorted.map((l) => [
       l.name, l.practiceName, l.address ?? "", l.phone ?? "", l.fax ?? "",
-      l.providerCount, l.referralCount, l.activityCount, fmtDate(l.createdAt),
+      l.providerCount, l.referralCount, l.activityCount, l.ownerName ?? "", fmtDate(l.createdAt),
     ])
     return { headers, rows }
   }
@@ -300,6 +305,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                         {col.key === "providers" && l.providerCount}
                         {col.key === "referrals" && l.referralCount}
                         {col.key === "activities" && l.activityCount}
+                        {col.key === "owner" && <span className="text-slate-500">{l.ownerName || "—"}</span>}
                         {col.key === "created" && <span className="text-slate-500">{fmtDate(l.createdAt)}</span>}
                       </td>
                     ))}

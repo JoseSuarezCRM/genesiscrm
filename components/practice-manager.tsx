@@ -68,6 +68,7 @@ const PROVIDER_COLUMNS: { key: string; label: string }[] = [
   { key: "email", label: "Email" },
   { key: "locations", label: "Locations" },
   { key: "referrals", label: "Referrals" },
+  { key: "owner", label: "Provider Owner" },
 ]
 
 const DEFAULT_PROVIDER_COLUMNS = ["title", "practice", "npi", "referrals"]
@@ -478,6 +479,12 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   // Distinct values for the select-type filter fields.
   const providerPractices = Array.from(new Set(allProviders.map((d) => d.practiceName).filter(Boolean))).sort()
   const providerSpecialties = Array.from(new Set(allProviders.map((d) => (d as any).specialty as string).filter(Boolean))).sort()
+  // Record Owner reads off the user list the view-sharing selector already has.
+  const ownerLabel = (d: any) => {
+    const u = shareUsers.find((x) => x.id === d.ownerId)
+    return u ? (u.name ?? u.email) : ""
+  }
+  const providerOwners = Array.from(new Set(allProviders.map(ownerLabel).filter(Boolean))).sort()
 
   // Filter schema — one entry per column/property, type-aware. New (custom)
   // properties should be appended here so they become filter criteria automatically.
@@ -492,6 +499,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     { key: "email", label: "Email", type: "text", getValue: (d) => (d as any).email },
     { key: "referrals", label: "Referrals", type: "number", getValue: (d) => d._count.referrals },
     { key: "locations", label: "Locations (count)", type: "number", getValue: (d) => d.locations?.length ?? 0 },
+    { key: "owner", label: "Provider Owner", type: "select", options: providerOwners.map((o) => ({ label: o, value: o })), getValue: ownerLabel },
     ...customPropertyFilterFields(providerCustomPropertyDefs),
   ]
 
@@ -504,11 +512,11 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const providerFiltersActive = activeConditionCount(providerFilter, providerFilterFields) > 0
 
   function buildProviderExport() {
-    const headers = ["Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Office Phone", "Email", "Locations", "Referrals"]
+    const headers = ["Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Office Phone", "Email", "Locations", "Referrals", "Provider Owner"]
     const rows = filteredProviders.map((d) => [
       d.name, (d as any).title ?? "", d.practiceName, (d as any).specialty ?? "", d.npi ?? "",
       (d as any).phone ?? "", (d as any).officePhone ?? "", (d as any).email ?? "",
-      d.locations?.map((l) => l.location.name).join("; ") ?? "", d._count.referrals,
+      d.locations?.map((l) => l.location.name).join("; ") ?? "", d._count.referrals, ownerLabel(d),
     ])
     return { headers, rows }
   }
@@ -783,6 +791,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                       {shows("email") && <th className="px-4 py-2.5 font-semibold">Email</th>}
                       {shows("locations") && <th className="px-4 py-2.5 font-semibold">Locations</th>}
                       {shows("referrals") && <th className="px-4 py-2.5 font-semibold text-right">Referrals</th>}
+                      {shows("owner") && <th className="px-4 py-2.5 font-semibold">Provider Owner</th>}
                       {isAdmin && <th className="px-4 py-2.5 font-semibold text-right w-20"></th>}
                     </tr>
                   </thead>
@@ -811,6 +820,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                           </td>
                         )}
                         {shows("referrals") && <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">{d._count.referrals}</td>}
+                        {shows("owner") && <td className="px-4 py-2.5 text-slate-500">{ownerLabel(d) || "—"}</td>}
                         {isAdmin && (
                           <td className="px-4 py-2.5">
                             <div className="flex gap-1 justify-end">
