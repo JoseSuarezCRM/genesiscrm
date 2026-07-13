@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
 import ProviderInfoEditor from "@/components/provider-info-editor"
 import RecordActivityFeed from "@/components/record-activity-feed"
+import RecordEngagementBar from "@/components/record-engagement-bar"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
@@ -79,6 +80,15 @@ export default async function ProviderDetailPage({ params }: Props) {
           Back to Referring Providers
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">{displayName}</h1>
+        {provider.specialty && <p className="text-sm text-slate-500 mt-0.5">{provider.specialty}</p>}
+        <div className="mt-4">
+          <RecordEngagementBar
+            recordType="PROVIDER"
+            recordId={provider.id}
+            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+            canEdit={isAdmin}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -147,6 +157,7 @@ export default async function ProviderDetailPage({ params }: Props) {
           items={activityItems as any}
           users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
           canEdit={isAdmin}
+          showActions={false}
         />
       </div>
     </div>

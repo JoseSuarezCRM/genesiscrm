@@ -7,6 +7,7 @@ import { Loader2, Check, Plus, X, Search, ExternalLink } from "lucide-react"
 import { updateCustomObjectRecord } from "@/app/actions/custom-object-records"
 import { searchAssociableRecords, associateRecords, unassociateRecords } from "@/app/actions/associations"
 import RecordActivityFeed from "@/components/record-activity-feed"
+import RecordEngagementBar from "@/components/record-engagement-bar"
 import type { ActivityItem } from "@/app/actions/record-activity"
 import type { CustomObjectProperty, CustomObjectCard } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
@@ -119,6 +120,15 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* LEFT: record details */}
         <div className="lg:col-span-1 space-y-4">
+          <RecordEngagementBar
+            recordType={`CO:${objectKey}`}
+            recordId={record.id}
+            users={users}
+            canEdit={canEdit}
+            compact
+            onLogged={() => setTab("activities")}
+          />
+
           <div className="bg-white border border-slate-200 rounded-xl">
             <div className="px-5 py-3 border-b border-slate-100"><h2 className="text-sm font-semibold text-slate-900">Record details</h2></div>
             <div className="p-5 space-y-3 text-sm">
@@ -158,7 +168,7 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
               {middleCards.map(renderCard)}
             </div>
           ) : (
-            <RecordActivityFeed recordType={`CO:${objectKey}`} recordId={record.id} items={activityItems} users={users} canEdit={canEdit} />
+            <RecordActivityFeed recordType={`CO:${objectKey}`} recordId={record.id} items={activityItems} users={users} canEdit={canEdit} showActions={false} />
           )}
         </div>
 

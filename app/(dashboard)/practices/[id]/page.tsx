@@ -8,6 +8,7 @@ import { ChevronLeft } from "lucide-react"
 import PracticeDetailClient from "@/components/practice-detail-client"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
+import RecordEngagementBar from "@/components/record-engagement-bar"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
@@ -69,6 +70,14 @@ export default async function PracticeDetailPage({ params }: Props) {
           <span className="text-sm text-slate-400">{practice._count.referrals} referral{practice._count.referrals !== 1 ? "s" : ""}</span>
         </div>
         {practice.phone && <p className="text-sm text-slate-500 mt-0.5">{practice.phone}</p>}
+        <div className="mt-4">
+          <RecordEngagementBar
+            recordType="PRACTICE"
+            recordId={practice.id}
+            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+            canEdit={isAdmin}
+          />
+        </div>
       </div>
 
       <PracticeDetailClient practice={practice as any} referrals={referrals as any} isAdmin={isAdmin} customProperties={customProperties} />
@@ -82,6 +91,7 @@ export default async function PracticeDetailPage({ params }: Props) {
           items={activityItems as any}
           users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
           canEdit={isAdmin}
+          showActions={false}
         />
       </div>
     </div>

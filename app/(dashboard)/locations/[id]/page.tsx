@@ -11,6 +11,7 @@ import LocationInfoEditor from "@/components/location-info-editor"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
+import RecordEngagementBar from "@/components/record-engagement-bar"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
@@ -80,6 +81,14 @@ export default async function LocationDetailPage({ params }: Props) {
         <Link href={`/practices/${location.practice.id}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:underline mt-1">
           <Building2 className="h-3.5 w-3.5" />{location.practice.name}
         </Link>
+        <div className="mt-4">
+          <RecordEngagementBar
+            recordType="LOCATION"
+            recordId={location.id}
+            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+            canEdit={canEdit}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -166,6 +175,7 @@ export default async function LocationDetailPage({ params }: Props) {
           items={activityItems as any}
           users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
           canEdit={canEdit}
+          showActions={false}
         />
       </div>
     </div>
