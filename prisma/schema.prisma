@@ -220,14 +220,19 @@ model ObjectAssociationDef {
 // A link between two specific records (heterogeneous — no FKs).
 // A note on any record (custom or built-in) — the first engagement type in the
 // unified activity feed. recordType is a registry key ("CO:<key>" or built-in).
+// Logged engagements on any record: notes, call logs and meetings.
 model RecordNote {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   recordType  String
   recordId    String
+  kind        String    @default("NOTE") // NOTE | CALL | MEETING
+  title       String?
   body        String
+  occurredAt  DateTime? // call time / meeting start
+  meta        Json? // outcome, duration, attendees, location…
   createdById String?
-  createdBy   User?    @relation("RecordNoteCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
+  createdBy   User?     @relation("RecordNoteCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
 
   @@index([recordType, recordId])
 }

@@ -3,9 +3,13 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
+import { sendEmail, sendCalendarInvite } from "@/lib/graph-mailer"
+import { buildIcs } from "@/lib/ics"
+import { sendSMS } from "@/lib/twilio"
+import { resolveMyFromEmail } from "@/app/actions/account"
 import { revalidatePath } from "next/cache"
 
-export type ActivityKind = "NOTE" | "TASK" | "ACTIVITY" | "EMAIL" | "SMS" | "MEETING"
+export type ActivityKind = "NOTE" | "TASK" | "ACTIVITY" | "EMAIL" | "SMS" | "MEETING" | "CALL"
 
 export interface ActivityItem {
   id: string
@@ -29,6 +33,10 @@ function pathFor(recordType: string, recordId: string): string | null {
 
 function fmtDate(d: string | Date | null | undefined): string {
   return d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" }) : ""
+}
+
+function fmtDateTime(d: string | Date): string {
+  return new Date(d).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
 }
 
 function stripHtml(s: string): string {
@@ -82,7 +90,23 @@ export async function listRecordActivities(recordType: string, recordId: string)
     where: { recordType, recordId }, orderBy: { createdAt: "desc" },
     include: { createdBy: { select: { name: true, email: true } } },
   })
-  for (const n of notes) items.push({ id: n.id, kind: "NOTE", title: "Note", body: n.body, date: n.createdAt, by: n.createdBy?.name ?? n.createdBy?.email ?? null })
+  for (const n of notes) {
+    const kind: ActivityKind = (["NOTE", "CALL", "MEETING"].includes(n.kind) ? n.kind : "NOTE") as ActivityKind
+    const meta: any = n.meta ?? {}
+    const extras = [
+      kind === "CALL" && meta.outcome ? `Outcome: ${meta.outcome}` : "",
+      kind === "MEETING" && n.occurredAt ? fmtDateTime(n.occurredAt) : "",
+      kind === "MEETING" && meta.location ? meta.location : "",
+      kind === "MEETING" && meta.attendees?.length ? `With ${meta.attendees.join(", ")}` : "",
+    ].filter(Boolean).join(" · ")
+    items.push({
+      id: n.id, kind,
+      title: n.title || (kind === "CALL" ? "Call logged" : kind === "MEETING" ? "Meeting" : "Note"),
+      body: [extras, n.body].filter(Boolean).join("\n"),
+      date: n.occurredAt ?? n.createdAt,
+      by: n.createdBy?.name ?? n.createdBy?.email ?? null,
+    })
+  }
 
   // Legacy provider notes surface in the same timeline (read-only).
   if (recordType === "PROVIDER") {
@@ -102,6 +126,7 @@ export async function listRecordActivities(recordType: string, recordId: string)
     : (l.toType === recordType && l.toId === recordId && l.fromType === kind) ? l.fromId : null
   const taskIds = links.map((l: any) => otherOf(l, "TASK")).filter(Boolean)
   const activityIds = links.map((l: any) => otherOf(l, "ACTIVITY")).filter(Boolean)
+  const emailIds = links.map((l: any) => otherOf(l, "EMAIL")).filter(Boolean)
 
   if (taskIds.length) {
     const tasks = await prisma.task.findMany({ where: { id: { in: taskIds } }, include: { createdBy: { select: { name: true, email: true } }, assignedTo: { select: { name: true, email: true } } } })
@@ -128,9 +153,12 @@ export async function listRecordActivities(recordType: string, recordId: string)
 
   // Emails + SMS: matched to the record's email address / phone number.
   const { emails, phones } = await contactInfoFor(recordType, recordId)
-  if (emails.length) {
+  const emailOr: any[] = []
+  if (emails.length) emailOr.push({ to: { hasSome: emails } }, { cc: { hasSome: emails } })
+  if (emailIds.length) emailOr.push({ id: { in: emailIds } })
+  if (emailOr.length) {
     const sent = await prisma.directEmail.findMany({
-      where: { OR: [{ to: { hasSome: emails } }, { cc: { hasSome: emails } }] },
+      where: { OR: emailOr },
       orderBy: { sentAt: "desc" }, take: 50,
       include: { sentBy: { select: { name: true, email: true } } },
     })
@@ -193,5 +221,131 @@ export async function createTaskForRecord(recordType: string, recordId: string, 
   await (prisma as any).objectAssociation.create({ data: { fromType: "TASK", fromId: task.id, toType: recordType, toId: recordId } })
   const p = pathFor(recordType, recordId)
   if (p) revalidatePath(p)
+  return { success: true }
+}
+
+// The record's email / phone, so the composer can pre-fill who we're contacting.
+export async function getRecordContact(recordType: string, recordId: string) {
+  const session = await auth()
+  if (!session?.user) return { emails: [], phones: [] }
+  return contactInfoFor(recordType, recordId)
+}
+
+// Email sent straight from the record — always from the current user's own address.
+export async function sendEmailFromRecord(recordType: string, recordId: string, data: { to: string; subject: string; body: string }) {
+  await requireAccess(permKeyFor(recordType), "EDIT")
+  const session = await auth()
+  const uid = (session!.user as any).id
+  const to = data.to.trim()
+  if (!to || !data.subject.trim() || !data.body.trim()) return { error: "To, subject and message are required." }
+
+  const fromEmail = await resolveMyFromEmail(null)
+  if (!fromEmail) return { error: "You don't have a sending address yet. Set one up in Settings → My Account." }
+
+  const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${data.body.replace(/\n/g, "<br/>")}</div>`
+  const result = await sendEmail(to, data.subject.trim(), html, { fromEmail })
+
+  const rec = await prisma.directEmail.create({
+    data: {
+      to: [to], cc: [], bcc: [],
+      subject: data.subject.trim(), body: data.body.trim(),
+      success: result.success, error: result.success ? null : (result.error ?? "Unknown error"),
+      sentById: uid,
+    },
+  })
+  // Link it to the record explicitly, so it stays on the timeline even if the address changes.
+  await (prisma as any).objectAssociation.create({
+    data: { fromType: "EMAIL", fromId: rec.id, toType: recordType, toId: recordId },
+  }).catch(() => {})
+
+  const p = pathFor(recordType, recordId)
+  if (p) revalidatePath(p)
+  if (!result.success) return { error: result.error ?? "Email failed to send." }
+  return { success: true }
+}
+
+// SMS sent from the record. sendSMS stores the thread + message, so it lands on the timeline.
+export async function sendSmsFromRecord(recordType: string, recordId: string, data: { to: string; body: string }) {
+  await requireAccess(permKeyFor(recordType), "EDIT")
+  if (!data.to.trim() || !data.body.trim()) return { error: "Phone number and message are required." }
+  const result = await sendSMS(data.to.trim(), data.body.trim())
+  const p = pathFor(recordType, recordId)
+  if (p) revalidatePath(p)
+  if (!result.success) return { error: result.error ?? "SMS failed to send." }
+  return { success: true }
+}
+
+export async function logCall(recordType: string, recordId: string, data: { body: string; outcome?: string; occurredAt?: string }) {
+  await requireAccess(permKeyFor(recordType), "EDIT")
+  const session = await auth()
+  const uid = (session!.user as any).id
+  if (!data.body.trim()) return { error: "Call notes are required." }
+  await (prisma as any).recordNote.create({
+    data: {
+      recordType, recordId, kind: "CALL", title: "Call logged",
+      body: data.body.trim(),
+      occurredAt: data.occurredAt ? new Date(data.occurredAt) : new Date(),
+      meta: data.outcome ? { outcome: data.outcome } : undefined,
+      createdById: uid,
+    },
+  })
+  const p = pathFor(recordType, recordId)
+  if (p) revalidatePath(p)
+  return { success: true }
+}
+
+// Log a meeting on the record and, optionally, send a real calendar invite to the attendees.
+export async function logMeeting(recordType: string, recordId: string, data: {
+  title: string; start: string; durationMins?: number; location?: string; body?: string; attendees?: string[]; sendInvite?: boolean
+}) {
+  await requireAccess(permKeyFor(recordType), "EDIT")
+  const session = await auth()
+  const uid = (session!.user as any).id
+  if (!data.title.trim() || !data.start) return { error: "Meeting title and start time are required." }
+
+  const start = new Date(data.start)
+  if (isNaN(start.getTime())) return { error: "Invalid start time." }
+  const end = new Date(start.getTime() + (data.durationMins ?? 30) * 60_000)
+  const attendees = (data.attendees ?? []).map((a) => a.trim()).filter(Boolean)
+
+  let inviteError: string | null = null
+  if (data.sendInvite && attendees.length) {
+    const fromEmail = await resolveMyFromEmail(null)
+    if (!fromEmail) {
+      inviteError = "Meeting logged, but no sending address is set up for you (Settings → My Account), so no invite was sent."
+    } else {
+      const ics = buildIcs({
+        uid: `mtg-${Date.now()}@genesisortho.com`,
+        start, end,
+        title: data.title.trim(),
+        description: data.body?.trim() || undefined,
+        location: data.location?.trim() || undefined,
+        organizer: { email: fromEmail, name: "Genesis Ortho" },
+        attendees: attendees.map((email) => ({ email })),
+      })
+      const when = start.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
+      const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">
+        <p><strong>${data.title.trim()}</strong></p><p>${when} (Central)</p>
+        ${data.location?.trim() ? `<p>${data.location.trim()}</p>` : ""}
+        ${data.body?.trim() ? `<p>${data.body.trim().replace(/\n/g, "<br/>")}</p>` : ""}</div>`
+      const res = await sendCalendarInvite(attendees, data.title.trim(), html, ics, undefined, fromEmail)
+      if (!res.success) inviteError = `Meeting logged, but the invite failed: ${res.error ?? "unknown error"}`
+    }
+  }
+
+  await (prisma as any).recordNote.create({
+    data: {
+      recordType, recordId, kind: "MEETING",
+      title: data.title.trim(),
+      body: data.body?.trim() ?? "",
+      occurredAt: start,
+      meta: { location: data.location?.trim() || null, attendees, durationMins: data.durationMins ?? 30, invited: !!data.sendInvite },
+      createdById: uid,
+    },
+  })
+
+  const p = pathFor(recordType, recordId)
+  if (p) revalidatePath(p)
+  if (inviteError) return { error: inviteError }
   return { success: true }
 }
