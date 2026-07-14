@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
-import { deleteDoctor, deletePractice, deleteLocation } from "@/app/actions/referring-doctors"
+import { deleteDoctor, deletePractice, deleteLocation, mergeDoctor, mergePractice, mergeLocation } from "@/app/actions/referring-doctors"
 import { deleteSurgeryCase } from "@/app/actions/surgery"
 import { deleteReferral } from "@/app/actions/referrals"
 import { deleteCustomObjectRecord, createCustomObjectRecord } from "@/app/actions/custom-object-records"
@@ -85,4 +85,18 @@ export async function cloneRecord(entityType: string, id: string): Promise<{ url
   }
 
   return { error: `Can't clone a ${entityType} record.` }
+}
+
+// Objects that support merge (dedup two records into one). Source is merged INTO
+// the target, then the target's page is returned.
+export const MERGEABLE = ["PROVIDER", "PRACTICE", "LOCATION"]
+
+export async function mergeRecord(entityType: string, sourceId: string, targetId: string): Promise<{ url?: string; error?: string }> {
+  if (sourceId === targetId) return { error: "Pick a different record to merge into." }
+  let res: any
+  if (entityType === "PROVIDER") { res = await mergeDoctor(sourceId, targetId); if (!res?.error) return { url: `/referring-doctors/${targetId}` } }
+  else if (entityType === "PRACTICE") { res = await mergePractice(sourceId, targetId); if (!res?.error) return { url: `/practices/${targetId}` } }
+  else if (entityType === "LOCATION") { res = await mergeLocation(sourceId, targetId); if (!res?.error) return { url: `/locations/${targetId}` } }
+  else return { error: `Can't merge a ${entityType} record.` }
+  return { error: res?.error ?? "Merge failed" }
 }

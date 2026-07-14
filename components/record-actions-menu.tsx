@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, List, Copy, Trash2, Loader2, X, Search } from "lucide-react"
-import { deleteRecord, cloneRecord } from "@/app/actions/record-crud"
+import { ChevronDown, List, Copy, GitMerge, Trash2, Loader2, X, Search } from "lucide-react"
+import { deleteRecord, cloneRecord, mergeRecord, MERGEABLE } from "@/app/actions/record-crud"
+import { searchAssociableRecords } from "@/app/actions/associations"
 import { listUrlFor } from "@/lib/record-urls"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import { cn } from "@/lib/utils"
@@ -32,8 +33,10 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [panel, setPanel] = useState(false)
+  const [merging, setMerging] = useState(false)
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
+  const mergeable = MERGEABLE.includes(entityType)
 
   useEffect(() => {
     function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
@@ -80,6 +83,11 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
               <Copy className="h-4 w-4 text-slate-400" /> Clone
             </button>
           )}
+          {canEdit && mergeable && (
+            <button className={item} onClick={() => { setOpen(false); setMerging(true) }}>
+              <GitMerge className="h-4 w-4 text-slate-400" /> Merge
+            </button>
+          )}
           {canDelete && (
             <>
               <div className="my-1 border-t border-slate-100" />
@@ -92,6 +100,86 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
       )}
 
       {panel && <AllPropertiesPanel title={title} catalog={catalog} values={values} userMap={userMap} onClose={() => setPanel(false)} />}
+      {merging && <MergeDialog entityType={entityType} recordId={recordId} title={title} onClose={() => setMerging(false)} />}
+    </div>
+  )
+}
+
+// Merge THIS record into another of the same type; the other record survives.
+function MergeDialog({ entityType, recordId, title, onClose }: {
+  entityType: string; recordId: string; title: string; onClose: () => void
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [q, setQ] = useState("")
+  const [results, setResults] = useState<{ id: string; name: string }[]>([])
+  const [picked, setPicked] = useState<{ id: string; name: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function search(value: string) {
+    setQ(value); setPicked(null)
+    if (value.trim().length < 2) { setResults([]); return }
+    startTransition(async () => {
+      const rows = await searchAssociableRecords(entityType, value)
+      setResults(rows.filter((r) => r.id !== recordId))
+    })
+  }
+
+  function doMerge() {
+    if (!picked) return
+    setError(null)
+    startTransition(async () => {
+      const res = await mergeRecord(entityType, recordId, picked.id)
+      if (res.error) setError(res.error)
+      else if (res.url) { onClose(); router.push(res.url) }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-slate-900">Merge record</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="h-5 w-5" /></button>
+        </div>
+        <p className="text-sm text-slate-500">
+          Merge <span className="font-medium text-slate-800">{title}</span> into another record. The other record is kept and this one's
+          links move to it. This can't be undone.
+        </p>
+
+        {picked ? (
+          <div className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
+            <span className="text-sm text-slate-800">Merge into <span className="font-medium">{picked.name}</span></span>
+            <button onClick={() => setPicked(null)} className="text-xs text-slate-500 hover:text-slate-800">Change</button>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input value={q} onChange={(e) => search(e.target.value)} placeholder="Search a record to merge into…" autoFocus
+                className="w-full h-9 pl-8 pr-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
+            </div>
+            {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+            <div className="max-h-52 overflow-y-auto">
+              {results.map((r) => (
+                <button key={r.id} onClick={() => { setPicked(r); setResults([]) }}
+                  className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-50 text-slate-700">{r.name}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
+          <button onClick={doMerge} disabled={!picked || isPending}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitMerge className="h-3.5 w-3.5" />} Merge
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

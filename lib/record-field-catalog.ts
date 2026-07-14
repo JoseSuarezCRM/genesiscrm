@@ -2,6 +2,11 @@
 // property cards (same idea as the Referral field catalog): a card groups these
 // keys, and each value is click-to-edit inline.
 
+import {
+  CLEARANCE_OPTIONS, DENTAL_CLEARANCE_OPTIONS, CT_REQUIRED_OPTIONS,
+  GLP1_OPTIONS, DME_OPTIONS, FACILITY_OPTIONS,
+} from "@/lib/surgery-procedures"
+
 export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime"
 
 export interface RecordFieldDef {
@@ -50,8 +55,20 @@ export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
     { key: "orderingProvider", label: "Ordering Provider", type: "text" },
     { key: "diagnosis", label: "Diagnosis", type: "text" },
     { key: "procedure", label: "Procedure", type: "text" },
-    { key: "facility", label: "Facility", type: "text" },
+    { key: "facility", label: "Facility", type: "select", options: FACILITY_OPTIONS },
+    { key: "surgeryDate", label: "Surgery Date", type: "date" },
+    { key: "language", label: "Language", type: "select", options: ["EN", "ES"] },
     { key: "email", label: "Email", type: "email" },
+    // Clinical & scheduling — the same fields as the rich editor, so they can be
+    // shown/edited on any card and appear in "View all properties".
+    { key: "medicalClearance", label: "Medical Clearance", type: "select", options: CLEARANCE_OPTIONS },
+    { key: "secondaryClearance", label: "Secondary Clearance", type: "select", options: CLEARANCE_OPTIONS },
+    { key: "dentalClearance", label: "Dental Clearance", type: "select", options: DENTAL_CLEARANCE_OPTIONS },
+    { key: "ctRequired", label: "CT Required", type: "select", options: CT_REQUIRED_OPTIONS },
+    { key: "glp1", label: "GLP-1", type: "select", options: GLP1_OPTIONS },
+    { key: "dme", label: "DME", type: "select", options: DME_OPTIONS },
+    { key: "physicalTherapy", label: "Physical Therapy", type: "text" },
+    { key: "referral", label: "Referral Source", type: "text" },
     { key: "notes", label: "Notes", type: "long_text" },
   ],
 }

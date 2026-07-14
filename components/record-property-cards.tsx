@@ -78,8 +78,10 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
   }
 
   function save() {
+    // Date columns want an ISO datetime, not a bare YYYY-MM-DD.
+    const val = f.type === "date" && draft ? new Date(String(draft)).toISOString() : draft
     startTransition(async () => {
-      const res = await updateRecordField(entityType as any, recordId, f.key, draft)
+      const res = await updateRecordField(entityType as any, recordId, f.key, val)
       if (!(res as any)?.error) { setEditing(false); router.refresh() }
     })
   }
