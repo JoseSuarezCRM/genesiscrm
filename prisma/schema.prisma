@@ -254,6 +254,23 @@ model RecordNote {
   @@index([recordType, recordId])
 }
 
+// Property cards for objects that aren't in the CustomPropertyEntityType enum —
+// i.e. custom objects ("CO:visits"). Built-in objects keep using CardLayout; both
+// are read/written through the same actions so the UI is identical.
+model RecordCard {
+  id         String   @id @default(cuid())
+  objectType String
+  cardName   String
+  title      String
+  fields     String[] @default([])
+  section    String   @default("LEFT") // LEFT | MIDDLE
+  visible    Boolean  @default(true)
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([objectType, cardName])
+}
+
 // Which association cards show in a record page's right column. Keyed by registry
 // key, so it works for built-in objects AND custom objects ("CO:visits") alike.
 model AssociationCardPref {

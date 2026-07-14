@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Settings, Plus, Check, X, Trash2, Loader2 } from "lucide-react"
 import { updateRecordField } from "@/app/actions/record-fields"
-import { createCardLayout, updateCardLayout, deleteCardLayout } from "@/app/actions/card-layouts"
+import { createRecordCard, updateRecordCard, deleteRecordCard } from "@/app/actions/record-card-actions"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
@@ -119,7 +119,7 @@ function CardEditor({ card, catalog, entityType, onDone }: {
 
   function save() {
     startTransition(async () => {
-      await updateCardLayout(entityType as any, card.cardName, title.trim() || card.title, fields)
+      await updateRecordCard(entityType, card.cardName, title.trim() || card.title, fields)
       onDone(); router.refresh()
     })
   }
@@ -127,7 +127,7 @@ function CardEditor({ card, catalog, entityType, onDone }: {
   function remove() {
     if (!confirm(`Delete the "${card.title}" card?`)) return
     startTransition(async () => {
-      await deleteCardLayout(entityType as any, card.cardName)
+      await deleteRecordCard(entityType, card.cardName)
       onDone(); router.refresh()
     })
   }
@@ -172,7 +172,7 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
 
   function addCard() {
     startTransition(async () => {
-      await createCardLayout(entityType as any, "New card", [], section)
+      await createRecordCard(entityType, "New card", [], section)
       router.refresh()
     })
   }

@@ -12,7 +12,42 @@ const CP_TYPE: Record<string, RecordFieldType> = {
   MULTI_SELECT: "select", URL: "text",
 }
 
+// Custom objects: properties come from the object definition, values from the
+// record's JSON bag, and cards from RecordCard — but the shape returned here is
+// identical to a built-in object's, so the page renders the same components.
+async function loadCustomObjectCards(objectType: string, record: Record<string, any>) {
+  const key = objectType.slice(3)
+  const [def, rows] = await Promise.all([
+    (prisma as any).customObjectDef.findUnique({ where: { key } }),
+    (prisma as any).recordCard.findMany({ where: { objectType }, orderBy: { order: "asc" } }),
+  ])
+  const props: any[] = (def?.properties as any[]) ?? []
+
+  const catalog: RecordFieldDef[] = props.map((p) => ({
+    key: p.id,
+    label: p.name,
+    type: CP_TYPE[p.type] ?? "text",
+    options: p.options ?? [],
+  }))
+
+  const values: Record<string, any> = (record.values as Record<string, any>) ?? {}
+  const toCards = (rs: any[]) => rs.map((r) => ({ cardName: r.cardName, title: r.title, fields: r.fields }))
+  const left = rows.filter((r: any) => r.section === "LEFT")
+  const middle = rows.filter((r: any) => r.section === "MIDDLE")
+
+  return {
+    cards: left.length
+      ? toCards(left)
+      : [{ cardName: "info", title: `${def?.singular ?? "Record"} Information`, fields: props.map((p) => p.id) }],
+    middleCards: toCards(middle),
+    catalog,
+    values,
+  }
+}
+
 export async function loadPropertyCards(entityType: string, record: Record<string, any>) {
+  if (entityType.startsWith("CO:")) return loadCustomObjectCards(entityType, record)
+
   const [leftLayouts, middleLayouts, customProps] = await Promise.all([
     getCardLayouts(entityType as any, "LEFT"),
     getCardLayouts(entityType as any, "MIDDLE"),

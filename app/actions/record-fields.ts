@@ -23,13 +23,27 @@ function delegateFor(type: CPEntity): any {
  * Inline click-to-edit on a record's property card. `field` is either a real
  * column or "cp_<customPropertyId>" for a custom property.
  */
-export async function updateRecordField(entityType: CPEntity, recordId: string, field: string, value: unknown) {
-  const meta = cpMeta(entityType)
+export async function updateRecordField(entityType: string, recordId: string, field: string, value: unknown) {
+  // Custom objects keep every property in a JSON values bag.
+  if (entityType.startsWith("CO:")) {
+    await requireAccess(entityType, "EDIT")
+    const session = await auth()
+    const uid = (session?.user as any)?.id ?? null
+    const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { values: true } })
+    const values: Record<string, any> = (rec?.values as any) ?? {}
+    values[field] = value === "" ? null : value
+    await (prisma as any).customObjectRecord.update({ where: { id: recordId }, data: { values, updatedById: uid } })
+    await runTrigger_RecordPropertyChanged(entityType, recordId, { [field]: value }, uid ?? undefined).catch(() => {})
+    revalidatePath(`/objects/${entityType.slice(3)}/${recordId}`)
+    return { success: true }
+  }
+
+  const meta = cpMeta(entityType as CPEntity)
   await requireAccess(meta.object, "EDIT")
   const session = await auth()
   const uid = (session?.user as any)?.id ?? null
 
-  const model = delegateFor(entityType)
+  const model = delegateFor(entityType as CPEntity)
   if (!model) return { error: `Unknown object "${entityType}"` }
 
   try {

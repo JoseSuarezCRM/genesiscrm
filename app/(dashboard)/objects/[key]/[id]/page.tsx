@@ -1,52 +1,111 @@
 import { notFound } from "next/navigation"
-import Link from "next/link"
-import { ChevronLeft } from "lucide-react"
 import { requireView } from "@/lib/auth-guard"
 import { userCanLevel } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { getCustomObjectRecord, recordCustomObjectView } from "@/app/actions/custom-object-records"
 import { loadAssociationCards } from "@/lib/record-associations"
+import { loadPropertyCards } from "@/lib/record-cards"
 import { listRecordActivities } from "@/app/actions/record-activity"
-import CustomObjectDetail from "@/components/custom-object-detail"
+import RecordDetailShell from "@/components/record-detail-shell"
+import RecordMiddleTabs from "@/components/record-middle-tabs"
+import RecordPropertyCards from "@/components/record-property-cards"
+import RecordAssociationCards from "@/components/record-association-cards"
+import RecordActivityFeed from "@/components/record-activity-feed"
+import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordOwnerCard from "@/components/record-owner-card"
 
 interface Props { params: { key: string; id: string } }
 
+// A custom-object record renders through exactly the same components as a
+// Referral — shell, property cards, tabs, association cards, engagement bar.
 export default async function CustomRecordDetailPage({ params }: Props) {
   const def = await getCustomObject(params.key)
   if (!def) notFound()
 
-  const session = await requireView(`CO:${params.key}`)
-  const canEdit = userCanLevel(session?.user as any, `CO:${params.key}`, "EDIT")
+  const objectType = `CO:${params.key}`
+  const session = await requireView(objectType)
+  const canEdit = userCanLevel(session?.user as any, objectType, "EDIT")
+  const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
 
   const record = await getCustomObjectRecord(params.key, params.id)
   if (!record) notFound()
   await recordCustomObjectView(params.key, params.id)
 
-  const [users, associations, activityItems] = await Promise.all([
+  const [users, assocCards, activityItems, propertyCards] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
-    loadAssociationCards(`CO:${params.key}`, params.id),
-    listRecordActivities(`CO:${params.key}`, params.id),
+    loadAssociationCards(objectType, params.id),
+    listRecordActivities(objectType, params.id),
+    loadPropertyCards(objectType, record as any),
   ])
 
-  return (
-    <div className="p-6 max-w-6xl space-y-4">
-      <Link href={`/objects/${def.key}`} className="inline-flex items-center text-sm text-slate-500 hover:text-slate-800">
-        <ChevronLeft className="h-4 w-4 mr-1" /> Back to {def.plural}
-      </Link>
+  const userOptions = users.map((u) => ({ id: u.id, label: u.name ?? u.email }))
+  const primary = def.properties.find((p) => p.primary) ?? def.properties[0]
+  const title = (primary ? record.values[primary.id] : null) || `${def.singular} #${record.recordNumber ?? ""}`
 
-      <CustomObjectDetail
-        objectKey={def.key}
-        singular={def.singular}
-        ownerLabel={def.ownerLabel}
-        properties={def.properties}
-        cards={def.cards}
-        record={record as any}
-        users={users.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
-        canEdit={canEdit}
-        associations={associations as any}
-        activityItems={activityItems as any}
-      />
-    </div>
+  return (
+    <RecordDetailShell
+      backHref={`/objects/${def.key}`}
+      backLabel={`Back to ${def.plural}`}
+      title={String(title)}
+      subtitle={<span className="font-mono text-slate-400">Record ID #{record.recordNumber ?? "—"}</span>}
+      engagementBar={
+        <RecordEngagementBar recordType={objectType} recordId={record.id} users={userOptions} canEdit={canEdit} compact />
+      }
+      left={
+        <>
+          <RecordPropertyCards
+            entityType={objectType}
+            recordId={record.id}
+            cards={propertyCards.cards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={canEdit}
+            canEditCards={canEditCards}
+          />
+          <RecordOwnerCard
+            type={objectType}
+            recordId={record.id}
+            ownerLabel={def.ownerLabel}
+            ownerId={record.ownerId}
+            users={userOptions}
+            createdByName={record.createdByName}
+            createdAt={record.createdAt}
+            updatedByName={record.updatedByName}
+            updatedAt={record.updatedAt}
+            canEdit={canEdit}
+          />
+        </>
+      }
+      middle={
+        <RecordMiddleTabs
+          overview={
+            <RecordPropertyCards
+              entityType={objectType}
+              recordId={record.id}
+              cards={propertyCards.middleCards}
+              catalog={propertyCards.catalog}
+              values={propertyCards.values}
+              canEdit={canEdit}
+              canEditCards={canEditCards}
+              section="MIDDLE"
+            />
+          }
+          activities={
+            <RecordActivityFeed
+              recordType={objectType}
+              recordId={record.id}
+              items={activityItems as any}
+              users={userOptions}
+              canEdit={canEdit}
+              showActions={false}
+            />
+          }
+        />
+      }
+      right={
+        <RecordAssociationCards recordType={objectType} recordId={record.id} cards={assocCards} canEdit={canEdit} />
+      }
+    />
   )
 }
