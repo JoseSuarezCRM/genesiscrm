@@ -36,7 +36,7 @@ export default function RecordAssociationCards({ recordType, recordId, cards, ca
 
   return (
     <div className="space-y-4">
-      {canEdit && cards.length > 0 && (
+      {canEdit && (
         <div className="flex justify-end">
           <button onClick={() => setCustomizing((v) => !v)}
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
@@ -111,7 +111,7 @@ function AssociationCard({ recordType, recordId, card, canEdit }: {
         <h2 className="text-sm font-semibold text-slate-900">
           {card.label} <span className="text-slate-400 font-normal">{card.records.length}</span>
         </h2>
-        {canEdit && (
+        {canEdit && !card.native && (
           <button onClick={() => setAdding((v) => !v)} title={`Associate a ${card.label}`}
             className="text-slate-400 hover:text-slate-800">
             <Plus className="h-3.5 w-3.5" />
@@ -144,7 +144,7 @@ function AssociationCard({ recordType, recordId, card, canEdit }: {
             {card.records.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-2 py-2">
                 <Link href={r.url} className="text-sm text-blue-600 hover:underline truncate">{r.name}</Link>
-                {canEdit && (
+                {canEdit && !card.native && (
                   <button onClick={() => remove(r.id)} disabled={isPending}
                     className="h-6 w-6 shrink-0 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded">
                     <X className="h-3.5 w-3.5" />

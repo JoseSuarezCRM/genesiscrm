@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react"
 import {
-  createCardLayout,
-  updateCardLayout,
-  deleteCardLayout,
-} from "@/app/actions/card-layouts"
+  createRecordCard,
+  updateRecordCard,
+  deleteRecordCard,
+} from "@/app/actions/record-card-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -28,11 +28,17 @@ interface CardLayout {
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  entityType: "REFERRAL" | "PROVIDER" | "PRACTICE"
+  // Any object key — a built-in ("PROVIDER") or a custom object ("CO:visits").
+  entityType: string
   // null = creating a new card
   existing: CardLayout | null
   // custom properties defined in Settings, selectable like built-in fields
   customProperties?: { id: string; name: string }[]
+  // The object's own properties. When omitted, the Referral pool is used.
+  fields?: { id: string; label: string }[]
+  // Which column a newly created card belongs to.
+  section?: "LEFT" | "MIDDLE"
+  onSaved?: () => void
 }
 
 export default function LeftCardEditorModal({
@@ -41,6 +47,9 @@ export default function LeftCardEditorModal({
   entityType,
   existing,
   customProperties = [],
+  fields: fieldDefs,
+  section = "LEFT",
+  onSaved,
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [title, setTitle] = useState(existing?.title ?? "")
@@ -48,7 +57,7 @@ export default function LeftCardEditorModal({
   const [dragId, setDragId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
 
-  const fieldPool = [
+  const fieldPool = fieldDefs ?? [
     ...referralLeftFieldPool,
     ...customProperties.map((p) => ({ id: `custom:${p.id}`, label: p.name })),
   ]
@@ -79,10 +88,11 @@ export default function LeftCardEditorModal({
     if (!trimmed) return
     startTransition(async () => {
       if (existing) {
-        await updateCardLayout(entityType, existing.cardName, trimmed, fields)
+        await updateRecordCard(entityType, existing.cardName, trimmed, fields)
       } else {
-        await createCardLayout(entityType, trimmed, fields)
+        await createRecordCard(entityType, trimmed, fields, section)
       }
+      onSaved?.()
       onOpenChange(false)
     })
   }
@@ -90,7 +100,8 @@ export default function LeftCardEditorModal({
   const handleDelete = () => {
     if (!existing) return
     startTransition(async () => {
-      await deleteCardLayout(entityType, existing.cardName)
+      await deleteRecordCard(entityType, existing.cardName)
+      onSaved?.()
       onOpenChange(false)
     })
   }

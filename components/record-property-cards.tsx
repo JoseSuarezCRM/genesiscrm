@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Settings, Plus, Check, X, Trash2, Loader2 } from "lucide-react"
+import { Settings, Plus, Check, Loader2 } from "lucide-react"
 import { updateRecordField } from "@/app/actions/record-fields"
-import { createRecordCard, updateRecordCard, deleteRecordCard } from "@/app/actions/record-card-actions"
+import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
@@ -104,84 +104,20 @@ function FieldRow({ f, value, recordId, entityType, canEdit }: {
   )
 }
 
-// Gear → rename the card, add/remove its properties, or delete it.
-function CardEditor({ card, catalog, entityType, onDone }: {
-  card: PropertyCard; catalog: RecordFieldDef[]; entityType: string; onDone: () => void
-}) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [title, setTitle] = useState(card.title)
-  const [fields, setFields] = useState<string[]>(card.fields)
-
-  function toggle(key: string) {
-    setFields((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])
-  }
-
-  function save() {
-    startTransition(async () => {
-      await updateRecordCard(entityType, card.cardName, title.trim() || card.title, fields)
-      onDone(); router.refresh()
-    })
-  }
-
-  function remove() {
-    if (!confirm(`Delete the "${card.title}" card?`)) return
-    startTransition(async () => {
-      await deleteRecordCard(entityType, card.cardName)
-      onDone(); router.refresh()
-    })
-  }
-
-  return (
-    <div className="p-4 space-y-3">
-      <input value={title} onChange={(e) => setTitle(e.target.value)}
-        className="w-full text-sm font-semibold border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400" />
-      <div className="space-y-1 max-h-64 overflow-y-auto">
-        {catalog.map((f) => (
-          <button key={f.key} onClick={() => toggle(f.key)}
-            className="w-full flex items-center gap-2 px-1 py-1.5 text-sm text-left rounded-md hover:bg-slate-50">
-            <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center",
-              fields.includes(f.key) ? "bg-zinc-900 border-zinc-900" : "border-slate-300")}>
-              {fields.includes(f.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-            </span>
-            <span className="text-slate-700">{f.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <button onClick={save} disabled={isPending}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
-          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
-        </button>
-        <button onClick={onDone} className="h-8 px-2 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
-        <button onClick={remove} disabled={isPending}
-          className="ml-auto h-8 w-8 inline-flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
 export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards, section = "LEFT" }: Props) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [editingCard, setEditingCard] = useState<string | null>(null)
+  // null = closed; PropertyCard = editing that card; "new" = creating one.
+  const [editing, setEditing] = useState<PropertyCard | "new" | null>(null)
 
   const byKey = Object.fromEntries(catalog.map((f) => [f.key, f]))
-
-  function addCard() {
-    startTransition(async () => {
-      await createRecordCard(entityType, "New card", [], section)
-      router.refresh()
-    })
-  }
+  // The same "Edit Card" modal Referrals uses, fed this object's own properties.
+  const pool = catalog.map((f) => ({ id: f.key, label: f.label }))
 
   return (
     <div className="space-y-4">
       {canEditCards && (
         <div className="flex justify-end">
-          <button onClick={addCard} disabled={isPending}
+          <button onClick={() => setEditing("new")}
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
             <Plus className="h-3.5 w-3.5" /> Add card
           </button>
@@ -190,35 +126,41 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
 
       {cards.map((card) => (
         <div key={card.cardName} className="bg-white border border-slate-200 rounded-xl">
-          {editingCard === card.cardName ? (
-            <CardEditor card={card} catalog={catalog} entityType={entityType} onDone={() => setEditingCard(null)} />
-          ) : (
-            <>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-                <h2 className="text-sm font-semibold text-slate-900">{card.title}</h2>
-                {canEditCards && (
-                  <button onClick={() => setEditingCard(card.cardName)} title="Customize card"
-                    className="text-slate-300 hover:text-slate-600">
-                    <Settings className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-              <div className="p-5 text-sm">
-                {card.fields.length === 0 ? (
-                  <p className="text-sm text-slate-400">No properties on this card yet.</p>
-                ) : (
-                  card.fields
-                    .map((key) => byKey[key])
-                    .filter(Boolean)
-                    .map((f) => (
-                      <FieldRow key={f.key} f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} />
-                    ))
-                )}
-              </div>
-            </>
-          )}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-900">{card.title}</h2>
+            {canEditCards && (
+              <button onClick={() => setEditing(card)} title="Edit card"
+                className="text-slate-300 hover:text-slate-600">
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="p-5 text-sm">
+            {card.fields.length === 0 ? (
+              <p className="text-sm text-slate-400">No properties on this card yet.</p>
+            ) : (
+              card.fields
+                .map((key) => byKey[key])
+                .filter(Boolean)
+                .map((f) => (
+                  <FieldRow key={f.key} f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} />
+                ))
+            )}
+          </div>
         </div>
       ))}
+
+      {editing && (
+        <LeftCardEditorModal
+          open
+          onOpenChange={(o) => { if (!o) setEditing(null) }}
+          entityType={entityType}
+          existing={editing === "new" ? null : editing}
+          fields={pool}
+          section={section}
+          onSaved={() => router.refresh()}
+        />
+      )}
     </div>
   )
 }

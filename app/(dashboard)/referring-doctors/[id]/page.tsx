@@ -175,35 +175,6 @@ export default async function ProviderDetailPage({ params }: Props) {
       right={
         <>
         <Card>
-          <CardHeader><CardTitle className="text-base">Practice</CardTitle></CardHeader>
-          <CardContent>
-            {provider.practice ? (
-              <Link href={`/practices/${provider.practice.id}`} className="text-sm font-medium text-blue-600 hover:underline">
-                {provider.practice.name}
-              </Link>
-            ) : <p className="text-sm text-slate-400">—</p>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Locations ({provider.locations.length})</CardTitle></CardHeader>
-          <CardContent className="max-h-72 overflow-y-auto">
-            {provider.locations.length === 0 ? (
-              <p className="text-sm text-slate-400">No locations linked.</p>
-            ) : (
-              <div className="divide-y">
-                {provider.locations.map((dl) => (
-                  <Link key={dl.location.id} href={`/locations/${dl.location.id}`}
-                    className="block py-2 text-sm text-blue-600 hover:underline">
-                    {dl.location.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
           <CardHeader><CardTitle className="text-base">Referral Summary</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             <Row label="Total Referrals" value={String(provider.referrals.length)} />

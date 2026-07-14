@@ -186,28 +186,6 @@ export default async function LocationDetailPage({ params }: Props) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="text-base">Providers ({providers.length})</CardTitle></CardHeader>
-            <CardContent className="max-h-80 overflow-y-auto">
-              {providers.length === 0 ? (
-                <p className="text-sm text-slate-400">No providers linked to this location.</p>
-              ) : (
-                <div className="divide-y">
-                  {providers.map((d) => (
-                    <Link key={d.id} href={`/referring-doctors/${d.id}`}
-                      className="flex items-center justify-between gap-3 py-2.5 hover:bg-slate-50 -mx-2 px-2 rounded-md transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-blue-600 truncate">{d.name}</p>
-                        {d.specialty && <p className="text-xs text-slate-400 truncate">{d.specialty}</p>}
-                      </div>
-                      <span className="text-xs text-slate-400 shrink-0">{d._count.referrals}</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           <RecordAssociationCards recordType="LOCATION" recordId={location.id} cards={assocCards} canEdit={canEdit} />
         </>
       }
