@@ -11,6 +11,7 @@ import SurgeryDetailClient from "@/components/surgery-detail-client"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordActionsMenu from "@/components/record-actions-menu"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
 import { loadAssociationCards } from "@/lib/record-associations"
@@ -19,7 +20,7 @@ import RecordMiddleTabs from "@/components/record-middle-tabs"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { listRecordActivities } from "@/app/actions/record-activity"
-import { userCanLevel } from "@/lib/permissions"
+import { userCanLevel, userCanDelete } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 
 const STATUS_COLORS: Record<string, string> = {
@@ -62,6 +63,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
   const canEditCards = userCanLevel(session.user as any, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("SURGERY", surgeryCase as any, "Surgery Case Owner")
   const assocCards = await loadAssociationCards("SURGERY", params.id)
+  const canDelete = userCanDelete(session.user as any, "SURGERY")
 
   return (
     <RecordDetailShell
@@ -75,18 +77,10 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
       }
       subtitle={surgeryCase.mrn ? `MRN: ${surgeryCase.mrn}` : undefined}
       actions={
-        <form
-          action={async () => {
-            "use server"
-            await deleteSurgeryCase(params.id)
-            redirect("/surgery")
-          }}
-        >
-          <Button variant="destructive" size="sm" type="submit">
-            <Trash2 className="h-4 w-4 mr-1.5" />
-            Delete
-          </Button>
-        </form>
+        <RecordActionsMenu entityType="SURGERY" recordId={params.id} title={surgeryCase.patientName}
+          catalog={propertyCards.catalog} values={propertyCards.values}
+          userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
+          canEdit={canEdit} canDelete={canDelete} />
       }
       engagementBar={
         <RecordEngagementBar recordType="SURGERY" recordId={params.id} users={userOptions} canEdit={canEdit} compact />

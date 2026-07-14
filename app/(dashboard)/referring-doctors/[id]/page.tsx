@@ -12,11 +12,12 @@ import ProviderInfoEditor from "@/components/provider-info-editor"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordActionsMenu from "@/components/record-actions-menu"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
 import { loadAssociationCards } from "@/lib/record-associations"
 import { loadPropertyCards } from "@/lib/record-cards"
-import { userCanLevel as canLevel } from "@/lib/permissions"
+import { userCanLevel as canLevel, userCanDelete } from "@/lib/permissions"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
@@ -85,6 +86,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = canLevel(session?.user as any, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("PROVIDER", provider as any, "Provider Owner")
+  const canDelete = userCanDelete(session?.user as any, "PROVIDERS")
   const assocCards = await loadAssociationCards("PROVIDER", provider.id)
 
   return (
@@ -92,6 +94,12 @@ export default async function ProviderDetailPage({ params }: Props) {
       backHref="/referring-doctors"
       backLabel="Back to Referring Providers"
       title={displayName}
+      actions={
+        <RecordActionsMenu entityType="PROVIDER" recordId={provider.id} title={displayName}
+          catalog={propertyCards.catalog} values={propertyCards.values}
+          userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
+          canEdit={isAdmin} canDelete={canDelete} />
+      }
       subtitle={provider.specialty ?? undefined}
       engagementBar={
         <RecordEngagementBar recordType="PROVIDER" recordId={provider.id} users={userOptions} canEdit={isAdmin} compact />

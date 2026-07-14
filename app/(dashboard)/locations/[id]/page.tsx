@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { requireView } from "@/lib/auth-guard"
-import { userCanLevel } from "@/lib/permissions"
+import { userCanLevel, userCanDelete } from "@/lib/permissions"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Building2, MapPin, ExternalLink } from "lucide-react"
@@ -13,6 +13,7 @@ import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordActionsMenu from "@/components/record-actions-menu"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
 import { loadAssociationCards } from "@/lib/record-associations"
@@ -82,12 +83,19 @@ export default async function LocationDetailPage({ params }: Props) {
   const canEditCards = userCanLevel(user, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("LOCATION", location as any, "Location Owner")
   const assocCards = await loadAssociationCards("LOCATION", location.id)
+  const canDelete = userCanDelete(user, "LOCATIONS") || userCanDelete(user, "PRACTICES")
 
   return (
     <RecordDetailShell
       backHref="/locations"
       backLabel="Back to Locations"
       title={<span className="inline-flex items-center gap-2"><MapPin className="h-5 w-5 text-slate-400 shrink-0" />{location.name}</span>}
+      actions={
+        <RecordActionsMenu entityType="LOCATION" recordId={location.id} title={location.name}
+          catalog={propertyCards.catalog} values={propertyCards.values}
+          userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
+          canEdit={canEdit} canDelete={canDelete} />
+      }
       subtitle={
         <Link href={`/practices/${location.practice.id}`} className="inline-flex items-center gap-1 hover:underline">
           <Building2 className="h-3.5 w-3.5" />{location.practice.name}

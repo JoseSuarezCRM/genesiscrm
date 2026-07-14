@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { requireView } from "@/lib/auth-guard"
-import { userCanLevel } from "@/lib/permissions"
+import { userCanLevel, userCanDelete } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { getCustomObjectRecord, recordCustomObjectView } from "@/app/actions/custom-object-records"
@@ -8,6 +8,7 @@ import { loadAssociationCards } from "@/lib/record-associations"
 import { loadPropertyCards } from "@/lib/record-cards"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordActionsMenu from "@/components/record-actions-menu"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
@@ -26,6 +27,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
   const session = await requireView(objectType)
   const canEdit = userCanLevel(session?.user as any, objectType, "EDIT")
   const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
+  const canDelete = userCanDelete(session?.user as any, objectType)
 
   const record = await getCustomObjectRecord(params.key, params.id)
   if (!record) notFound()
@@ -47,6 +49,12 @@ export default async function CustomRecordDetailPage({ params }: Props) {
       backHref={`/objects/${def.key}`}
       backLabel={`Back to ${def.plural}`}
       title={String(title)}
+      actions={
+        <RecordActionsMenu entityType={objectType} recordId={record.id} title={String(title)}
+          catalog={propertyCards.catalog} values={propertyCards.values}
+          userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
+          canEdit={canEdit} canDelete={canDelete} />
+      }
       subtitle={<span className="font-mono text-slate-400">Record ID #{record.recordNumber ?? "—"}</span>}
       engagementBar={
         <RecordEngagementBar recordType={objectType} recordId={record.id} users={userOptions} canEdit={canEdit} compact />

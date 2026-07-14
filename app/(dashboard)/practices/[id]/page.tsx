@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
-import { userCan, userCanLevel } from "@/lib/permissions"
+import { userCan, userCanLevel, userCanDelete } from "@/lib/permissions"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
@@ -10,6 +10,7 @@ import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordActionsMenu from "@/components/record-actions-menu"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
 import { loadAssociationCards } from "@/lib/record-associations"
@@ -71,12 +72,19 @@ export default async function PracticeDetailPage({ params }: Props) {
   const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("PRACTICE", practice as any, "Practice Owner")
   const assocCards = await loadAssociationCards("PRACTICE", practice.id)
+  const canDelete = userCanDelete(session?.user as any, "PRACTICES")
 
   return (
     <RecordDetailShell
       backHref="/referring-doctors"
       backLabel="Back to Referring Providers"
       title={practice.name}
+      actions={
+        <RecordActionsMenu entityType="PRACTICE" recordId={practice.id} title={practice.name}
+          catalog={propertyCards.catalog} values={propertyCards.values}
+          userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
+          canEdit={isAdmin} canDelete={canDelete} />
+      }
       subtitle={practice.phone ?? undefined}
       badges={
         <span className="text-sm text-slate-400">
