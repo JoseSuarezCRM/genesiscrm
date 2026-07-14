@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Settings, Plus, Check, Loader2 } from "lucide-react"
 import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
@@ -15,11 +16,13 @@ export interface PropertyCard {
   fields: string[]
 }
 
+interface UserOpt { id: string; label: string }
+
 interface Props {
   entityType: string
   recordId: string
   cards: PropertyCard[]
-  /** Every editable property of this object — base columns + custom properties. */
+  /** Every editable property of this object — base columns + custom properties + owner/audit. */
   catalog: RecordFieldDef[]
   values: Record<string, any>
   canEdit: boolean
@@ -27,23 +30,52 @@ interface Props {
   canEditCards: boolean
   /** Which column these cards belong to — new cards are created there. */
   section?: "LEFT" | "MIDDLE"
+  /** Needed to render/edit the Record Owner field. */
+  users?: UserOpt[]
 }
 
-function display(f: RecordFieldDef, v: any): string {
+function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): string {
   if (v === null || v === undefined || v === "") return "—"
+  if (f.type === "user") return userMap[v] ?? String(v)
+  if (f.type === "datetime") return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
   if (f.type === "date") return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
   if (Array.isArray(v)) return v.join(", ")
   return String(v)
 }
 
-// One property row: click the value to edit it in place.
-function FieldRow({ f, value, recordId, entityType, canEdit }: {
-  f: RecordFieldDef; value: any; recordId: string; entityType: string; canEdit: boolean
+// One property row — label on top, value underneath (matching Referrals). Click
+// the value to edit it in place; the owner is a dropdown; audit fields are read-only.
+function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
+  f: RecordFieldDef; value: any; recordId: string; entityType: string; canEdit: boolean; users: UserOpt[]; userMap: Record<string, string>
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<any>(value ?? "")
+
+  const Label = <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide">{f.label}</span>
+
+  // Record Owner: an always-on dropdown (built-in + custom objects go through setRecordOwner).
+  if (f.type === "user") {
+    if (!canEdit) return <div className="py-2 space-y-1">{Label}<span className="block text-sm text-slate-900 font-medium">{display(f, value, userMap)}</span></div>
+    return (
+      <div className="py-2 space-y-1">
+        {Label}
+        <StyledSelect
+          value={String(value ?? "")}
+          disabled={isPending}
+          onChange={(e) => startTransition(async () => { await setRecordOwner(entityType, recordId, e.target.value || null); router.refresh() })}
+          className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400">
+          <option value="">— Unassigned —</option>
+          {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+        </StyledSelect>
+      </div>
+    )
+  }
+
+  if (!canEdit || f.readOnly) {
+    return <div className="py-2 space-y-1">{Label}<span className="block text-sm text-slate-900 font-medium break-words">{display(f, value, userMap)}</span></div>
+  }
 
   function save() {
     startTransition(async () => {
@@ -52,22 +84,13 @@ function FieldRow({ f, value, recordId, entityType, canEdit }: {
     })
   }
 
-  if (!canEdit || f.readOnly) {
-    return (
-      <div className="flex justify-between gap-4 py-1.5">
-        <span className="text-slate-500 shrink-0">{f.label}</span>
-        <span className="text-slate-900 font-medium text-right break-words">{display(f, value)}</span>
-      </div>
-    )
-  }
-
   if (!editing) {
     return (
       <button onClick={() => { setDraft(value ?? ""); setEditing(true) }}
-        className="w-full flex justify-between gap-4 py-1.5 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 transition-colors group">
-        <span className="text-slate-500 shrink-0">{f.label}</span>
-        <span className={cn("text-right break-words font-medium", value ? "text-slate-900" : "text-slate-400 group-hover:text-slate-600")}>
-          {display(f, value)}
+        className="w-full py-2 space-y-1 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 transition-colors group">
+        {Label}
+        <span className={cn("block text-sm break-words font-medium", value ? "text-slate-900" : "text-slate-400 group-hover:text-slate-600")}>
+          {display(f, value, userMap)}
         </span>
       </button>
     )
@@ -75,8 +98,8 @@ function FieldRow({ f, value, recordId, entityType, canEdit }: {
 
   const input = "w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400"
   return (
-    <div className="py-1.5 space-y-1.5">
-      <span className="text-xs text-slate-500">{f.label}</span>
+    <div className="py-2 space-y-1.5">
+      {Label}
       {f.type === "select" ? (
         <StyledSelect value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} className={input}>
           <option value="">—</option>
@@ -104,12 +127,13 @@ function FieldRow({ f, value, recordId, entityType, canEdit }: {
   )
 }
 
-export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards, section = "LEFT" }: Props) {
+export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards, section = "LEFT", users = [] }: Props) {
   const router = useRouter()
   // null = closed; PropertyCard = editing that card; "new" = creating one.
   const [editing, setEditing] = useState<PropertyCard | "new" | null>(null)
 
   const byKey = Object.fromEntries(catalog.map((f) => [f.key, f]))
+  const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // The same "Edit Card" modal Referrals uses, fed this object's own properties.
   const pool = catalog.map((f) => ({ id: f.key, label: f.label }))
 
@@ -142,8 +166,10 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
               card.fields
                 .map((key) => byKey[key])
                 .filter(Boolean)
-                .map((f) => (
-                  <FieldRow key={f.key} f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} />
+                .map((f, i, arr) => (
+                  <div key={f.key} className={i < arr.length - 1 ? "border-b border-slate-50" : ""}>
+                    <FieldRow f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />
+                  </div>
                 ))
             )}
           </div>

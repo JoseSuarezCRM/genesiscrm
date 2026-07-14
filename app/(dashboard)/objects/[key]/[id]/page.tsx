@@ -13,7 +13,6 @@ import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
-import RecordOwnerCard from "@/components/record-owner-card"
 
 interface Props { params: { key: string; id: string } }
 
@@ -36,7 +35,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
     loadAssociationCards(objectType, params.id),
     listRecordActivities(objectType, params.id),
-    loadPropertyCards(objectType, record as any),
+    loadPropertyCards(objectType, record as any, def.ownerLabel),
   ])
 
   const userOptions = users.map((u) => ({ id: u.id, label: u.name ?? u.email }))
@@ -62,18 +61,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
             values={propertyCards.values}
             canEdit={canEdit}
             canEditCards={canEditCards}
-          />
-          <RecordOwnerCard
-            type={objectType}
-            recordId={record.id}
-            ownerLabel={def.ownerLabel}
-            ownerId={record.ownerId}
             users={userOptions}
-            createdByName={record.createdByName}
-            createdAt={record.createdAt}
-            updatedByName={record.updatedByName}
-            updatedAt={record.updatedAt}
-            canEdit={canEdit}
           />
         </>
       }
@@ -89,6 +77,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
               canEdit={canEdit}
               canEditCards={canEditCards}
               section="MIDDLE"
+              users={userOptions}
             />
           }
           activities={

@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import SurgeryDetailClient from "@/components/surgery-detail-client"
 import RecordEngagementBar from "@/components/record-engagement-bar"
-import RecordOwnerCard from "@/components/record-owner-card"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
@@ -61,7 +60,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
   ])
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = userCanLevel(session.user as any, "VIEWS", "EDIT")
-  const propertyCards = await loadPropertyCards("SURGERY", surgeryCase as any)
+  const propertyCards = await loadPropertyCards("SURGERY", surgeryCase as any, "Surgery Case Owner")
   const assocCards = await loadAssociationCards("SURGERY", params.id)
 
   return (
@@ -94,18 +93,6 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
       }
       left={
         <>
-          <RecordOwnerCard
-            type="SURGERY"
-            recordId={params.id}
-            ownerLabel="Surgery Case Owner"
-            ownerId={surgeryCase.ownerId ?? null}
-            users={userOptions}
-            createdByName={surgeryCase.createdBy?.name ?? surgeryCase.createdBy?.email ?? null}
-            createdAt={surgeryCase.createdAt}
-            updatedByName={surgeryCase.updatedBy?.name ?? surgeryCase.updatedBy?.email ?? null}
-            updatedAt={surgeryCase.updatedAt}
-            canEdit={canEdit}
-          />
 
           <RecordPropertyCards
             entityType="SURGERY"
@@ -115,6 +102,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
             values={propertyCards.values}
             canEdit={canEdit}
             canEditCards={canEditCards}
+            users={userOptions}
           />
         </>
       }
@@ -131,6 +119,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
             canEdit={canEdit}
             canEditCards={canEditCards}
             section="MIDDLE"
+            users={userOptions}
           />
             <SurgeryDetailClient surgeryCase={surgeryCase} />
             </>

@@ -9,7 +9,6 @@ import PracticeDetailClient from "@/components/practice-detail-client"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
-import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
@@ -70,7 +69,7 @@ export default async function PracticeDetailPage({ params }: Props) {
 
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
-  const propertyCards = await loadPropertyCards("PRACTICE", practice as any)
+  const propertyCards = await loadPropertyCards("PRACTICE", practice as any, "Practice Owner")
   const assocCards = await loadAssociationCards("PRACTICE", practice.id)
 
   return (
@@ -97,18 +96,7 @@ export default async function PracticeDetailPage({ params }: Props) {
           values={propertyCards.values}
           canEdit={isAdmin}
           canEditCards={canEditCards}
-        />
-        <RecordOwnerCard
-          type="PRACTICE"
-          recordId={practice.id}
-          ownerLabel="Practice Owner"
-          ownerId={practice.ownerId}
           users={userOptions}
-          createdByName={practice.createdBy?.name ?? practice.createdBy?.email ?? null}
-          createdAt={practice.createdAt}
-          updatedByName={practice.updatedBy?.name ?? practice.updatedBy?.email ?? null}
-          updatedAt={practice.updatedAt}
-          canEdit={isAdmin}
         />
         </>
       }
@@ -125,6 +113,7 @@ export default async function PracticeDetailPage({ params }: Props) {
             canEdit={isAdmin}
             canEditCards={canEditCards}
             section="MIDDLE"
+            users={userOptions}
           />
             <PracticeDetailClient
               practice={practice as any}

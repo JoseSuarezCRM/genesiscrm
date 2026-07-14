@@ -2,7 +2,7 @@
 // property cards (same idea as the Referral field catalog): a card groups these
 // keys, and each value is click-to-edit inline.
 
-export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text"
+export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime"
 
 export interface RecordFieldDef {
   key: string

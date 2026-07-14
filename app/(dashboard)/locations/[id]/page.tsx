@@ -12,7 +12,6 @@ import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
-import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
@@ -81,7 +80,7 @@ export default async function LocationDetailPage({ params }: Props) {
 
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = userCanLevel(user, "VIEWS", "EDIT")
-  const propertyCards = await loadPropertyCards("LOCATION", location as any)
+  const propertyCards = await loadPropertyCards("LOCATION", location as any, "Location Owner")
   const assocCards = await loadAssociationCards("LOCATION", location.id)
 
   return (
@@ -107,18 +106,7 @@ export default async function LocationDetailPage({ params }: Props) {
             values={propertyCards.values}
             canEdit={canEdit}
             canEditCards={canEditCards}
-          />
-          <RecordOwnerCard
-            type="LOCATION"
-            recordId={location.id}
-            ownerLabel="Location Owner"
-            ownerId={location.ownerId}
             users={userOptions}
-            createdByName={location.createdBy?.name ?? location.createdBy?.email ?? null}
-            createdAt={location.createdAt}
-            updatedByName={location.updatedBy?.name ?? location.updatedBy?.email ?? null}
-            updatedAt={location.updatedAt}
-            canEdit={canEdit}
           />
         </>
       }
@@ -135,6 +123,7 @@ export default async function LocationDetailPage({ params }: Props) {
             canEdit={canEdit}
             canEditCards={canEditCards}
             section="MIDDLE"
+            users={userOptions}
           />
             <Card>
               <CardHeader><CardTitle className="text-base">Referral History ({location._count.referrals})</CardTitle></CardHeader>

@@ -1,6 +1,11 @@
-// Server-side loader for a record's left-column property cards — the same shape
-// Referrals uses (saved CardLayouts + a property catalog), so every object gets
-// configurable cards with inline click-to-edit values.
+// Server-side loader for a record's property cards — the same shape Referrals
+// uses (saved card layouts + a property catalog), so every object gets
+// configurable cards with inline click-to-edit values, in the left AND middle
+// columns.
+//
+// Record Owner + the audit fields (created by/at, last updated by/at, Record ID)
+// are part of the catalog too, so they can be placed on any card, moved, or
+// hidden — they are not a separate hardcoded card.
 
 import { prisma } from "@/lib/prisma"
 import { getCardLayouts } from "@/app/actions/card-layouts"
@@ -12,10 +17,24 @@ const CP_TYPE: Record<string, RecordFieldType> = {
   MULTI_SELECT: "select", URL: "text",
 }
 
+// The owner + audit fields every ownable object shares. `__` keys never collide
+// with a real column or a custom-property ("cp_") key.
+function metaCatalog(ownerLabel: string, withRecordId: boolean): RecordFieldDef[] {
+  return [
+    { key: "__owner", label: ownerLabel, type: "user" },
+    ...(withRecordId ? [{ key: "__recordId", label: "Record ID", type: "text" as RecordFieldType, readOnly: true }] : []),
+    { key: "__createdBy", label: "Created by", type: "text", readOnly: true },
+    { key: "__createdAt", label: "Created", type: "datetime", readOnly: true },
+    { key: "__updatedBy", label: "Last updated by", type: "text", readOnly: true },
+    { key: "__updatedAt", label: "Last updated", type: "datetime", readOnly: true },
+  ]
+}
+
+const RECORD_DETAILS_FIELDS = ["__owner", "__createdBy", "__createdAt", "__updatedBy", "__updatedAt"]
+
 // Custom objects: properties come from the object definition, values from the
-// record's JSON bag, and cards from RecordCard — but the shape returned here is
-// identical to a built-in object's, so the page renders the same components.
-async function loadCustomObjectCards(objectType: string, record: Record<string, any>) {
+// record's JSON bag, cards from RecordCard — identical shape to a built-in.
+async function loadCustomObjectCards(objectType: string, record: Record<string, any>, ownerLabel: string) {
   const key = objectType.slice(3)
   const [def, rows] = await Promise.all([
     (prisma as any).customObjectDef.findUnique({ where: { key } }),
@@ -23,30 +42,36 @@ async function loadCustomObjectCards(objectType: string, record: Record<string, 
   ])
   const props: any[] = (def?.properties as any[]) ?? []
 
-  const catalog: RecordFieldDef[] = props.map((p) => ({
-    key: p.id,
-    label: p.name,
-    type: CP_TYPE[p.type] ?? "text",
-    options: p.options ?? [],
-  }))
+  const catalog: RecordFieldDef[] = [
+    ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", options: p.options ?? [] })),
+    ...metaCatalog(ownerLabel || `${def?.singular ?? "Record"} Owner`, true),
+  ]
 
-  const values: Record<string, any> = (record.values as Record<string, any>) ?? {}
+  const values: Record<string, any> = { ...((record.values as Record<string, any>) ?? {}) }
+  values.__owner = record.ownerId ?? null
+  values.__recordId = record.recordNumber != null ? `#${record.recordNumber}` : "—"
+  values.__createdBy = record.createdByName ?? null
+  values.__createdAt = record.createdAt ?? null
+  values.__updatedBy = record.updatedByName ?? null
+  values.__updatedAt = record.updatedAt ?? null
+
   const toCards = (rs: any[]) => rs.map((r) => ({ cardName: r.cardName, title: r.title, fields: r.fields }))
   const left = rows.filter((r: any) => r.section === "LEFT")
   const middle = rows.filter((r: any) => r.section === "MIDDLE")
 
   return {
-    cards: left.length
-      ? toCards(left)
-      : [{ cardName: "info", title: `${def?.singular ?? "Record"} Information`, fields: props.map((p) => p.id) }],
+    cards: left.length ? toCards(left) : [
+      { cardName: "info", title: `${def?.singular ?? "Record"} Information`, fields: props.map((p) => p.id) },
+      { cardName: "record-details", title: "Record details", fields: ["__owner", "__recordId", "__createdBy", "__createdAt", "__updatedBy", "__updatedAt"] },
+    ],
     middleCards: toCards(middle),
     catalog,
     values,
   }
 }
 
-export async function loadPropertyCards(entityType: string, record: Record<string, any>) {
-  if (entityType.startsWith("CO:")) return loadCustomObjectCards(entityType, record)
+export async function loadPropertyCards(entityType: string, record: Record<string, any>, ownerLabel?: string) {
+  if (entityType.startsWith("CO:")) return loadCustomObjectCards(entityType, record, ownerLabel ?? "")
 
   const [leftLayouts, middleLayouts, customProps] = await Promise.all([
     getCardLayouts(entityType as any, "LEFT"),
@@ -54,26 +79,39 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
     prisma.customProperty.findMany({ where: { entityType: entityType as any }, orderBy: { createdAt: "asc" } }),
   ])
 
+  // Referrals keep their own left-column component, so they don't get the shared
+  // owner/audit meta (they have no owner). Everything else does.
+  const hasMeta = entityType !== "REFERRAL" && !!ownerLabel
+
   const catalog: RecordFieldDef[] = [
     ...(RECORD_FIELDS[entityType] ?? []),
-    ...customProps.map((c) => ({
-      key: `cp_${c.id}`,
-      label: c.name,
-      type: CP_TYPE[c.type] ?? "text",
-      options: c.options,
-    })),
+    ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options })),
+    ...(hasMeta ? metaCatalog(ownerLabel!, false) : []),
   ]
 
   const bag = (record.customProperties as Record<string, any>) ?? {}
   const values: Record<string, any> = { ...record }
   for (const c of customProps) values[`cp_${c.id}`] = bag[c.id]
 
+  if (hasMeta) {
+    values.__owner = record.ownerId ?? null
+    values.__createdBy = record.createdBy?.name ?? record.createdBy?.email ?? null
+    values.__createdAt = record.createdAt ?? null
+    values.__updatedBy = record.updatedBy?.name ?? record.updatedBy?.email ?? null
+    values.__updatedAt = record.updatedAt ?? null
+  }
+
   const toCards = (rows: { cardName: string; title: string; fields: string[] }[]) =>
     rows.map((l) => ({ cardName: l.cardName, title: l.title, fields: l.fields }))
 
-  // Until someone customizes the layout, the left column shows one card with every
-  // base property. The middle column starts empty — add cards to put properties there.
-  const cards = leftLayouts.length ? toCards(leftLayouts as any) : [defaultCardFor(entityType)]
+  // Defaults (used until someone customizes): an info card with the base
+  // properties, plus a Record details card holding owner + audit.
+  const defaultLeft = [
+    defaultCardFor(entityType),
+    ...(hasMeta ? [{ cardName: "record-details", title: "Record details", fields: RECORD_DETAILS_FIELDS }] : []),
+  ]
+
+  const cards = leftLayouts.length ? toCards(leftLayouts as any) : defaultLeft
   const middleCards = toCards(middleLayouts as any)
 
   return { cards, middleCards, catalog, values }

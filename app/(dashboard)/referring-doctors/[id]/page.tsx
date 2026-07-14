@@ -11,7 +11,6 @@ import { formatDate } from "@/lib/utils"
 import ProviderInfoEditor from "@/components/provider-info-editor"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
-import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
@@ -85,7 +84,7 @@ export default async function ProviderDetailPage({ params }: Props) {
 
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = canLevel(session?.user as any, "VIEWS", "EDIT")
-  const propertyCards = await loadPropertyCards("PROVIDER", provider as any)
+  const propertyCards = await loadPropertyCards("PROVIDER", provider as any, "Provider Owner")
   const assocCards = await loadAssociationCards("PROVIDER", provider.id)
 
   return (
@@ -107,18 +106,7 @@ export default async function ProviderDetailPage({ params }: Props) {
             values={propertyCards.values}
             canEdit={isAdmin}
             canEditCards={canEditCards}
-          />
-          <RecordOwnerCard
-            type="PROVIDER"
-            recordId={provider.id}
-            ownerLabel="Provider Owner"
-            ownerId={provider.ownerId}
             users={userOptions}
-            createdByName={provider.createdBy?.name ?? provider.createdBy?.email ?? null}
-            createdAt={provider.createdAt}
-            updatedByName={provider.updatedBy?.name ?? provider.updatedBy?.email ?? null}
-            updatedAt={provider.updatedAt}
-            canEdit={isAdmin}
           />
         </>
       }
@@ -135,6 +123,7 @@ export default async function ProviderDetailPage({ params }: Props) {
             canEdit={isAdmin}
             canEditCards={canEditCards}
             section="MIDDLE"
+            users={userOptions}
           />
             <Card>
               <CardHeader><CardTitle className="text-base">Referral History ({provider.referrals.length})</CardTitle></CardHeader>
