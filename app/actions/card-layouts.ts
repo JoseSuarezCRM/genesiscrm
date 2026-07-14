@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
-type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE"
+type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION" | "SURGERY" | "ACTIVITY" | "TASK"
 export type CardSection = "LEFT" | "RIGHT"
 
 // Admin-only guard
@@ -20,6 +20,8 @@ function revalidateDetailPages() {
   revalidatePath("/referrals/[id]", "page")
   revalidatePath("/referring-doctors/[id]", "page")
   revalidatePath("/practices/[id]", "page")
+  revalidatePath("/locations/[id]", "page")
+  revalidatePath("/surgery/[id]", "page")
 }
 
 export async function getCardLayout(entityType: EntityType, cardName: string) {

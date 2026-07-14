@@ -12,6 +12,8 @@ import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordPropertyCards from "@/components/record-property-cards"
+import { loadPropertyCards } from "@/lib/record-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
@@ -56,6 +58,8 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
   ])
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
+  const canEditCards = userCanLevel(session.user as any, "VIEWS", "EDIT")
+  const propertyCards = await loadPropertyCards("SURGERY", surgeryCase as any)
 
   return (
     <RecordDetailShell
@@ -100,26 +104,15 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
             canEdit={canEdit}
           />
 
-          <Card>
-            <CardHeader><CardTitle className="text-base">Case Information</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <Row label="Patient Name" value={surgeryCase.patientName} />
-              <Row label="MRN" value={surgeryCase.mrn} />
-              <Row label="Ordering Provider" value={surgeryCase.orderingProvider} />
-              <Row label="Diagnosis" value={surgeryCase.diagnosis} />
-              <Row label="Creation Date" value={formatDate(surgeryCase.creationDate)} />
-              <Row label="Expires" value={formatDate(surgeryCase.expires)} />
-              <Row label="Uploaded by" value={surgeryCase.createdBy?.name ?? surgeryCase.createdBy?.email} />
-            </CardContent>
-          </Card>
-
-          {customProperties.length > 0 && (
-            <Card>
-              <CardContent className="pt-6">
-                <CustomPropertiesDisplay entityType="SURGERY" entityId={params.id} properties={customProperties as any} />
-              </CardContent>
-            </Card>
-          )}
+          <RecordPropertyCards
+            entityType="SURGERY"
+            recordId={params.id}
+            cards={propertyCards.cards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={canEdit}
+            canEditCards={canEditCards}
+          />
         </>
       }
       middle={

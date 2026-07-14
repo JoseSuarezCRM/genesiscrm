@@ -13,6 +13,9 @@ import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordPropertyCards from "@/components/record-property-cards"
+import { loadPropertyCards } from "@/lib/record-cards"
+import { userCanLevel as canLevel } from "@/lib/permissions"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
@@ -79,6 +82,8 @@ export default async function ProviderDetailPage({ params }: Props) {
     : provider.name
 
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
+  const canEditCards = canLevel(session?.user as any, "VIEWS", "EDIT")
+  const propertyCards = await loadPropertyCards("PROVIDER", provider as any)
 
   return (
     <RecordDetailShell
@@ -91,7 +96,15 @@ export default async function ProviderDetailPage({ params }: Props) {
       }
       left={
         <>
-          <ProviderInfoEditor provider={provider as any} allPractices={allPractices as any} isAdmin={isAdmin} />
+          <RecordPropertyCards
+            entityType="PROVIDER"
+            recordId={provider.id}
+            cards={propertyCards.cards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={isAdmin}
+            canEditCards={canEditCards}
+          />
           <RecordOwnerCard
             type="PROVIDER"
             recordId={provider.id}
@@ -104,13 +117,6 @@ export default async function ProviderDetailPage({ params }: Props) {
             updatedAt={provider.updatedAt}
             canEdit={isAdmin}
           />
-          {customProperties.length > 0 && (
-            <Card>
-              <CardContent className="pt-6">
-                <CustomPropertiesDisplay entityType="PROVIDER" entityId={provider.id} properties={customProperties} />
-              </CardContent>
-            </Card>
-          )}
         </>
       }
       middle={
@@ -152,6 +158,36 @@ export default async function ProviderDetailPage({ params }: Props) {
         />
       }
       right={
+        <>
+        <Card>
+          <CardHeader><CardTitle className="text-base">Practice</CardTitle></CardHeader>
+          <CardContent>
+            {provider.practice ? (
+              <Link href={`/practices/${provider.practice.id}`} className="text-sm font-medium text-blue-600 hover:underline">
+                {provider.practice.name}
+              </Link>
+            ) : <p className="text-sm text-slate-400">—</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Locations ({provider.locations.length})</CardTitle></CardHeader>
+          <CardContent className="max-h-72 overflow-y-auto">
+            {provider.locations.length === 0 ? (
+              <p className="text-sm text-slate-400">No locations linked.</p>
+            ) : (
+              <div className="divide-y">
+                {provider.locations.map((dl) => (
+                  <Link key={dl.location.id} href={`/locations/${dl.location.id}`}
+                    className="block py-2 text-sm text-blue-600 hover:underline">
+                    {dl.location.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader><CardTitle className="text-base">Referral Summary</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -162,6 +198,7 @@ export default async function ProviderDetailPage({ params }: Props) {
             <Row label="Pending" value={String(provider.referrals.filter((r) => r.status === "NEW" || r.status === "CONTACTED").length)} />
           </CardContent>
         </Card>
+        </>
       }
     />
   )

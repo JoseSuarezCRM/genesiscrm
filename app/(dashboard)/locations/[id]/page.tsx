@@ -14,6 +14,8 @@ import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordPropertyCards from "@/components/record-property-cards"
+import { loadPropertyCards } from "@/lib/record-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
@@ -76,6 +78,8 @@ export default async function LocationDetailPage({ params }: Props) {
   const pending = location.referrals.filter((r) => r.status === "NEW" || r.status === "CONTACTED").length
 
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
+  const canEditCards = userCanLevel(user, "VIEWS", "EDIT")
+  const propertyCards = await loadPropertyCards("LOCATION", location as any)
 
   return (
     <RecordDetailShell
@@ -92,7 +96,15 @@ export default async function LocationDetailPage({ params }: Props) {
       }
       left={
         <>
-          <LocationInfoEditor location={location as any} practices={practices} canEdit={canEdit} />
+          <RecordPropertyCards
+            entityType="LOCATION"
+            recordId={location.id}
+            cards={propertyCards.cards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={canEdit}
+            canEditCards={canEditCards}
+          />
           <RecordOwnerCard
             type="LOCATION"
             recordId={location.id}
@@ -105,13 +117,6 @@ export default async function LocationDetailPage({ params }: Props) {
             updatedAt={location.updatedAt}
             canEdit={canEdit}
           />
-          {customProperties.length > 0 && (
-            <Card>
-              <CardContent className="pt-6">
-                <CustomPropertiesDisplay entityType="LOCATION" entityId={location.id} properties={customProperties as any} />
-              </CardContent>
-            </Card>
-          )}
         </>
       }
       middle={
@@ -168,7 +173,7 @@ export default async function LocationDetailPage({ params }: Props) {
 
           <Card>
             <CardHeader><CardTitle className="text-base">Providers ({providers.length})</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className="max-h-80 overflow-y-auto">
               {providers.length === 0 ? (
                 <p className="text-sm text-slate-400">No providers linked to this location.</p>
               ) : (

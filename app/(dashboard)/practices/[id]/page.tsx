@@ -11,6 +11,8 @@ import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
+import RecordPropertyCards from "@/components/record-property-cards"
+import { loadPropertyCards } from "@/lib/record-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
@@ -65,6 +67,8 @@ export default async function PracticeDetailPage({ params }: Props) {
   ])
 
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
+  const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
+  const propertyCards = await loadPropertyCards("PRACTICE", practice as any)
 
   return (
     <RecordDetailShell
@@ -81,6 +85,16 @@ export default async function PracticeDetailPage({ params }: Props) {
         <RecordEngagementBar recordType="PRACTICE" recordId={practice.id} users={userOptions} canEdit={isAdmin} compact />
       }
       left={
+        <>
+        <RecordPropertyCards
+          entityType="PRACTICE"
+          recordId={practice.id}
+          cards={propertyCards.cards}
+          catalog={propertyCards.catalog}
+          values={propertyCards.values}
+          canEdit={isAdmin}
+          canEditCards={canEditCards}
+        />
         <RecordOwnerCard
           type="PRACTICE"
           recordId={practice.id}
@@ -93,6 +107,7 @@ export default async function PracticeDetailPage({ params }: Props) {
           updatedAt={practice.updatedAt}
           canEdit={isAdmin}
         />
+        </>
       }
       middle={
         <RecordMiddleTabs
