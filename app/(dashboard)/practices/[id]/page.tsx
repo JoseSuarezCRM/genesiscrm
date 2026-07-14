@@ -115,12 +115,24 @@ export default async function PracticeDetailPage({ params }: Props) {
       middle={
         <RecordMiddleTabs
           overview={
+            <>
+          <RecordPropertyCards
+            entityType="PRACTICE"
+            recordId={practice.id}
+            cards={propertyCards.middleCards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={isAdmin}
+            canEditCards={canEditCards}
+            section="MIDDLE"
+          />
             <PracticeDetailClient
               practice={practice as any}
               referrals={referrals as any}
               isAdmin={isAdmin}
               customProperties={customProperties}
             />
+            </>
           }
           activities={
             <RecordActivityFeed

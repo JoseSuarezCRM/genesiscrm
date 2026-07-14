@@ -13,8 +13,9 @@ const CP_TYPE: Record<string, RecordFieldType> = {
 }
 
 export async function loadPropertyCards(entityType: string, record: Record<string, any>) {
-  const [layouts, customProps] = await Promise.all([
+  const [leftLayouts, middleLayouts, customProps] = await Promise.all([
     getCardLayouts(entityType as any, "LEFT"),
+    getCardLayouts(entityType as any, "MIDDLE"),
     prisma.customProperty.findMany({ where: { entityType: entityType as any }, orderBy: { createdAt: "asc" } }),
   ])
 
@@ -32,10 +33,13 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
   const values: Record<string, any> = { ...record }
   for (const c of customProps) values[`cp_${c.id}`] = bag[c.id]
 
-  // Until someone customizes the layout, show one card with every base property.
-  const cards = layouts.length
-    ? layouts.map((l) => ({ cardName: l.cardName, title: l.title, fields: l.fields }))
-    : [defaultCardFor(entityType)]
+  const toCards = (rows: { cardName: string; title: string; fields: string[] }[]) =>
+    rows.map((l) => ({ cardName: l.cardName, title: l.title, fields: l.fields }))
 
-  return { cards, catalog, values }
+  // Until someone customizes the layout, the left column shows one card with every
+  // base property. The middle column starts empty — add cards to put properties there.
+  const cards = leftLayouts.length ? toCards(leftLayouts as any) : [defaultCardFor(entityType)]
+  const middleCards = toCards(middleLayouts as any)
+
+  return { cards, middleCards, catalog, values }
 }

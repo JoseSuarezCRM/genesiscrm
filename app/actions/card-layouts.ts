@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
 type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION" | "SURGERY" | "ACTIVITY" | "TASK"
-export type CardSection = "LEFT" | "RIGHT"
+export type CardSection = "LEFT" | "RIGHT" | "MIDDLE"
 
 // Admin-only guard
 async function requireAdmin() {

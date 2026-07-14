@@ -13,6 +13,15 @@ export interface RecordFieldDef {
 }
 
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
+  REFERRAL: [
+    { key: "patientFirstName", label: "First Name", type: "text" },
+    { key: "patientLastName", label: "Last Name", type: "text" },
+    { key: "patientMrn", label: "MRN", type: "text" },
+    { key: "patientPhone", label: "Phone", type: "phone" },
+    { key: "patientEmail", label: "Email", type: "email" },
+    { key: "insuranceProvider", label: "Insurance", type: "text" },
+    { key: "notes", label: "Notes", type: "long_text" },
+  ],
   PROVIDER: [
     { key: "name", label: "Name", type: "text" },
     { key: "title", label: "Title", type: "text" },

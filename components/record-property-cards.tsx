@@ -25,6 +25,8 @@ interface Props {
   canEdit: boolean
   /** Card layouts are a Views permission, like on Referrals. */
   canEditCards: boolean
+  /** Which column these cards belong to — new cards are created there. */
+  section?: "LEFT" | "MIDDLE"
 }
 
 function display(f: RecordFieldDef, v: any): string {
@@ -161,7 +163,7 @@ function CardEditor({ card, catalog, entityType, onDone }: {
   )
 }
 
-export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards }: Props) {
+export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards, section = "LEFT" }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editingCard, setEditingCard] = useState<string | null>(null)
@@ -170,7 +172,7 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
 
   function addCard() {
     startTransition(async () => {
-      await createCardLayout(entityType as any, "New card", [], "LEFT")
+      await createCardLayout(entityType as any, "New card", [], section)
       router.refresh()
     })
   }

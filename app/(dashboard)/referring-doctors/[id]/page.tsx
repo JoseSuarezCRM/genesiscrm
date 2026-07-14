@@ -125,6 +125,17 @@ export default async function ProviderDetailPage({ params }: Props) {
       middle={
         <RecordMiddleTabs
           overview={
+            <>
+          <RecordPropertyCards
+            entityType="PROVIDER"
+            recordId={provider.id}
+            cards={propertyCards.middleCards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={isAdmin}
+            canEditCards={canEditCards}
+            section="MIDDLE"
+          />
             <Card>
               <CardHeader><CardTitle className="text-base">Referral History ({provider.referrals.length})</CardTitle></CardHeader>
               <CardContent>
@@ -147,6 +158,7 @@ export default async function ProviderDetailPage({ params }: Props) {
                 )}
               </CardContent>
             </Card>
+            </>
           }
           activities={
             <RecordActivityFeed

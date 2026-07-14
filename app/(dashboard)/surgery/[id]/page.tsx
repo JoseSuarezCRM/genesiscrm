@@ -120,7 +120,21 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
       }
       middle={
         <RecordMiddleTabs
-          overview={<SurgeryDetailClient surgeryCase={surgeryCase} />}
+          overview={
+            <>
+          <RecordPropertyCards
+            entityType="SURGERY"
+            recordId={params.id}
+            cards={propertyCards.middleCards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={canEdit}
+            canEditCards={canEditCards}
+            section="MIDDLE"
+          />
+            <SurgeryDetailClient surgeryCase={surgeryCase} />
+            </>
+          }
           activities={
             <RecordActivityFeed
               recordType="SURGERY"

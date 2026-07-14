@@ -125,6 +125,17 @@ export default async function LocationDetailPage({ params }: Props) {
       middle={
         <RecordMiddleTabs
           overview={
+            <>
+          <RecordPropertyCards
+            entityType="LOCATION"
+            recordId={location.id}
+            cards={propertyCards.middleCards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={canEdit}
+            canEditCards={canEditCards}
+            section="MIDDLE"
+          />
             <Card>
               <CardHeader><CardTitle className="text-base">Referral History ({location._count.referrals})</CardTitle></CardHeader>
               <CardContent>
@@ -147,6 +158,7 @@ export default async function LocationDetailPage({ params }: Props) {
                 )}
               </CardContent>
             </Card>
+            </>
           }
           activities={
             <RecordActivityFeed

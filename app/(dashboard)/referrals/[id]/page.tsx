@@ -22,6 +22,9 @@ import ReferralDetailLeftColumn from "@/components/referral-detail-left-column"
 import ReferralDetailRightColumn from "@/components/referral-detail-right-column"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordActivityFeed from "@/components/record-activity-feed"
+import RecordPropertyCards from "@/components/record-property-cards"
+import RecordMiddleTabs from "@/components/record-middle-tabs"
+import { loadPropertyCards } from "@/lib/record-cards"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props {
@@ -83,6 +86,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
   ])
 
   const referralActivity = await listRecordActivities("REFERRAL", referral.id)
+  const propertyCards = await loadPropertyCards("REFERRAL", referral as any)
 
   return (
     <div className="p-6 space-y-6 lg:h-full lg:flex lg:flex-col">
@@ -136,7 +140,22 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
         </div>
 
         {/* MIDDLE: Overview & Activities */}
-        <div className="lg:col-span-2 space-y-6 lg:overflow-y-auto lg:pr-1">
+        <div className="lg:col-span-2 lg:overflow-y-auto lg:pr-1">
+          <RecordMiddleTabs
+            overview={
+              <>
+          {/* Property cards placed in the middle column */}
+          <RecordPropertyCards
+            entityType="REFERRAL"
+            recordId={referral.id}
+            cards={propertyCards.middleCards}
+            catalog={propertyCards.catalog}
+            values={propertyCards.values}
+            canEdit={isAdmin}
+            canEditCards={canEditCards}
+            section="MIDDLE"
+          />
+
           {/* Overview */}
           <Card>
             <CardHeader>
@@ -195,18 +214,19 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             </CardContent>
           </Card>
 
-          {/* Activity — notes, calls, meetings, emails, SMS and tasks on this referral */}
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
-            <RecordActivityFeed
-              recordType="REFERRAL"
-              recordId={referral.id}
-              items={referralActivity as any}
-              users={users.map((u: any) => ({ id: u.id, label: u.name ?? u.email }))}
-              canEdit={isAdmin}
-              showActions={false}
-            />
-          </div>
+              </>
+            }
+            activities={
+              <RecordActivityFeed
+                recordType="REFERRAL"
+                recordId={referral.id}
+                items={referralActivity as any}
+                users={users.map((u: any) => ({ id: u.id, label: u.name ?? u.email }))}
+                canEdit={isAdmin}
+                showActions={false}
+              />
+            }
+          />
         </div>
 
         {/* RIGHT: Associated Objects (Customizable) */}
