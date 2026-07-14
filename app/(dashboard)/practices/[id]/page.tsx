@@ -10,6 +10,8 @@ import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
+import RecordDetailShell from "@/components/record-detail-shell"
+import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
@@ -62,57 +64,58 @@ export default async function PracticeDetailPage({ params }: Props) {
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
   ])
 
-  return (
-    <div className="p-6 max-w-5xl space-y-6">
-      <div>
-        <Link href="/referring-doctors" className="inline-flex items-center text-sm text-slate-500 hover:text-slate-800 mb-3">
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Referring Providers
-        </Link>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">{practice.name}</h1>
-          <span className="text-sm text-slate-400">{practice._count.referrals} referral{practice._count.referrals !== 1 ? "s" : ""}</span>
-        </div>
-        {practice.phone && <p className="text-sm text-slate-500 mt-0.5">{practice.phone}</p>}
-        <div className="mt-4">
-          <RecordEngagementBar
-            recordType="PRACTICE"
-            recordId={practice.id}
-            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
-            canEdit={isAdmin}
-          />
-        </div>
-      </div>
+  const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
 
-      <div className="max-w-md">
+  return (
+    <RecordDetailShell
+      backHref="/referring-doctors"
+      backLabel="Back to Referring Providers"
+      title={practice.name}
+      subtitle={practice.phone ?? undefined}
+      badges={
+        <span className="text-sm text-slate-400">
+          {practice._count.referrals} referral{practice._count.referrals !== 1 ? "s" : ""}
+        </span>
+      }
+      engagementBar={
+        <RecordEngagementBar recordType="PRACTICE" recordId={practice.id} users={userOptions} canEdit={isAdmin} compact />
+      }
+      left={
         <RecordOwnerCard
           type="PRACTICE"
           recordId={practice.id}
           ownerLabel="Practice Owner"
           ownerId={practice.ownerId}
-          users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+          users={userOptions}
           createdByName={practice.createdBy?.name ?? practice.createdBy?.email ?? null}
           createdAt={practice.createdAt}
           updatedByName={practice.updatedBy?.name ?? practice.updatedBy?.email ?? null}
           updatedAt={practice.updatedAt}
           canEdit={isAdmin}
         />
-      </div>
-
-      <PracticeDetailClient practice={practice as any} referrals={referrals as any} isAdmin={isAdmin} customProperties={customProperties} />
-
-      {/* Activity feed (notes, tasks, activities) */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
-        <RecordActivityFeed
-          recordType="PRACTICE"
-          recordId={practice.id}
-          items={activityItems as any}
-          users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
-          canEdit={isAdmin}
-          showActions={false}
+      }
+      middle={
+        <RecordMiddleTabs
+          overview={
+            <PracticeDetailClient
+              practice={practice as any}
+              referrals={referrals as any}
+              isAdmin={isAdmin}
+              customProperties={customProperties}
+            />
+          }
+          activities={
+            <RecordActivityFeed
+              recordType="PRACTICE"
+              recordId={practice.id}
+              items={activityItems as any}
+              users={userOptions}
+              canEdit={isAdmin}
+              showActions={false}
+            />
+          }
         />
-      </div>
-    </div>
+      }
+    />
   )
 }

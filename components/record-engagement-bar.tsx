@@ -101,18 +101,18 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
 
   return (
     <div className="space-y-3">
-      <div className={cn("flex flex-wrap items-start", compact ? "gap-3" : "gap-5")}>
+      <div className={cn("flex flex-wrap items-start", compact ? "gap-2" : "gap-3")}>
         {ACTIONS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => { setError(null); setOpen(open === key ? null : key) }}
-            className="flex flex-col items-center gap-1.5 group">
+            className="flex flex-col items-center gap-1 group">
             <span className={cn(
               "rounded-full border flex items-center justify-center transition-colors",
-              compact ? "h-9 w-9" : "h-11 w-11",
+              compact ? "h-7 w-7" : "h-8 w-8",
               open === key ? "bg-zinc-900 border-zinc-900 text-white" : "bg-white border-slate-200 text-slate-600 group-hover:border-zinc-400 group-hover:text-zinc-900",
             )}>
-              <Icon className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+              <Icon className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
             </span>
-            <span className={cn("text-xs font-medium", open === key ? "text-zinc-900" : "text-slate-500 group-hover:text-zinc-900")}>{label}</span>
+            <span className={cn("text-[11px] font-medium leading-none", open === key ? "text-zinc-900" : "text-slate-500 group-hover:text-zinc-900")}>{label}</span>
           </button>
         ))}
       </div>

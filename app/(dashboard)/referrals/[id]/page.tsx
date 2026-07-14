@@ -20,6 +20,9 @@ import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { getCardLayout, getCardLayouts } from "@/app/actions/card-layouts"
 import ReferralDetailLeftColumn from "@/components/referral-detail-left-column"
 import ReferralDetailRightColumn from "@/components/referral-detail-right-column"
+import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordActivityFeed from "@/components/record-activity-feed"
+import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props {
   params: { id: string }
@@ -79,6 +82,8 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
     getCardLayouts("REFERRAL", "LEFT"),
   ])
 
+  const referralActivity = await listRecordActivities("REFERRAL", referral.id)
+
   return (
     <div className="p-6 space-y-6 lg:h-full lg:flex lg:flex-col">
       {/* Header */}
@@ -92,6 +97,15 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             <div className="flex items-center gap-3 mt-2">
               <StatusBadge status={referral.status} />
               <span className="text-sm text-slate-500">Referred {formatDate(referral.referralDate)}</span>
+            </div>
+            <div className="mt-4">
+              <RecordEngagementBar
+                recordType="REFERRAL"
+                recordId={referral.id}
+                users={users.map((u: any) => ({ id: u.id, label: u.name ?? u.email }))}
+                canEdit={isAdmin}
+                compact
+              />
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -180,6 +194,19 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
               <DocumentList documents={referral.documents} referralId={referral.id} />
             </CardContent>
           </Card>
+
+          {/* Activity — notes, calls, meetings, emails, SMS and tasks on this referral */}
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
+            <RecordActivityFeed
+              recordType="REFERRAL"
+              recordId={referral.id}
+              items={referralActivity as any}
+              users={users.map((u: any) => ({ id: u.id, label: u.name ?? u.email }))}
+              canEdit={isAdmin}
+              showActions={false}
+            />
+          </div>
         </div>
 
         {/* RIGHT: Associated Objects (Customizable) */}

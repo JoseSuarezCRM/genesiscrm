@@ -54,6 +54,10 @@ function toE164(p: string): string | null {
 
 // The record's email addresses / phone numbers, used to match emails + SMS.
 async function contactInfoFor(recordType: string, recordId: string): Promise<{ emails: string[]; phones: string[] }> {
+  if (recordType === "REFERRAL") {
+    const r = await prisma.referral.findUnique({ where: { id: recordId }, select: { patientEmail: true, patientPhone: true } })
+    return { emails: [r?.patientEmail].filter(Boolean) as string[], phones: [r?.patientPhone].filter(Boolean) as string[] }
+  }
   if (recordType === "PROVIDER") {
     const d = await prisma.referringDoctor.findUnique({ where: { id: recordId }, select: { email: true, phone: true, officePhone: true } })
     return { emails: [d?.email].filter(Boolean) as string[], phones: [d?.phone, d?.officePhone].filter(Boolean) as string[] }

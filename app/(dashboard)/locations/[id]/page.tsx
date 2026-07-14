@@ -13,6 +13,8 @@ import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
+import RecordDetailShell from "@/components/record-detail-shell"
+import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
 
 interface Props { params: { id: string } }
@@ -73,129 +75,120 @@ export default async function LocationDetailPage({ params }: Props) {
   const scheduled = location.referrals.filter((r) => r.status === "SCHEDULED").length
   const pending = location.referrals.filter((r) => r.status === "NEW" || r.status === "CONTACTED").length
 
+  const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
+
   return (
-    <div className="p-6 max-w-5xl space-y-6">
-      <div>
-        <Link href="/locations" className="inline-flex items-center text-sm text-slate-500 hover:text-slate-800 mb-3">
-          <ChevronLeft className="h-4 w-4 mr-1" /> Back to Locations
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-slate-400" />{location.name}
-        </h1>
-        <Link href={`/practices/${location.practice.id}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:underline mt-1">
+    <RecordDetailShell
+      backHref="/locations"
+      backLabel="Back to Locations"
+      title={<span className="inline-flex items-center gap-2"><MapPin className="h-5 w-5 text-slate-400 shrink-0" />{location.name}</span>}
+      subtitle={
+        <Link href={`/practices/${location.practice.id}`} className="inline-flex items-center gap-1 hover:underline">
           <Building2 className="h-3.5 w-3.5" />{location.practice.name}
         </Link>
-        <div className="mt-4">
-          <RecordEngagementBar
-            recordType="LOCATION"
-            recordId={location.id}
-            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
-            canEdit={canEdit}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
+      }
+      engagementBar={
+        <RecordEngagementBar recordType="LOCATION" recordId={location.id} users={userOptions} canEdit={canEdit} compact />
+      }
+      left={
+        <>
           <LocationInfoEditor location={location as any} practices={practices} canEdit={canEdit} />
           <RecordOwnerCard
             type="LOCATION"
             recordId={location.id}
             ownerLabel="Location Owner"
             ownerId={location.ownerId}
-            users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
+            users={userOptions}
             createdByName={location.createdBy?.name ?? location.createdBy?.email ?? null}
             createdAt={location.createdAt}
             updatedByName={location.updatedBy?.name ?? location.updatedBy?.email ?? null}
             updatedAt={location.updatedAt}
             canEdit={canEdit}
           />
-        </div>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Referral Summary</CardTitle></CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <Row label="Total Referrals" value={String(location._count.referrals)} />
-            <Row label="Providers Here" value={String(location._count.doctors)} />
-            <Row label="Activities" value={String(location._count.activities)} />
-            <Row label="Completed" value={String(completed)} />
-            <Row label="Scheduled" value={String(scheduled)} />
-            <Row label="Pending" value={String(pending)} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Custom Properties */}
-      {customProperties.length > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <CustomPropertiesDisplay entityType="LOCATION" entityId={location.id} properties={customProperties as any} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Providers at this location */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Providers at this Location ({providers.length})</CardTitle></CardHeader>
-        <CardContent>
-          {providers.length === 0 ? (
-            <p className="text-sm text-slate-400">No providers linked to this location.</p>
-          ) : (
-            <div className="divide-y">
-              {providers.map((d) => (
-                <Link key={d.id} href={`/referring-doctors/${d.id}`}
-                  className="flex items-center justify-between gap-4 py-3 hover:bg-slate-50 -mx-2 px-2 rounded-md transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-blue-600 inline-flex items-center gap-1">
-                      {d.title ? <span className="text-slate-500 font-normal">{d.title}</span> : null}{d.name}
-                      <ExternalLink className="h-3 w-3 text-slate-400" />
-                    </p>
-                    {d.specialty && <p className="text-xs text-slate-400">{d.specialty}</p>}
-                  </div>
-                  <span className="text-xs text-slate-400 shrink-0">{d._count.referrals} referrals</span>
-                </Link>
-              ))}
-            </div>
+          {customProperties.length > 0 && (
+            <Card>
+              <CardContent className="pt-6">
+                <CustomPropertiesDisplay entityType="LOCATION" entityId={location.id} properties={customProperties as any} />
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Referral history */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Referral History ({location._count.referrals})</CardTitle></CardHeader>
-        <CardContent>
-          {location.referrals.length === 0 ? (
-            <p className="text-sm text-slate-400">No referrals from this location yet.</p>
-          ) : (
-            <div className="divide-y">
-              {location.referrals.map((r) => (
-                <Link key={r.id} href={`/referrals/${r.id}`}
-                  className="flex items-center justify-between gap-4 py-3 hover:bg-slate-50 -mx-2 px-2 rounded-md transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900">{r.patientFirstName} {r.patientLastName}</p>
-                    {r.patientMrn && <p className="text-xs text-slate-400">MRN: {r.patientMrn}</p>}
+        </>
+      }
+      middle={
+        <RecordMiddleTabs
+          overview={
+            <Card>
+              <CardHeader><CardTitle className="text-base">Referral History ({location._count.referrals})</CardTitle></CardHeader>
+              <CardContent>
+                {location.referrals.length === 0 ? (
+                  <p className="text-sm text-slate-400">No referrals from this location yet.</p>
+                ) : (
+                  <div className="divide-y">
+                    {location.referrals.map((r) => (
+                      <Link key={r.id} href={`/referrals/${r.id}`}
+                        className="flex items-center justify-between gap-4 py-3 hover:bg-slate-50 -mx-2 px-2 rounded-md transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900">{r.patientFirstName} {r.patientLastName}</p>
+                          {r.patientMrn && <p className="text-xs text-slate-400">MRN: {r.patientMrn}</p>}
+                        </div>
+                        <StatusBadge status={r.status} />
+                        <span className="text-xs text-slate-400 shrink-0">{formatDate(r.referralDate)}</span>
+                      </Link>
+                    ))}
                   </div>
-                  <StatusBadge status={r.status} />
-                  <span className="text-xs text-slate-400 shrink-0">{formatDate(r.referralDate)}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Activity feed (notes, tasks, activities) */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 mb-3">Activity</h2>
-        <RecordActivityFeed
-          recordType="LOCATION"
-          recordId={location.id}
-          items={activityItems as any}
-          users={feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
-          canEdit={canEdit}
-          showActions={false}
+                )}
+              </CardContent>
+            </Card>
+          }
+          activities={
+            <RecordActivityFeed
+              recordType="LOCATION"
+              recordId={location.id}
+              items={activityItems as any}
+              users={userOptions}
+              canEdit={canEdit}
+              showActions={false}
+            />
+          }
         />
-      </div>
-    </div>
+      }
+      right={
+        <>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Referral Summary</CardTitle></CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <Row label="Total Referrals" value={String(location._count.referrals)} />
+              <Row label="Providers Here" value={String(location._count.doctors)} />
+              <Row label="Activities" value={String(location._count.activities)} />
+              <Row label="Completed" value={String(completed)} />
+              <Row label="Scheduled" value={String(scheduled)} />
+              <Row label="Pending" value={String(pending)} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base">Providers ({providers.length})</CardTitle></CardHeader>
+            <CardContent>
+              {providers.length === 0 ? (
+                <p className="text-sm text-slate-400">No providers linked to this location.</p>
+              ) : (
+                <div className="divide-y">
+                  {providers.map((d) => (
+                    <Link key={d.id} href={`/referring-doctors/${d.id}`}
+                      className="flex items-center justify-between gap-3 py-2.5 hover:bg-slate-50 -mx-2 px-2 rounded-md transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-blue-600 truncate">{d.name}</p>
+                        {d.specialty && <p className="text-xs text-slate-400 truncate">{d.specialty}</p>}
+                      </div>
+                      <span className="text-xs text-slate-400 shrink-0">{d._count.referrals}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      }
+    />
   )
 }
