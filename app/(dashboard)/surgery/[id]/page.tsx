@@ -13,6 +13,8 @@ import RecordOwnerCard from "@/components/record-owner-card"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
+import RecordAssociationCards from "@/components/record-association-cards"
+import { loadAssociationCards } from "@/lib/record-associations"
 import { loadPropertyCards } from "@/lib/record-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
@@ -60,6 +62,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = userCanLevel(session.user as any, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("SURGERY", surgeryCase as any)
+  const assocCards = await loadAssociationCards("SURGERY", params.id)
 
   return (
     <RecordDetailShell
@@ -129,6 +132,9 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
             />
           }
         />
+      }
+      right={
+        <RecordAssociationCards recordType="SURGERY" recordId={params.id} cards={assocCards} canEdit={canEdit} />
       }
     />
   )

@@ -118,3 +118,23 @@ export async function unassociateRecords(typeKey: string, recordId: string, othe
   if (typeKey.startsWith("CO:")) revalidatePath(`/objects/${typeKey.slice(3)}/${recordId}`)
   return { success: true }
 }
+
+// ── Right-column association cards (every object: built-in + custom) ──────────
+
+export async function getAssociationCardPrefs(objectType: string) {
+  const session = await auth()
+  if (!session?.user) return []
+  return (prisma as any).associationCardPref.findMany({ where: { objectType }, orderBy: { order: "asc" } })
+}
+
+export async function setAssociationCardVisible(objectType: string, cardType: string, visible: boolean) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  await (prisma as any).associationCardPref.upsert({
+    where: { objectType_cardType: { objectType, cardType } },
+    create: { objectType, cardType, visible },
+    update: { visible },
+  })
+  revalidatePath("/", "layout")
+  return { success: true }
+}

@@ -12,6 +12,8 @@ import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
+import RecordAssociationCards from "@/components/record-association-cards"
+import { loadAssociationCards } from "@/lib/record-associations"
 import { loadPropertyCards } from "@/lib/record-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
@@ -69,6 +71,7 @@ export default async function PracticeDetailPage({ params }: Props) {
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("PRACTICE", practice as any)
+  const assocCards = await loadAssociationCards("PRACTICE", practice.id)
 
   return (
     <RecordDetailShell
@@ -130,6 +133,9 @@ export default async function PracticeDetailPage({ params }: Props) {
             />
           }
         />
+      }
+      right={
+        <RecordAssociationCards recordType="PRACTICE" recordId={practice.id} cards={assocCards} canEdit={isAdmin} />
       }
     />
   )

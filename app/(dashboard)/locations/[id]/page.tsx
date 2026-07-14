@@ -15,6 +15,8 @@ import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
+import RecordAssociationCards from "@/components/record-association-cards"
+import { loadAssociationCards } from "@/lib/record-associations"
 import { loadPropertyCards } from "@/lib/record-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { listRecordActivities } from "@/app/actions/record-activity"
@@ -80,6 +82,7 @@ export default async function LocationDetailPage({ params }: Props) {
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = userCanLevel(user, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("LOCATION", location as any)
+  const assocCards = await loadAssociationCards("LOCATION", location.id)
 
   return (
     <RecordDetailShell
@@ -192,6 +195,8 @@ export default async function LocationDetailPage({ params }: Props) {
               )}
             </CardContent>
           </Card>
+
+          <RecordAssociationCards recordType="LOCATION" recordId={location.id} cards={assocCards} canEdit={canEdit} />
         </>
       }
     />

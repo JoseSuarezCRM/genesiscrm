@@ -8,6 +8,7 @@ import { updateCustomObjectRecord } from "@/app/actions/custom-object-records"
 import { searchAssociableRecords, associateRecords, unassociateRecords } from "@/app/actions/associations"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordAssociationCards from "@/components/record-association-cards"
 import type { ActivityItem } from "@/app/actions/record-activity"
 import type { CustomObjectProperty, CustomObjectCard } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
@@ -172,16 +173,19 @@ export default function CustomObjectDetail({ objectKey, singular, ownerLabel, pr
           )}
         </div>
 
-        {/* RIGHT: Associated Objects */}
+        {/* RIGHT: Associated Objects — same component every other object uses */}
         <div className="lg:col-span-1 space-y-4">
           {associations.length === 0 ? (
             <div className="bg-white border border-dashed border-slate-200 rounded-xl px-5 py-4 text-sm text-slate-400">
               No relationships. Set them up in Settings → Data Model.
             </div>
           ) : (
-            associations.map((g) => (
-              <AssociationCard key={g.type} objectKey={objectKey} recordId={record.id} group={g} canEdit={canEdit} />
-            ))
+            <RecordAssociationCards
+              recordType={`CO:${objectKey}`}
+              recordId={record.id}
+              cards={associations as any}
+              canEdit={canEdit}
+            />
           )}
         </div>
       </div>

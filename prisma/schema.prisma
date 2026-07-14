@@ -254,6 +254,18 @@ model RecordNote {
   @@index([recordType, recordId])
 }
 
+// Which association cards show in a record page's right column. Keyed by registry
+// key, so it works for built-in objects AND custom objects ("CO:visits") alike.
+model AssociationCardPref {
+  id         String  @id @default(cuid())
+  objectType String
+  cardType   String
+  visible    Boolean @default(true)
+  order      Int     @default(0)
+
+  @@unique([objectType, cardType])
+}
+
 model ObjectAssociation {
   id        String   @id @default(cuid())
   fromType  String

@@ -6,7 +6,7 @@ import { userCanLevel } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { getCustomObjectRecord, recordCustomObjectView } from "@/app/actions/custom-object-records"
-import { getAssociationsFor } from "@/app/actions/associations"
+import { loadAssociationCards } from "@/lib/record-associations"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import CustomObjectDetail from "@/components/custom-object-detail"
 
@@ -25,7 +25,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
 
   const [users, associations, activityItems] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
-    getAssociationsFor(`CO:${params.key}`, params.id),
+    loadAssociationCards(`CO:${params.key}`, params.id),
     listRecordActivities(`CO:${params.key}`, params.id),
   ])
 

@@ -14,6 +14,8 @@ import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordOwnerCard from "@/components/record-owner-card"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordPropertyCards from "@/components/record-property-cards"
+import RecordAssociationCards from "@/components/record-association-cards"
+import { loadAssociationCards } from "@/lib/record-associations"
 import { loadPropertyCards } from "@/lib/record-cards"
 import { userCanLevel as canLevel } from "@/lib/permissions"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
@@ -84,6 +86,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   const userOptions = feedUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))
   const canEditCards = canLevel(session?.user as any, "VIEWS", "EDIT")
   const propertyCards = await loadPropertyCards("PROVIDER", provider as any)
+  const assocCards = await loadAssociationCards("PROVIDER", provider.id)
 
   return (
     <RecordDetailShell
@@ -198,6 +201,8 @@ export default async function ProviderDetailPage({ params }: Props) {
             <Row label="Pending" value={String(provider.referrals.filter((r) => r.status === "NEW" || r.status === "CONTACTED").length)} />
           </CardContent>
         </Card>
+
+        <RecordAssociationCards recordType="PROVIDER" recordId={provider.id} cards={assocCards} canEdit={isAdmin} />
         </>
       }
     />
