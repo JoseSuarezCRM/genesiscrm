@@ -120,12 +120,12 @@ export default function LeftCardEditorModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{existing ? "Edit Card" : "Create Card"}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 flex-1 overflow-y-auto min-h-0">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-slate-700">Card name</label>
             <Input
@@ -217,7 +217,7 @@ export default function LeftCardEditorModal({
           </div>
         </div>
 
-        <DialogFooter className="border-t pt-4">
+        <DialogFooter className="border-t pt-4 shrink-0">
           {existing && (
             <Button
               variant="destructive"
