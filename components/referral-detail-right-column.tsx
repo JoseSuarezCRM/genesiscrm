@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Settings, SlidersHorizontal } from "lucide-react"
+import { Settings, SlidersHorizontal, ChevronUp, ChevronDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,7 +17,7 @@ import {
 import { STATUS_LABELS } from "@/lib/utils"
 import { ReferralStatus } from "@prisma/client"
 import CardCustomizationModal from "@/components/card-customization-modal"
-import { setCardVisibility } from "@/app/actions/card-layouts"
+import { setCardVisibility, reorderRightCards } from "@/app/actions/card-layouts"
 import { formatDate, formatPhone } from "@/lib/utils"
 
 interface CardLayout {
@@ -132,13 +133,28 @@ export default function ReferralDetailRightColumn({
     providerCardLayout,
   ])
 
+  // Card order (persisted). Cards lay out via CSS `order`, so we don't move JSX.
+  const router = useRouter()
+  const [, startReorder] = useTransition()
+  const defaultOrder = ["Referral", "Practice", "Provider"]
+  const [order, setOrder] = useState<string[]>(() => {
+    const withOrder = [referralCardLayout, practiceCardLayout, providerCardLayout]
+      .map((l, i) => ({ name: l.cardName, o: (l as any).order ?? i }))
+      .sort((a, b) => a.o - b.o)
+      .map((x) => x.name)
+    return withOrder.length === 3 ? withOrder : defaultOrder
+  })
+  const orderOf = (name: string) => { const i = order.indexOf(name); return i < 0 ? 99 : i }
+
   // Update layouts when props change (e.g., when opening a different referral)
   useEffect(() => {
-    setLayouts([
-      referralCardLayout,
-      practiceCardLayout,
-      providerCardLayout,
-    ])
+    const next = [referralCardLayout, practiceCardLayout, providerCardLayout]
+    setLayouts(next)
+    const ordered = next
+      .map((l, i) => ({ name: l.cardName, o: (l as any).order ?? i }))
+      .sort((a, b) => a.o - b.o)
+      .map((x) => x.name)
+    if (ordered.length === 3) setOrder(ordered)
   }, [referralCardLayout, practiceCardLayout, providerCardLayout])
 
   const handleOpenCustomization = (cardName: string) => {
@@ -170,6 +186,35 @@ export default function ReferralDetailRightColumn({
   const currentPracticeLayout = getLayoutByCardName("Practice")
   const currentProviderLayout = getLayoutByCardName("Provider")
   const currentEditingLayout = editingCardName ? getLayoutByCardName(editingCardName) : referralCardLayout
+
+  function moveCard(name: string, dir: -1 | 1) {
+    const i = order.indexOf(name)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= order.length) return
+    const next = [...order]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setOrder(next)
+    startReorder(async () => {
+      await reorderRightCards("REFERRAL", next.map((n) => {
+        const l = getLayoutByCardName(n)
+        return { cardName: n, title: l.title, fields: l.fields, visible: l.visible !== false }
+      }))
+      router.refresh()
+    })
+  }
+
+  // Up/down + gear for a card header.
+  const HeaderControls = ({ name }: { name: string }) => (
+    <div className="flex items-center gap-0.5 text-slate-300">
+      <button onClick={() => moveCard(name, -1)} disabled={orderOf(name) === 0} title="Move up"
+        className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
+      <button onClick={() => moveCard(name, 1)} disabled={orderOf(name) === order.length - 1} title="Move down"
+        className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
+      <button onClick={() => handleOpenCustomization(name)} className="hover:text-slate-600 ml-0.5" title="Customize card">
+        <Settings className="h-4 w-4" />
+      </button>
+    </div>
+  )
 
   // Shows only the value (HubSpot-style association card); label kept as hover tooltip
   function PropertyRow({
@@ -203,9 +248,9 @@ export default function ReferralDetailRightColumn({
 
   return (
     <>
-      <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
+      <div className="lg:col-span-1 flex flex-col gap-4 lg:overflow-y-auto lg:pr-1">
         {canEditCards && (
-          <div className="flex justify-end">
+          <div className="flex justify-end" style={{ order: -1 }}>
             <button
               onClick={() => setCardsModalOpen(true)}
               className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
@@ -218,18 +263,10 @@ export default function ReferralDetailRightColumn({
 
         {/* Referral Info Card */}
         {currentReferralLayout.visible !== false && (
-          <Card>
+          <Card style={{ order: orderOf("Referral") }}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentReferralLayout.title}</CardTitle>
-              {canEditCards && (
-                <button
-                  onClick={() => handleOpenCustomization("Referral")}
-                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                  title="Customize card"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-              )}
+              {canEditCards && <HeaderControls name="Referral" />}
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {currentReferralLayout.fields.length > 0 ? (
@@ -279,18 +316,10 @@ export default function ReferralDetailRightColumn({
 
         {/* Practice Info Card */}
         {currentPracticeLayout.visible !== false && (
-          <Card>
+          <Card style={{ order: orderOf("Practice") }}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentPracticeLayout.title}</CardTitle>
-              {canEditCards && (
-                <button
-                  onClick={() => handleOpenCustomization("Practice")}
-                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                  title="Customize card"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-              )}
+              {canEditCards && <HeaderControls name="Practice" />}
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {!referral.referringPractice ? (
@@ -336,18 +365,10 @@ export default function ReferralDetailRightColumn({
 
         {/* Provider Info Card */}
         {currentProviderLayout.visible !== false && (
-          <Card>
+          <Card style={{ order: orderOf("Provider") }}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentProviderLayout.title}</CardTitle>
-              {canEditCards && (
-                <button
-                  onClick={() => handleOpenCustomization("Provider")}
-                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                  title="Customize card"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-              )}
+              {canEditCards && <HeaderControls name="Provider" />}
             </CardHeader>
             <CardContent className="space-y-0 text-sm">
               {!referral.referringDoctor ? (

@@ -120,3 +120,22 @@ export async function setCardVisibility(
   revalidateDetailPages()
   return { success: true }
 }
+
+// Persist the order of the referral right-column cards (Referral / Practice /
+// Provider). Upserts CardLayout rows so the saved order survives reloads.
+export async function reorderRightCards(
+  entityType: EntityType,
+  cards: { cardName: string; title: string; fields: string[]; visible?: boolean }[],
+) {
+  await requireAccess("VIEWS", "EDIT")
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i]
+    await prisma.cardLayout.upsert({
+      where: { entityType_cardName: { entityType, cardName: c.cardName } },
+      create: { entityType, cardName: c.cardName, title: c.title, fields: c.fields, section: "RIGHT", order: i, visible: c.visible ?? true },
+      update: { order: i },
+    })
+  }
+  revalidateDetailPages()
+  return { success: true }
+}

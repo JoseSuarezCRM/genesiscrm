@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useTransition } from "react"
 import Link from "next/link"
-import { Settings, Plus, Check, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Settings, Plus, Check, X, ChevronUp, ChevronDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ReferralStatus } from "@prisma/client"
@@ -11,6 +12,7 @@ import { updateReferralStatus, updateReferralField } from "@/app/actions/referra
 import ReferralAssignee from "@/components/referral-assignee"
 import TagSelector from "@/components/tag-selector"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
+import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import CustomPropertyField from "@/components/custom-property-field"
 
 interface CardLayout {
@@ -212,12 +214,37 @@ export default function ReferralDetailLeftColumn({
   isAdmin,
   canEditCards = isAdmin,
 }: Props) {
+  const router = useRouter()
+  const [, startTransition] = useTransition()
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingCard, setEditingCard] = useState<CardLayout | null>(null)
 
   const openEditor = (card: CardLayout | null) => {
     setEditingCard(card)
     setEditorOpen(true)
+  }
+
+  // The default cards, expressed as field-based cards so they go through the same
+  // renderer (and become reorderable) instead of hardcoded JSX.
+  const DEFAULT_CARDS: CardLayout[] = [
+    { cardName: "status", title: "Status", fields: ["status"] },
+    { cardName: "assigned", title: "Assigned To", fields: ["assignedTo"] },
+    { cardName: "tags", title: "Tags", fields: ["tags"] },
+    { cardName: "patient", title: "Patient", fields: ["mrn", "dob", "patientPhone", "patientEmail"] },
+    { cardName: "source", title: "Source", fields: ["practice", "provider", "npi"] },
+  ]
+  const effectiveCards = leftCards.length ? leftCards : DEFAULT_CARDS
+
+  // Reorder persists the whole column (materializing the defaults on first move).
+  function move(index: number, dir: -1 | 1) {
+    const next = [...effectiveCards]
+    const j = index + dir
+    if (j < 0 || j >= next.length) return
+    ;[next[index], next[j]] = [next[j], next[index]]
+    startTransition(async () => {
+      await replaceColumnCards("REFERRAL", "LEFT", next.map((c) => ({ cardName: c.cardName, title: c.title, fields: c.fields })))
+      router.refresh()
+    })
   }
 
   const providerName = referral.referringDoctor
@@ -330,101 +357,33 @@ export default function ReferralDetailLeftColumn({
         </div>
       )}
 
-      {leftCards.length === 0 ? (
-        <>
-          {/* Default cards (shown until an admin creates custom cards) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <StatusButtons referral={referral} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Assigned To</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ReferralAssignee referralId={referral.id} assignedTo={referral.assignedTo} users={users} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Tags</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TagSelector
-                referralId={referral.id}
-                allTags={allTags}
-                selectedTagIds={referral.tags.map((t: any) => t.tagId)}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Patient</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-0">
-              <EditableRow referralId={referral.id} field="genesisMrn" label="Genesis MRN" value={referral.genesisMrn} />
-              <EditableRow referralId={referral.id} field="patientDob" label="DOB" value={referral.patientDob} type="date" format={formatDate} />
-              <EditableRow referralId={referral.id} field="patientPhone" label="Phone" value={referral.patientPhone} format={formatPhone} />
-              <EditableRow referralId={referral.id} field="patientEmail" label="Email" value={referral.patientEmail} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Source</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-0">
-              <PropertyRow
-                label="Practice"
-                value={referral.referringPractice?.name}
-                href={referral.referringPractice ? `/practices/${referral.referringPractice.id}` : undefined}
-                bold
-              />
-              <PropertyRow
-                label="Provider"
-                value={providerName}
-                href={referral.referringDoctor ? `/referring-doctors/${referral.referringDoctor.id}` : undefined}
-                bold
-              />
-              <EditableRow referralId={referral.id} field="referringNpi" label="NPI" value={referral.referringNpi ?? referral.referringDoctor?.npi} />
-            </CardContent>
-          </Card>
-        </>
-      ) : (
-        /* Custom cards */
-        leftCards.map((card) => (
-          <Card key={card.cardName}>
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">{card.title}</CardTitle>
-              {canEditCards && (
-                <button
-                  onClick={() => openEditor(card)}
-                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-                  title="Customize card"
-                >
+      {effectiveCards.map((card, index) => (
+        <Card key={card.cardName}>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">{card.title}</CardTitle>
+            {canEditCards && (
+              <div className="flex items-center gap-0.5 text-slate-300">
+                <button onClick={() => move(index, -1)} disabled={index === 0} title="Move up"
+                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
+                <button onClick={() => move(index, 1)} disabled={index === effectiveCards.length - 1} title="Move down"
+                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
+                <button onClick={() => openEditor(card)} className="hover:text-slate-600 ml-0.5" title="Customize card">
                   <Settings className="h-4 w-4" />
                 </button>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-0 text-sm">
-              {card.fields.length > 0 ? (
-                card.fields.map((fieldId) => renderField(fieldId))
-              ) : (
-                <p className="text-xs text-slate-400 py-2">
-                  No properties selected. Click the settings icon to customize.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        ))
-      )}
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-0 text-sm">
+            {card.fields.length > 0 ? (
+              card.fields.map((fieldId) => renderField(fieldId))
+            ) : (
+              <p className="text-xs text-slate-400 py-2">
+                No properties selected. Click the settings icon to customize.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ))}
 
       {editorOpen && (
         <LeftCardEditorModal
