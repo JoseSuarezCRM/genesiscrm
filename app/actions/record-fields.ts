@@ -67,3 +67,23 @@ export async function updateRecordField(entityType: string, recordId: string, fi
     return { error: err.message }
   }
 }
+
+// The field values of a record, keyed to match the property catalog — used by the
+// merge preview to show two records side by side.
+export async function getRecordValues(entityType: string, id: string): Promise<Record<string, any>> {
+  if (entityType.startsWith("CO:")) {
+    await requireAccess(entityType, "VIEW")
+    const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id } })
+    return (rec?.values as any) ?? {}
+  }
+  const meta = cpMeta(entityType as CPEntity)
+  await requireAccess(meta.object, "VIEW")
+  const model = delegateFor(entityType as CPEntity)
+  if (!model) return {}
+  const rec = await model.findUnique({ where: { id } })
+  if (!rec) return {}
+  const out: Record<string, any> = { ...rec }
+  const bag = (rec.customProperties as any) ?? {}
+  for (const [k, v] of Object.entries(bag)) out[`cp_${k}`] = v
+  return out
+}

@@ -6,6 +6,7 @@ import { ChevronDown, List, Copy, GitMerge, Trash2, Loader2, X, Search } from "l
 import { deleteRecord, cloneRecord, mergeRecord } from "@/app/actions/record-crud"
 import { isMergeable } from "@/lib/record-urls"
 import { searchAssociableRecords } from "@/app/actions/associations"
+import { getRecordValues } from "@/app/actions/record-fields"
 import { listUrlFor } from "@/lib/record-urls"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import { cn } from "@/lib/utils"
@@ -101,24 +102,29 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
       )}
 
       {panel && <AllPropertiesPanel title={title} catalog={catalog} values={values} userMap={userMap} onClose={() => setPanel(false)} />}
-      {merging && <MergeDialog entityType={entityType} recordId={recordId} title={title} onClose={() => setMerging(false)} />}
+      {merging && <MergeDialog entityType={entityType} recordId={recordId} title={title} catalog={catalog} values={values} userMap={userMap} onClose={() => setMerging(false)} />}
     </div>
   )
 }
 
-// Merge THIS record into another of the same type; the other record survives.
-function MergeDialog({ entityType, recordId, title, onClose }: {
-  entityType: string; recordId: string; title: string; onClose: () => void
+// Merge two records: search for the other, then a side-by-side preview where you
+// pick which record survives (the primary). The other's links move to it, and it
+// fills the primary's blank fields.
+function MergeDialog({ entityType, recordId, title, catalog, values, userMap, onClose }: {
+  entityType: string; recordId: string; title: string; catalog: RecordFieldDef[]; values: Record<string, any>; userMap: Record<string, string>; onClose: () => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [q, setQ] = useState("")
   const [results, setResults] = useState<{ id: string; name: string }[]>([])
   const [picked, setPicked] = useState<{ id: string; name: string } | null>(null)
+  const [otherValues, setOtherValues] = useState<Record<string, any> | null>(null)
+  // Which record survives: "this" (the one you opened) or "other" (the picked one).
+  const [primary, setPrimary] = useState<"this" | "other">("this")
   const [error, setError] = useState<string | null>(null)
 
   function search(value: string) {
-    setQ(value); setPicked(null)
+    setQ(value)
     if (value.trim().length < 2) { setResults([]); return }
     startTransition(async () => {
       const rows = await searchAssociableRecords(entityType, value)
@@ -126,60 +132,134 @@ function MergeDialog({ entityType, recordId, title, onClose }: {
     })
   }
 
+  function pick(r: { id: string; name: string }) {
+    setResults([]); setQ(""); setPicked(r); setOtherValues(null)
+    startTransition(async () => setOtherValues(await getRecordValues(entityType, r.id)))
+  }
+
   function doMerge() {
     if (!picked) return
     setError(null)
+    const survivorId = primary === "this" ? recordId : picked.id
+    const loserId = primary === "this" ? picked.id : recordId
     startTransition(async () => {
-      const res = await mergeRecord(entityType, recordId, picked.id)
+      const res = await mergeRecord(entityType, loserId, survivorId)
       if (res.error) setError(res.error)
       else if (res.url) { onClose(); router.push(res.url) }
     })
   }
 
+  // Only real data fields — skip owner/audit meta.
+  const fields = catalog.filter((f) => !f.key.startsWith("__"))
+
+  const Head = ({ side, name }: { side: "this" | "other"; name: string }) => (
+    <button onClick={() => setPrimary(side)}
+      className={cn("flex-1 min-w-0 text-left px-3 py-2 rounded-lg border transition-colors",
+        primary === side ? "border-zinc-900 bg-zinc-50" : "border-slate-200 hover:border-slate-300")}>
+      <span className={cn("flex items-center gap-1.5 text-xs font-medium", primary === side ? "text-zinc-900" : "text-slate-500")}>
+        <span className={cn("h-3.5 w-3.5 rounded-full border flex items-center justify-center shrink-0", primary === side ? "border-zinc-900" : "border-slate-300")}>
+          {primary === side && <span className="h-1.5 w-1.5 rounded-full bg-zinc-900" />}
+        </span>
+        {primary === side ? "Primary — kept" : "Merged in"}
+      </span>
+      <span className="block text-sm font-semibold text-slate-900 truncate mt-0.5">{name}</span>
+    </button>
+  )
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Merge record</h2>
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <h2 className="text-base font-semibold text-slate-900">Merge records</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="h-5 w-5" /></button>
         </div>
-        <p className="text-sm text-slate-500">
-          Merge <span className="font-medium text-slate-800">{title}</span> into another record. The other record is kept and this one's
-          links move to it. This can't be undone.
-        </p>
 
-        {picked ? (
-          <div className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
-            <span className="text-sm text-slate-800">Merge into <span className="font-medium">{picked.name}</span></span>
-            <button onClick={() => setPicked(null)} className="text-xs text-slate-500 hover:text-slate-800">Change</button>
-          </div>
-        ) : (
-          <div className="space-y-1.5">
+        {!picked ? (
+          <div className="p-5 space-y-2">
+            <p className="text-sm text-slate-500">Find the record to merge with <span className="font-medium text-slate-800">{title}</span>.</p>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input value={q} onChange={(e) => search(e.target.value)} placeholder="Search a record to merge into…" autoFocus
+              <input value={q} onChange={(e) => search(e.target.value)} placeholder="Search a record…" autoFocus
                 className="w-full h-9 pl-8 pr-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
             </div>
             {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
-            <div className="max-h-52 overflow-y-auto">
+            <div className="max-h-60 overflow-y-auto">
               {results.map((r) => (
-                <button key={r.id} onClick={() => { setPicked(r); setResults([]) }}
+                <button key={r.id} onClick={() => pick(r)}
                   className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-50 text-slate-700">{r.name}</button>
               ))}
             </div>
           </div>
+        ) : (
+          <>
+            <div className="px-5 pt-4 space-y-3 overflow-y-auto">
+              <p className="text-sm text-slate-500">Choose which record to keep. The other is merged into it and then deleted — this can't be undone.</p>
+              <div className="flex gap-2">
+                <Head side="this" name={title} />
+                <Head side="other" name={picked.name} />
+              </div>
+
+              {otherValues === null ? (
+                <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin text-slate-400 mx-auto" /></div>
+              ) : (() => {
+                const primVals = primary === "this" ? values : otherValues
+                const otherVals = primary === "this" ? otherValues : values
+                const shownFields = fields.filter((f) => !(fmt(f, values[f.key], userMap) === "—" && fmt(f, otherValues[f.key], userMap) === "—"))
+                return (
+                  <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
+                    {/* Both records, side by side */}
+                    <div className="border border-slate-200 rounded-xl divide-y divide-slate-100">
+                      {shownFields.map((f) => {
+                        const a = fmt(f, values[f.key], userMap)
+                        const b = fmt(f, otherValues[f.key], userMap)
+                        const diff = a !== b
+                        return (
+                          <div key={f.key} className="px-3 py-2">
+                            <span className="block text-[11px] text-slate-400 uppercase tracking-wide">{f.label}</span>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <span className={cn("block break-words", primary === "this" ? "text-slate-900" : "text-slate-400", diff && primary === "this" && "font-medium")}>{a}</span>
+                              <span className={cn("block break-words", primary === "other" ? "text-slate-900" : "text-slate-400", diff && primary === "other" && "font-medium")}>{b}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Live preview of the resulting record */}
+                    <div className="lg:sticky lg:top-0 self-start">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Merged result</p>
+                      <div className="border border-zinc-900/10 bg-zinc-50 rounded-xl p-3 space-y-2.5">
+                        <p className="text-sm font-semibold text-slate-900 break-words">{primary === "this" ? title : picked.name}</p>
+                        {shownFields.map((f) => {
+                          const val = fmt(f, primVals[f.key], userMap)
+                          const filled = val === "—" ? fmt(f, otherVals[f.key], userMap) : val
+                          if (filled === "—") return null
+                          return (
+                            <div key={f.key}>
+                              <span className="block text-[11px] text-slate-400 uppercase tracking-wide">{f.label}</span>
+                              <span className="block text-sm text-slate-900 break-words">{filled}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+            </div>
+
+            <div className="flex justify-between gap-2 px-5 py-4 border-t border-slate-200">
+              <button onClick={() => { setPicked(null); setOtherValues(null) }} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-900">Back</button>
+              <button onClick={doMerge} disabled={isPending}
+                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+                {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitMerge className="h-3.5 w-3.5" />} Merge records
+              </button>
+            </div>
+          </>
         )}
-
-        {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
-
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
-          <button onClick={doMerge} disabled={!picked || isPending}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
-            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitMerge className="h-3.5 w-3.5" />} Merge
-          </button>
-        </div>
       </div>
     </div>
   )
@@ -197,7 +277,7 @@ function AllPropertiesPanel({ title, catalog, values, userMap, onClose }: {
 
   return (
     <div className="fixed inset-0 z-[60]">
-      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <h2 className="text-base font-semibold text-slate-900 truncate">{title} — All Properties</h2>
