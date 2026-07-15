@@ -3,11 +3,12 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { SlidersHorizontal, Plus, X, Check, Loader2, Search, ChevronUp, ChevronDown } from "lucide-react"
+import { SlidersHorizontal, Plus, X, Check, Loader2, Search, GripVertical } from "lucide-react"
 import {
   searchAssociableRecords, associateRecords, unassociateRecords, setAssociationCardVisible, reorderAssociationCards,
 } from "@/app/actions/associations"
 import type { AssocCard } from "@/lib/record-associations"
+import { useCardReorder } from "@/components/use-card-reorder"
 import { cn } from "@/lib/utils"
 
 /**
@@ -34,16 +35,11 @@ export default function RecordAssociationCards({ recordType, recordId, cards, ca
 
   const visible = cards.filter((c) => c.visible)
 
-  // Move a visible card up/down; persist the full order across all cards.
-  function move(index: number, dir: -1 | 1) {
-    const j = index + dir
-    if (j < 0 || j >= visible.length) return
-    const reordered = [...visible]
-    ;[reordered[index], reordered[j]] = [reordered[j], reordered[index]]
-    const hiddenCards = cards.filter((c) => !c.visible)
-    const order = [...reordered, ...hiddenCards].map((c) => c.type)
-    startTransition(async () => { await reorderAssociationCards(recordType, order); router.refresh() })
-  }
+  // Drag-and-drop reorder of the visible cards; hidden cards keep their slots.
+  const dnd = useCardReorder(visible, (c) => c.type, (types) => {
+    const hidden = cards.filter((c) => !c.visible).map((c) => c.type)
+    startTransition(async () => { await reorderAssociationCards(recordType, [...types, ...hidden]); router.refresh() })
+  })
 
   return (
     <div className="space-y-4">
@@ -78,17 +74,18 @@ export default function RecordAssociationCards({ recordType, recordId, cards, ca
         </div>
       )}
 
-      {visible.map((card, index) => (
+      {dnd.order.map((card) => (
         <AssociationCard key={card.type} recordType={recordType} recordId={recordId} card={card} canEdit={canEdit}
-          onUp={index > 0 ? () => move(index, -1) : undefined}
-          onDown={index < visible.length - 1 ? () => move(index, 1) : undefined} />
+          dragging={dnd.dragging === card.type}
+          handleProps={dnd.handleProps(card.type)} cardProps={dnd.cardProps(card.type)} />
       ))}
     </div>
   )
 }
 
-function AssociationCard({ recordType, recordId, card, canEdit, onUp, onDown }: {
-  recordType: string; recordId: string; card: AssocCard; canEdit: boolean; onUp?: () => void; onDown?: () => void
+function AssociationCard({ recordType, recordId, card, canEdit, dragging, handleProps, cardProps }: {
+  recordType: string; recordId: string; card: AssocCard; canEdit: boolean
+  dragging?: boolean; handleProps?: any; cardProps?: any
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -119,21 +116,22 @@ function AssociationCard({ recordType, recordId, card, canEdit, onUp, onDown }: 
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl">
+    <div {...cardProps} className={cn("bg-white border border-slate-200 rounded-xl transition-shadow", dragging && "opacity-50 ring-2 ring-zinc-300")}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-900">
-          {card.label} <span className="text-slate-400 font-normal">{card.records.length}</span>
-        </h2>
-        {canEdit && (
-          <div className="flex items-center gap-0.5 text-slate-300">
-            <button onClick={onUp} disabled={!onUp} title="Move up" className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
-            <button onClick={onDown} disabled={!onDown} title="Move down" className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
-            {!card.native && (
-              <button onClick={() => setAdding((v) => !v)} title={`Associate a ${card.label}`} className="hover:text-slate-800 ml-0.5">
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {canEdit && (
+            <span {...handleProps} title="Drag to reorder" className={cn("text-slate-300 hover:text-slate-500 shrink-0", handleProps?.className)}>
+              <GripVertical className="h-4 w-4" />
+            </span>
+          )}
+          <h2 className="text-sm font-semibold text-slate-900 truncate">
+            {card.label} <span className="text-slate-400 font-normal">{card.records.length}</span>
+          </h2>
+        </div>
+        {canEdit && !card.native && (
+          <button onClick={() => setAdding((v) => !v)} title={`Associate a ${card.label}`} className="text-slate-400 hover:text-slate-800 shrink-0">
+            <Plus className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
 

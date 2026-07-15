@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Settings, Plus, Check, X, ChevronUp, ChevronDown } from "lucide-react"
+import { Settings, Plus, Check, X, GripVertical } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ReferralStatus } from "@prisma/client"
@@ -13,6 +13,7 @@ import ReferralAssignee from "@/components/referral-assignee"
 import TagSelector from "@/components/tag-selector"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import { replaceColumnCards } from "@/app/actions/record-card-actions"
+import { useCardReorder } from "@/components/use-card-reorder"
 import CustomPropertyField from "@/components/custom-property-field"
 
 interface CardLayout {
@@ -234,18 +235,15 @@ export default function ReferralDetailLeftColumn({
     { cardName: "source", title: "Source", fields: ["practice", "provider", "npi"] },
   ]
   const effectiveCards = leftCards.length ? leftCards : DEFAULT_CARDS
+  const byName = Object.fromEntries(effectiveCards.map((c) => [c.cardName, c]))
 
-  // Reorder persists the whole column (materializing the defaults on first move).
-  function move(index: number, dir: -1 | 1) {
-    const next = [...effectiveCards]
-    const j = index + dir
-    if (j < 0 || j >= next.length) return
-    ;[next[index], next[j]] = [next[j], next[index]]
+  // Drag-and-drop reorder; persists the whole column (materializing defaults).
+  const dnd = useCardReorder(effectiveCards, (c) => c.cardName, (keys) => {
     startTransition(async () => {
-      await replaceColumnCards("REFERRAL", "LEFT", next.map((c) => ({ cardName: c.cardName, title: c.title, fields: c.fields })))
+      await replaceColumnCards("REFERRAL", "LEFT", keys.map((k) => byName[k]).filter(Boolean).map((c) => ({ cardName: c.cardName, title: c.title, fields: c.fields })))
       router.refresh()
     })
-  }
+  })
 
   const providerName = referral.referringDoctor
     ? [referral.referringDoctor.title, referral.referringDoctor.name].filter(Boolean).join(" ")
@@ -357,20 +355,22 @@ export default function ReferralDetailLeftColumn({
         </div>
       )}
 
-      {effectiveCards.map((card, index) => (
-        <Card key={card.cardName}>
+      {dnd.order.map((card) => (
+        <Card key={card.cardName} {...dnd.cardProps(card.cardName)}
+          className={dnd.dragging === card.cardName ? "opacity-50 ring-2 ring-zinc-300" : undefined}>
           <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm">{card.title}</CardTitle>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {canEditCards && (
+                <span {...dnd.handleProps(card.cardName)} title="Drag to reorder" className="text-slate-300 hover:text-slate-500 shrink-0">
+                  <GripVertical className="h-4 w-4" />
+                </span>
+              )}
+              <CardTitle className="text-sm truncate">{card.title}</CardTitle>
+            </div>
             {canEditCards && (
-              <div className="flex items-center gap-0.5 text-slate-300">
-                <button onClick={() => move(index, -1)} disabled={index === 0} title="Move up"
-                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
-                <button onClick={() => move(index, 1)} disabled={index === effectiveCards.length - 1} title="Move down"
-                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
-                <button onClick={() => openEditor(card)} className="hover:text-slate-600 ml-0.5" title="Customize card">
-                  <Settings className="h-4 w-4" />
-                </button>
-              </div>
+              <button onClick={() => openEditor(card)} className="text-slate-300 hover:text-slate-600 shrink-0" title="Customize card">
+                <Settings className="h-4 w-4" />
+              </button>
             )}
           </CardHeader>
           <CardContent className="space-y-0 text-sm">

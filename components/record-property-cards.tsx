@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Settings, Plus, Check, Loader2, ChevronUp, ChevronDown } from "lucide-react"
+import { Settings, Plus, Check, Loader2, GripVertical } from "lucide-react"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
 import { replaceColumnCards } from "@/app/actions/record-card-actions"
+import { useCardReorder } from "@/components/use-card-reorder"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
@@ -185,13 +186,8 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
     })
   }
 
-  function move(index: number, dir: -1 | 1) {
-    const next = [...cards]
-    const j = index + dir
-    if (j < 0 || j >= next.length) return
-    ;[next[index], next[j]] = [next[j], next[index]]
-    persist(next)
-  }
+  const byName = Object.fromEntries(cards.map((c) => [c.cardName, c]))
+  const dnd = useCardReorder(cards, (c) => c.cardName, (keys) => persist(keys.map((k) => byName[k]).filter(Boolean)))
 
   function submitCard(data: { title: string; fields: string[]; columns: number }) {
     if (editing === "new") {
@@ -218,20 +214,22 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
         </div>
       )}
 
-      {cards.map((card, index) => (
-        <div key={card.cardName} className="bg-white border border-slate-200 rounded-xl">
+      {dnd.order.map((card) => (
+        <div key={card.cardName} {...dnd.cardProps(card.cardName)}
+          className={cn("bg-white border border-slate-200 rounded-xl transition-shadow", dnd.dragging === card.cardName && "opacity-50 ring-2 ring-zinc-300")}>
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">{card.title}</h2>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {canEditCards && (
+                <span {...dnd.handleProps(card.cardName)} title="Drag to reorder" className="text-slate-300 hover:text-slate-500 shrink-0">
+                  <GripVertical className="h-4 w-4" />
+                </span>
+              )}
+              <h2 className="text-sm font-semibold text-slate-900 truncate">{card.title}</h2>
+            </div>
             {canEditCards && (
-              <div className="flex items-center gap-0.5 text-slate-300">
-                <button onClick={() => move(index, -1)} disabled={index === 0} title="Move up"
-                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
-                <button onClick={() => move(index, 1)} disabled={index === cards.length - 1} title="Move down"
-                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
-                <button onClick={() => setEditing(card)} title="Edit card" className="hover:text-slate-600 ml-0.5">
-                  <Settings className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              <button onClick={() => setEditing(card)} title="Edit card" className="text-slate-300 hover:text-slate-600 shrink-0">
+                <Settings className="h-3.5 w-3.5" />
+              </button>
             )}
           </div>
           <div className={cn("p-5 text-sm", (card.columns ?? 1) > 1 && "grid gap-x-5",

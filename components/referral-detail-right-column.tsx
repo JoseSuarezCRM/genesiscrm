@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Settings, SlidersHorizontal, ChevronUp, ChevronDown } from "lucide-react"
+import { Settings, SlidersHorizontal, GripVertical } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -18,6 +18,7 @@ import { STATUS_LABELS } from "@/lib/utils"
 import { ReferralStatus } from "@prisma/client"
 import CardCustomizationModal from "@/components/card-customization-modal"
 import { setCardVisibility, reorderRightCards } from "@/app/actions/card-layouts"
+import { useCardReorder } from "@/components/use-card-reorder"
 import { formatDate, formatPhone } from "@/lib/utils"
 
 interface CardLayout {
@@ -133,28 +134,12 @@ export default function ReferralDetailRightColumn({
     providerCardLayout,
   ])
 
-  // Card order (persisted). Cards lay out via CSS `order`, so we don't move JSX.
   const router = useRouter()
   const [, startReorder] = useTransition()
-  const defaultOrder = ["Referral", "Practice", "Provider"]
-  const [order, setOrder] = useState<string[]>(() => {
-    const withOrder = [referralCardLayout, practiceCardLayout, providerCardLayout]
-      .map((l, i) => ({ name: l.cardName, o: (l as any).order ?? i }))
-      .sort((a, b) => a.o - b.o)
-      .map((x) => x.name)
-    return withOrder.length === 3 ? withOrder : defaultOrder
-  })
-  const orderOf = (name: string) => { const i = order.indexOf(name); return i < 0 ? 99 : i }
 
   // Update layouts when props change (e.g., when opening a different referral)
   useEffect(() => {
-    const next = [referralCardLayout, practiceCardLayout, providerCardLayout]
-    setLayouts(next)
-    const ordered = next
-      .map((l, i) => ({ name: l.cardName, o: (l as any).order ?? i }))
-      .sort((a, b) => a.o - b.o)
-      .map((x) => x.name)
-    if (ordered.length === 3) setOrder(ordered)
+    setLayouts([referralCardLayout, practiceCardLayout, providerCardLayout])
   }, [referralCardLayout, practiceCardLayout, providerCardLayout])
 
   const handleOpenCustomization = (cardName: string) => {
@@ -187,30 +172,29 @@ export default function ReferralDetailRightColumn({
   const currentProviderLayout = getLayoutByCardName("Provider")
   const currentEditingLayout = editingCardName ? getLayoutByCardName(editingCardName) : referralCardLayout
 
-  function moveCard(name: string, dir: -1 | 1) {
-    const i = order.indexOf(name)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= order.length) return
-    const next = [...order]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    setOrder(next)
+  // Drag-and-drop card order. Cards lay out via CSS `order` (no JSX moved).
+  const orderedNames = [referralCardLayout, practiceCardLayout, providerCardLayout]
+    .map((l, i) => ({ name: l.cardName, o: (l as any).order ?? i }))
+    .sort((a, b) => a.o - b.o)
+    .map((x) => ({ cardName: x.name }))
+  const dnd = useCardReorder(orderedNames, (c) => c.cardName, (names) => {
     startReorder(async () => {
-      await reorderRightCards("REFERRAL", next.map((n) => {
+      await reorderRightCards("REFERRAL", names.map((n) => {
         const l = getLayoutByCardName(n)
         return { cardName: n, title: l.title, fields: l.fields, visible: l.visible !== false }
       }))
       router.refresh()
     })
-  }
+  })
+  const orderOf = (name: string) => { const i = dnd.order.findIndex((c) => c.cardName === name); return i < 0 ? 99 : i }
 
-  // Up/down + gear for a card header.
+  // Drag handle + gear for a card header.
   const HeaderControls = ({ name }: { name: string }) => (
-    <div className="flex items-center gap-0.5 text-slate-300">
-      <button onClick={() => moveCard(name, -1)} disabled={orderOf(name) === 0} title="Move up"
-        className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
-      <button onClick={() => moveCard(name, 1)} disabled={orderOf(name) === order.length - 1} title="Move down"
-        className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
-      <button onClick={() => handleOpenCustomization(name)} className="hover:text-slate-600 ml-0.5" title="Customize card">
+    <div className="flex items-center gap-1 text-slate-300">
+      <span {...dnd.handleProps(name)} title="Drag to reorder" className="hover:text-slate-500">
+        <GripVertical className="h-4 w-4" />
+      </span>
+      <button onClick={() => handleOpenCustomization(name)} className="hover:text-slate-600" title="Customize card">
         <Settings className="h-4 w-4" />
       </button>
     </div>
@@ -263,7 +247,7 @@ export default function ReferralDetailRightColumn({
 
         {/* Referral Info Card */}
         {currentReferralLayout.visible !== false && (
-          <Card style={{ order: orderOf("Referral") }}>
+          <Card style={{ order: orderOf("Referral") }} {...dnd.cardProps("Referral")} className={dnd.dragging === "Referral" ? "opacity-50 ring-2 ring-zinc-300" : undefined}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentReferralLayout.title}</CardTitle>
               {canEditCards && <HeaderControls name="Referral" />}
@@ -316,7 +300,7 @@ export default function ReferralDetailRightColumn({
 
         {/* Practice Info Card */}
         {currentPracticeLayout.visible !== false && (
-          <Card style={{ order: orderOf("Practice") }}>
+          <Card style={{ order: orderOf("Practice") }} {...dnd.cardProps("Practice")} className={dnd.dragging === "Practice" ? "opacity-50 ring-2 ring-zinc-300" : undefined}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentPracticeLayout.title}</CardTitle>
               {canEditCards && <HeaderControls name="Practice" />}
@@ -365,7 +349,7 @@ export default function ReferralDetailRightColumn({
 
         {/* Provider Info Card */}
         {currentProviderLayout.visible !== false && (
-          <Card style={{ order: orderOf("Provider") }}>
+          <Card style={{ order: orderOf("Provider") }} {...dnd.cardProps("Provider")} className={dnd.dragging === "Provider" ? "opacity-50 ring-2 ring-zinc-300" : undefined}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">{currentProviderLayout.title}</CardTitle>
               {canEditCards && <HeaderControls name="Provider" />}
