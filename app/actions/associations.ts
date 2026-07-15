@@ -138,3 +138,18 @@ export async function setAssociationCardVisible(objectType: string, cardType: st
   revalidatePath("/", "layout")
   return { success: true }
 }
+
+// Persist the right-column card order (the full ordered list of card types).
+export async function reorderAssociationCards(objectType: string, cardTypes: string[]) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  for (let i = 0; i < cardTypes.length; i++) {
+    await (prisma as any).associationCardPref.upsert({
+      where: { objectType_cardType: { objectType, cardType: cardTypes[i] } },
+      create: { objectType, cardType: cardTypes[i], visible: true, order: i },
+      update: { order: i },
+    })
+  }
+  revalidatePath("/", "layout")
+  return { success: true }
+}

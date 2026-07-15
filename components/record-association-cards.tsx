@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { SlidersHorizontal, Plus, X, Check, Loader2, Search } from "lucide-react"
+import { SlidersHorizontal, Plus, X, Check, Loader2, Search, ChevronUp, ChevronDown } from "lucide-react"
 import {
-  searchAssociableRecords, associateRecords, unassociateRecords, setAssociationCardVisible,
+  searchAssociableRecords, associateRecords, unassociateRecords, setAssociationCardVisible, reorderAssociationCards,
 } from "@/app/actions/associations"
 import type { AssocCard } from "@/lib/record-associations"
 import { cn } from "@/lib/utils"
@@ -33,6 +33,17 @@ export default function RecordAssociationCards({ recordType, recordId, cards, ca
   }
 
   const visible = cards.filter((c) => c.visible)
+
+  // Move a visible card up/down; persist the full order across all cards.
+  function move(index: number, dir: -1 | 1) {
+    const j = index + dir
+    if (j < 0 || j >= visible.length) return
+    const reordered = [...visible]
+    ;[reordered[index], reordered[j]] = [reordered[j], reordered[index]]
+    const hiddenCards = cards.filter((c) => !c.visible)
+    const order = [...reordered, ...hiddenCards].map((c) => c.type)
+    startTransition(async () => { await reorderAssociationCards(recordType, order); router.refresh() })
+  }
 
   return (
     <div className="space-y-4">
@@ -67,15 +78,17 @@ export default function RecordAssociationCards({ recordType, recordId, cards, ca
         </div>
       )}
 
-      {visible.map((card) => (
-        <AssociationCard key={card.type} recordType={recordType} recordId={recordId} card={card} canEdit={canEdit} />
+      {visible.map((card, index) => (
+        <AssociationCard key={card.type} recordType={recordType} recordId={recordId} card={card} canEdit={canEdit}
+          onUp={index > 0 ? () => move(index, -1) : undefined}
+          onDown={index < visible.length - 1 ? () => move(index, 1) : undefined} />
       ))}
     </div>
   )
 }
 
-function AssociationCard({ recordType, recordId, card, canEdit }: {
-  recordType: string; recordId: string; card: AssocCard; canEdit: boolean
+function AssociationCard({ recordType, recordId, card, canEdit, onUp, onDown }: {
+  recordType: string; recordId: string; card: AssocCard; canEdit: boolean; onUp?: () => void; onDown?: () => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -111,11 +124,16 @@ function AssociationCard({ recordType, recordId, card, canEdit }: {
         <h2 className="text-sm font-semibold text-slate-900">
           {card.label} <span className="text-slate-400 font-normal">{card.records.length}</span>
         </h2>
-        {canEdit && !card.native && (
-          <button onClick={() => setAdding((v) => !v)} title={`Associate a ${card.label}`}
-            className="text-slate-400 hover:text-slate-800">
-            <Plus className="h-3.5 w-3.5" />
-          </button>
+        {canEdit && (
+          <div className="flex items-center gap-0.5 text-slate-300">
+            <button onClick={onUp} disabled={!onUp} title="Move up" className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
+            <button onClick={onDown} disabled={!onDown} title="Move down" className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
+            {!card.native && (
+              <button onClick={() => setAdding((v) => !v)} title={`Associate a ${card.label}`} className="hover:text-slate-800 ml-0.5">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 

@@ -4,10 +4,10 @@
 
 import {
   CLEARANCE_OPTIONS, DENTAL_CLEARANCE_OPTIONS, CT_REQUIRED_OPTIONS,
-  GLP1_OPTIONS, DME_OPTIONS, FACILITY_OPTIONS,
+  GLP1_OPTIONS, DME_OPTIONS, FACILITY_OPTIONS, PHYSICAL_THERAPY_OPTIONS, REFERRAL_PRESETS,
 } from "@/lib/surgery-procedures"
 
-export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime"
+export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime" | "select_or_other"
 
 export interface RecordFieldDef {
   key: string
@@ -15,6 +15,9 @@ export interface RecordFieldDef {
   type: RecordFieldType
   options?: string[]
   readOnly?: boolean
+  // For `select_or_other`: the option label that reveals a free-text box (the typed
+  // value is stored in the same field), like Physical Therapy's "External".
+  otherOption?: string
 }
 
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
@@ -56,29 +59,35 @@ export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
     { key: "diagnosis", label: "Diagnosis", type: "text" },
     { key: "procedure", label: "Procedure", type: "text" },
     { key: "facility", label: "Facility", type: "select", options: FACILITY_OPTIONS },
-    { key: "surgeryDate", label: "Surgery Date", type: "date" },
+    { key: "surgeryDate", label: "Surgery Date", type: "datetime" },
     { key: "language", label: "Language", type: "select", options: ["EN", "ES"] },
     { key: "email", label: "Email", type: "email" },
-    // Clinical & scheduling — the same fields as the rich editor, so they can be
-    // shown/edited on any card and appear in "View all properties".
+    // Clinical & scheduling — the same fields as the old rich editor, now editable
+    // inline on a customizable card.
     { key: "medicalClearance", label: "Medical Clearance", type: "select", options: CLEARANCE_OPTIONS },
     { key: "secondaryClearance", label: "Secondary Clearance", type: "select", options: CLEARANCE_OPTIONS },
     { key: "dentalClearance", label: "Dental Clearance", type: "select", options: DENTAL_CLEARANCE_OPTIONS },
     { key: "ctRequired", label: "CT Required", type: "select", options: CT_REQUIRED_OPTIONS },
     { key: "glp1", label: "GLP-1", type: "select", options: GLP1_OPTIONS },
     { key: "dme", label: "DME", type: "select", options: DME_OPTIONS },
-    { key: "physicalTherapy", label: "Physical Therapy", type: "text" },
-    { key: "referral", label: "Referral Source", type: "text" },
+    { key: "physicalTherapy", label: "Physical Therapy", type: "select_or_other", options: PHYSICAL_THERAPY_OPTIONS, otherOption: "External" },
+    { key: "referral", label: "Referral Source", type: "select_or_other", options: REFERRAL_PRESETS, otherOption: "Other" },
     { key: "notes", label: "Notes", type: "long_text" },
   ],
 }
 
+// Surgery's default middle card — the clinical & scheduling fields, editable inline.
+export const SURGERY_CLINICAL_FIELDS = [
+  "medicalClearance", "secondaryClearance", "dentalClearance", "ctRequired", "glp1",
+  "dme", "physicalTherapy", "referral", "facility", "surgeryDate", "language", "email", "notes",
+]
+
 // The card a record shows when no layout has been saved yet.
 export function defaultCardFor(entityType: string): { cardName: string; title: string; fields: string[] } {
   const label = ({ PROVIDER: "Provider", PRACTICE: "Practice", LOCATION: "Location", SURGERY: "Case" } as Record<string, string>)[entityType] ?? "Record"
-  return {
-    cardName: "info",
-    title: `${label} Information`,
-    fields: (RECORD_FIELDS[entityType] ?? []).map((f) => f.key),
-  }
+  // Surgery's identity card excludes the clinical fields (on their own middle card)
+  // and Procedure (edited via the cascade picker in SurgeryDetailClient).
+  const clinical = new Set([...SURGERY_CLINICAL_FIELDS, "procedure"])
+  const fields = (RECORD_FIELDS[entityType] ?? []).map((f) => f.key).filter((k) => entityType !== "SURGERY" || !clinical.has(k))
+  return { cardName: "info", title: `${label} Information`, fields }
 }

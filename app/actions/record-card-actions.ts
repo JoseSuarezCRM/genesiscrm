@@ -48,3 +48,40 @@ export async function deleteRecordCard(objectType: string, cardName: string) {
   revalidatePath(`/objects/${objectType.slice(3)}/[id]`, "page")
   return { success: true }
 }
+
+// Persist the order of a column's cards (materializing default cards on first move).
+export async function reorderCards(
+  entityType: string,
+  section: "LEFT" | "MIDDLE",
+  cards: { cardName: string; title: string; fields: string[] }[],
+) {
+  if (isCustom(entityType)) {
+    await requireAccess(entityType, "EDIT")
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i]
+      await (prisma as any).recordCard.upsert({
+        where: { objectType_cardName: { objectType: entityType, cardName: c.cardName } },
+        create: { objectType: entityType, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i },
+        update: { order: i, title: c.title, fields: c.fields, section },
+      })
+    }
+    revalidatePath(`/objects/${entityType.slice(3)}/[id]`, "page")
+    return { success: true }
+  }
+
+  await requireAccess("VIEWS", "EDIT")
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i]
+    await prisma.cardLayout.upsert({
+      where: { entityType_cardName: { entityType: entityType as any, cardName: c.cardName } },
+      create: { entityType: entityType as any, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i },
+      update: { order: i, title: c.title, fields: c.fields, section },
+    })
+  }
+  revalidatePath("/referrals/[id]", "page")
+  revalidatePath("/referring-doctors/[id]", "page")
+  revalidatePath("/practices/[id]", "page")
+  revalidatePath("/locations/[id]", "page")
+  revalidatePath("/surgery/[id]", "page")
+  return { success: true }
+}

@@ -9,7 +9,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { getCardLayouts } from "@/app/actions/card-layouts"
-import { RECORD_FIELDS, defaultCardFor, type RecordFieldDef, type RecordFieldType } from "@/lib/record-field-catalog"
+import { RECORD_FIELDS, defaultCardFor, SURGERY_CLINICAL_FIELDS, type RecordFieldDef, type RecordFieldType } from "@/lib/record-field-catalog"
 
 const CP_TYPE: Record<string, RecordFieldType> = {
   TEXT: "text", LONG_TEXT: "long_text", NUMBER: "number", EMAIL: "email",
@@ -112,7 +112,12 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
   ]
 
   const cards = leftLayouts.length ? toCards(leftLayouts as any) : defaultLeft
-  const middleCards = toCards(middleLayouts as any)
+
+  // Surgery gets a default middle Clinical & Scheduling card (editable inline).
+  const defaultMiddle = entityType === "SURGERY"
+    ? [{ cardName: "clinical", title: "Clinical & Scheduling", fields: SURGERY_CLINICAL_FIELDS }]
+    : []
+  const middleCards = middleLayouts.length ? toCards(middleLayouts as any) : defaultMiddle
 
   return { cards, middleCards, catalog, values }
 }

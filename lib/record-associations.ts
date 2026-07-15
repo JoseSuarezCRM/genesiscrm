@@ -106,9 +106,15 @@ export async function loadAssociationCards(recordType: string, recordId: string)
   ])
 
   const hidden = new Set(prefs.filter((p: any) => !p.visible).map((p: any) => p.cardType))
+  const orderOf = new Map<string, number>(prefs.map((p: any) => [p.cardType, p.order]))
 
-  return [
+  const all: AssocCard[] = [
     ...native.map((c) => ({ ...c, visible: !hidden.has(c.type) })),
     ...groups.map((g) => ({ type: g.type, label: g.label, records: g.records, visible: !hidden.has(g.type) })),
   ]
+  // Apply the saved order; cards without a saved order keep their natural position.
+  return all
+    .map((c, i) => ({ c, i, o: orderOf.has(c.type) ? orderOf.get(c.type)! : 1000 + i }))
+    .sort((a, b) => a.o - b.o || a.i - b.i)
+    .map((x) => x.c)
 }

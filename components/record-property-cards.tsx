@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Settings, Plus, Check, Loader2 } from "lucide-react"
+import { Settings, Plus, Check, Loader2, ChevronUp, ChevronDown } from "lucide-react"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
+import { reorderCards } from "@/app/actions/record-card-actions"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
@@ -43,6 +44,14 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): st
   return String(v)
 }
 
+// ISO → the value a <input type="datetime-local"> expects (local wall time).
+function isoToLocalInput(iso: any): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 // One property row — label on top, value underneath (matching Referrals). Click
 // the value to edit it in place; the owner is a dropdown; audit fields are read-only.
 function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
@@ -52,8 +61,21 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
   const [isPending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<any>(value ?? "")
+  // For select_or_other: the picked option, and the free text when "other".
+  const [sel, setSel] = useState("")
+  const [otherText, setOtherText] = useState("")
 
   const Label = <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide">{f.label}</span>
+
+  function beginEdit() {
+    setDraft(value ?? "")
+    if (f.type === "select_or_other") {
+      const v = String(value ?? "")
+      if (v && !(f.options ?? []).includes(v)) { setSel(f.otherOption ?? "Other"); setOtherText(v) }
+      else { setSel(v); setOtherText("") }
+    }
+    setEditing(true)
+  }
 
   // Record Owner: an always-on dropdown (built-in + custom objects go through setRecordOwner).
   if (f.type === "user") {
@@ -78,8 +100,9 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
   }
 
   function save() {
-    // Date columns want an ISO datetime, not a bare YYYY-MM-DD.
-    const val = f.type === "date" && draft ? new Date(String(draft)).toISOString() : draft
+    let val: any = draft
+    if (f.type === "select_or_other") val = sel === (f.otherOption ?? "Other") ? otherText : sel
+    else if ((f.type === "date" || f.type === "datetime") && draft) val = new Date(String(draft)).toISOString()
     startTransition(async () => {
       const res = await updateRecordField(entityType as any, recordId, f.key, val)
       if (!(res as any)?.error) { setEditing(false); router.refresh() }
@@ -88,7 +111,7 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
 
   if (!editing) {
     return (
-      <button onClick={() => { setDraft(value ?? ""); setEditing(true) }}
+      <button onClick={beginEdit}
         className="w-full py-2 space-y-1 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 transition-colors group">
         {Label}
         <span className={cn("block text-sm break-words font-medium", value ? "text-slate-900" : "text-slate-400 group-hover:text-slate-600")}>
@@ -99,6 +122,7 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
   }
 
   const input = "w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400"
+  const otherLabel = f.otherOption ?? "Other"
   return (
     <div className="py-2 space-y-1.5">
       {Label}
@@ -107,12 +131,23 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
           <option value="">—</option>
           {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
         </StyledSelect>
+      ) : f.type === "select_or_other" ? (
+        <>
+          <StyledSelect value={sel} onChange={(e) => setSel(e.target.value)} className={input}>
+            <option value="">—</option>
+            {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+            {!(f.options ?? []).includes(otherLabel) && <option value={otherLabel}>{otherLabel}…</option>}
+          </StyledSelect>
+          {sel === otherLabel && (
+            <input value={otherText} onChange={(e) => setOtherText(e.target.value)} placeholder={`${otherLabel} details…`} className={input} autoFocus />
+          )}
+        </>
       ) : f.type === "long_text" ? (
         <textarea rows={3} value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} className={input + " resize-none"} />
       ) : (
         <input
-          type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
-          value={String(draft ?? "")}
+          type={f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "datetime" ? "datetime-local" : "text"}
+          value={f.type === "datetime" && draft ? isoToLocalInput(draft) : String(draft ?? "")}
           onChange={(e) => setDraft(e.target.value)}
           className={input}
           autoFocus
@@ -131,6 +166,7 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
 
 export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards, section = "LEFT", users = [] }: Props) {
   const router = useRouter()
+  const [, startTransition] = useTransition()
   // null = closed; PropertyCard = editing that card; "new" = creating one.
   const [editing, setEditing] = useState<PropertyCard | "new" | null>(null)
 
@@ -138,6 +174,18 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // The same "Edit Card" modal Referrals uses, fed this object's own properties.
   const pool = catalog.map((f) => ({ id: f.key, label: f.label }))
+
+  // Move a card up/down; persists the whole column's order (materializing defaults).
+  function move(index: number, dir: -1 | 1) {
+    const next = [...cards]
+    const j = index + dir
+    if (j < 0 || j >= next.length) return
+    ;[next[index], next[j]] = [next[j], next[index]]
+    startTransition(async () => {
+      await reorderCards(entityType, section, next.map((c) => ({ cardName: c.cardName, title: c.title, fields: c.fields })))
+      router.refresh()
+    })
+  }
 
   return (
     <div className="space-y-4">
@@ -150,15 +198,20 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
         </div>
       )}
 
-      {cards.map((card) => (
+      {cards.map((card, index) => (
         <div key={card.cardName} className="bg-white border border-slate-200 rounded-xl">
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
             <h2 className="text-sm font-semibold text-slate-900">{card.title}</h2>
             {canEditCards && (
-              <button onClick={() => setEditing(card)} title="Edit card"
-                className="text-slate-300 hover:text-slate-600">
-                <Settings className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-0.5 text-slate-300">
+                <button onClick={() => move(index, -1)} disabled={index === 0} title="Move up"
+                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronUp className="h-3.5 w-3.5" /></button>
+                <button onClick={() => move(index, 1)} disabled={index === cards.length - 1} title="Move down"
+                  className="hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-300"><ChevronDown className="h-3.5 w-3.5" /></button>
+                <button onClick={() => setEditing(card)} title="Edit card" className="hover:text-slate-600 ml-0.5">
+                  <Settings className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
           </div>
           <div className="p-5 text-sm">

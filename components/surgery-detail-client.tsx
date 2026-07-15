@@ -245,6 +245,15 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
     })
   }
 
+  function saveProcedure() {
+    startSave(async () => {
+      await updateSurgeryCase(surgeryCase.id, { procedure: procedure || null })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      router.refresh()
+    })
+  }
+
   function handleSave() {
     startSave(async () => {
       await updateSurgeryCase(surgeryCase.id, {
@@ -344,127 +353,15 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
         </CardContent>
       </Card>
 
-      {/* Clinical & Scheduling */}
+      {/* Procedure — the cascading provider → body part → procedure picker. The
+          rest of Clinical & Scheduling is an editable property card in the middle
+          column. */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-base">Clinical & Scheduling</CardTitle>
-        </CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-base">Procedure</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <SelectField
-              label="Medical Clearance"
-              value={medicalClearance}
-              onChange={setMedicalClearance}
-              options={[
-                { value: "Not required", label: "Not required" },
-                { value: "Arrangements to be made", label: "Arrangements to be made" },
-                { value: "Scheduled", label: "Scheduled" },
-                { value: "Awaiting clearance documents", label: "Awaiting clearance documents" },
-                { value: "Completed, on file", label: "Completed, on file" },
-              ]}
-            />
-            <SelectField
-              label="Secondary Clearance"
-              value={secondaryClearance}
-              onChange={setSecondaryClearance}
-              options={[
-                { value: "Not required", label: "Not required" },
-                { value: "Arrangements to be made", label: "Arrangements to be made" },
-                { value: "Scheduled", label: "Scheduled" },
-                { value: "Awaiting clearance documents", label: "Awaiting clearance documents" },
-                { value: "Completed, on file", label: "Completed, on file" },
-              ]}
-            />
-            <SelectField
-              label="Dental Clearance"
-              value={dentalClearance}
-              onChange={setDentalClearance}
-              options={[
-                { value: "Not required", label: "Not required" },
-                { value: "Arrangements to be made", label: "Arrangements to be made" },
-                { value: "Scheduled", label: "Scheduled" },
-                { value: "Awaiting clearance documents", label: "Awaiting clearance documents" },
-                { value: "Treatment required", label: "Treatment required" },
-                { value: "Completed, on file", label: "Completed, on file" },
-              ]}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <SelectField
-              label="CT Required"
-              value={ctRequired}
-              onChange={setCtRequired}
-              options={[
-                { value: "Yes", label: "Yes" },
-                { value: "No", label: "No" },
-                { value: "Received", label: "Received" },
-              ]}
-            />
-            <SelectField
-              label="GLP-1"
-              value={glp1}
-              onChange={setGlp1}
-              options={[
-                { value: "Yes", label: "Yes" },
-                { value: "No", label: "No" },
-              ]}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <SelectField
-              label="DME"
-              value={dme}
-              onChange={setDme}
-              options={toOptions(DME_OPTIONS)}
-            />
-            <PhysicalTherapyField
-              selectVal={ptSelect}
-              externalVal={ptExternal}
-              onSelectChange={setPtSelect}
-              onExternalChange={setPtExternal}
-            />
-            <ReferralField
-              presets={referralPresets}
-              selectVal={referralSelect}
-              otherVal={referralOther}
-              onSelectChange={setReferralSelect}
-              onOtherChange={setReferralOther}
-            />
-            <SelectField
-              label="Facility"
-              value={facility}
-              onChange={setFacility}
-              options={[
-                { value: "Glen Oaks Hospital",                          label: "Glen Oaks Hospital" },
-                { value: "Humboldt Park Hospital",                      label: "Humboldt Park Hospital" },
-                { value: "Mercy Aurora Hospital",                       label: "Mercy Aurora Hospital" },
-                { value: "Good Samaritan Hospital",                     label: "Good Samaritan Hospital" },
-                { value: "Oak Brook Surgical Center",                   label: "Oak Brook Surgical Center" },
-                { value: "Aiden Center For Day Surgery",                label: "Aiden Center For Day Surgery" },
-                { value: "Fullerton-Kimball Medical & Surgical Center", label: "Fullerton-Kimball Medical & Surgical Center" },
-                { value: "Illinois Masonic Hospital",                   label: "Illinois Masonic Hospital" },
-              ]}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <ProcedureField value={procedure} onChange={setProcedure} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <InputField label="Surgery Date & Time" value={surgeryDate} type="datetime-local" onChange={setSurgeryDate} />
-            <SelectField label="Language" value={language} options={LANGUAGE_OPTIONS} onChange={setLanguage} />
-            <InputField label="Patient Email" value={email} type="email" onChange={setEmail} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="px-3 py-2 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors resize-none"
-            />
-          </div>
+          <ProcedureField value={procedure} onChange={setProcedure} />
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving} size="sm" className="min-w-[80px]">
+            <Button onClick={saveProcedure} disabled={saving} size="sm" className="min-w-[80px]">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <><Check className="h-4 w-4 mr-1" />Saved</> : "Save"}
             </Button>
           </div>
