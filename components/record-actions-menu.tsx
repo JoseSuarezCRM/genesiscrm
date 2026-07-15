@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronDown, List, Copy, GitMerge, Trash2, Loader2, X, Search } from "lucide-react"
-import { deleteRecord, cloneRecord, mergeRecord, MERGEABLE } from "@/app/actions/record-crud"
+import { deleteRecord, cloneRecord, mergeRecord } from "@/app/actions/record-crud"
+import { isMergeable } from "@/lib/record-urls"
 import { searchAssociableRecords } from "@/app/actions/associations"
 import { listUrlFor } from "@/lib/record-urls"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
@@ -36,7 +37,7 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
   const [merging, setMerging] = useState(false)
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
-  const mergeable = MERGEABLE.includes(entityType)
+  const mergeable = isMergeable(entityType)
 
   useEffect(() => {
     function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }

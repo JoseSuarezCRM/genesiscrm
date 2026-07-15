@@ -150,3 +150,29 @@ export async function recordCustomObjectView(objectKey: string, id: string) {
     data: { lastViewedById: uid, lastViewedAt: new Date() },
   }).catch(() => {})
 }
+
+// Merge one custom-object record into another: fill blank values on the target,
+// move notes + associations, then delete the source.
+export async function mergeCustomObjectRecord(objectKey: string, sourceId: string, targetId: string) {
+  await requireAccess(objKey(objectKey), "EDIT")
+  if (sourceId === targetId) return { error: "Cannot merge a record into itself." }
+
+  const type = `CO:${objectKey}`
+  const [source, target] = await Promise.all([
+    (prisma as any).customObjectRecord.findUnique({ where: { id: sourceId } }),
+    (prisma as any).customObjectRecord.findUnique({ where: { id: targetId } }),
+  ])
+  if (!source || !target) return { error: "Record not found." }
+
+  // Target values win; source fills only the gaps.
+  const values = { ...((source.values as any) ?? {}), ...((target.values as any) ?? {}) }
+  await (prisma as any).customObjectRecord.update({ where: { id: targetId }, data: { values } })
+
+  await (prisma as any).recordNote.updateMany({ where: { recordType: type, recordId: sourceId }, data: { recordId: targetId } })
+  await (prisma as any).objectAssociation.updateMany({ where: { fromType: type, fromId: sourceId }, data: { fromId: targetId } })
+  await (prisma as any).objectAssociation.updateMany({ where: { toType: type, toId: sourceId }, data: { toId: targetId } })
+
+  await (prisma as any).customObjectRecord.delete({ where: { id: sourceId } })
+  revalidatePath(`/objects/${objectKey}`)
+  return { success: true }
+}

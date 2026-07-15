@@ -428,3 +428,57 @@ export async function assignReferral(referralId: string, assignedToId: string | 
 
   return { success: true }
 }
+
+// Merge one referral into another: move its children to the target, fill any blank
+// scalar fields on the target, then delete the source.
+export async function mergeReferral(sourceId: string, targetId: string) {
+  await requireAccess("REFERRALS", "EDIT")
+  if (sourceId === targetId) return { error: "Cannot merge a referral into itself." }
+
+  const [source, target] = await Promise.all([
+    prisma.referral.findUnique({ where: { id: sourceId } }),
+    prisma.referral.findUnique({ where: { id: targetId } }),
+  ])
+  if (!source || !target) return { error: "Referral not found." }
+
+  // Reassign child records that key off referralId.
+  await prisma.document.updateMany({ where: { referralId: sourceId }, data: { referralId: targetId } })
+  await prisma.callAttempt.updateMany({ where: { referralId: sourceId }, data: { referralId: targetId } })
+  await prisma.outreachMessage.updateMany({ where: { referralId: sourceId }, data: { referralId: targetId } })
+  await prisma.smsThread.updateMany({ where: { referralId: sourceId }, data: { referralId: targetId } })
+  await prisma.task.updateMany({ where: { referralId: sourceId }, data: { referralId: targetId } })
+
+  // Tags + sequence enrollments have composite/unique keys — move only the ones
+  // the target doesn't already have; the rest fall away with the source.
+  const tags = await prisma.referralTag.findMany({ where: { referralId: sourceId } })
+  for (const t of tags) {
+    await prisma.referralTag.upsert({
+      where: { referralId_tagId: { referralId: targetId, tagId: t.tagId } },
+      create: { referralId: targetId, tagId: t.tagId },
+      update: {},
+    }).catch(() => {})
+  }
+  const enrollments = await prisma.sequenceEnrollment.findMany({ where: { referralId: sourceId } })
+  for (const e of enrollments) {
+    const dup = await prisma.sequenceEnrollment.findFirst({ where: { sequenceId: e.sequenceId, referralId: targetId } })
+    if (!dup) await prisma.sequenceEnrollment.update({ where: { id: e.id }, data: { referralId: targetId } }).catch(() => {})
+  }
+
+  // Generic engagement layer (notes + associations).
+  await (prisma as any).recordNote.updateMany({ where: { recordType: "REFERRAL", recordId: sourceId }, data: { recordId: targetId } })
+  await (prisma as any).objectAssociation.updateMany({ where: { fromType: "REFERRAL", fromId: sourceId }, data: { fromId: targetId } })
+  await (prisma as any).objectAssociation.updateMany({ where: { toType: "REFERRAL", toId: sourceId }, data: { toId: targetId } })
+
+  // Fill blank scalar fields on the target from the source.
+  const fill: Record<string, unknown> = {}
+  for (const k of ["patientMrn", "patientPhone", "patientEmail", "insuranceProvider", "notes", "referringDoctorId", "referringPracticeId", "referringLocationId"] as const) {
+    if ((target as any)[k] == null && (source as any)[k] != null) fill[k] = (source as any)[k]
+  }
+  const merged = { ...(source.customProperties as any ?? {}), ...(target.customProperties as any ?? {}) }
+  fill.customProperties = merged
+  await prisma.referral.update({ where: { id: targetId }, data: fill as any })
+
+  await prisma.referral.delete({ where: { id: sourceId } })
+  revalidatePath("/referrals")
+  return { success: true }
+}

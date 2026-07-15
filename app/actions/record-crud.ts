@@ -5,8 +5,8 @@ import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
 import { deleteDoctor, deletePractice, deleteLocation, mergeDoctor, mergePractice, mergeLocation } from "@/app/actions/referring-doctors"
 import { deleteSurgeryCase } from "@/app/actions/surgery"
-import { deleteReferral } from "@/app/actions/referrals"
-import { deleteCustomObjectRecord, createCustomObjectRecord } from "@/app/actions/custom-object-records"
+import { deleteReferral, mergeReferral } from "@/app/actions/referrals"
+import { deleteCustomObjectRecord, createCustomObjectRecord, mergeCustomObjectRecord } from "@/app/actions/custom-object-records"
 
 // Delete dispatches to each object's own guarded delete, so cascade checks
 // (e.g. a practice with referrals) still apply.
@@ -87,16 +87,16 @@ export async function cloneRecord(entityType: string, id: string): Promise<{ url
   return { error: `Can't clone a ${entityType} record.` }
 }
 
-// Objects that support merge (dedup two records into one). Source is merged INTO
-// the target, then the target's page is returned.
-export const MERGEABLE = ["PROVIDER", "PRACTICE", "LOCATION"]
-
+// Merge dedups two records into one: the source is merged INTO the target, then
+// the target's page is returned. (See lib/record-urls for `isMergeable`.)
 export async function mergeRecord(entityType: string, sourceId: string, targetId: string): Promise<{ url?: string; error?: string }> {
   if (sourceId === targetId) return { error: "Pick a different record to merge into." }
   let res: any
-  if (entityType === "PROVIDER") { res = await mergeDoctor(sourceId, targetId); if (!res?.error) return { url: `/referring-doctors/${targetId}` } }
+  if (entityType.startsWith("CO:")) { res = await mergeCustomObjectRecord(entityType.slice(3), sourceId, targetId); if (!res?.error) return { url: `/objects/${entityType.slice(3)}/${targetId}` } }
+  else if (entityType === "PROVIDER") { res = await mergeDoctor(sourceId, targetId); if (!res?.error) return { url: `/referring-doctors/${targetId}` } }
   else if (entityType === "PRACTICE") { res = await mergePractice(sourceId, targetId); if (!res?.error) return { url: `/practices/${targetId}` } }
   else if (entityType === "LOCATION") { res = await mergeLocation(sourceId, targetId); if (!res?.error) return { url: `/locations/${targetId}` } }
+  else if (entityType === "REFERRAL") { res = await mergeReferral(sourceId, targetId); if (!res?.error) return { url: `/referrals/${targetId}` } }
   else return { error: `Can't merge a ${entityType} record.` }
   return { error: res?.error ?? "Merge failed" }
 }

@@ -13,3 +13,10 @@ export function listUrlFor(entityType: string): string {
   if (entityType.startsWith("CO:")) return `/objects/${entityType.slice(3)}`
   return LIST_URL[entityType] ?? "/"
 }
+
+// Objects that support merge (mirrors record-crud's dispatcher). Pure so client
+// components can gate the Merge menu item.
+const MERGEABLE_BUILTINS = ["PROVIDER", "PRACTICE", "LOCATION", "REFERRAL"]
+export function isMergeable(entityType: string): boolean {
+  return entityType.startsWith("CO:") || MERGEABLE_BUILTINS.includes(entityType)
+}
