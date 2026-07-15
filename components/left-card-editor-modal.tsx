@@ -39,6 +39,11 @@ interface Props {
   // Which column a newly created card belongs to.
   section?: "LEFT" | "MIDDLE"
   onSaved?: () => void
+  // When provided, the modal delegates persistence to the parent (which saves the
+  // whole column) instead of writing this one card directly.
+  columnsEnabled?: boolean
+  onSubmit?: (data: { title: string; fields: string[]; columns: number }) => void
+  onDelete?: () => void
 }
 
 export default function LeftCardEditorModal({
@@ -50,10 +55,14 @@ export default function LeftCardEditorModal({
   fields: fieldDefs,
   section = "LEFT",
   onSaved,
+  onSubmit,
+  onDelete,
+  columnsEnabled = false,
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [title, setTitle] = useState(existing?.title ?? "")
   const [fields, setFields] = useState<string[]>(existing?.fields ?? [])
+  const [columns, setColumns] = useState<number>((existing as any)?.columns ?? 1)
   const [dragId, setDragId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
 
@@ -86,6 +95,8 @@ export default function LeftCardEditorModal({
   const handleSave = () => {
     const trimmed = title.trim()
     if (!trimmed) return
+    // Parent-managed mode: hand the edited card back; it persists the whole column.
+    if (onSubmit) { onSubmit({ title: trimmed, fields, columns }); onOpenChange(false); return }
     startTransition(async () => {
       if (existing) {
         await updateRecordCard(entityType, existing.cardName, trimmed, fields)
@@ -99,6 +110,7 @@ export default function LeftCardEditorModal({
 
   const handleDelete = () => {
     if (!existing) return
+    if (onDelete) { onDelete(); onOpenChange(false); return }
     startTransition(async () => {
       await deleteRecordCard(entityType, existing.cardName)
       onSaved?.()
@@ -122,6 +134,22 @@ export default function LeftCardEditorModal({
               placeholder="e.g. Key Information"
             />
           </div>
+
+          {columnsEnabled && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Layout</label>
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
+                {[1, 2, 3].map((n) => (
+                  <button key={n} type="button" onClick={() => setColumns(n)}
+                    className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors",
+                      columns === n ? "bg-zinc-900 text-white" : "text-slate-600 hover:bg-slate-100")}>
+                    {n} column{n > 1 ? "s" : ""}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400">Properties are laid out {columns} across.</p>
+            </div>
+          )}
 
           <div className="border rounded-lg p-4 border-slate-200 bg-white space-y-3">
             <p className="text-xs text-slate-500">

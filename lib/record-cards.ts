@@ -55,7 +55,7 @@ async function loadCustomObjectCards(objectType: string, record: Record<string, 
   values.__updatedBy = record.updatedByName ?? null
   values.__updatedAt = record.updatedAt ?? null
 
-  const toCards = (rs: any[]) => rs.map((r) => ({ cardName: r.cardName, title: r.title, fields: r.fields }))
+  const toCards = (rs: any[]) => rs.map((r) => ({ cardName: r.cardName, title: r.title, fields: r.fields, columns: r.columns ?? 1 }))
   const left = rows.filter((r: any) => r.section === "LEFT")
   const middle = rows.filter((r: any) => r.section === "MIDDLE")
 
@@ -101,8 +101,8 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
     values.__updatedAt = record.updatedAt ?? null
   }
 
-  const toCards = (rows: { cardName: string; title: string; fields: string[] }[]) =>
-    rows.map((l) => ({ cardName: l.cardName, title: l.title, fields: l.fields }))
+  const toCards = (rows: any[]) =>
+    rows.map((l) => ({ cardName: l.cardName, title: l.title, fields: l.fields, columns: l.columns ?? 1 }))
 
   // Defaults (used until someone customizes): an info card with the base
   // properties, plus a Record details card holding owner + audit.
@@ -115,7 +115,7 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
 
   // Surgery gets a default middle Clinical & Scheduling card (editable inline).
   const defaultMiddle = entityType === "SURGERY"
-    ? [{ cardName: "clinical", title: "Clinical & Scheduling", fields: SURGERY_CLINICAL_FIELDS }]
+    ? [{ cardName: "clinical", title: "Clinical & Scheduling", fields: SURGERY_CLINICAL_FIELDS, columns: 2 }]
     : []
   const middleCards = middleLayouts.length ? toCards(middleLayouts as any) : defaultMiddle
 

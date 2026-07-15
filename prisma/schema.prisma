@@ -264,6 +264,7 @@ model RecordCard {
   title      String
   fields     String[] @default([])
   section    String   @default("LEFT") // LEFT | MIDDLE
+  columns    Int      @default(1) // fields laid out N-across (middle column)
   visible    Boolean  @default(true)
   order      Int      @default(0)
   createdAt  DateTime @default(now())
@@ -331,6 +332,7 @@ model CardLayout {
   title            String
   fields           String[]                   @default([])
   section          String                     @default("RIGHT") // LEFT (properties sidebar) or RIGHT (associated objects)
+  columns          Int                        @default(1) // fields laid out N-across (middle column)
   visible          Boolean                    @default(true)
   order            Int                        @default(0)
   createdAt        DateTime                   @default(now())

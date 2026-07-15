@@ -85,3 +85,33 @@ export async function reorderCards(
   revalidatePath("/surgery/[id]", "page")
   return { success: true }
 }
+
+// Replace a column's entire card set in one shot — the robust path for add / edit /
+// delete / reorder. Because loadPropertyCards falls back to defaults only when NO
+// rows exist, every mutation must persist the full set (materializing defaults),
+// otherwise deleting or adding one card would drop the rest.
+export async function replaceColumnCards(
+  entityType: string,
+  section: "LEFT" | "MIDDLE",
+  cards: { cardName: string; title: string; fields: string[]; columns?: number }[],
+) {
+  if (isCustom(entityType)) {
+    await requireAccess(entityType, "EDIT")
+    await (prisma as any).recordCard.deleteMany({ where: { objectType: entityType, section } })
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i]
+      await (prisma as any).recordCard.create({ data: { objectType: entityType, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i, columns: c.columns ?? 1 } })
+    }
+    revalidatePath(`/objects/${entityType.slice(3)}/[id]`, "page")
+    return { success: true }
+  }
+
+  await requireAccess("VIEWS", "EDIT")
+  await prisma.cardLayout.deleteMany({ where: { entityType: entityType as any, section } })
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i]
+    await prisma.cardLayout.create({ data: { entityType: entityType as any, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i, columns: c.columns ?? 1 } })
+  }
+  for (const p of ["/referrals/[id]", "/referring-doctors/[id]", "/practices/[id]", "/locations/[id]", "/surgery/[id]"]) revalidatePath(p, "page")
+  return { success: true }
+}

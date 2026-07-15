@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Settings, Plus, Check, Loader2, ChevronUp, ChevronDown } from "lucide-react"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
-import { reorderCards } from "@/app/actions/record-card-actions"
+import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
@@ -15,6 +15,7 @@ export interface PropertyCard {
   cardName: string
   title: string
   fields: string[]
+  columns?: number
 }
 
 interface UserOpt { id: string; label: string }
@@ -175,16 +176,35 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
   // The same "Edit Card" modal Referrals uses, fed this object's own properties.
   const pool = catalog.map((f) => ({ id: f.key, label: f.label }))
 
-  // Move a card up/down; persists the whole column's order (materializing defaults).
+  // Every card mutation persists the WHOLE column (materializing defaults), so
+  // adding/deleting/reordering one card never drops the others.
+  function persist(next: PropertyCard[]) {
+    startTransition(async () => {
+      await replaceColumnCards(entityType, section, next.map((c) => ({ cardName: c.cardName, title: c.title, fields: c.fields, columns: c.columns ?? 1 })))
+      router.refresh()
+    })
+  }
+
   function move(index: number, dir: -1 | 1) {
     const next = [...cards]
     const j = index + dir
     if (j < 0 || j >= next.length) return
     ;[next[index], next[j]] = [next[j], next[index]]
-    startTransition(async () => {
-      await reorderCards(entityType, section, next.map((c) => ({ cardName: c.cardName, title: c.title, fields: c.fields })))
-      router.refresh()
-    })
+    persist(next)
+  }
+
+  function submitCard(data: { title: string; fields: string[]; columns: number }) {
+    if (editing === "new") {
+      persist([...cards, { cardName: `card-${Date.now()}`, title: data.title, fields: data.fields, columns: data.columns }])
+    } else if (editing) {
+      persist(cards.map((c) => (c.cardName === editing.cardName ? { ...c, title: data.title, fields: data.fields, columns: data.columns } : c)))
+    }
+    setEditing(null)
+  }
+
+  function deleteCard() {
+    if (editing && editing !== "new") persist(cards.filter((c) => c.cardName !== editing.cardName))
+    setEditing(null)
   }
 
   return (
@@ -214,15 +234,16 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
               </div>
             )}
           </div>
-          <div className="p-5 text-sm">
+          <div className={cn("p-5 text-sm", (card.columns ?? 1) > 1 && "grid gap-x-5",
+            (card.columns ?? 1) === 2 && "sm:grid-cols-2", (card.columns ?? 1) >= 3 && "sm:grid-cols-3")}>
             {card.fields.length === 0 ? (
               <p className="text-sm text-slate-400">No properties on this card yet.</p>
             ) : (
               card.fields
                 .map((key) => byKey[key])
                 .filter(Boolean)
-                .map((f, i, arr) => (
-                  <div key={f.key} className={i < arr.length - 1 ? "border-b border-slate-50" : ""}>
+                .map((f) => (
+                  <div key={f.key} className={(card.columns ?? 1) > 1 ? "" : "border-b border-slate-50 last:border-0"}>
                     <FieldRow f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />
                   </div>
                 ))
@@ -239,7 +260,9 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
           existing={editing === "new" ? null : editing}
           fields={pool}
           section={section}
-          onSaved={() => router.refresh()}
+          columnsEnabled={section === "MIDDLE"}
+          onSubmit={submitCard}
+          onDelete={deleteCard}
         />
       )}
     </div>
