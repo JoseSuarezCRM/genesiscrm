@@ -87,16 +87,55 @@ export async function cloneRecord(entityType: string, id: string): Promise<{ url
   return { error: `Can't clone a ${entityType} record.` }
 }
 
-// Merge dedups two records into one: the source is merged INTO the target, then
-// the target's page is returned. (See lib/record-urls for `isMergeable`.)
-export async function mergeRecord(entityType: string, sourceId: string, targetId: string): Promise<{ url?: string; error?: string }> {
+const MERGE_DELEGATE: Record<string, () => any> = {
+  REFERRAL: () => prisma.referral, PROVIDER: () => prisma.referringDoctor,
+  PRACTICE: () => prisma.referringPractice, LOCATION: () => prisma.practiceLocation,
+  SURGERY: () => (prisma as any).surgeryCase,
+}
+
+// After the base merge, write the field values the user explicitly chose from the
+// losing record onto the survivor. Keys are catalog keys ("cp_<id>" for a custom
+// property; a property id for a custom object).
+async function applyMergeOverrides(entityType: string, survivorId: string, overrides?: Record<string, any>) {
+  const keys = Object.keys(overrides ?? {})
+  if (!keys.length) return
+
+  if (entityType.startsWith("CO:")) {
+    const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: survivorId }, select: { values: true } })
+    await (prisma as any).customObjectRecord.update({ where: { id: survivorId }, data: { values: { ...((rec?.values as any) ?? {}), ...overrides } } })
+    return
+  }
+
+  const model = MERGE_DELEGATE[entityType]?.()
+  if (!model) return
+  const cols: Record<string, any> = {}
+  const cp: Record<string, any> = {}
+  for (const k of keys) {
+    if (k.startsWith("cp_")) cp[k.slice(3)] = overrides![k]
+    else cols[k] = overrides![k] === "" ? null : overrides![k]
+  }
+  const data: any = { ...cols }
+  if (Object.keys(cp).length) {
+    const rec = await model.findUnique({ where: { id: survivorId }, select: { customProperties: true } })
+    data.customProperties = { ...((rec?.customProperties as any) ?? {}), ...cp }
+  }
+  await model.update({ where: { id: survivorId }, data })
+}
+
+// Merge dedups two records into one: the source is merged INTO the target, the
+// chosen per-field overrides are applied to the target, then its page is returned.
+export async function mergeRecord(entityType: string, sourceId: string, targetId: string, overrides?: Record<string, any>): Promise<{ url?: string; error?: string }> {
   if (sourceId === targetId) return { error: "Pick a different record to merge into." }
   let res: any
-  if (entityType.startsWith("CO:")) { res = await mergeCustomObjectRecord(entityType.slice(3), sourceId, targetId); if (!res?.error) return { url: `/objects/${entityType.slice(3)}/${targetId}` } }
-  else if (entityType === "PROVIDER") { res = await mergeDoctor(sourceId, targetId); if (!res?.error) return { url: `/referring-doctors/${targetId}` } }
-  else if (entityType === "PRACTICE") { res = await mergePractice(sourceId, targetId); if (!res?.error) return { url: `/practices/${targetId}` } }
-  else if (entityType === "LOCATION") { res = await mergeLocation(sourceId, targetId); if (!res?.error) return { url: `/locations/${targetId}` } }
-  else if (entityType === "REFERRAL") { res = await mergeReferral(sourceId, targetId); if (!res?.error) return { url: `/referrals/${targetId}` } }
+  let url: string | undefined
+  if (entityType.startsWith("CO:")) { res = await mergeCustomObjectRecord(entityType.slice(3), sourceId, targetId); url = `/objects/${entityType.slice(3)}/${targetId}` }
+  else if (entityType === "PROVIDER") { res = await mergeDoctor(sourceId, targetId); url = `/referring-doctors/${targetId}` }
+  else if (entityType === "PRACTICE") { res = await mergePractice(sourceId, targetId); url = `/practices/${targetId}` }
+  else if (entityType === "LOCATION") { res = await mergeLocation(sourceId, targetId); url = `/locations/${targetId}` }
+  else if (entityType === "REFERRAL") { res = await mergeReferral(sourceId, targetId); url = `/referrals/${targetId}` }
   else return { error: `Can't merge a ${entityType} record.` }
-  return { error: res?.error ?? "Merge failed" }
+
+  if (res?.error) return { error: res.error }
+  await applyMergeOverrides(entityType, targetId, overrides).catch(() => {})
+  return { url }
 }

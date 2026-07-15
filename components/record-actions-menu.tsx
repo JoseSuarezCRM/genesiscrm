@@ -121,7 +121,14 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
   const [otherValues, setOtherValues] = useState<Record<string, any> | null>(null)
   // Which record survives: "this" (the one you opened) or "other" (the picked one).
   const [primary, setPrimary] = useState<"this" | "other">("this")
+  // Per-field winner. Undefined = follow the primary; set to override one field.
+  const [choices, setChoices] = useState<Record<string, "this" | "other">>({})
   const [error, setError] = useState<string | null>(null)
+
+  function choosePrimary(side: "this" | "other") {
+    setPrimary(side)
+    setChoices({}) // switching the primary resets all per-field overrides to it
+  }
 
   function search(value: string) {
     setQ(value)
@@ -137,23 +144,34 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
     startTransition(async () => setOtherValues(await getRecordValues(entityType, r.id)))
   }
 
+  // Only real data fields — skip owner/audit meta.
+  const fields = catalog.filter((f) => !f.key.startsWith("__"))
+  const rawFor = (side: "this" | "other", key: string) => (side === "this" ? values : otherValues ?? {})[key]
+
   function doMerge() {
     if (!picked) return
     setError(null)
     const survivorId = primary === "this" ? recordId : picked.id
     const loserId = primary === "this" ? picked.id : recordId
+
+    // Send only the fields the user pointed away from the survivor.
+    const overrides: Record<string, any> = {}
+    for (const f of fields) {
+      const eff = choices[f.key] ?? primary
+      if (eff !== primary) {
+        const raw = rawFor(eff, f.key)
+        overrides[f.key] = (f.type === "date" || f.type === "datetime") && raw ? new Date(raw).toISOString() : raw
+      }
+    }
     startTransition(async () => {
-      const res = await mergeRecord(entityType, loserId, survivorId)
+      const res = await mergeRecord(entityType, loserId, survivorId, overrides)
       if (res.error) setError(res.error)
       else if (res.url) { onClose(); router.push(res.url) }
     })
   }
 
-  // Only real data fields — skip owner/audit meta.
-  const fields = catalog.filter((f) => !f.key.startsWith("__"))
-
   const Head = ({ side, name }: { side: "this" | "other"; name: string }) => (
-    <button onClick={() => setPrimary(side)}
+    <button onClick={() => choosePrimary(side)}
       className={cn("flex-1 min-w-0 text-left px-3 py-2 rounded-lg border transition-colors",
         primary === side ? "border-zinc-900 bg-zinc-50" : "border-slate-200 hover:border-slate-300")}>
       <span className={cn("flex items-center gap-1.5 text-xs font-medium", primary === side ? "text-zinc-900" : "text-slate-500")}>
@@ -203,27 +221,43 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
               {otherValues === null ? (
                 <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin text-slate-400 mx-auto" /></div>
               ) : (() => {
-                const primVals = primary === "this" ? values : otherValues
-                const otherVals = primary === "this" ? otherValues : values
                 const shownFields = fields.filter((f) => !(fmt(f, values[f.key], userMap) === "—" && fmt(f, otherValues[f.key], userMap) === "—"))
+                // The value that will survive for a field: the chosen side, or if
+                // that's blank, the other side (blank-fill).
+                const resolved = (f: RecordFieldDef) => {
+                  const eff = choices[f.key] ?? primary
+                  const chosen = fmt(f, rawFor(eff, f.key), userMap)
+                  return chosen === "—" ? fmt(f, rawFor(eff === "this" ? "other" : "this", f.key), userMap) : chosen
+                }
+                const Cell = ({ f, side }: { f: RecordFieldDef; side: "this" | "other" }) => {
+                  const eff = choices[f.key] ?? primary
+                  const active = eff === side
+                  const text = fmt(f, rawFor(side, f.key), userMap)
+                  const diff = fmt(f, values[f.key], userMap) !== fmt(f, otherValues[f.key], userMap)
+                  return (
+                    <button onClick={() => setChoices((c) => ({ ...c, [f.key]: side }))}
+                      className={cn("flex items-start gap-1.5 text-left rounded-md px-1.5 py-1 min-w-0 transition-colors",
+                        active ? "bg-zinc-50" : "hover:bg-slate-50")}>
+                      <span className={cn("mt-0.5 h-3 w-3 rounded-full border flex items-center justify-center shrink-0", active ? "border-zinc-900" : "border-slate-300")}>
+                        {active && <span className="h-1.5 w-1.5 rounded-full bg-zinc-900" />}
+                      </span>
+                      <span className={cn("block break-words text-sm", active ? "text-slate-900" : "text-slate-400", diff && active && "font-medium")}>{text}</span>
+                    </button>
+                  )
+                }
                 return (
-                  <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
-                    {/* Both records, side by side */}
+                  <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-4">
+                    {/* Both records — click a value to keep it */}
                     <div className="border border-slate-200 rounded-xl divide-y divide-slate-100">
-                      {shownFields.map((f) => {
-                        const a = fmt(f, values[f.key], userMap)
-                        const b = fmt(f, otherValues[f.key], userMap)
-                        const diff = a !== b
-                        return (
-                          <div key={f.key} className="px-3 py-2">
-                            <span className="block text-[11px] text-slate-400 uppercase tracking-wide">{f.label}</span>
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                              <span className={cn("block break-words", primary === "this" ? "text-slate-900" : "text-slate-400", diff && primary === "this" && "font-medium")}>{a}</span>
-                              <span className={cn("block break-words", primary === "other" ? "text-slate-900" : "text-slate-400", diff && primary === "other" && "font-medium")}>{b}</span>
-                            </div>
+                      {shownFields.map((f) => (
+                        <div key={f.key} className="px-3 py-2">
+                          <span className="block text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">{f.label}</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Cell f={f} side="this" />
+                            <Cell f={f} side="other" />
                           </div>
-                        )
-                      })}
+                        </div>
+                      ))}
                     </div>
 
                     {/* Live preview of the resulting record */}
@@ -232,13 +266,12 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
                       <div className="border border-zinc-900/10 bg-zinc-50 rounded-xl p-3 space-y-2.5">
                         <p className="text-sm font-semibold text-slate-900 break-words">{primary === "this" ? title : picked.name}</p>
                         {shownFields.map((f) => {
-                          const val = fmt(f, primVals[f.key], userMap)
-                          const filled = val === "—" ? fmt(f, otherVals[f.key], userMap) : val
-                          if (filled === "—") return null
+                          const val = resolved(f)
+                          if (val === "—") return null
                           return (
                             <div key={f.key}>
                               <span className="block text-[11px] text-slate-400 uppercase tracking-wide">{f.label}</span>
-                              <span className="block text-sm text-slate-900 break-words">{filled}</span>
+                              <span className="block text-sm text-slate-900 break-words">{val}</span>
                             </div>
                           )
                         })}
