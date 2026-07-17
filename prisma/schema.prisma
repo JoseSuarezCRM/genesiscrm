@@ -265,6 +265,8 @@ model RecordCard {
   fields     String[] @default([])
   section    String   @default("LEFT") // LEFT | MIDDLE
   columns    Int      @default(1) // fields laid out N-across (middle column)
+  kind       String   @default("PROPERTIES") // PROPERTIES | CALL_LOG
+  config     Json?
   visible    Boolean  @default(true)
   order      Int      @default(0)
   createdAt  DateTime @default(now())
@@ -333,6 +335,8 @@ model CardLayout {
   fields           String[]                   @default([])
   section          String                     @default("RIGHT") // LEFT (properties sidebar) or RIGHT (associated objects)
   columns          Int                        @default(1) // fields laid out N-across (middle column)
+  kind             String                     @default("PROPERTIES") // PROPERTIES | CALL_LOG
+  config           Json?                       // card-type settings (e.g. { maxCalls })
   visible          Boolean                    @default(true)
   order            Int                        @default(0)
   createdAt        DateTime                   @default(now())

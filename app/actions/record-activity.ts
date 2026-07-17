@@ -361,3 +361,21 @@ export async function logMeeting(recordType: string, recordId: string, data: {
   if (inviteError) return { error: inviteError }
   return { success: true }
 }
+
+// Just the logged calls (RecordNote kind=CALL) for a record — used by the Call Log card.
+export async function listRecordCalls(recordType: string, recordId: string) {
+  const session = await auth()
+  if (!session?.user) return []
+  const rows = await (prisma as any).recordNote.findMany({
+    where: { recordType, recordId, kind: "CALL" },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+    include: { createdBy: { select: { name: true, email: true } } },
+  })
+  return rows.map((r: any) => ({
+    id: r.id,
+    outcome: (r.meta as any)?.outcome ?? null,
+    body: r.body as string,
+    date: (r.occurredAt ?? r.createdAt) as Date,
+    by: r.createdBy?.name ?? r.createdBy?.email ?? null,
+  }))
+}

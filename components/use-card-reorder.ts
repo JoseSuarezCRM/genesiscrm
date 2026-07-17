@@ -19,12 +19,17 @@ export function useCardReorder<T>(
   const orderRef = useRef<T[]>(items)
   orderRef.current = order
 
-  // Re-sync when the server data changes (identity by key list).
-  const signature = items.map(keyOf).join("|")
-  useEffect(() => { setOrder(items); /* eslint-disable-next-line */ }, [signature])
-
   const dragKey = useRef<string | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
+
+  // Re-sync when the server data changes — by full content, not just the key list,
+  // so editing a card's fields (same key) still refreshes what renders. Skipped
+  // mid-drag so a live reorder isn't clobbered.
+  const signature = JSON.stringify(items)
+  useEffect(() => {
+    if (dragKey.current === null) setOrder(items)
+    /* eslint-disable-next-line */
+  }, [signature])
 
   function moveOver(overKey: string) {
     const from = dragKey.current
