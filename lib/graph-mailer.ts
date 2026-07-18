@@ -238,3 +238,44 @@ export async function sendCalendarInvite(
     return { success: false, error: message }
   }
 }
+
+// ── Inbound: read replies from a mailbox ─────────────────────────────────────
+// Needs the app registration to have Mail.Read (application) granted with admin
+// consent — the same client-credentials token is reused.
+export interface InboundMessage {
+  internetMessageId: string
+  conversationId: string | null
+  fromEmail: string | null
+  fromName: string | null
+  toRecipients: string[]
+  subject: string
+  bodyHtml: string
+  receivedAt: string
+}
+
+export async function fetchInboundMessages(mailbox: string, sinceIso: string): Promise<InboundMessage[]> {
+  const token = await getAccessToken()
+  // Inbox only, received since `sinceIso`, newest first.
+  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages`
+    + `?$filter=${encodeURIComponent(`receivedDateTime ge ${sinceIso}`)}`
+    + `&$select=internetMessageId,conversationId,from,toRecipients,subject,body,receivedDateTime`
+    + `&$top=50&$orderby=receivedDateTime desc`
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) {
+    const body = await res.text()
+    // 403 = Mail.Read not granted yet; surface quietly.
+    throw new Error(`Graph read failed for ${mailbox}: ${res.status} ${body.slice(0, 300)}`)
+  }
+  const data = await res.json() as { value: any[] }
+  return (data.value ?? []).map((m) => ({
+    internetMessageId: m.internetMessageId,
+    conversationId: m.conversationId ?? null,
+    fromEmail: m.from?.emailAddress?.address?.toLowerCase() ?? null,
+    fromName: m.from?.emailAddress?.name ?? null,
+    toRecipients: (m.toRecipients ?? []).map((r: any) => r.emailAddress?.address?.toLowerCase()).filter(Boolean),
+    subject: m.subject ?? "(no subject)",
+    bodyHtml: m.body?.content ?? "",
+    receivedAt: m.receivedDateTime,
+  }))
+}

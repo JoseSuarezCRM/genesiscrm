@@ -209,7 +209,10 @@ export async function listRecordActivities(recordType: string, recordId: string)
   // Emails + SMS: matched to the record's email address / phone number.
   const { emails, phones } = await contactInfoFor(recordType, recordId)
   const emailOr: any[] = []
-  if (emails.length) emailOr.push({ to: { hasSome: emails } }, { cc: { hasSome: emails } })
+  if (emails.length) {
+    // Outbound: the record is a recipient. Inbound (a reply): the record is the sender.
+    emailOr.push({ to: { hasSome: emails } }, { cc: { hasSome: emails } }, { fromEmail: { in: emails } })
+  }
   if (emailIds.length) emailOr.push({ id: { in: emailIds } })
   if (emailOr.length) {
     const sent = await prisma.directEmail.findMany({
@@ -218,7 +221,9 @@ export async function listRecordActivities(recordType: string, recordId: string)
       include: { sentBy: { select: { name: true, email: true } } },
     })
     for (const e of sent) {
-      items.push({ id: e.id, kind: "EMAIL", title: e.subject, body: stripHtml(e.body), date: e.sentAt, by: e.sentBy?.name ?? e.sentBy?.email ?? null })
+      const inbound = (e as any).direction === "INBOUND"
+      const by = inbound ? ((e as any).fromEmail ?? "them") : (e.sentBy?.name ?? e.sentBy?.email ?? null)
+      items.push({ id: e.id, kind: "EMAIL", title: inbound ? `↩ ${e.subject}` : e.subject, body: stripHtml(e.body), date: e.sentAt, by })
     }
   }
   const e164 = phones.map(toE164).filter(Boolean) as string[]
@@ -331,6 +336,7 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
       to: [to], cc: [], bcc: [],
       subject: data.subject.trim(), body: data.body.trim(),
       success: result.success, error: result.success ? null : (result.error ?? "Unknown error"),
+      direction: "OUTBOUND", fromEmail,
       sentById: uid,
     },
   })

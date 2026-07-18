@@ -896,10 +896,19 @@ model DirectEmail {
   sentAt   DateTime @default(now())
   success  Boolean  @default(true)
   error    String?
-  sentById String
-  sentBy   User     @relation(fields: [sentById], references: [id])
+  // Direction + threading. Outbound is app-sent; inbound is a reply pulled from
+  // the mailbox. fromEmail is the sender (app mailbox for outbound, the external
+  // replier for inbound). conversationId groups a thread; internetMessageId dedupes.
+  direction         String   @default("OUTBOUND") // OUTBOUND | INBOUND
+  fromEmail         String?
+  conversationId    String?
+  internetMessageId String?  @unique
+  sentById String?
+  sentBy   User?    @relation(fields: [sentById], references: [id])
 
   @@index([sentAt])
+  @@index([conversationId])
+  @@index([fromEmail])
 }
 
 model ActivityTag {
