@@ -8,6 +8,7 @@ import { setRecordOwner } from "@/app/actions/record-owner"
 import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import { useCardReorder } from "@/components/use-card-reorder"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
+import CallLogCard from "@/components/call-log-card"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
@@ -17,6 +18,8 @@ export interface PropertyCard {
   title: string
   fields: string[]
   columns?: number
+  kind?: string
+  config?: any
 }
 
 interface UserOpt { id: string; label: string }
@@ -189,11 +192,12 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
   const byName = Object.fromEntries(cards.map((c) => [c.cardName, c]))
   const dnd = useCardReorder(cards, (c) => c.cardName, (keys) => persist(keys.map((k) => byName[k]).filter(Boolean)))
 
-  function submitCard(data: { title: string; fields: string[]; columns: number }) {
+  function submitCard(data: { title: string; fields: string[]; columns: number; kind?: string; config?: any }) {
+    const extra = { columns: data.columns, kind: data.kind ?? "PROPERTIES", config: data.config ?? null }
     if (editing === "new") {
-      persist([...cards, { cardName: `card-${Date.now()}`, title: data.title, fields: data.fields, columns: data.columns }])
+      persist([...cards, { cardName: `card-${Date.now()}`, title: data.title, fields: data.fields, ...extra }])
     } else if (editing) {
-      persist(cards.map((c) => (c.cardName === editing.cardName ? { ...c, title: data.title, fields: data.fields, columns: data.columns } : c)))
+      persist(cards.map((c) => (c.cardName === editing.cardName ? { ...c, title: data.title, fields: data.fields, ...extra } : c)))
     }
     setEditing(null)
   }
@@ -232,21 +236,25 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
               </button>
             )}
           </div>
-          <div className={cn("p-5 text-sm", (card.columns ?? 1) > 1 && "grid gap-x-5",
-            (card.columns ?? 1) === 2 && "sm:grid-cols-2", (card.columns ?? 1) >= 3 && "sm:grid-cols-3")}>
-            {card.fields.length === 0 ? (
-              <p className="text-sm text-slate-400">No properties on this card yet.</p>
-            ) : (
-              card.fields
-                .map((key) => byKey[key])
-                .filter(Boolean)
-                .map((f) => (
-                  <div key={f.key} className={(card.columns ?? 1) > 1 ? "" : "border-b border-slate-50 last:border-0"}>
-                    <FieldRow f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />
-                  </div>
-                ))
-            )}
-          </div>
+          {card.kind === "CALL_LOG" ? (
+            <CallLogCard recordType={entityType} recordId={recordId} maxCalls={card.config?.maxCalls ?? 3} canEdit={canEdit} />
+          ) : (
+            <div className={cn("p-5 text-sm", (card.columns ?? 1) > 1 && "grid gap-x-5",
+              (card.columns ?? 1) === 2 && "sm:grid-cols-2", (card.columns ?? 1) >= 3 && "sm:grid-cols-3")}>
+              {card.fields.length === 0 ? (
+                <p className="text-sm text-slate-400">No properties on this card yet.</p>
+              ) : (
+                card.fields
+                  .map((key) => byKey[key])
+                  .filter(Boolean)
+                  .map((f) => (
+                    <div key={f.key} className={(card.columns ?? 1) > 1 ? "" : "border-b border-slate-50 last:border-0"}>
+                      <FieldRow f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />
+                    </div>
+                  ))
+              )}
+            </div>
+          )}
         </div>
       ))}
 
@@ -259,6 +267,7 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
           fields={pool}
           section={section}
           columnsEnabled={section === "MIDDLE"}
+          cardTypesEnabled
           onSubmit={submitCard}
           onDelete={deleteCard}
         />

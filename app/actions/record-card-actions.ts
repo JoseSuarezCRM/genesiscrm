@@ -93,14 +93,14 @@ export async function reorderCards(
 export async function replaceColumnCards(
   entityType: string,
   section: "LEFT" | "MIDDLE",
-  cards: { cardName: string; title: string; fields: string[]; columns?: number }[],
+  cards: { cardName: string; title: string; fields: string[]; columns?: number; kind?: string; config?: any }[],
 ) {
   if (isCustom(entityType)) {
     await requireAccess(entityType, "EDIT")
     await (prisma as any).recordCard.deleteMany({ where: { objectType: entityType, section } })
     for (let i = 0; i < cards.length; i++) {
       const c = cards[i]
-      await (prisma as any).recordCard.create({ data: { objectType: entityType, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i, columns: c.columns ?? 1 } })
+      await (prisma as any).recordCard.create({ data: { objectType: entityType, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i, columns: c.columns ?? 1, kind: c.kind ?? "PROPERTIES", config: c.config ?? undefined } })
     }
     revalidatePath(`/objects/${entityType.slice(3)}/[id]`, "page")
     return { success: true }
@@ -110,7 +110,7 @@ export async function replaceColumnCards(
   await prisma.cardLayout.deleteMany({ where: { entityType: entityType as any, section } })
   for (let i = 0; i < cards.length; i++) {
     const c = cards[i]
-    await prisma.cardLayout.create({ data: { entityType: entityType as any, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i, columns: c.columns ?? 1 } })
+    await prisma.cardLayout.create({ data: { entityType: entityType as any, cardName: c.cardName, title: c.title, fields: c.fields, section, order: i, columns: c.columns ?? 1, kind: c.kind ?? "PROPERTIES", config: c.config ?? undefined } })
   }
   for (const p of ["/referrals/[id]", "/referring-doctors/[id]", "/practices/[id]", "/locations/[id]", "/surgery/[id]"]) revalidatePath(p, "page")
   return { success: true }

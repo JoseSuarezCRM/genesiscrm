@@ -55,7 +55,7 @@ async function loadCustomObjectCards(objectType: string, record: Record<string, 
   values.__updatedBy = record.updatedByName ?? null
   values.__updatedAt = record.updatedAt ?? null
 
-  const toCards = (rs: any[]) => rs.map((r) => ({ cardName: r.cardName, title: r.title, fields: r.fields, columns: r.columns ?? 1 }))
+  const toCards = (rs: any[]) => rs.map((r) => ({ cardName: r.cardName, title: r.title, fields: r.fields, columns: r.columns ?? 1, kind: r.kind ?? "PROPERTIES", config: r.config ?? null }))
   const left = rows.filter((r: any) => r.section === "LEFT")
   const middle = rows.filter((r: any) => r.section === "MIDDLE")
 
@@ -102,7 +102,7 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
   }
 
   const toCards = (rows: any[]) =>
-    rows.map((l) => ({ cardName: l.cardName, title: l.title, fields: l.fields, columns: l.columns ?? 1 }))
+    rows.map((l) => ({ cardName: l.cardName, title: l.title, fields: l.fields, columns: l.columns ?? 1, kind: l.kind ?? "PROPERTIES", config: l.config ?? null }))
 
   // Defaults (used until someone customizes): an info card with the base
   // properties, plus a Record details card holding owner + audit.

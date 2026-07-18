@@ -42,7 +42,9 @@ interface Props {
   // When provided, the modal delegates persistence to the parent (which saves the
   // whole column) instead of writing this one card directly.
   columnsEnabled?: boolean
-  onSubmit?: (data: { title: string; fields: string[]; columns: number }) => void
+  // Offer a card-type choice (Properties vs Call log).
+  cardTypesEnabled?: boolean
+  onSubmit?: (data: { title: string; fields: string[]; columns: number; kind: string; config: any }) => void
   onDelete?: () => void
 }
 
@@ -58,11 +60,14 @@ export default function LeftCardEditorModal({
   onSubmit,
   onDelete,
   columnsEnabled = false,
+  cardTypesEnabled = false,
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [title, setTitle] = useState(existing?.title ?? "")
   const [fields, setFields] = useState<string[]>(existing?.fields ?? [])
   const [columns, setColumns] = useState<number>((existing as any)?.columns ?? 1)
+  const [kind, setKind] = useState<string>((existing as any)?.kind ?? "PROPERTIES")
+  const [maxCalls, setMaxCalls] = useState<number>((existing as any)?.config?.maxCalls ?? 3)
   const [dragId, setDragId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
 
@@ -96,7 +101,7 @@ export default function LeftCardEditorModal({
     const trimmed = title.trim()
     if (!trimmed) return
     // Parent-managed mode: hand the edited card back; it persists the whole column.
-    if (onSubmit) { onSubmit({ title: trimmed, fields, columns }); onOpenChange(false); return }
+    if (onSubmit) { onSubmit({ title: trimmed, fields, columns, kind, config: kind === "CALL_LOG" ? { maxCalls } : null }); onOpenChange(false); return }
     startTransition(async () => {
       if (existing) {
         await updateRecordCard(entityType, existing.cardName, trimmed, fields)
@@ -135,6 +140,30 @@ export default function LeftCardEditorModal({
             />
           </div>
 
+          {cardTypesEnabled && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Card type</label>
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
+                {[["PROPERTIES", "Properties"], ["CALL_LOG", "Call log"]].map(([v, l]) => (
+                  <button key={v} type="button" onClick={() => setKind(v)}
+                    className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors",
+                      kind === v ? "bg-zinc-900 text-white" : "text-slate-600 hover:bg-slate-100")}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {kind === "CALL_LOG" ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Number of call slots</label>
+              <Input type="number" min={1} max={20} value={maxCalls}
+                onChange={(e) => setMaxCalls(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} className="w-28" />
+              <p className="text-xs text-slate-400">Log up to {maxCalls} call{maxCalls > 1 ? "s" : ""} on this card.</p>
+            </div>
+          ) : (
+          <>
           {columnsEnabled && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Layout</label>
@@ -215,6 +244,8 @@ export default function LeftCardEditorModal({
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
 
         <DialogFooter className="border-t pt-4 shrink-0">
