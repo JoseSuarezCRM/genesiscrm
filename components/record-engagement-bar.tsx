@@ -1,14 +1,31 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Loader2, Send, X } from "lucide-react"
+import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Loader2, Send, X, FileText, Braces } from "lucide-react"
 import {
   addRecordNote, createTaskForRecord,
-  getRecordContact, sendEmailFromRecord, sendSmsFromRecord, logCall, logMeeting,
+  getRecordContact, getComposeTemplates, sendEmailFromRecord, sendSmsFromRecord, logCall, logMeeting,
 } from "@/app/actions/record-activity"
 import StyledSelect from "@/components/ui/styled-select"
+import { MESSAGE_TOKEN_GROUPS } from "@/lib/message-tokens"
 import { cn } from "@/lib/utils"
+
+type Tpl = { id: string; name: string; subject: string; body: string }
+
+// Flattened personalization fields (StyledSelect renders a flat list), grouped in
+// the label so it still reads like the token catalog.
+const TOKEN_OPTIONS = MESSAGE_TOKEN_GROUPS.flatMap((g) => g.tokens.map((t) => ({ value: t.value, label: `${g.group}: ${t.label}` })))
+
+// Insert text at the caret of a controlled textarea, then restore the caret.
+function insertAtCaret(el: HTMLTextAreaElement | null, value: string, token: string, setValue: (v: string) => void) {
+  if (!el) { setValue(value + token); return }
+  const start = el.selectionStart ?? value.length
+  const end = el.selectionEnd ?? value.length
+  const next = value.slice(0, start) + token + value.slice(end)
+  setValue(next)
+  requestAnimationFrame(() => { el.focus(); const pos = start + token.length; el.setSelectionRange(pos, pos) })
+}
 
 type Composer = "NOTE" | "EMAIL" | "CALL" | "SMS" | "TASK" | "MEETING"
 
@@ -44,10 +61,17 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   const [taskDue, setTaskDue] = useState("")
   const [taskAssignee, setTaskAssignee] = useState("")
   const [emTo, setEmTo] = useState("")
+  const [emCc, setEmCc] = useState("")
+  const [emBcc, setEmBcc] = useState("")
+  const [showCcBcc, setShowCcBcc] = useState(false)
   const [emSubject, setEmSubject] = useState("")
   const [emBody, setEmBody] = useState("")
   const [smTo, setSmTo] = useState("")
   const [smBody, setSmBody] = useState("")
+  const [emailTpls, setEmailTpls] = useState<Tpl[]>([])
+  const [smsTpls, setSmsTpls] = useState<Tpl[]>([])
+  const emBodyRef = useRef<HTMLTextAreaElement>(null)
+  const smBodyRef = useRef<HTMLTextAreaElement>(null)
   const [callOutcome, setCallOutcome] = useState(CALL_OUTCOMES[0])
   const [callBody, setCallBody] = useState("")
   const [mtTitle, setMtTitle] = useState("")
@@ -64,7 +88,14 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
       if (c.emails[0]) { setEmTo(c.emails[0]); setMtAttendees(c.emails[0]) }
       if (c.phones[0]) setSmTo(c.phones[0])
     })
+    getComposeTemplates(recordType, recordId, "EMAIL" as any).then(setEmailTpls).catch(() => {})
+    getComposeTemplates(recordType, recordId, "SMS" as any).then(setSmsTpls).catch(() => {})
   }, [recordType, recordId, canEdit])
+
+  function applyTemplate(t: Tpl, channel: "EMAIL" | "SMS") {
+    if (channel === "EMAIL") { if (t.subject) setEmSubject(t.subject); setEmBody(t.body) }
+    else setSmBody(t.body)
+  }
 
   if (!canEdit) return null
 
@@ -81,8 +112,10 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
     NOTE: () => run(() => addRecordNote(recordType, recordId, note), () => setNote("")),
     TASK: () => run(() => createTaskForRecord(recordType, recordId, { title: taskTitle, dueDate: taskDue || undefined, assignedToId: taskAssignee || undefined }),
       () => { setTaskTitle(""); setTaskDue(""); setTaskAssignee("") }),
-    EMAIL: () => run(() => sendEmailFromRecord(recordType, recordId, { to: emTo, subject: emSubject, body: emBody }),
-      () => { setEmSubject(""); setEmBody("") }),
+    EMAIL: () => run(() => sendEmailFromRecord(recordType, recordId, {
+      to: emTo, subject: emSubject, body: emBody,
+      cc: emCc.split(/[,;\s]+/).filter(Boolean), bcc: emBcc.split(/[,;\s]+/).filter(Boolean),
+    }), () => { setEmSubject(""); setEmBody(""); setEmCc(""); setEmBcc(""); setShowCcBcc(false) }),
     SMS: () => run(() => sendSmsFromRecord(recordType, recordId, { to: smTo, body: smBody }), () => setSmBody("")),
     CALL: () => run(() => logCall(recordType, recordId, { body: callBody, outcome: callOutcome }), () => setCallBody("")),
     MEETING: () => run(() => logMeeting(recordType, recordId, {
@@ -98,6 +131,31 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
       {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {label}
     </button>
   )
+
+  // A small dropdown row: pick a template + insert a personalization field.
+  const ComposerTools = ({ templates, onTemplate, onField }: { templates: Tpl[]; onTemplate: (t: Tpl) => void; onField: (token: string) => void }) => (
+    <div className="flex flex-wrap items-center gap-2">
+      {templates.length > 0 && (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <StyledSelect value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) onTemplate(t) }}
+            className={INPUT + " min-w-[150px]"}>
+            <option value="">Use a template…</option>
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </StyledSelect>
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Braces className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+        <StyledSelect value="" onChange={(e) => { if (e.target.value) onField(e.target.value) }} className={INPUT + " min-w-[140px]"}>
+          <option value="">Insert field…</option>
+          {TOKEN_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </StyledSelect>
+      </div>
+    </div>
+  )
+
+  const isModal = open === "EMAIL" || open === "SMS"
 
   return (
     <div className="space-y-3">
@@ -117,12 +175,12 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
         ))}
       </div>
 
-      {open && (
+      {open && !isModal && (
         <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2.5">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-900">
-              {open === "NOTE" ? "Add a note" : open === "EMAIL" ? "Send an email" : open === "CALL" ? "Log a call"
-                : open === "SMS" ? "Send an SMS" : open === "TASK" ? "Create a task" : "Schedule a meeting"}
+              {open === "NOTE" ? "Add a note" : open === "CALL" ? "Log a call"
+                : open === "TASK" ? "Create a task" : "Schedule a meeting"}
             </p>
             <button onClick={() => setOpen(null)} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button>
           </div>
@@ -133,29 +191,6 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
             <>
               <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…" className={INPUT + " w-full resize-none"} />
               <div className="flex"><SubmitBtn label="Add note" disabled={!note.trim()} onClick={submit.NOTE} /></div>
-            </>
-          )}
-
-          {open === "EMAIL" && (
-            <>
-              <input value={emTo} onChange={(e) => setEmTo(e.target.value)} placeholder="To" className={INPUT + " w-full"} />
-              <input value={emSubject} onChange={(e) => setEmSubject(e.target.value)} placeholder="Subject" className={INPUT + " w-full"} />
-              <textarea rows={5} value={emBody} onChange={(e) => setEmBody(e.target.value)} placeholder="Write your message…" className={INPUT + " w-full resize-none"} />
-              <div className="flex items-center">
-                <p className="text-xs text-slate-400">Sends from your own email address.</p>
-                <SubmitBtn label="Send email" disabled={!emTo.trim() || !emSubject.trim() || !emBody.trim()} onClick={submit.EMAIL} />
-              </div>
-            </>
-          )}
-
-          {open === "SMS" && (
-            <>
-              <input value={smTo} onChange={(e) => setSmTo(e.target.value)} placeholder="Phone number" className={INPUT + " w-full"} />
-              <textarea rows={3} value={smBody} onChange={(e) => setSmBody(e.target.value)} placeholder="Write your message…" className={INPUT + " w-full resize-none"} />
-              <div className="flex items-center">
-                <p className="text-xs text-slate-400">{smBody.length} characters</p>
-                <SubmitBtn label="Send SMS" disabled={!smTo.trim() || !smBody.trim()} onClick={submit.SMS} />
-              </div>
             </>
           )}
 
@@ -204,6 +239,59 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {isModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/30 backdrop-blur-sm p-4 sm:p-8"
+          onMouseDown={() => setOpen(null)}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 my-4 sm:my-12"
+            onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-900">{open === "EMAIL" ? "Send an email" : "Send an SMS"}</p>
+              <button onClick={() => setOpen(null)} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button>
+            </div>
+
+            <div className="p-5 space-y-2.5 max-h-[75vh] overflow-y-auto">
+              {error && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+
+              {open === "EMAIL" && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <input value={emTo} onChange={(e) => setEmTo(e.target.value)} placeholder="To" className={INPUT + " flex-1 min-w-0"} />
+                    {!showCcBcc && (
+                      <button type="button" onClick={() => setShowCcBcc(true)} className="text-xs font-medium text-slate-500 hover:text-zinc-900 shrink-0">Cc / Bcc</button>
+                    )}
+                  </div>
+                  {showCcBcc && (
+                    <>
+                      <input value={emCc} onChange={(e) => setEmCc(e.target.value)} placeholder="Cc (comma separated)" className={INPUT + " w-full"} />
+                      <input value={emBcc} onChange={(e) => setEmBcc(e.target.value)} placeholder="Bcc (comma separated)" className={INPUT + " w-full"} />
+                    </>
+                  )}
+                  <ComposerTools templates={emailTpls} onTemplate={(t) => applyTemplate(t, "EMAIL")} onField={(tok) => insertAtCaret(emBodyRef.current, emBody, tok, setEmBody)} />
+                  <input value={emSubject} onChange={(e) => setEmSubject(e.target.value)} placeholder="Subject" className={INPUT + " w-full"} />
+                  <textarea ref={emBodyRef} rows={8} value={emBody} onChange={(e) => setEmBody(e.target.value)} placeholder="Write your message…" className={INPUT + " w-full resize-none"} />
+                  <div className="flex items-center pt-1">
+                    <p className="text-xs text-slate-400">Sends from your own email address.</p>
+                    <SubmitBtn label="Send email" disabled={!emTo.trim() || !emSubject.trim() || !emBody.trim()} onClick={submit.EMAIL} />
+                  </div>
+                </>
+              )}
+
+              {open === "SMS" && (
+                <>
+                  <input value={smTo} onChange={(e) => setSmTo(e.target.value)} placeholder="Phone number" className={INPUT + " w-full"} />
+                  <ComposerTools templates={smsTpls} onTemplate={(t) => applyTemplate(t, "SMS")} onField={(tok) => insertAtCaret(smBodyRef.current, smBody, tok, setSmBody)} />
+                  <textarea ref={smBodyRef} rows={5} value={smBody} onChange={(e) => setSmBody(e.target.value)} placeholder="Write your message…" className={INPUT + " w-full resize-none"} />
+                  <div className="flex items-center pt-1">
+                    <p className="text-xs text-slate-400">{smBody.length} characters</p>
+                    <SubmitBtn label="Send SMS" disabled={!smTo.trim() || !smBody.trim()} onClick={submit.SMS} />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

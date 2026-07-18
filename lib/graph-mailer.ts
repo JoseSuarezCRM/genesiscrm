@@ -285,12 +285,14 @@ export async function fetchInboundMessages(mailbox: string, sinceIso: string): P
 // ── Threaded send + reply ────────────────────────────────────────────────────
 // Create a draft then send it, so we capture the conversationId / message ids and
 // can later match replies and reply in-thread. Needs Mail.ReadWrite + Mail.Send.
-export async function sendEmailTracked(fromEmail: string, to: string, subject: string, html: string): Promise<{
+export async function sendEmailTracked(fromEmail: string, to: string, subject: string, html: string, options?: { cc?: string[]; bcc?: string[] }): Promise<{
   success: boolean; error?: string; conversationId?: string; internetMessageId?: string; graphMessageId?: string
 }> {
   try {
     const token = await getAccessToken()
     const base = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}`
+    const ccRecipients = (options?.cc ?? []).map((a) => ({ emailAddress: { address: a } }))
+    const bccRecipients = (options?.bcc ?? []).map((a) => ({ emailAddress: { address: a } }))
     // 1) Create the draft — the response carries the ids we need.
     const draftRes = await fetch(`${base}/messages`, {
       method: "POST",
@@ -299,6 +301,8 @@ export async function sendEmailTracked(fromEmail: string, to: string, subject: s
         subject,
         body: { contentType: "HTML", content: html },
         toRecipients: [{ emailAddress: { address: to } }],
+        ...(ccRecipients.length ? { ccRecipients } : {}),
+        ...(bccRecipients.length ? { bccRecipients } : {}),
         from: { emailAddress: { address: fromEmail, name: "Genesis Ortho" } },
       }),
     })

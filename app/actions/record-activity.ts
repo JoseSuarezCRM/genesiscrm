@@ -10,6 +10,8 @@ import { sendSMS } from "@/lib/twilio"
 import { resolveMyFromEmail } from "@/app/actions/account"
 import { revalidatePath } from "next/cache"
 import { runTrigger_EngagementLogged } from "@/lib/automation-engine"
+import { buildReferralVars, resolveMessageTokens, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
+import type { OutreachChannel } from "@prisma/client"
 
 export type ActivityKind = "NOTE" | "TASK" | "ACTIVITY" | "EMAIL" | "SMS" | "MEETING" | "CALL"
 
@@ -312,6 +314,41 @@ export async function createTaskForRecord(recordType: string, recordId: string, 
   return { success: true }
 }
 
+// Personalization tokens resolvable for a given record. Referrals resolve the full
+// catalog; every other object resolves the common contact tokens (email/phone) so a
+// template with {patient_email} etc. still fills in. Unknown tokens are left as-is.
+async function recordTokenVars(recordType: string, recordId: string): Promise<Record<string, string>> {
+  const vars: Record<string, string> = {}
+  const contact = await contactInfoFor(recordType, recordId).catch(() => ({ emails: [], phones: [] }))
+  if (contact.emails[0]) vars.patient_email = contact.emails[0]
+  if (contact.phones[0]) vars.patient_phone = contact.phones[0]
+  const base = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || ""
+  if (recordType === "REFERRAL") {
+    const r = await prisma.referral.findUnique({ where: { id: recordId }, select: REFERRAL_TOKEN_SELECT }).catch(() => null)
+    if (r) Object.assign(vars, buildReferralVars(r as any, { referralUrl: base ? `${base}/referrals/${recordId}` : undefined }))
+  }
+  return vars
+}
+
+// Templates for the composer, pre-resolved against this record so inserting one drops
+// in ready-to-send text (subject + body). Used by the Email/SMS popups.
+export async function getComposeTemplates(recordType: string, recordId: string, channel: OutreachChannel) {
+  const session = await auth()
+  if (!session?.user) return []
+  const templates = await prisma.messageTemplate.findMany({
+    where: { channel, isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, subject: true, body: true },
+  })
+  const vars = await recordTokenVars(recordType, recordId)
+  return templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    subject: resolveMessageTokens(t.subject ?? "", vars),
+    body: resolveMessageTokens(t.body, vars),
+  }))
+}
+
 // The record's email / phone, so the composer can pre-fill who we're contacting.
 export async function getRecordContact(recordType: string, recordId: string) {
   const session = await auth()
@@ -320,7 +357,7 @@ export async function getRecordContact(recordType: string, recordId: string) {
 }
 
 // Email sent straight from the record — always from the current user's own address.
-export async function sendEmailFromRecord(recordType: string, recordId: string, data: { to: string; subject: string; body: string }) {
+export async function sendEmailFromRecord(recordType: string, recordId: string, data: { to: string; subject: string; body: string; cc?: string[]; bcc?: string[] }) {
   await requireAccess(permKeyFor(recordType), "EDIT")
   const session = await auth()
   const uid = (session!.user as any).id
@@ -330,17 +367,24 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
   const fromEmail = await resolveMyFromEmail(null)
   if (!fromEmail) return { error: "You don't have a sending address yet. Set one up in Settings → My Account." }
 
-  const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${data.body.replace(/\n/g, "<br/>")}</div>`
+  // Resolve any personalization tokens the sender left in (e.g. from a template).
+  const vars = await recordTokenVars(recordType, recordId)
+  const subject = resolveMessageTokens(data.subject.trim(), vars)
+  const bodyText = resolveMessageTokens(data.body.trim(), vars)
+  const cc = (data.cc ?? []).map((s) => s.trim()).filter(Boolean)
+  const bcc = (data.bcc ?? []).map((s) => s.trim()).filter(Boolean)
+
+  const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${bodyText.replace(/\n/g, "<br/>")}</div>`
   // Tracked send captures the thread ids for threading/replies, but it needs
   // Mail.ReadWrite (draft). If that isn't granted, fall back to the plain send
   // (Mail.Send only) so email always works — threading just won't be available.
-  const tracked = await sendEmailTracked(fromEmail, to, data.subject.trim(), html)
+  const tracked = await sendEmailTracked(fromEmail, to, subject, html, { cc, bcc })
   const result = tracked.success ? tracked : { success: false, error: tracked.error }
   let conversationId = tracked.conversationId
   let internetMessageId = tracked.internetMessageId
   let graphMessageId = tracked.graphMessageId
   if (!tracked.success) {
-    const plain = await sendEmail(to, data.subject.trim(), html, { fromEmail })
+    const plain = await sendEmail(to, subject, html, { fromEmail, cc, bcc })
     result.success = plain.success
     result.error = plain.error
     conversationId = internetMessageId = graphMessageId = undefined
@@ -348,8 +392,8 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
 
   const rec = await prisma.directEmail.create({
     data: {
-      to: [to], cc: [], bcc: [],
-      subject: data.subject.trim(), body: data.body.trim(),
+      to: [to], cc, bcc,
+      subject, body: bodyText,
       success: result.success, error: result.success ? null : (result.error ?? "Unknown error"),
       direction: "OUTBOUND", fromEmail, mailbox: fromEmail,
       conversationId, internetMessageId, graphMessageId,
@@ -413,7 +457,9 @@ export async function replyToEmailThread(recordType: string, recordId: string, e
 export async function sendSmsFromRecord(recordType: string, recordId: string, data: { to: string; body: string }) {
   await requireAccess(permKeyFor(recordType), "EDIT")
   if (!data.to.trim() || !data.body.trim()) return { error: "Phone number and message are required." }
-  const result = await sendSMS(data.to.trim(), data.body.trim())
+  const vars = await recordTokenVars(recordType, recordId)
+  const body = resolveMessageTokens(data.body.trim(), vars)
+  const result = await sendSMS(data.to.trim(), body)
   const p = pathFor(recordType, recordId)
   if (p) revalidatePath(p)
   if (!result.success) return { error: result.error ?? "SMS failed to send." }
