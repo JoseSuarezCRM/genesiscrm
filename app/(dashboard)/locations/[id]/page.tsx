@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { requireView } from "@/lib/auth-guard"
-import { userCanLevel, userCanDelete } from "@/lib/permissions"
+import { userCan, userCanLevel, userCanDelete } from "@/lib/permissions"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Building2, MapPin, ExternalLink } from "lucide-react"
@@ -84,6 +84,7 @@ export default async function LocationDetailPage({ params }: Props) {
   const propertyCards = await loadPropertyCards("LOCATION", location as any, "Location Owner")
   const assocCards = await loadAssociationCards("LOCATION", location.id)
   const canDelete = userCanDelete(user, "LOCATIONS") || userCanDelete(user, "PRACTICES")
+  const canDeleteActivities = userCan(user, "DELETE_ACTIVITIES")
 
   return (
     <RecordDetailShell
@@ -165,6 +166,7 @@ export default async function LocationDetailPage({ params }: Props) {
               users={userOptions}
               canEdit={canEdit}
               showActions={false}
+              canDeleteActivities={canDeleteActivities}
             />
           }
         />

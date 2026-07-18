@@ -51,6 +51,7 @@ export const CAPABILITIES: PermissionDef[] = [
   { key: "IMPORT_DATA",       label: "Import Data",          description: "Import referrals and surgery cases from CSV / XLSX" },
   { key: "MANAGE_SCHEDULING", label: "Manage Scheduling",    description: "Use the staff scheduler, assign staff, auto-generate schedules" },
   { key: "MANAGE_USERS",      label: "Manage Users & Teams", description: "Add users, manage teams and permission sets" },
+  { key: "DELETE_ACTIVITIES", label: "Delete Activities",    description: "Delete notes, calls, meetings, emails and SMS from a record's activity feed" },
 ]
 
 // Nav sections (control sidebar visibility). Keep keys in sync with sidebar.tsx.

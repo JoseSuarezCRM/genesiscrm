@@ -86,6 +86,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
   ])
 
   const referralActivity = await listRecordActivities("REFERRAL", referral.id)
+  const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
   const propertyCards = await loadPropertyCards("REFERRAL", referral as any)
 
   return (
@@ -224,6 +225,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
                 users={users.map((u: any) => ({ id: u.id, label: u.name ?? u.email }))}
                 canEdit={isAdmin}
                 showActions={false}
+                canDeleteActivities={canDeleteActivities}
               />
             }
           />

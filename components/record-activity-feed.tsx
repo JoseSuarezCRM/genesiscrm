@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Trash2 } from "lucide-react"
-import { deleteRecordNote, type ActivityItem, type ActivityKind } from "@/app/actions/record-activity"
+import { deleteRecordNote, deleteRecordEmail, deleteRecordSms, type ActivityItem, type ActivityKind } from "@/app/actions/record-activity"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import { cn } from "@/lib/utils"
 
@@ -48,7 +48,7 @@ function ActivityBody({ body }: { body: string }) {
   )
 }
 
-export default function RecordActivityFeed({ recordType, recordId, items, users = [], canEdit, showActions = true }: {
+export default function RecordActivityFeed({ recordType, recordId, items, users = [], canEdit, showActions = true, canDeleteActivities = false }: {
   recordType: string
   recordId: string
   items: ActivityItem[]
@@ -56,6 +56,8 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
   canEdit: boolean
   /** Hide the engagement bar when it's already shown elsewhere on the page. */
   showActions?: boolean
+  /** DELETE_ACTIVITIES capability — enables deleting any engagement from the feed. */
+  canDeleteActivities?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -63,8 +65,21 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
 
   const filtered = sub === "ALL" ? items : items.filter((i) => i.kind === sub)
 
-  function removeNote(id: string) {
-    startTransition(async () => { await deleteRecordNote(id); router.refresh() })
+  // Which feed items can be deleted (with the permission): notes/calls/meetings
+  // (RecordNote), emails (DirectEmail) and SMS (SmsMessage). Legacy provider notes
+  // (pn_ prefix) and federated tasks/activities aren't deletable here.
+  function deleteItem(item: ActivityItem) {
+    startTransition(async () => {
+      if (["NOTE", "CALL", "MEETING"].includes(item.kind)) await deleteRecordNote(item.id)
+      else if (item.kind === "EMAIL") await deleteRecordEmail(item.id)
+      else if (item.kind === "SMS") await deleteRecordSms(item.id)
+      router.refresh()
+    })
+  }
+  function canDelete(item: ActivityItem) {
+    if (!canDeleteActivities) return false
+    if (["NOTE", "CALL", "MEETING"].includes(item.kind)) return !item.id.startsWith("pn_")
+    return item.kind === "EMAIL" || item.kind === "SMS"
   }
 
   return (
@@ -88,7 +103,7 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
         <div className="space-y-2">
           {filtered.map((item) => {
             const Icon = KIND_ICON[item.kind] ?? StickyNote
-            const deletable = canEdit && ["NOTE", "CALL", "MEETING"].includes(item.kind) && !item.id.startsWith("pn_")
+            const deletable = canDelete(item)
             return (
               <div key={`${item.kind}-${item.id}`} className="bg-white border border-slate-200 rounded-xl p-4">
                 <div className="flex items-start gap-3">
@@ -102,7 +117,7 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
                     <p className="text-xs text-slate-400 mt-1">{item.by ? `by ${item.by}` : ""}</p>
                   </div>
                   {deletable && (
-                    <button onClick={() => removeNote(item.id)} disabled={isPending} className="h-6 w-6 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => deleteItem(item)} disabled={isPending} title="Delete" className="h-6 w-6 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
                   )}
                 </div>
               </div>

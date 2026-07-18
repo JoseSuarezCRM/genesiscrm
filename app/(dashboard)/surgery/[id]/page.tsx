@@ -20,7 +20,7 @@ import RecordMiddleTabs from "@/components/record-middle-tabs"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { listRecordActivities } from "@/app/actions/record-activity"
-import { userCanLevel, userCanDelete } from "@/lib/permissions"
+import { userCan, userCanLevel, userCanDelete } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 
 const STATUS_COLORS: Record<string, string> = {
@@ -64,6 +64,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
   const propertyCards = await loadPropertyCards("SURGERY", surgeryCase as any, "Surgery Case Owner")
   const assocCards = await loadAssociationCards("SURGERY", params.id)
   const canDelete = userCanDelete(session.user as any, "SURGERY")
+  const canDeleteActivities = userCan(session.user as any, "DELETE_ACTIVITIES")
 
   return (
     <RecordDetailShell
@@ -122,6 +123,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
               users={userOptions}
               canEdit={canEdit}
               showActions={false}
+              canDeleteActivities={canDeleteActivities}
             />
           }
         />

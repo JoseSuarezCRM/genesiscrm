@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { requireView } from "@/lib/auth-guard"
-import { userCanLevel, userCanDelete } from "@/lib/permissions"
+import { userCan, userCanLevel, userCanDelete } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { getCustomObjectRecord, recordCustomObjectView } from "@/app/actions/custom-object-records"
@@ -28,6 +28,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
   const canEdit = userCanLevel(session?.user as any, objectType, "EDIT")
   const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
   const canDelete = userCanDelete(session?.user as any, objectType)
+  const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
 
   const record = await getCustomObjectRecord(params.key, params.id)
   if (!record) notFound()
@@ -96,6 +97,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
               users={userOptions}
               canEdit={canEdit}
               showActions={false}
+              canDeleteActivities={canDeleteActivities}
             />
           }
         />

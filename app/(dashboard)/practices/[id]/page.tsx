@@ -73,6 +73,7 @@ export default async function PracticeDetailPage({ params }: Props) {
   const propertyCards = await loadPropertyCards("PRACTICE", practice as any, "Practice Owner")
   const assocCards = await loadAssociationCards("PRACTICE", practice.id)
   const canDelete = userCanDelete(session?.user as any, "PRACTICES")
+  const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
 
   return (
     <RecordDetailShell
@@ -139,6 +140,7 @@ export default async function PracticeDetailPage({ params }: Props) {
               users={userOptions}
               canEdit={isAdmin}
               showActions={false}
+              canDeleteActivities={canDeleteActivities}
             />
           }
         />

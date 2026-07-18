@@ -88,6 +88,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   const propertyCards = await loadPropertyCards("PROVIDER", provider as any, "Provider Owner")
   const canDelete = userCanDelete(session?.user as any, "PROVIDERS")
   const assocCards = await loadAssociationCards("PROVIDER", provider.id)
+  const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
 
   return (
     <RecordDetailShell
@@ -165,6 +166,7 @@ export default async function ProviderDetailPage({ params }: Props) {
               users={userOptions}
               canEdit={isAdmin}
               showActions={false}
+              canDeleteActivities={canDeleteActivities}
             />
           }
         />

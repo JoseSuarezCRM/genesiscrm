@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
+import { userCan } from "@/lib/permissions"
 import { sendEmail, sendCalendarInvite } from "@/lib/graph-mailer"
 import { buildIcs } from "@/lib/ics"
 import { sendSMS } from "@/lib/twilio"
@@ -252,10 +253,35 @@ export async function addRecordNote(recordType: string, recordId: string, body: 
   return { success: true }
 }
 
-export async function deleteRecordNote(id: string) {
+// Deleting engagements (notes, calls, meetings, emails, SMS) needs the
+// DELETE_ACTIVITIES capability — enforced here, not just hidden in the UI.
+async function requireDeleteActivities() {
   const session = await auth()
-  if (!session?.user) return { error: "Unauthorized" }
+  if (!session?.user) return { error: "Unauthorized" as const }
+  if (!userCan(session.user as any, "DELETE_ACTIVITIES")) return { error: "You don't have permission to delete activities." as const }
+  return { ok: true as const }
+}
+
+export async function deleteRecordNote(id: string) {
+  const gate = await requireDeleteActivities()
+  if ("error" in gate) return gate
   await (prisma as any).recordNote.delete({ where: { id } })
+  return { success: true }
+}
+
+// Deletes a logged email (DirectEmail row) — removes it from the record's feed.
+export async function deleteRecordEmail(id: string) {
+  const gate = await requireDeleteActivities()
+  if ("error" in gate) return gate
+  await prisma.directEmail.delete({ where: { id } }).catch(() => {})
+  return { success: true }
+}
+
+// Deletes a single SMS message from its thread.
+export async function deleteRecordSms(id: string) {
+  const gate = await requireDeleteActivities()
+  if ("error" in gate) return gate
+  await prisma.smsMessage.delete({ where: { id } }).catch(() => {})
   return { success: true }
 }
 
