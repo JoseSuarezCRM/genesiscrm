@@ -17,6 +17,7 @@ import {
   MessageCircle,
   UserCog,
   Box,
+  Workflow,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { userCanLevel } from "@/lib/permissions"
@@ -56,15 +57,15 @@ const communicationsItems: NavItem[] = [
   { href: "/communications/email", label: "Email", object: "TEMPLATES" },
 ]
 
+const automationItems: NavItem[] = [
+  { href: "/automations",        label: "Workflows", object: "AUTOMATIONS" },
+  { href: "/settings/reconcile", label: "Appt Reconciliation" },
+]
+
+// Admin/config pages now live in the Settings page's own nav; the sidebar just
+// links to Settings.
 const adminItems: NavItem[] = [
-  { href: "/settings/objects",    label: "Custom Objects" },
-  { href: "/settings/data-model", label: "Data Model" },
-  { href: "/settings/outreach",   label: "Outreach Templates" },
-  { href: "/settings/embed",      label: "Embed Referral Form" },
-  { href: "/automations",         label: "Automations", object: "AUTOMATIONS" },
-  { href: "/settings/duplicates", label: "Duplicate Detection" },
-  { href: "/settings/reconcile",  label: "Appt Reconciliation" },
-  { href: "/settings/marketing",  label: "Marketing Materials" },
+  { href: "/settings/users", label: "Settings" },
 ]
 
 const sections = [
@@ -73,7 +74,8 @@ const sections = [
   { key: "NAV_SCHEDULING",   title: "Scheduling",   icon: CalendarRange, items: schedulingItems },
   { key: "NAV_SURGERY",      title: "Surgery",      icon: Stethoscope,   items: surgeryItems },
   { key: "NAV_COMMUNICATIONS", title: "Communications", icon: MessageCircle, items: communicationsItems },
-  { key: "NAV_ADMIN",        title: "Admin",        icon: Settings,      items: adminItems },
+  { key: "NAV_AUTOMATIONS",  title: "Automations",  icon: Workflow,      items: automationItems },
+  { key: "NAV_ADMIN",        title: "Settings",     icon: Settings,      items: adminItems },
 ]
 
 interface SidebarProps {

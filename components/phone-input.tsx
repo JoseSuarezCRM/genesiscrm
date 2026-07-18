@@ -45,17 +45,17 @@ export default function PhoneInput({ value, onChange, className }: {
   }
 
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1.5 min-w-0">
       <StyledSelect value={COUNTRIES.find((c) => realDial(c.dial) === dial)?.dial ?? "+1"}
         onChange={(e) => emit(e.target.value, rest)}
-        className="w-24 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400">
+        className="w-[76px] shrink-0 text-sm border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none focus:border-zinc-400">
         {COUNTRIES.map((c) => <option key={c.dial} value={c.dial}>{c.label}</option>)}
       </StyledSelect>
       <input
         value={rest}
         onChange={(e) => emit(dial, e.target.value)}
         placeholder="Phone number"
-        className={className ?? "flex-1 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400"}
+        className="min-w-0 flex-1 w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400"
         autoFocus
       />
     </div>

@@ -12,12 +12,23 @@ const settingsSections = [
     ],
   },
   {
-    title: "Data & Setup",
+    title: "Objects & Data",
     items: [
+      { href: "/settings/objects", label: "Custom Objects" },
+      { href: "/settings/data-model", label: "Data Model" },
       { href: "/settings/custom-properties", label: "Custom Properties" },
       { href: "/settings/customization", label: "Property Customization" },
       { href: "/settings/pipelines", label: "Pipelines" },
       { href: "/settings/org-rules", label: "Org Name Rules" },
+    ],
+  },
+  {
+    title: "Tools",
+    items: [
+      { href: "/settings/outreach", label: "Outreach Templates" },
+      { href: "/settings/embed", label: "Embed Referral Form" },
+      { href: "/settings/duplicates", label: "Duplicate Detection" },
+      { href: "/settings/marketing", label: "Marketing Materials" },
     ],
   },
 ]

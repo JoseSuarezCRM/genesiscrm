@@ -60,7 +60,8 @@ export const NAV_PERMISSIONS: PermissionDef[] = [
   { key: "NAV_SCHEDULING",   label: "Scheduling",   description: "Weekly schedule and staff roster" },
   { key: "NAV_SURGERY",      label: "Surgery",      description: "Surgery cases tracker with file import, call log, and documents" },
   { key: "NAV_COMMUNICATIONS", label: "Communications", description: "Reusable SMS and Email templates" },
-  { key: "NAV_ADMIN",        label: "Admin",        description: "User management, automations, templates, and settings" },
+  { key: "NAV_AUTOMATIONS",  label: "Automations",  description: "Workflows and appointment reconciliation" },
+  { key: "NAV_ADMIN",        label: "Settings",     description: "User management, objects, data model, templates, and settings" },
 ]
 
 export interface SessionUserLike { role?: string | null; permissions?: string[] | null }
