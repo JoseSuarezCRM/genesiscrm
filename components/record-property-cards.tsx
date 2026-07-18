@@ -38,6 +38,9 @@ interface Props {
   section?: "LEFT" | "MIDDLE"
   /** Needed to render/edit the Record Owner field. */
   users?: UserOpt[]
+  /** Renders the body of a functional card (kind other than PROPERTIES/CALL_LOG),
+   *  e.g. Surgery's Status / Procedure / Call Attempts. Returns null to skip. */
+  renderFunctional?: (card: PropertyCard) => React.ReactNode | null
 }
 
 function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): string {
@@ -169,7 +172,7 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
   )
 }
 
-export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards, section = "LEFT", users = [] }: Props) {
+export default function RecordPropertyCards({ entityType, recordId, cards, catalog, values, canEdit, canEditCards, section = "LEFT", users = [], renderFunctional }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   // null = closed; PropertyCard = editing that card; "new" = creating one.
@@ -184,7 +187,10 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
   // adding/deleting/reordering one card never drops the others.
   function persist(next: PropertyCard[]) {
     startTransition(async () => {
-      await replaceColumnCards(entityType, section, next.map((c) => ({ cardName: c.cardName, title: c.title, fields: c.fields, columns: c.columns ?? 1 })))
+      await replaceColumnCards(entityType, section, next.map((c) => ({
+        cardName: c.cardName, title: c.title, fields: c.fields, columns: c.columns ?? 1,
+        kind: c.kind ?? "PROPERTIES", config: c.config ?? null,
+      })))
       router.refresh()
     })
   }
@@ -218,7 +224,9 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
         </div>
       )}
 
-      {dnd.order.map((card) => (
+      {dnd.order.map((card) => {
+        const isFunctional = !!card.kind && card.kind !== "PROPERTIES" && card.kind !== "CALL_LOG"
+        return (
         <div key={card.cardName} {...dnd.cardProps(card.cardName)}
           className={cn("bg-white border border-slate-200 rounded-xl transition-shadow", dnd.dragging === card.cardName && "opacity-50 ring-2 ring-zinc-300")}>
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
@@ -230,13 +238,15 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
               )}
               <h2 className="text-sm font-semibold text-slate-900 truncate">{card.title}</h2>
             </div>
-            {canEditCards && (
+            {canEditCards && !isFunctional && (
               <button onClick={() => setEditing(card)} title="Edit card" className="text-slate-300 hover:text-slate-600 shrink-0">
                 <Settings className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
-          {card.kind === "CALL_LOG" ? (
+          {isFunctional ? (
+            <div className="p-5">{renderFunctional?.(card)}</div>
+          ) : card.kind === "CALL_LOG" ? (
             <CallLogCard recordType={entityType} recordId={recordId} maxCalls={card.config?.maxCalls ?? 3} canEdit={canEdit} />
           ) : (
             <div className={cn("p-5 text-sm", (card.columns ?? 1) > 1 && "grid gap-x-5",
@@ -256,7 +266,8 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
             </div>
           )}
         </div>
-      ))}
+        )
+      })}
 
       {editing && (
         <LeftCardEditorModal

@@ -187,7 +187,7 @@ function PhysicalTherapyField({
   )
 }
 
-export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any }) {
+export default function SurgeryDetailClient({ surgeryCase, only }: { surgeryCase: any; only?: "STATUS" | "PROCEDURE" | "CALLS" | "DOCUMENTS" }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
 
@@ -328,205 +328,136 @@ export default function SurgeryDetailClient({ surgeryCase }: { surgeryCase: any 
   const docs: any[] = surgeryCase.documents ?? []
   const canAddCall = calls.length < MAX_CALLS
 
-  return (
-    <div className="space-y-6">
-      {/* Status */}
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Update Status</p>
-          <div className="grid grid-cols-3 gap-2">
-            {STATUS_OPTIONS.map((s) => (
-              <button
-                key={s}
-                onClick={() => handleStatusChange(s)}
-                disabled={statusPending}
-                className={`h-9 rounded-lg text-xs font-medium border transition-all ${
-                  surgeryCase.status === s
-                    ? STATUS_COLORS[s]
-                    : "bg-white text-slate-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
-                }`}
-              >
-                {SURGERY_STATUS_LABELS[s]}
-              </button>
+  // Each functional section as a body (no Card wrapper) so it can render inside a
+  // reorderable property-card slot, or stacked in legacy full mode.
+  const statusBody = (
+    <div className="grid grid-cols-3 gap-2">
+      {STATUS_OPTIONS.map((s) => (
+        <button key={s} onClick={() => handleStatusChange(s)} disabled={statusPending}
+          className={`h-9 rounded-lg text-xs font-medium border transition-all ${
+            surgeryCase.status === s ? STATUS_COLORS[s] : "bg-white text-slate-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
+          }`}>
+          {SURGERY_STATUS_LABELS[s]}
+        </button>
+      ))}
+    </div>
+  )
+
+  const procedureBody = (
+    <div className="space-y-4">
+      <ProcedureField value={procedure} onChange={setProcedure} />
+      <div className="flex justify-end">
+        <Button onClick={saveProcedure} disabled={saving} size="sm" className="min-w-[80px]">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <><Check className="h-4 w-4 mr-1" />Saved</> : "Save"}
+        </Button>
+      </div>
+    </div>
+  )
+
+  const callsBody = (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-400">{calls.length}/{MAX_CALLS} attempts</p>
+      <div className="flex gap-2">
+        {Array.from({ length: MAX_CALLS }).map((_, i) => {
+          const call = calls[i]
+          return (
+            <div key={i} className={`flex-1 h-10 rounded-lg border flex items-center justify-center text-xs font-medium ${
+              call ? "bg-zinc-900 text-white border-zinc-900" : "bg-white border-zinc-200 text-slate-300"
+            }`}>
+              {call ? <span className={OUTCOME_LABELS[call.outcome]?.color ?? "text-white"}>{OUTCOME_LABELS[call.outcome]?.label ?? call.outcome}</span> : `Call ${i + 1}`}
+            </div>
+          )
+        })}
+      </div>
+      {canAddCall && (
+        <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Log Call {calls.length + 1}</p>
+          <div className="flex gap-2 flex-wrap">
+            {Object.entries(OUTCOME_LABELS).map(([key, { label }]) => (
+              <button key={key} onClick={() => setCallOutcome(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                  callOutcome === key ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+                }`}>{label}</button>
             ))}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Procedure — the cascading provider → body part → procedure picker. The
-          rest of Clinical & Scheduling is an editable property card in the middle
-          column. */}
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Procedure</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <ProcedureField value={procedure} onChange={setProcedure} />
-          <div className="flex justify-end">
-            <Button onClick={saveProcedure} disabled={saving} size="sm" className="min-w-[80px]">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <><Check className="h-4 w-4 mr-1" />Saved</> : "Save"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Call Attempts */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Call Attempts ({calls.length}/{MAX_CALLS})</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Call slots */}
-          <div className="flex gap-2">
-            {Array.from({ length: MAX_CALLS }).map((_, i) => {
-              const call = calls[i]
-              return (
-                <div
-                  key={i}
-                  className={`flex-1 h-10 rounded-lg border flex items-center justify-center text-xs font-medium ${
-                    call ? "bg-zinc-900 text-white border-zinc-900" : "bg-white border-zinc-200 text-slate-300"
-                  }`}
-                >
-                  {call ? (
-                    <span className={OUTCOME_LABELS[call.outcome]?.color ?? "text-white"}>
-                      {OUTCOME_LABELS[call.outcome]?.label ?? call.outcome}
-                    </span>
-                  ) : (
-                    `Call ${i + 1}`
-                  )}
+          <textarea value={callNotes} onChange={(e) => setCallNotes(e.target.value)} placeholder="Notes (optional)..." rows={2}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm focus:outline-none focus:border-zinc-400 resize-none bg-white" />
+          <Button onClick={handleLogCall} disabled={callPending} size="sm">
+            {callPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Phone className="h-4 w-4 mr-1.5" />} Log Call
+          </Button>
+        </div>
+      )}
+      {calls.length > 0 && (
+        <div className="divide-y divide-slate-100">
+          {calls.map((call: any, i: number) => (
+            <div key={call.id} className="flex items-start justify-between py-3 gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="shrink-0 w-6 h-6 rounded-full bg-zinc-900 text-white text-xs flex items-center justify-center font-medium mt-0.5">{i + 1}</div>
+                <div>
+                  <span className={`text-sm font-medium ${OUTCOME_LABELS[call.outcome]?.color ?? "text-slate-700"}`}>{OUTCOME_LABELS[call.outcome]?.label ?? call.outcome}</span>
+                  {call.notes && <p className="text-xs text-slate-500 mt-0.5">{call.notes}</p>}
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {new Date(call.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                    {call.calledBy && ` · ${call.calledBy.name ?? call.calledBy.email}`}
+                  </p>
                 </div>
-              )
-            })}
-          </div>
-
-          {/* Log a call */}
-          {canAddCall && (
-            <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Log Call {calls.length + 1}</p>
-              <div className="flex gap-2 flex-wrap">
-                {Object.entries(OUTCOME_LABELS).map(([key, { label }]) => (
-                  <button
-                    key={key}
-                    onClick={() => setCallOutcome(key)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                      callOutcome === key
-                        ? "bg-zinc-900 text-white border-zinc-900"
-                        : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
               </div>
-              <textarea
-                value={callNotes}
-                onChange={(e) => setCallNotes(e.target.value)}
-                placeholder="Notes (optional)..."
-                rows={2}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm focus:outline-none focus:border-zinc-400 resize-none bg-white"
-              />
-              <Button onClick={handleLogCall} disabled={callPending} size="sm">
-                {callPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Phone className="h-4 w-4 mr-1.5" />}
-                Log Call
-              </Button>
+              <button onClick={() => handleDeleteCall(call.id)} disabled={deletingCallId === call.id}
+                className="shrink-0 p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
-          )}
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
-          {/* Call log */}
-          {calls.length > 0 && (
-            <div className="divide-y divide-slate-100">
-              {calls.map((call: any, i: number) => (
-                <div key={call.id} className="flex items-start justify-between py-3 gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="shrink-0 w-6 h-6 rounded-full bg-zinc-900 text-white text-xs flex items-center justify-center font-medium mt-0.5">
-                      {i + 1}
-                    </div>
-                    <div>
-                      <span className={`text-sm font-medium ${OUTCOME_LABELS[call.outcome]?.color ?? "text-slate-700"}`}>
-                        {OUTCOME_LABELS[call.outcome]?.label ?? call.outcome}
-                      </span>
-                      {call.notes && <p className="text-xs text-slate-500 mt-0.5">{call.notes}</p>}
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {new Date(call.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                        {call.calledBy && ` · ${call.calledBy.name ?? call.calledBy.email}`}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteCall(call.id)}
-                    disabled={deletingCallId === call.id}
-                    className="shrink-0 p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+  const documentsBody = (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" className="hidden" onChange={handleFileUpload} />
+        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Upload className="h-4 w-4 mr-1.5" />} Upload
+        </Button>
+      </div>
+      {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+      {docs.length === 0 ? (
+        <p className="text-sm text-slate-400 py-4 text-center">No documents uploaded.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {docs.map((doc: any) => (
+            <li key={doc.id} className="flex items-center justify-between py-3 gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                <div className="min-w-0">
+                  <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-slate-800 hover:text-blue-600 truncate block transition-colors">{doc.fileName}</a>
+                  <p className="text-xs text-slate-400">
+                    {new Date(doc.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {doc.fileSize && ` · ${(doc.fileSize / 1024).toFixed(0)} KB`}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+              <button onClick={() => handleDeleteDoc(doc.id)} disabled={deletingDocId === doc.id}
+                className="shrink-0 p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all"><X className="h-3.5 w-3.5" /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 
-      {/* Documents */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Documents</CardTitle>
-          <div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Upload className="h-4 w-4 mr-1.5" />}
-              Upload
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {uploadError && (
-            <p className="text-sm text-red-600 mb-3">{uploadError}</p>
-          )}
-          {docs.length === 0 ? (
-            <p className="text-sm text-slate-400 py-4 text-center">No documents uploaded.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {docs.map((doc: any) => (
-                <li key={doc.id} className="flex items-center justify-between py-3 gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <FileText className="h-4 w-4 text-slate-400 shrink-0" />
-                    <div className="min-w-0">
-                      <a
-                        href={doc.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-medium text-slate-800 hover:text-blue-600 truncate block transition-colors"
-                      >
-                        {doc.fileName}
-                      </a>
-                      <p className="text-xs text-slate-400">
-                        {new Date(doc.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        {doc.fileSize && ` · ${(doc.fileSize / 1024).toFixed(0)} KB`}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteDoc(doc.id)}
-                    disabled={deletingDocId === doc.id}
-                    className="shrink-0 p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+  // Rendered as a single functional card body (inside a reorderable slot).
+  if (only === "STATUS") return statusBody
+  if (only === "PROCEDURE") return procedureBody
+  if (only === "CALLS") return callsBody
+  if (only === "DOCUMENTS") return documentsBody
+
+  // Legacy full stack (unused once the middle column composes these as cards).
+  return (
+    <div className="space-y-6">
+      <Card><CardContent className="pt-4"><p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Update Status</p>{statusBody}</CardContent></Card>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-base">Procedure</CardTitle></CardHeader><CardContent>{procedureBody}</CardContent></Card>
+      <Card><CardHeader><CardTitle className="text-base">Call Attempts ({calls.length}/{MAX_CALLS})</CardTitle></CardHeader><CardContent>{callsBody}</CardContent></Card>
+      <Card><CardHeader><CardTitle className="text-base">Documents</CardTitle></CardHeader><CardContent>{documentsBody}</CardContent></Card>
     </div>
   )
 }

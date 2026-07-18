@@ -113,9 +113,16 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
 
   const cards = leftLayouts.length ? toCards(leftLayouts as any) : defaultLeft
 
-  // Surgery gets a default middle Clinical & Scheduling card (editable inline).
+  // Surgery's default middle: the editable Clinical card plus the functional cards
+  // (Status / Procedure / Call Attempts / Documents), all reorderable together.
   const defaultMiddle = entityType === "SURGERY"
-    ? [{ cardName: "clinical", title: "Clinical & Scheduling", fields: SURGERY_CLINICAL_FIELDS, columns: 2 }]
+    ? [
+        { cardName: "status", title: "Update Status", fields: [], kind: "SURGERY_STATUS" },
+        { cardName: "clinical", title: "Clinical & Scheduling", fields: SURGERY_CLINICAL_FIELDS, columns: 2 },
+        { cardName: "procedure", title: "Procedure", fields: [], kind: "SURGERY_PROCEDURE" },
+        { cardName: "calls", title: "Call Attempts", fields: [], kind: "SURGERY_CALLS" },
+        { cardName: "documents", title: "Documents", fields: [], kind: "SURGERY_DOCUMENTS" },
+      ]
     : []
   const middleCards = middleLayouts.length ? toCards(middleLayouts as any) : defaultMiddle
 

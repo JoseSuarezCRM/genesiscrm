@@ -7,7 +7,7 @@ import { getSurgeryCase, deleteSurgeryCase } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import SurgeryDetailClient from "@/components/surgery-detail-client"
+import SurgeryMiddle from "@/components/surgery-middle"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordDetailShell from "@/components/record-detail-shell"
@@ -103,20 +103,16 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
       middle={
         <RecordMiddleTabs
           overview={
-            <>
-          <RecordPropertyCards
-            entityType="SURGERY"
-            recordId={params.id}
-            cards={propertyCards.middleCards}
-            catalog={propertyCards.catalog}
-            values={propertyCards.values}
-            canEdit={canEdit}
-            canEditCards={canEditCards}
-            section="MIDDLE"
-            users={userOptions}
-          />
-            <SurgeryDetailClient surgeryCase={surgeryCase} />
-            </>
+            <SurgeryMiddle
+              recordId={params.id}
+              cards={propertyCards.middleCards}
+              catalog={propertyCards.catalog}
+              values={propertyCards.values}
+              canEdit={canEdit}
+              canEditCards={canEditCards}
+              users={userOptions}
+              surgeryCase={surgeryCase}
+            />
           }
           activities={
             <RecordActivityFeed
