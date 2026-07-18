@@ -22,6 +22,15 @@ export async function pollInboundEmails(): Promise<{ polled: number; stored: num
   // Look back a window that comfortably covers the cron interval + clock skew.
   const since = new Date(Date.now() - 30 * 60_000).toISOString()
 
+  // Only ingest replies to threads WE started — the conversations of our outbound
+  // emails (looked at a recent window; conversationId is captured on send).
+  const sent = await prisma.directEmail.findMany({
+    where: { direction: "OUTBOUND", conversationId: { not: null }, sentAt: { gte: new Date(Date.now() - 90 * 24 * 60 * 60_000) } },
+    select: { conversationId: true },
+  })
+  const appConversations = new Set(sent.map((s) => s.conversationId as string))
+  if (appConversations.size === 0) return { polled: mailboxes.length, stored: 0, errors: [] }
+
   let stored = 0
   const errors: string[] = []
 
@@ -30,14 +39,16 @@ export async function pollInboundEmails(): Promise<{ polled: number; stored: num
       const messages = await fetchInboundMessages(mailbox, since)
       for (const m of messages) {
         if (!m.internetMessageId) continue
-        // Skip mail we sent (from one of our own mailboxes) — we only want replies.
-        if (m.fromEmail && mailboxSet.has(m.fromEmail)) continue
+        if (m.fromEmail && mailboxSet.has(m.fromEmail)) continue // skip our own mail
+        if (!m.conversationId || !appConversations.has(m.conversationId)) continue // only app-started threads
 
         try {
           await prisma.directEmail.create({
             data: {
               direction: "INBOUND",
               internetMessageId: m.internetMessageId,
+              graphMessageId: m.id,
+              mailbox,
               conversationId: m.conversationId,
               fromEmail: m.fromEmail,
               to: m.toRecipients,

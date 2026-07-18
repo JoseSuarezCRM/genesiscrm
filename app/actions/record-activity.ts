@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
 import { userCan } from "@/lib/permissions"
-import { sendEmail, sendCalendarInvite } from "@/lib/graph-mailer"
+import { sendEmail, sendEmailTracked, replyToMessage, sendCalendarInvite } from "@/lib/graph-mailer"
 import { buildIcs } from "@/lib/ics"
 import { sendSMS } from "@/lib/twilio"
 import { resolveMyFromEmail } from "@/app/actions/account"
@@ -20,6 +20,8 @@ export interface ActivityItem {
   body: string | null
   date: string | Date
   by: string | null
+  /** EMAIL items in a tracked Graph thread can be replied to from the app. */
+  canReply?: boolean
 }
 
 // Permission object key that gates editing a record of a given type.
@@ -223,7 +225,7 @@ export async function listRecordActivities(recordType: string, recordId: string)
     for (const e of sent) {
       const inbound = (e as any).direction === "INBOUND"
       const by = inbound ? ((e as any).fromEmail ?? "them") : (e.sentBy?.name ?? e.sentBy?.email ?? null)
-      items.push({ id: e.id, kind: "EMAIL", title: inbound ? `↩ ${e.subject}` : e.subject, body: stripHtml(e.body), date: e.sentAt, by })
+      items.push({ id: e.id, kind: "EMAIL", title: inbound ? `↩ ${e.subject}` : e.subject, body: stripHtml(e.body), date: e.sentAt, by, canReply: !!(e as any).conversationId })
     }
   }
   const e164 = phones.map(toE164).filter(Boolean) as string[]
@@ -329,14 +331,16 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
   if (!fromEmail) return { error: "You don't have a sending address yet. Set one up in Settings → My Account." }
 
   const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${data.body.replace(/\n/g, "<br/>")}</div>`
-  const result = await sendEmail(to, data.subject.trim(), html, { fromEmail })
+  // Tracked send captures the thread ids so replies can be matched + threaded.
+  const result = await sendEmailTracked(fromEmail, to, data.subject.trim(), html)
 
   const rec = await prisma.directEmail.create({
     data: {
       to: [to], cc: [], bcc: [],
       subject: data.subject.trim(), body: data.body.trim(),
       success: result.success, error: result.success ? null : (result.error ?? "Unknown error"),
-      direction: "OUTBOUND", fromEmail,
+      direction: "OUTBOUND", fromEmail, mailbox: fromEmail,
+      conversationId: result.conversationId, internetMessageId: result.internetMessageId, graphMessageId: result.graphMessageId,
       sentById: uid,
     },
   })
@@ -348,6 +352,48 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
   const p = pathFor(recordType, recordId)
   if (p) revalidatePath(p)
   if (!result.success) return { error: result.error ?? "Email failed to send." }
+  return { success: true }
+}
+
+// Reply to an email in the app, keeping it in the same Graph thread. `emailId` is
+// any DirectEmail row in the conversation (usually the message being replied to).
+export async function replyToEmailThread(recordType: string, recordId: string, emailId: string, body: string) {
+  await requireAccess(permKeyFor(recordType), "EDIT")
+  const session = await auth()
+  const uid = (session!.user as any).id
+  if (!body.trim()) return { error: "Reply is empty." }
+
+  const email = await prisma.directEmail.findUnique({ where: { id: emailId } })
+  if (!email?.conversationId) return { error: "This email isn't part of a tracked thread yet." }
+
+  // Reply to the most recent message in the thread that we can act on (prefer the
+  // latest inbound so the reply goes back to the person who wrote in).
+  const target = await prisma.directEmail.findFirst({
+    where: { conversationId: email.conversationId, graphMessageId: { not: null }, mailbox: { not: null } },
+    orderBy: [{ direction: "asc" }, { sentAt: "desc" }], // INBOUND sorts before OUTBOUND
+  })
+  if (!target?.graphMessageId || !target.mailbox) return { error: "Can't reply — the original message isn't available in the mailbox." }
+
+  const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${body.replace(/\n/g, "<br/>")}</div>`
+  const result = await replyToMessage(target.mailbox, target.graphMessageId, html)
+  if (!result.success) return { error: result.error ?? "Reply failed to send." }
+
+  const to = target.direction === "INBOUND" ? (target.fromEmail ?? "") : (target.to[0] ?? "")
+  const rec = await prisma.directEmail.create({
+    data: {
+      to: to ? [to] : [], cc: [], bcc: [],
+      subject: email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`,
+      body: body.trim(), success: true,
+      direction: "OUTBOUND", fromEmail: target.mailbox, mailbox: target.mailbox,
+      conversationId: email.conversationId, sentById: uid,
+    },
+  })
+  await (prisma as any).objectAssociation.create({
+    data: { fromType: "EMAIL", fromId: rec.id, toType: recordType, toId: recordId },
+  }).catch(() => {})
+
+  const p = pathFor(recordType, recordId)
+  if (p) revalidatePath(p)
   return { success: true }
 }
 

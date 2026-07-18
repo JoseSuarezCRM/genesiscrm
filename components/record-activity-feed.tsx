@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Trash2 } from "lucide-react"
-import { deleteRecordNote, deleteRecordEmail, deleteRecordSms, type ActivityItem, type ActivityKind } from "@/app/actions/record-activity"
+import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Trash2, Reply, Loader2, Send } from "lucide-react"
+import { deleteRecordNote, deleteRecordEmail, deleteRecordSms, replyToEmailThread, type ActivityItem, type ActivityKind } from "@/app/actions/record-activity"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import { cn } from "@/lib/utils"
 
@@ -30,6 +30,47 @@ const SUBTABS: { key: "ALL" | ActivityKind; label: string }[] = [
 
 function fmt(d: string | Date) {
   return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
+}
+
+// Reply to an email thread inline — keeps it in the same Graph conversation.
+function EmailReply({ recordType, recordId, emailId }: { recordType: string; recordId: string; emailId: string }) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function send() {
+    if (!text.trim()) return
+    setError(null)
+    startTransition(async () => {
+      const res = await replyToEmailThread(recordType, recordId, emailId, text)
+      if ((res as any)?.error) { setError((res as any).error); return }
+      setText(""); setOpen(false); router.refresh()
+    })
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+        <Reply className="h-3.5 w-3.5" /> Reply
+      </button>
+    )
+  }
+  return (
+    <div className="mt-2 space-y-1.5">
+      <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write your reply…" autoFocus
+        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:border-zinc-400" />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="flex items-center gap-1">
+        <button onClick={send} disabled={isPending || !text.trim()}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send reply
+        </button>
+        <button onClick={() => { setOpen(false); setText("") }} className="h-8 px-2 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
+      </div>
+    </div>
+  )
 }
 
 // Long bodies (emails especially) render at a fixed height and expand on click.
@@ -115,6 +156,9 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
                     </div>
                     {item.body && <ActivityBody body={item.body} />}
                     <p className="text-xs text-slate-400 mt-1">{item.by ? `by ${item.by}` : ""}</p>
+                    {item.kind === "EMAIL" && item.canReply && canEdit && (
+                      <EmailReply recordType={recordType} recordId={recordId} emailId={item.id} />
+                    )}
                   </div>
                   {deletable && (
                     <button onClick={() => deleteItem(item)} disabled={isPending} title="Delete" className="h-6 w-6 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>

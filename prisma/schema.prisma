@@ -901,8 +901,10 @@ model DirectEmail {
   // replier for inbound). conversationId groups a thread; internetMessageId dedupes.
   direction         String   @default("OUTBOUND") // OUTBOUND | INBOUND
   fromEmail         String?
+  mailbox           String?  // the app mailbox this was sent from / received in
   conversationId    String?
   internetMessageId String?  @unique
+  graphMessageId    String?  // Graph message id (to reply in-thread)
   sentById String?
   sentBy   User?    @relation(fields: [sentById], references: [id])
 

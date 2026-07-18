@@ -243,6 +243,7 @@ export async function sendCalendarInvite(
 // Needs the app registration to have Mail.Read (application) granted with admin
 // consent — the same client-credentials token is reused.
 export interface InboundMessage {
+  id: string
   internetMessageId: string
   conversationId: string | null
   fromEmail: string | null
@@ -258,7 +259,7 @@ export async function fetchInboundMessages(mailbox: string, sinceIso: string): P
   // Inbox only, received since `sinceIso`, newest first.
   const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages`
     + `?$filter=${encodeURIComponent(`receivedDateTime ge ${sinceIso}`)}`
-    + `&$select=internetMessageId,conversationId,from,toRecipients,subject,body,receivedDateTime`
+    + `&$select=id,internetMessageId,conversationId,from,toRecipients,subject,body,receivedDateTime`
     + `&$top=50&$orderby=receivedDateTime desc`
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
@@ -269,6 +270,7 @@ export async function fetchInboundMessages(mailbox: string, sinceIso: string): P
   }
   const data = await res.json() as { value: any[] }
   return (data.value ?? []).map((m) => ({
+    id: m.id,
     internetMessageId: m.internetMessageId,
     conversationId: m.conversationId ?? null,
     fromEmail: m.from?.emailAddress?.address?.toLowerCase() ?? null,
@@ -278,4 +280,51 @@ export async function fetchInboundMessages(mailbox: string, sinceIso: string): P
     bodyHtml: m.body?.content ?? "",
     receivedAt: m.receivedDateTime,
   }))
+}
+
+// ── Threaded send + reply ────────────────────────────────────────────────────
+// Create a draft then send it, so we capture the conversationId / message ids and
+// can later match replies and reply in-thread. Needs Mail.ReadWrite + Mail.Send.
+export async function sendEmailTracked(fromEmail: string, to: string, subject: string, html: string): Promise<{
+  success: boolean; error?: string; conversationId?: string; internetMessageId?: string; graphMessageId?: string
+}> {
+  try {
+    const token = await getAccessToken()
+    const base = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}`
+    // 1) Create the draft — the response carries the ids we need.
+    const draftRes = await fetch(`${base}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subject,
+        body: { contentType: "HTML", content: html },
+        toRecipients: [{ emailAddress: { address: to } }],
+        from: { emailAddress: { address: fromEmail, name: "Genesis Ortho" } },
+      }),
+    })
+    if (!draftRes.ok) return { success: false, error: `Draft failed: ${(await draftRes.text()).slice(0, 200)}` }
+    const draft = await draftRes.json() as { id: string; conversationId?: string; internetMessageId?: string }
+    // 2) Send the draft.
+    const sendRes = await fetch(`${base}/messages/${draft.id}/send`, { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+    if (!sendRes.ok && sendRes.status !== 202) return { success: false, error: `Send failed: ${(await sendRes.text()).slice(0, 200)}` }
+    return { success: true, conversationId: draft.conversationId, internetMessageId: draft.internetMessageId, graphMessageId: draft.id }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+// Reply to a message, keeping it in the same thread (sends immediately).
+export async function replyToMessage(mailbox: string, graphMessageId: string, html: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = await getAccessToken()
+    const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages/${graphMessageId}/reply`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: { body: { contentType: "HTML", content: html } } }),
+    })
+    if (!res.ok && res.status !== 202) return { success: false, error: `Reply failed: ${(await res.text()).slice(0, 200)}` }
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
 }

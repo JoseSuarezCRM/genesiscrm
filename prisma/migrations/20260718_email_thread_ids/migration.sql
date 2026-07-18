@@ -1,0 +1,2 @@
+ALTER TABLE "DirectEmail" ADD COLUMN IF NOT EXISTS "mailbox" TEXT;
+ALTER TABLE "DirectEmail" ADD COLUMN IF NOT EXISTS "graphMessageId" TEXT;
