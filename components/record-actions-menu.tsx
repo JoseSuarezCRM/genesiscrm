@@ -36,6 +36,7 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
   const [open, setOpen] = useState(false)
   const [panel, setPanel] = useState(false)
   const [merging, setMerging] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   const mergeable = isMergeable(entityType)
@@ -55,13 +56,13 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
     })
   }
 
-  function remove() {
-    setOpen(false)
-    if (!confirm(`Delete "${title}"? This can't be undone.`)) return
-    startTransition(async () => {
-      const res = await deleteRecord(entityType, recordId)
-      if (res.error) alert(res.error)
-      else router.push(listUrlFor(entityType))
+  function confirmDelete() {
+    return new Promise<void>((resolve) => {
+      startTransition(async () => {
+        const res = await deleteRecord(entityType, recordId)
+        if (res.error) { alert(res.error); resolve() }
+        else router.push(listUrlFor(entityType))
+      })
     })
   }
 
@@ -90,19 +91,55 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
               <GitMerge className="h-4 w-4 text-slate-400" /> Merge
             </button>
           )}
-          {canDelete && (
-            <>
-              <div className="my-1 border-t border-slate-100" />
-              <button className={cn(item, "text-red-600")} onClick={remove}>
-                <Trash2 className="h-4 w-4" /> Delete
-              </button>
-            </>
-          )}
+          <div className="my-1 border-t border-slate-100" />
+          <button
+            className={cn(item, canDelete ? "text-red-600" : "text-slate-300 cursor-not-allowed hover:bg-transparent")}
+            disabled={!canDelete}
+            title={canDelete ? undefined : "You don't have permission to delete this"}
+            onClick={() => { if (!canDelete) return; setOpen(false); setDeleting(true) }}>
+            <Trash2 className="h-4 w-4" /> Delete
+          </button>
         </div>
       )}
 
       {panel && <AllPropertiesPanel title={title} catalog={catalog} values={values} userMap={userMap} onClose={() => setPanel(false)} />}
       {merging && <MergeDialog entityType={entityType} recordId={recordId} title={title} catalog={catalog} values={values} userMap={userMap} onClose={() => setMerging(false)} />}
+      {deleting && <DeleteDialog title={title} isPending={isPending} onConfirm={confirmDelete} onClose={() => setDeleting(false)} />}
+    </div>
+  )
+}
+
+// Type-DELETE-to-confirm gate before a record is permanently removed.
+function DeleteDialog({ title, isPending, onConfirm, onClose }: {
+  title: string; isPending: boolean; onConfirm: () => void; onClose: () => void
+}) {
+  const [text, setText] = useState("")
+  const ok = text.trim().toUpperCase() === "DELETE"
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="h-9 w-9 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0"><Trash2 className="h-4 w-4" /></span>
+          <h2 className="text-base font-semibold text-slate-900">Delete this record?</h2>
+        </div>
+        <p className="text-sm text-slate-500">
+          You're about to permanently delete <span className="font-medium text-slate-800">{title}</span>. This can't be undone.
+          Type <span className="font-mono font-semibold text-slate-800">DELETE</span> to confirm.
+        </p>
+        <input
+          autoFocus value={text} onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && ok && !isPending) onConfirm() }}
+          placeholder="DELETE"
+          className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-red-400" />
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
+          <button onClick={onConfirm} disabled={!ok || isPending}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
