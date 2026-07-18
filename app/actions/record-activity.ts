@@ -64,28 +64,38 @@ function toE164(p: string): string | null {
   return d.length > 6 ? `+${d}` : null
 }
 
-// The record's email addresses / phone numbers, used to match emails + SMS.
+// Built-in objects that carry a customProperties JSON bag, mapped to their
+// CustomProperty entityType. Custom EMAIL/PHONE properties feed the buttons + feed.
+const CP_CONTACT: Record<string, { entity: string; delegate: () => any }> = {
+  REFERRAL: { entity: "REFERRAL", delegate: () => prisma.referral },
+  PROVIDER: { entity: "PROVIDER", delegate: () => prisma.referringDoctor },
+  PRACTICE: { entity: "PRACTICE", delegate: () => prisma.referringPractice },
+  LOCATION: { entity: "LOCATION", delegate: () => prisma.practiceLocation },
+  SURGERY: { entity: "SURGERY", delegate: () => (prisma as any).surgeryCase },
+}
+
+// Custom EMAIL/PHONE property values on a built-in record.
+async function customPropContact(recordType: string, recordId: string): Promise<{ emails: string[]; phones: string[] }> {
+  const meta = CP_CONTACT[recordType]
+  if (!meta) return { emails: [], phones: [] }
+  const [rec, defs] = await Promise.all([
+    meta.delegate().findUnique({ where: { id: recordId }, select: { customProperties: true } }),
+    prisma.customProperty.findMany({ where: { entityType: meta.entity as any, type: { in: ["EMAIL", "PHONE"] } as any } }),
+  ])
+  const bag: Record<string, any> = (rec?.customProperties as any) ?? {}
+  const emails: string[] = [], phones: string[] = []
+  for (const d of defs) {
+    const v = bag[d.id]
+    if (!v) continue
+    if (d.type === "EMAIL") emails.push(v)
+    else phones.push(v)
+  }
+  return { emails, phones }
+}
+
+// The record's email addresses / phone numbers, used to prefill Email/SMS and to
+// match emails + SMS into the activity feed — native columns AND custom properties.
 async function contactInfoFor(recordType: string, recordId: string): Promise<{ emails: string[]; phones: string[] }> {
-  if (recordType === "REFERRAL") {
-    const r = await prisma.referral.findUnique({ where: { id: recordId }, select: { patientEmail: true, patientPhone: true } })
-    return { emails: [r?.patientEmail].filter(Boolean) as string[], phones: [r?.patientPhone].filter(Boolean) as string[] }
-  }
-  if (recordType === "PROVIDER") {
-    const d = await prisma.referringDoctor.findUnique({ where: { id: recordId }, select: { email: true, phone: true, officePhone: true } })
-    return { emails: [d?.email].filter(Boolean) as string[], phones: [d?.phone, d?.officePhone].filter(Boolean) as string[] }
-  }
-  if (recordType === "PRACTICE") {
-    const p = await prisma.referringPractice.findUnique({ where: { id: recordId }, select: { phone: true } })
-    return { emails: [], phones: [p?.phone].filter(Boolean) as string[] }
-  }
-  if (recordType === "LOCATION") {
-    const l = await prisma.practiceLocation.findUnique({ where: { id: recordId }, select: { phone: true } })
-    return { emails: [], phones: [l?.phone].filter(Boolean) as string[] }
-  }
-  if (recordType === "SURGERY") {
-    const s = await (prisma as any).surgeryCase.findUnique({ where: { id: recordId }, select: { email: true } })
-    return { emails: [s?.email].filter(Boolean) as string[], phones: [] }
-  }
   if (recordType.startsWith("CO:")) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) } })
     const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId } })
@@ -97,7 +107,30 @@ async function contactInfoFor(recordType: string, recordId: string): Promise<{ e
       phones: props.filter((p) => p.type === "PHONE").map((p) => vals[p.id]).filter(Boolean),
     }
   }
-  return { emails: [], phones: [] }
+
+  let base: { emails: string[]; phones: string[] } = { emails: [], phones: [] }
+  if (recordType === "REFERRAL") {
+    const r = await prisma.referral.findUnique({ where: { id: recordId }, select: { patientEmail: true, patientPhone: true } })
+    base = { emails: [r?.patientEmail].filter(Boolean) as string[], phones: [r?.patientPhone].filter(Boolean) as string[] }
+  } else if (recordType === "PROVIDER") {
+    const d = await prisma.referringDoctor.findUnique({ where: { id: recordId }, select: { email: true, phone: true, officePhone: true } })
+    base = { emails: [d?.email].filter(Boolean) as string[], phones: [d?.phone, d?.officePhone].filter(Boolean) as string[] }
+  } else if (recordType === "PRACTICE") {
+    const p = await prisma.referringPractice.findUnique({ where: { id: recordId }, select: { phone: true } })
+    base = { emails: [], phones: [p?.phone].filter(Boolean) as string[] }
+  } else if (recordType === "LOCATION") {
+    const l = await prisma.practiceLocation.findUnique({ where: { id: recordId }, select: { phone: true } })
+    base = { emails: [], phones: [l?.phone].filter(Boolean) as string[] }
+  } else if (recordType === "SURGERY") {
+    const s = await (prisma as any).surgeryCase.findUnique({ where: { id: recordId }, select: { email: true } })
+    base = { emails: [s?.email].filter(Boolean) as string[], phones: [] }
+  }
+
+  const custom = await customPropContact(recordType, recordId)
+  return {
+    emails: Array.from(new Set([...base.emails, ...custom.emails])),
+    phones: Array.from(new Set([...base.phones, ...custom.phones])),
+  }
 }
 
 // The unified activity feed for a record: notes + associated tasks + activities.
