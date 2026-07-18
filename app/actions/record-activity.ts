@@ -362,7 +362,9 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
   const session = await auth()
   const uid = (session!.user as any).id
   const to = data.to.trim()
-  if (!to || !data.subject.trim() || !data.body.trim()) return { error: "To, subject and message are required." }
+  // The body may be HTML (rich editor); check it has real text, not just tags.
+  const bareBody = data.body.replace(/<[^>]*>/g, "").replace(/&nbsp;| /g, " ").trim()
+  if (!to || !data.subject.trim() || !bareBody) return { error: "To, subject and message are required." }
 
   const fromEmail = await resolveMyFromEmail(null)
   if (!fromEmail) return { error: "You don't have a sending address yet. Set one up in Settings → My Account." }
@@ -374,7 +376,10 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
   const cc = (data.cc ?? []).map((s) => s.trim()).filter(Boolean)
   const bcc = (data.bcc ?? []).map((s) => s.trim()).filter(Boolean)
 
-  const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${bodyText.replace(/\n/g, "<br/>")}</div>`
+  // Rich-editor HTML is used as-is; plain text keeps its line breaks.
+  const looksHtml = /<[a-z!/][^>]*>/i.test(bodyText)
+  const inner = looksHtml ? bodyText : bodyText.replace(/\n/g, "<br/>")
+  const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${inner}</div>`
   // Tracked send captures the thread ids for threading/replies, but it needs
   // Mail.ReadWrite (draft). If that isn't granted, fall back to the plain send
   // (Mail.Send only) so email always works — threading just won't be available.

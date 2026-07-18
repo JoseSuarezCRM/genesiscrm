@@ -8,6 +8,7 @@ import {
   getRecordContact, getComposeTemplates, sendEmailFromRecord, sendSmsFromRecord, logCall, logMeeting,
 } from "@/app/actions/record-activity"
 import StyledSelect from "@/components/ui/styled-select"
+import { RichTextEditor } from "@/components/rich-text-editor"
 import { MESSAGE_TOKEN_GROUPS } from "@/lib/message-tokens"
 import { cn } from "@/lib/utils"
 
@@ -70,7 +71,6 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   const [smBody, setSmBody] = useState("")
   const [emailTpls, setEmailTpls] = useState<Tpl[]>([])
   const [smsTpls, setSmsTpls] = useState<Tpl[]>([])
-  const emBodyRef = useRef<HTMLTextAreaElement>(null)
   const smBodyRef = useRef<HTMLTextAreaElement>(null)
   const [callOutcome, setCallOutcome] = useState(CALL_OUTCOMES[0])
   const [callBody, setCallBody] = useState("")
@@ -93,9 +93,12 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   }, [recordType, recordId, canEdit])
 
   function applyTemplate(t: Tpl, channel: "EMAIL" | "SMS") {
-    if (channel === "EMAIL") { if (t.subject) setEmSubject(t.subject); setEmBody(t.body) }
+    if (channel === "EMAIL") { if (t.subject) setEmSubject(t.subject); setEmBody(/<[a-z!/][^>]*>/i.test(t.body) ? t.body : t.body.replace(/\n/g, "<br>")) }
     else setSmBody(t.body)
   }
+
+  // Rich-editor HTML can be tags-only ("<br>") but visually empty.
+  const emBodyEmpty = emBody.replace(/<[^>]*>/g, "").replace(/&nbsp;| /g, "").trim() === ""
 
   if (!canEdit) return null
 
@@ -132,28 +135,34 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
     </button>
   )
 
-  // A small dropdown row: pick a template + insert a personalization field.
-  const ComposerTools = ({ templates, onTemplate, onField }: { templates: Tpl[]; onTemplate: (t: Tpl) => void; onField: (token: string) => void }) => (
-    <div className="flex flex-wrap items-center gap-2">
-      {templates.length > 0 && (
-        <div className="flex items-center gap-1.5 min-w-0">
-          <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-          <StyledSelect value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) onTemplate(t) }}
-            className={INPUT + " min-w-[150px]"}>
-            <option value="">Use a template…</option>
-            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </StyledSelect>
-        </div>
-      )}
-      <div className="flex items-center gap-1.5 min-w-0">
-        <Braces className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-        <StyledSelect value="" onChange={(e) => { if (e.target.value) onField(e.target.value) }} className={INPUT + " min-w-[140px]"}>
-          <option value="">Insert field…</option>
-          {TOKEN_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </StyledSelect>
+  // A small dropdown row: pick a template + (optionally) insert a personalization
+  // field. The rich email editor has its own Fields menu, so email omits onField.
+  const ComposerTools = ({ templates, onTemplate, onField }: { templates: Tpl[]; onTemplate: (t: Tpl) => void; onField?: (token: string) => void }) => {
+    if (templates.length === 0 && !onField) return null
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {templates.length > 0 && (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <StyledSelect value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) onTemplate(t) }}
+              className={INPUT + " min-w-[150px]"}>
+              <option value="">Use a template…</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </StyledSelect>
+          </div>
+        )}
+        {onField && (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Braces className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <StyledSelect value="" onChange={(e) => { if (e.target.value) onField(e.target.value) }} className={INPUT + " min-w-[140px]"}>
+              <option value="">Insert field…</option>
+              {TOKEN_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </StyledSelect>
+          </div>
+        )}
       </div>
-    </div>
-  )
+    )
+  }
 
   const isModal = open === "EMAIL" || open === "SMS"
 
@@ -269,12 +278,12 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
                       <input value={emBcc} onChange={(e) => setEmBcc(e.target.value)} placeholder="Bcc (comma separated)" className={INPUT + " w-full"} />
                     </>
                   )}
-                  <ComposerTools templates={emailTpls} onTemplate={(t) => applyTemplate(t, "EMAIL")} onField={(tok) => insertAtCaret(emBodyRef.current, emBody, tok, setEmBody)} />
+                  <ComposerTools templates={emailTpls} onTemplate={(t) => applyTemplate(t, "EMAIL")} />
                   <input value={emSubject} onChange={(e) => setEmSubject(e.target.value)} placeholder="Subject" className={INPUT + " w-full"} />
-                  <textarea ref={emBodyRef} rows={8} value={emBody} onChange={(e) => setEmBody(e.target.value)} placeholder="Write your message…" className={INPUT + " w-full resize-none"} />
+                  <RichTextEditor value={emBody} onChange={setEmBody} placeholder="Write your message…" minHeight={180} tokenGroups={MESSAGE_TOKEN_GROUPS} className="w-full" />
                   <div className="flex items-center pt-1">
                     <p className="text-xs text-slate-400">Sends from your own email address.</p>
-                    <SubmitBtn label="Send email" disabled={!emTo.trim() || !emSubject.trim() || !emBody.trim()} onClick={submit.EMAIL} />
+                    <SubmitBtn label="Send email" disabled={!emTo.trim() || !emSubject.trim() || emBodyEmpty} onClick={submit.EMAIL} />
                   </div>
                 </>
               )}
