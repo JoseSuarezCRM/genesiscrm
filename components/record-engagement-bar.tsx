@@ -5,18 +5,14 @@ import { useRouter } from "next/navigation"
 import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Loader2, Send, X, FileText, Braces } from "lucide-react"
 import {
   addRecordNote, createTaskForRecord,
-  getRecordContact, getComposeTemplates, sendEmailFromRecord, sendSmsFromRecord, logCall, logMeeting,
+  getRecordContact, getComposeTemplates, getRecordTokenGroups, sendEmailFromRecord, sendSmsFromRecord, logCall, logMeeting,
 } from "@/app/actions/record-activity"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor } from "@/components/rich-text-editor"
-import { MESSAGE_TOKEN_GROUPS } from "@/lib/message-tokens"
+import type { MessageTokenGroup } from "@/lib/message-tokens"
 import { cn } from "@/lib/utils"
 
 type Tpl = { id: string; name: string; subject: string; body: string }
-
-// Flattened personalization fields (StyledSelect renders a flat list), grouped in
-// the label so it still reads like the token catalog.
-const TOKEN_OPTIONS = MESSAGE_TOKEN_GROUPS.flatMap((g) => g.tokens.map((t) => ({ value: t.value, label: `${g.group}: ${t.label}` })))
 
 // Insert text at the caret of a controlled textarea, then restore the caret.
 function insertAtCaret(el: HTMLTextAreaElement | null, value: string, token: string, setValue: (v: string) => void) {
@@ -71,6 +67,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   const [smBody, setSmBody] = useState("")
   const [emailTpls, setEmailTpls] = useState<Tpl[]>([])
   const [smsTpls, setSmsTpls] = useState<Tpl[]>([])
+  const [tokenGroups, setTokenGroups] = useState<MessageTokenGroup[]>([])
   const smBodyRef = useRef<HTMLTextAreaElement>(null)
   const [callOutcome, setCallOutcome] = useState(CALL_OUTCOMES[0])
   const [callBody, setCallBody] = useState("")
@@ -90,7 +87,11 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
     })
     getComposeTemplates(recordType, recordId, "EMAIL" as any).then(setEmailTpls).catch(() => {})
     getComposeTemplates(recordType, recordId, "SMS" as any).then(setSmsTpls).catch(() => {})
+    getRecordTokenGroups(recordType, recordId).then(setTokenGroups).catch(() => {})
   }, [recordType, recordId, canEdit])
+
+  // Flat, group-prefixed field list for the SMS picker (no rich editor there).
+  const flatTokens = tokenGroups.flatMap((g) => g.tokens.map((t) => ({ value: t.value, label: `${g.group}: ${t.label}` })))
 
   function applyTemplate(t: Tpl, channel: "EMAIL" | "SMS") {
     if (channel === "EMAIL") { if (t.subject) setEmSubject(t.subject); setEmBody(/<[a-z!/][^>]*>/i.test(t.body) ? t.body : t.body.replace(/\n/g, "<br>")) }
@@ -137,8 +138,9 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
 
   // A small dropdown row: pick a template + (optionally) insert a personalization
   // field. The rich email editor has its own Fields menu, so email omits onField.
-  const ComposerTools = ({ templates, onTemplate, onField }: { templates: Tpl[]; onTemplate: (t: Tpl) => void; onField?: (token: string) => void }) => {
-    if (templates.length === 0 && !onField) return null
+  const ComposerTools = ({ templates, onTemplate, onField, fields }: { templates: Tpl[]; onTemplate: (t: Tpl) => void; onField?: (token: string) => void; fields?: { value: string; label: string }[] }) => {
+    const showFields = !!onField && !!fields && fields.length > 0
+    if (templates.length === 0 && !showFields) return null
     return (
       <div className="flex flex-wrap items-center gap-2">
         {templates.length > 0 && (
@@ -151,12 +153,12 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
             </StyledSelect>
           </div>
         )}
-        {onField && (
+        {showFields && (
           <div className="flex items-center gap-1.5 min-w-0">
             <Braces className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <StyledSelect value="" onChange={(e) => { if (e.target.value) onField(e.target.value) }} className={INPUT + " min-w-[140px]"}>
+            <StyledSelect value="" onChange={(e) => { if (e.target.value) onField!(e.target.value) }} className={INPUT + " min-w-[140px]"}>
               <option value="">Insert field…</option>
-              {TOKEN_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {fields!.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </StyledSelect>
           </div>
         )}
@@ -280,7 +282,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
                   )}
                   <ComposerTools templates={emailTpls} onTemplate={(t) => applyTemplate(t, "EMAIL")} />
                   <input value={emSubject} onChange={(e) => setEmSubject(e.target.value)} placeholder="Subject" className={INPUT + " w-full"} />
-                  <RichTextEditor value={emBody} onChange={setEmBody} placeholder="Write your message…" minHeight={180} tokenGroups={MESSAGE_TOKEN_GROUPS} className="w-full" />
+                  <RichTextEditor value={emBody} onChange={setEmBody} placeholder="Write your message…" minHeight={180} tokenGroups={tokenGroups} className="w-full" />
                   <div className="flex items-center pt-1">
                     <p className="text-xs text-slate-400">Sends from your own email address.</p>
                     <SubmitBtn label="Send email" disabled={!emTo.trim() || !emSubject.trim() || emBodyEmpty} onClick={submit.EMAIL} />
@@ -291,7 +293,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
               {open === "SMS" && (
                 <>
                   <input value={smTo} onChange={(e) => setSmTo(e.target.value)} placeholder="Phone number" className={INPUT + " w-full"} />
-                  <ComposerTools templates={smsTpls} onTemplate={(t) => applyTemplate(t, "SMS")} onField={(tok) => insertAtCaret(smBodyRef.current, smBody, tok, setSmBody)} />
+                  <ComposerTools templates={smsTpls} onTemplate={(t) => applyTemplate(t, "SMS")} fields={flatTokens} onField={(tok) => insertAtCaret(smBodyRef.current, smBody, tok, setSmBody)} />
                   <textarea ref={smBodyRef} rows={5} value={smBody} onChange={(e) => setSmBody(e.target.value)} placeholder="Write your message…" className={INPUT + " w-full resize-none"} />
                   <div className="flex items-center pt-1">
                     <p className="text-xs text-slate-400">{smBody.length} characters</p>

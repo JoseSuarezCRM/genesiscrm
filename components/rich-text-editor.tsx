@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import {
   Bold, Italic, Underline, List, ListOrdered, Link2, Heading2,
-  Strikethrough, RemoveFormatting, Braces, ChevronDown, ChevronLeft, ChevronRight,
+  Strikethrough, RemoveFormatting, Braces, ChevronDown, ChevronLeft, ChevronRight, Search,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -43,13 +43,35 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
   const [, force] = useState(0)
   const [tokenMenuOpen, setTokenMenuOpen] = useState(false)
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
   const fieldsBtnRef = useRef<HTMLButtonElement>(null)
+  const savedRange = useRef<Range | null>(null)
   const [menuPos, setMenuPos] = useState<{ left: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, top: 0, maxHeight: 320 })
 
-  function closeTokenMenu() { setTokenMenuOpen(false); setActiveGroup(null) }
+  function closeTokenMenu() { setTokenMenuOpen(false); setActiveGroup(null); setQuery("") }
+
+  // Remember the caret so a token still lands in the right place after the search
+  // box (or a menu click) steals focus from the editor.
+  function saveSelection() {
+    const el = ref.current
+    const sel = window.getSelection()
+    if (el && sel && sel.rangeCount && el.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      savedRange.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
+  function restoreSelection() {
+    const el = ref.current
+    if (!el) return
+    el.focus()
+    const sel = window.getSelection()
+    if (sel && savedRange.current && el.contains(savedRange.current.commonAncestorContainer)) {
+      sel.removeAllRanges(); sel.addRange(savedRange.current)
+    }
+  }
 
   function toggleTokenMenu() {
     if (tokenMenuOpen) { closeTokenMenu(); return }
+    saveSelection()
     const r = fieldsBtnRef.current?.getBoundingClientRect()
     if (r) {
       const below = window.innerHeight - r.bottom
@@ -104,11 +126,10 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
   }
 
   function insertToken(token: string) {
-    ref.current?.focus()
+    restoreSelection()
     document.execCommand("insertText", false, token)
     emit()
-    setTokenMenuOpen(false)
-    setActiveGroup(null)
+    closeTokenMenu()
   }
 
   const isActive = (cmd: string) => {
@@ -175,50 +196,78 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                 // Single unnamed group (flat tokens) → show tokens directly.
                 const flat = groups.length === 1 && !groups[0].group
                 const current = groups.find(g => g.group === activeGroup)
+                const q = query.trim().toLowerCase()
+                // Searching flattens everything into one filtered list across all groups.
+                const searchHits = q
+                  ? groups.flatMap(g => g.tokens
+                      .filter(t => t.label.toLowerCase().includes(q) || t.value.toLowerCase().includes(q))
+                      .map(t => ({ ...t, group: g.group })))
+                  : []
+                const TokenRow = (t: { label: string; value: string; group?: string }) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertToken(t.value) }}
+                    className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between gap-2"
+                  >
+                    <span className="text-sm text-slate-700 truncate">
+                      {t.label}{t.group ? <span className="text-slate-400"> · {t.group}</span> : null}
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono truncate">{t.value}</span>
+                  </button>
+                )
                 return (
                   <>
                     {/* Transparent backdrop closes the menu on any outside click */}
                     <div className="fixed inset-0 z-[998]" onMouseDown={e => { e.preventDefault(); closeTokenMenu() }} />
                     <div
-                      className="fixed z-[999] w-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1"
+                      className="fixed z-[999] w-64 flex flex-col bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
                       style={{ left: menuPos.left, top: menuPos.top, bottom: menuPos.bottom, maxHeight: menuPos.maxHeight }}
                     >
-                      {flat || current ? (
-                        <>
-                          {!flat && (
+                      <div className="p-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50">
+                          <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <input
+                            autoFocus
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            onMouseDown={e => e.stopPropagation()}
+                            placeholder="Search fields…"
+                            className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="overflow-y-auto py-1">
+                        {q ? (
+                          searchHits.length > 0 ? searchHits.map(TokenRow)
+                            : <p className="px-3 py-3 text-xs text-slate-400 text-center">No fields match “{query}”.</p>
+                        ) : flat || current ? (
+                          <>
+                            {!flat && (
+                              <button
+                                type="button"
+                                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setActiveGroup(null) }}
+                                className="w-full text-left px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 border-b border-slate-100 mb-1 sticky top-0 bg-white"
+                              >
+                                <ChevronLeft className="h-3.5 w-3.5" /> {current!.group}
+                              </button>
+                            )}
+                            {(flat ? groups[0].tokens : current!.tokens).map(TokenRow)}
+                          </>
+                        ) : (
+                          groups.map(g => (
                             <button
+                              key={g.group}
                               type="button"
-                              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setActiveGroup(null) }}
-                              className="w-full text-left px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 border-b border-slate-100 mb-1 sticky top-0 bg-white"
+                              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setActiveGroup(g.group) }}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between gap-2"
                             >
-                              <ChevronLeft className="h-3.5 w-3.5" /> {current!.group}
+                              <span className="text-sm font-medium text-slate-700">{g.group}</span>
+                              <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                             </button>
-                          )}
-                          {(flat ? groups[0].tokens : current!.tokens).map(t => (
-                            <button
-                              key={t.value}
-                              type="button"
-                              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertToken(t.value) }}
-                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between gap-2"
-                            >
-                              <span className="text-sm text-slate-700">{t.label}</span>
-                              <span className="text-xs text-slate-400 font-mono truncate">{t.value}</span>
-                            </button>
-                          ))}
-                        </>
-                      ) : (
-                        groups.map(g => (
-                          <button
-                            key={g.group}
-                            type="button"
-                            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setActiveGroup(g.group) }}
-                            className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between gap-2"
-                          >
-                            <span className="text-sm font-medium text-slate-700">{g.group}</span>
-                            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                          </button>
-                        ))
-                      )}
+                          ))
+                        )}
+                      </div>
                     </div>
                   </>
                 )
@@ -241,6 +290,8 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
           suppressContentEditableWarning
           onInput={emit}
           onBlur={emit}
+          onKeyUp={saveSelection}
+          onMouseUp={saveSelection}
           style={{ minHeight }}
           className="rte-content px-3 py-3 text-sm text-slate-800 outline-none overflow-y-auto max-h-[400px] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h2]:text-base [&_h2]:font-semibold [&_a]:text-blue-600 [&_a]:underline"
         />

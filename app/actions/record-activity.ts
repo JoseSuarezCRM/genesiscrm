@@ -10,8 +10,24 @@ import { sendSMS } from "@/lib/twilio"
 import { resolveMyFromEmail } from "@/app/actions/account"
 import { revalidatePath } from "next/cache"
 import { runTrigger_EngagementLogged } from "@/lib/automation-engine"
-import { buildReferralVars, resolveMessageTokens, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
+import { buildReferralVars, resolveMessageTokens, REFERRAL_TOKEN_SELECT, type MessageTokenGroup } from "@/lib/message-tokens"
+import { MESSAGE_TOKEN_GROUPS } from "@/lib/message-tokens"
+import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 import type { OutreachChannel } from "@prisma/client"
+
+// snake_case a field key so it matches the {single_brace} token resolver.
+function snakeToken(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()
+}
+
+function tokenValueForDisplay(v: any): string {
+  if (v == null) return ""
+  if (Array.isArray(v)) return v.filter(Boolean).join(", ")
+  if (v instanceof Date) return fmtDate(v)
+  return String(v)
+}
+
+const OBJECT_LABELS: Record<string, string> = { REFERRAL: "Referral", PROVIDER: "Provider", PRACTICE: "Practice", LOCATION: "Location", SURGERY: "Surgery" }
 
 export type ActivityKind = "NOTE" | "TASK" | "ACTIVITY" | "EMAIL" | "SMS" | "MEETING" | "CALL"
 
@@ -322,12 +338,66 @@ async function recordTokenVars(recordType: string, recordId: string): Promise<Re
   const contact = await contactInfoFor(recordType, recordId).catch(() => ({ emails: [], phones: [] }))
   if (contact.emails[0]) vars.patient_email = contact.emails[0]
   if (contact.phones[0]) vars.patient_phone = contact.phones[0]
+
+  if (recordType.startsWith("CO:")) {
+    const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { values: true } }).catch(() => null)
+    const values: Record<string, any> = (rec?.values as any) ?? {}
+    const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { properties: true } }).catch(() => null)
+    for (const p of ((def?.properties as any[]) ?? [])) vars[`cp_${p.id}`] = tokenValueForDisplay(values[p.id])
+    return vars
+  }
+
+  // Built-in object: every native field ({snake_key}) and every custom property ({cp_<id>}).
+  const meta = CP_CONTACT[recordType]
+  if (meta) {
+    const [rec, defs] = await Promise.all([
+      meta.delegate().findUnique({ where: { id: recordId } }).catch(() => null),
+      prisma.customProperty.findMany({ where: { entityType: meta.entity as any } }).catch(() => []),
+    ])
+    if (rec) {
+      for (const f of (RECORD_FIELDS[recordType] ?? [])) vars[snakeToken(f.key)] = tokenValueForDisplay((rec as any)[f.key])
+      const bag: Record<string, any> = (rec.customProperties as any) ?? {}
+      for (const d of defs) vars[`cp_${d.id}`] = tokenValueForDisplay(bag[d.id])
+    }
+  }
+
   const base = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || ""
   if (recordType === "REFERRAL") {
     const r = await prisma.referral.findUnique({ where: { id: recordId }, select: REFERRAL_TOKEN_SELECT }).catch(() => null)
     if (r) Object.assign(vars, buildReferralVars(r as any, { referralUrl: base ? `${base}/referrals/${recordId}` : undefined }))
   }
   return vars
+}
+
+// The Fields menu for the composer: every property of THIS record's object (native
+// + custom), plus the curated cross-object catalog for referrals. Built live from
+// the schema, so newly-created custom properties appear automatically.
+export async function getRecordTokenGroups(recordType: string, recordId: string): Promise<MessageTokenGroup[]> {
+  const session = await auth()
+  if (!session?.user) return []
+
+  if (recordType.startsWith("CO:")) {
+    const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { singular: true, properties: true } }).catch(() => null)
+    const tokens = ((def?.properties as any[]) ?? []).map((p) => ({ label: p.name as string, value: `{cp_${p.id}}` }))
+    return tokens.length ? [{ group: def?.singular ?? "Record", tokens }] : []
+  }
+
+  const meta = CP_CONTACT[recordType]
+  const nativeTokens = (RECORD_FIELDS[recordType] ?? []).map((f) => ({ label: f.label, value: `{${snakeToken(f.key)}}` }))
+  const customs = meta
+    ? await prisma.customProperty.findMany({ where: { entityType: meta.entity as any }, orderBy: { name: "asc" } }).catch(() => [])
+    : []
+  const customTokens = customs.map((c) => ({ label: c.name, value: `{cp_${c.id}}` }))
+
+  const groups: MessageTokenGroup[] = []
+  const own = [...nativeTokens, ...customTokens]
+  if (own.length) groups.push({ group: OBJECT_LABELS[recordType] ?? recordType, tokens: own })
+
+  // Referrals can resolve related-object tokens (provider, practice, surgery, links).
+  if (recordType === "REFERRAL") {
+    for (const g of MESSAGE_TOKEN_GROUPS) if (!["Patient", "Referral"].includes(g.group)) groups.push(g)
+  }
+  return groups
 }
 
 // Templates for the composer, pre-resolved against this record so inserting one drops
