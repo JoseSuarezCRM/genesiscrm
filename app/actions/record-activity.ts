@@ -331,8 +331,20 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
   if (!fromEmail) return { error: "You don't have a sending address yet. Set one up in Settings → My Account." }
 
   const html = `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#18181b;line-height:1.6;">${data.body.replace(/\n/g, "<br/>")}</div>`
-  // Tracked send captures the thread ids so replies can be matched + threaded.
-  const result = await sendEmailTracked(fromEmail, to, data.subject.trim(), html)
+  // Tracked send captures the thread ids for threading/replies, but it needs
+  // Mail.ReadWrite (draft). If that isn't granted, fall back to the plain send
+  // (Mail.Send only) so email always works — threading just won't be available.
+  const tracked = await sendEmailTracked(fromEmail, to, data.subject.trim(), html)
+  const result = tracked.success ? tracked : { success: false, error: tracked.error }
+  let conversationId = tracked.conversationId
+  let internetMessageId = tracked.internetMessageId
+  let graphMessageId = tracked.graphMessageId
+  if (!tracked.success) {
+    const plain = await sendEmail(to, data.subject.trim(), html, { fromEmail })
+    result.success = plain.success
+    result.error = plain.error
+    conversationId = internetMessageId = graphMessageId = undefined
+  }
 
   const rec = await prisma.directEmail.create({
     data: {
@@ -340,7 +352,7 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
       subject: data.subject.trim(), body: data.body.trim(),
       success: result.success, error: result.success ? null : (result.error ?? "Unknown error"),
       direction: "OUTBOUND", fromEmail, mailbox: fromEmail,
-      conversationId: result.conversationId, internetMessageId: result.internetMessageId, graphMessageId: result.graphMessageId,
+      conversationId, internetMessageId, graphMessageId,
       sentById: uid,
     },
   })
