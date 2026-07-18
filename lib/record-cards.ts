@@ -115,16 +115,25 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
 
   // Surgery's default middle: the editable Clinical card plus the functional cards
   // (Status / Procedure / Call Attempts / Documents), all reorderable together.
-  const defaultMiddle = entityType === "SURGERY"
-    ? [
-        { cardName: "status", title: "Update Status", fields: [], kind: "SURGERY_STATUS" },
-        { cardName: "clinical", title: "Clinical & Scheduling", fields: SURGERY_CLINICAL_FIELDS, columns: 2 },
-        { cardName: "procedure", title: "Procedure", fields: [], kind: "SURGERY_PROCEDURE" },
-        { cardName: "calls", title: "Call Attempts", fields: [], kind: "SURGERY_CALLS" },
-        { cardName: "documents", title: "Documents", fields: [], kind: "SURGERY_DOCUMENTS" },
-      ]
-    : []
-  const middleCards = middleLayouts.length ? toCards(middleLayouts as any) : defaultMiddle
+  const surgeryMiddle = [
+    { cardName: "status", title: "Update Status", fields: [], kind: "SURGERY_STATUS" },
+    { cardName: "clinical", title: "Clinical & Scheduling", fields: SURGERY_CLINICAL_FIELDS, columns: 2 },
+    { cardName: "procedure", title: "Procedure", fields: [], kind: "SURGERY_PROCEDURE" },
+    { cardName: "calls", title: "Call Attempts", fields: [], kind: "SURGERY_CALLS" },
+    { cardName: "documents", title: "Documents", fields: [], kind: "SURGERY_DOCUMENTS" },
+  ]
+
+  let middleCards: any[]
+  if (entityType === "SURGERY") {
+    // Functional cards can't be deleted, so always ensure they're present — a case
+    // customized before they existed would otherwise be missing them.
+    const persisted = middleLayouts.length ? toCards(middleLayouts as any) : []
+    const present = new Set(persisted.map((c: any) => c.cardName))
+    const missing = surgeryMiddle.filter((c) => !present.has(c.cardName))
+    middleCards = persisted.length ? [...persisted, ...missing] : surgeryMiddle
+  } else {
+    middleCards = middleLayouts.length ? toCards(middleLayouts as any) : []
+  }
 
   return { cards, middleCards, catalog, values }
 }

@@ -32,6 +32,22 @@ function fmt(d: string | Date) {
   return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
 }
 
+// Long bodies (emails especially) render at a fixed height and expand on click.
+function ActivityBody({ body }: { body: string }) {
+  const [open, setOpen] = useState(false)
+  const isLong = body.length > 280 || body.split("\n").length > 4
+  return (
+    <div className="mt-0.5">
+      <p className={cn("text-sm text-slate-600 whitespace-pre-wrap break-words", !open && isLong && "line-clamp-4")}>{body}</p>
+      {isLong && (
+        <button onClick={() => setOpen((v) => !v)} className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+          {open ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function RecordActivityFeed({ recordType, recordId, items, users = [], canEdit, showActions = true }: {
   recordType: string
   recordId: string
@@ -82,7 +98,7 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
                       <p className="text-sm font-medium text-slate-800">{item.title}</p>
                       <span className="text-xs text-slate-400 shrink-0">{fmt(item.date)}</span>
                     </div>
-                    {item.body && <p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap break-words">{item.body}</p>}
+                    {item.body && <ActivityBody body={item.body} />}
                     <p className="text-xs text-slate-400 mt-1">{item.by ? `by ${item.by}` : ""}</p>
                   </div>
                   {deletable && (

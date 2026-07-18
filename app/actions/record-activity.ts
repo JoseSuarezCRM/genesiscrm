@@ -41,7 +41,19 @@ function fmtDateTime(d: string | Date): string {
 }
 
 function stripHtml(s: string): string {
-  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+  return s
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#3?9;|&apos;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
 
 // Phone → E.164 so it can be matched against SMS threads.
@@ -172,7 +184,7 @@ export async function listRecordActivities(recordType: string, recordId: string)
       include: { sentBy: { select: { name: true, email: true } } },
     })
     for (const e of sent) {
-      items.push({ id: e.id, kind: "EMAIL", title: e.subject, body: stripHtml(e.body).slice(0, 400), date: e.sentAt, by: e.sentBy?.name ?? e.sentBy?.email ?? null })
+      items.push({ id: e.id, kind: "EMAIL", title: e.subject, body: stripHtml(e.body), date: e.sentAt, by: e.sentBy?.name ?? e.sentBy?.email ?? null })
     }
   }
   const e164 = phones.map(toE164).filter(Boolean) as string[]
