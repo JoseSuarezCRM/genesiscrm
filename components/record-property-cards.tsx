@@ -9,6 +9,7 @@ import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import { useCardReorder } from "@/components/use-card-reorder"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import CallLogCard from "@/components/call-log-card"
+import PhoneInput from "@/components/phone-input"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
@@ -152,6 +153,8 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
         </>
       ) : f.type === "long_text" ? (
         <textarea rows={3} value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} className={input + " resize-none"} />
+      ) : f.type === "phone" ? (
+        <PhoneInput value={String(draft ?? "")} onChange={setDraft} />
       ) : (
         <input
           type={f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "datetime" ? "datetime-local" : "text"}
