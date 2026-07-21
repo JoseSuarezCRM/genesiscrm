@@ -106,8 +106,13 @@ function resolveTemplate(template: string, vars: TemplateVars): string {
     .replace(/\{record_name\}/g, vars.record_name ?? "the record")
     .replace(/\{referral_url\}/g, vars.referral_url ?? "")
     .replace(/\{referral_button\}/g, btnHtml)
-    // Custom-property tokens {cp_<id>} — resolve from the record, leave as-is if unknown.
-    .replace(/\{cp_([a-zA-Z0-9]+)\}/g, (m, id: string) => vars.__custom?.[id] ?? m)
+    // Custom tokens: {cp_<id>} or a property's internal name. Resolved from the
+    // record's custom values; left as-is when unknown.
+    .replace(/\{([a-zA-Z0-9_]+)\}/g, (m, k: string) => vars.__custom?.[k] ?? m)
+}
+
+function engineSlug(s: string): string {
+  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")
 }
 
 function buildReferralUrl(referralId: string): string | undefined {
@@ -420,8 +425,31 @@ async function runSingleAction(
   recordRef?: RecordRef | null,
 ): Promise<string | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
-  // Make {cp_<id>} custom-property tokens resolvable from the triggering record.
-  vars = { ...vars, __custom: { ...customValueMap(record), ...(vars.__custom ?? {}) } }
+  // Make custom-property tokens resolvable from the triggering record — both the
+  // {cp_<id>} form and each property's readable internal name.
+  {
+    const byId = customValueMap(record) // { propId: value }
+    const custom: Record<string, string> = { ...(vars.__custom ?? {}) }
+    for (const [id, v] of Object.entries(byId)) custom[`cp_${id}`] = v
+    const entity = recordRef?.type ?? (referralId ? "REFERRAL" : null)
+    if (entity) {
+      try {
+        let defs: { id: string; internalName: string | null; name: string }[] = []
+        if (entity.startsWith("CO:")) {
+          const def = await (prisma as any).customObjectDef.findUnique({ where: { key: entity.slice(3) }, select: { properties: true } })
+          defs = (((def?.properties as any[]) ?? [])).map((p: any) => ({ id: p.id, internalName: p.internalName ?? null, name: p.name }))
+        } else {
+          defs = await prisma.customProperty.findMany({ where: { entityType: entity as any }, select: { id: true, internalName: true, name: true } })
+        }
+        for (const d of defs) {
+          if (byId[d.id] === undefined) continue
+          const key = d.internalName || engineSlug(d.name)
+          if (key) custom[key] = byId[d.id]
+        }
+      } catch { /* defs unavailable — {cp_<id>} tokens still resolve */ }
+    }
+    vars = { ...vars, __custom: custom }
+  }
 
   // If the action references a saved Communications template, load its content.
   // Referencing by id keeps workflow graphs small and lets edits propagate.

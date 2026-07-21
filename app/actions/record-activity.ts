@@ -351,7 +351,11 @@ async function recordTokenVars(recordType: string, recordId: string): Promise<Re
     const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { values: true } }).catch(() => null)
     const values: Record<string, any> = (rec?.values as any) ?? {}
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { properties: true } }).catch(() => null)
-    for (const p of ((def?.properties as any[]) ?? [])) vars[`cp_${p.id}`] = p.type === "DATE_TIME" ? fmtDateTimeToken(values[p.id]) : tokenValueForDisplay(values[p.id])
+    for (const p of ((def?.properties as any[]) ?? [])) {
+      const v = p.type === "DATE_TIME" ? fmtDateTimeToken(values[p.id]) : tokenValueForDisplay(values[p.id])
+      vars[`cp_${p.id}`] = v
+      vars[p.internalName || snakeToken(p.name)] = v
+    }
     return vars
   }
 
@@ -368,7 +372,11 @@ async function recordTokenVars(recordType: string, recordId: string): Promise<Re
         vars[snakeToken(f.key)] = f.type === "datetime" ? fmtDateTimeToken(raw) : tokenValueForDisplay(raw)
       }
       const bag: Record<string, any> = (rec.customProperties as any) ?? {}
-      for (const d of defs) vars[`cp_${d.id}`] = (d.type as any) === "DATE_TIME" ? fmtDateTimeToken(bag[d.id]) : tokenValueForDisplay(bag[d.id])
+      for (const d of defs) {
+        const v = (d.type as any) === "DATE_TIME" ? fmtDateTimeToken(bag[d.id]) : tokenValueForDisplay(bag[d.id])
+        vars[`cp_${d.id}`] = v                                   // back-compat token
+        vars[(d as any).internalName || snakeToken(d.name)] = v  // readable token
+      }
     }
   }
 
@@ -389,7 +397,7 @@ export async function getRecordTokenGroups(recordType: string, recordId: string)
 
   if (recordType.startsWith("CO:")) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { singular: true, properties: true } }).catch(() => null)
-    const tokens = ((def?.properties as any[]) ?? []).map((p) => ({ label: p.name as string, value: `{cp_${p.id}}` }))
+    const tokens = ((def?.properties as any[]) ?? []).map((p) => ({ label: p.name as string, value: `{${p.internalName || snakeToken(p.name)}}` }))
     return tokens.length ? [{ group: def?.singular ?? "Record", tokens }] : []
   }
 
@@ -398,7 +406,7 @@ export async function getRecordTokenGroups(recordType: string, recordId: string)
   const customs = meta
     ? await prisma.customProperty.findMany({ where: { entityType: meta.entity as any }, orderBy: { name: "asc" } }).catch(() => [])
     : []
-  const customTokens = customs.map((c) => ({ label: c.name, value: `{cp_${c.id}}` }))
+  const customTokens = customs.map((c) => ({ label: c.name, value: `{${(c as any).internalName || snakeToken(c.name)}}` }))
 
   const groups: MessageTokenGroup[] = []
   const own = [...nativeTokens, ...customTokens]

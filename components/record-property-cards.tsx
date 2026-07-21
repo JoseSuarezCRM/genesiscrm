@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Settings, Plus, Check, Loader2, GripVertical } from "lucide-react"
+import { Settings, Plus, Loader2, GripVertical } from "lucide-react"
+import { showToast } from "@/components/toast"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
 import { replaceColumnCards } from "@/app/actions/record-card-actions"
@@ -73,6 +74,8 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
   // For select_or_other: the picked option, and the free text when "other".
   const [sel, setSel] = useState("")
   const [otherText, setOtherText] = useState("")
+  // Guards a single commit per edit (Enter + blur can both fire).
+  const doneRef = useRef(false)
 
   const Label = <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide">{f.label}</span>
 
@@ -83,8 +86,10 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
       if (v && !(f.options ?? []).includes(v)) { setSel(f.otherOption ?? "Other"); setOtherText(v) }
       else { setSel(v); setOtherText("") }
     }
+    doneRef.current = false
     setEditing(true)
   }
+  function cancelEdit() { doneRef.current = true; setEditing(false) }
 
   // Record Owner: an always-on dropdown (built-in + custom objects go through setRecordOwner).
   if (f.type === "user") {
@@ -95,7 +100,7 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
         <StyledSelect
           value={String(value ?? "")}
           disabled={isPending}
-          onChange={(e) => startTransition(async () => { await setRecordOwner(entityType, recordId, e.target.value || null); router.refresh() })}
+          onChange={(e) => startTransition(async () => { await setRecordOwner(entityType, recordId, e.target.value || null); router.refresh(); showToast(`"${f.label}" saved`) })}
           className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400">
           <option value="">— Unassigned —</option>
           {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
@@ -108,15 +113,25 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
     return <div className="py-2 space-y-1">{Label}<span className="block text-sm text-slate-900 font-medium break-words">{display(f, value, userMap)}</span></div>
   }
 
-  function save() {
-    let val: any = draft
-    if (f.type === "select_or_other") val = sel === (f.otherOption ?? "Other") ? otherText : sel
-    else if ((f.type === "date" || f.type === "datetime") && draft) val = new Date(String(draft)).toISOString()
+  // Auto-save: no Save button — commit on select / Enter / blur. A "saved" toast
+  // (with Undo) confirms it, matching HubSpot's inline editing.
+  function commit(raw: any) {
+    if (doneRef.current) return
+    let val: any = raw
+    if ((f.type === "date" || f.type === "datetime") && raw) val = new Date(String(raw)).toISOString()
+    const prev = value ?? ""
+    if (String(val ?? "") === String(prev ?? "")) { cancelEdit(); return }
+    doneRef.current = true
     startTransition(async () => {
       const res = await updateRecordField(entityType as any, recordId, f.key, val)
-      if (!(res as any)?.error) { setEditing(false); router.refresh() }
+      if ((res as any)?.error) { doneRef.current = false; return }
+      setEditing(false); router.refresh()
+      showToast(`"${f.label}" saved`, () => startTransition(async () => {
+        await updateRecordField(entityType as any, recordId, f.key, prev); router.refresh()
+      }))
     })
   }
+  const commitOther = () => commit(sel === (f.otherOption ?? "Other") ? otherText : sel)
 
   if (!editing) {
     return (
@@ -132,45 +147,50 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
 
   const input = "w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400"
   const otherLabel = f.otherOption ?? "Other"
+  // Enter commits; Escape cancels (for single-line inputs).
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(draft) }
+    else if (e.key === "Escape") { e.preventDefault(); cancelEdit() }
+  }
   return (
     <div className="py-2 space-y-1.5">
       {Label}
       {f.type === "select" ? (
-        <StyledSelect value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} className={input}>
+        <StyledSelect autoOpen value={String(draft ?? "")} onChange={(e) => commit(e.target.value)} className={input}>
           <option value="">—</option>
           {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
         </StyledSelect>
       ) : f.type === "select_or_other" ? (
         <>
-          <StyledSelect value={sel} onChange={(e) => setSel(e.target.value)} className={input}>
+          <StyledSelect autoOpen={sel === ""} value={sel}
+            onChange={(e) => { const v = e.target.value; setSel(v); if (v !== otherLabel) commit(v) }} className={input}>
             <option value="">—</option>
             {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
             {!(f.options ?? []).includes(otherLabel) && <option value={otherLabel}>{otherLabel}…</option>}
           </StyledSelect>
           {sel === otherLabel && (
-            <input value={otherText} onChange={(e) => setOtherText(e.target.value)} placeholder={`${otherLabel} details…`} className={input} autoFocus />
+            <input value={otherText} onChange={(e) => setOtherText(e.target.value)} onBlur={commitOther}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitOther() } else if (e.key === "Escape") cancelEdit() }}
+              placeholder={`${otherLabel} details…`} className={input} autoFocus />
           )}
         </>
       ) : f.type === "long_text" ? (
-        <textarea rows={3} value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} className={input + " resize-none"} />
+        <textarea rows={3} value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} onBlur={() => commit(draft)}
+          onKeyDown={(e) => { if (e.key === "Escape") cancelEdit() }} className={input + " resize-none"} autoFocus />
       ) : f.type === "phone" ? (
-        <PhoneInput value={String(draft ?? "")} onChange={setDraft} />
+        <PhoneInput value={String(draft ?? "")} onChange={setDraft} onCommit={() => commit(draft)} />
       ) : (
         <input
           type={f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "datetime" ? "datetime-local" : "text"}
           value={f.type === "datetime" && draft ? isoToLocalInput(draft) : String(draft ?? "")}
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => commit(draft)}
+          onKeyDown={onKey}
           className={input}
           autoFocus
         />
       )}
-      <div className="flex items-center gap-1">
-        <button onClick={save} disabled={isPending}
-          className="inline-flex items-center gap-1 h-7 px-2 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 disabled:opacity-50">
-          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
-        </button>
-        <button onClick={() => setEditing(false)} className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800">Cancel</button>
-      </div>
+      {isPending && <Loader2 className="h-3 w-3 animate-spin text-slate-400" />}
     </div>
   )
 }

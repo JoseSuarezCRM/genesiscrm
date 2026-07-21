@@ -200,6 +200,7 @@ export const OBJECT_CUSTOM_ENTITY: Record<string, "REFERRAL" | "PROVIDER" | "PRA
 export interface CustomPropertyInput {
   id: string
   name: string
+  internalName?: string | null // token slug
   type: string                 // CustomPropertyType
   options?: string[]
 }

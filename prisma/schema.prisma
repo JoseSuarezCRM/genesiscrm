@@ -166,17 +166,19 @@ enum CustomPropertyEntityType {
 }
 
 model CustomProperty {
-  id          String                     @id @default(cuid())
-  name        String                     // e.g., "Surgery Type", "Insurance Plan"
-  type        CustomPropertyType
-  entityType  CustomPropertyEntityType
-  required    Boolean                    @default(false)
-  description String?
-  options     String[]                   @default([])  // for DROPDOWN and MULTI_SELECT
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  id           String                     @id @default(cuid())
+  name         String                     // e.g., "Surgery Type", "Insurance Plan"
+  internalName String?                    // token slug, e.g. "surgery_type" (unique per entity)
+  type         CustomPropertyType
+  entityType   CustomPropertyEntityType
+  required     Boolean                    @default(false)
+  description  String?
+  options      String[]                   @default([])  // for DROPDOWN and MULTI_SELECT
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
 
   @@unique([name, entityType])
+  @@unique([internalName, entityType])
 }
 
 // ── Custom objects (HubSpot-style) ───────────────────────────────────────────

@@ -11,6 +11,7 @@ import { Plus, Trash2, Pencil, X, Search } from "lucide-react"
 interface CustomProperty {
   id: string
   name: string
+  internalName: string | null
   type: string
   entityType: string
   required: boolean
@@ -18,6 +19,8 @@ interface CustomProperty {
   options: string[]
   createdAt: Date
 }
+
+const slugify = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")
 
 interface Props {
   propsByEntity: Record<string, CustomProperty[]>
@@ -45,6 +48,9 @@ function PropertyDialog({ entityType, editing, onClose }: { entityType: string; 
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState(editing?.name ?? "")
+  const [internalName, setInternalName] = useState(editing?.internalName ?? "")
+  // Once the user edits the internal name by hand, stop auto-filling it from the label.
+  const [internalTouched, setInternalTouched] = useState(!!editing?.internalName)
   const [type, setType] = useState(editing?.type ?? "TEXT")
   const [required, setRequired] = useState(editing?.required ?? false)
   const [description, setDescription] = useState(editing?.description ?? "")
@@ -52,15 +58,21 @@ function PropertyDialog({ entityType, editing, onClose }: { entityType: string; 
   const [error, setError] = useState("")
   const hasOptions = type === "DROPDOWN" || type === "MULTI_SELECT"
 
+  function onNameChange(v: string) {
+    setName(v)
+    if (!internalTouched) setInternalName(slugify(v))
+  }
+
   function submit() {
     if (!name.trim()) { setError("Property name is required"); return }
     const optionsArray = hasOptions ? options.split("\n").map((o) => o.trim()).filter(Boolean) : []
     if (hasOptions && optionsArray.length === 0) { setError("Add at least one option"); return }
+    const internal = slugify(internalName || name)
 
     startTransition(async () => {
       const res = editing
-        ? await updateCustomProperty({ id: editing.id, name: name.trim(), required, description: description.trim() || undefined, options: optionsArray }) as any
-        : await createCustomProperty({ name: name.trim(), type: type as any, entityType: entityType as any, required, description: description.trim() || undefined, options: optionsArray }) as any
+        ? await updateCustomProperty({ id: editing.id, name: name.trim(), internalName: internal, required, description: description.trim() || undefined, options: optionsArray }) as any
+        : await createCustomProperty({ name: name.trim(), internalName: internal, type: type as any, entityType: entityType as any, required, description: description.trim() || undefined, options: optionsArray }) as any
       if (res?.error) { setError(res.error); return }
       router.refresh()
       onClose()
@@ -76,8 +88,15 @@ function PropertyDialog({ entityType, editing, onClose }: { entityType: string; 
         </div>
         <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Property name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Insurance Plan" className={INPUT} autoFocus />
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Property label</label>
+            <input value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="e.g. Insurance Plan" className={INPUT} autoFocus />
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-xs text-slate-400 shrink-0">Internal name</span>
+              <input value={internalName} onChange={(e) => { setInternalName(slugify(e.target.value)); setInternalTouched(true) }}
+                placeholder="auto-filled from label"
+                className="flex-1 min-w-0 font-mono text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400" />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">Used as the personalization token, e.g. <span className="font-mono">{`{${internalName || "field"}}`}</span></p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -22,10 +22,12 @@ const COUNTRIES: { label: string; dial: string }[] = [
 
 const realDial = (d: string) => (d === "+1ca" ? "+1" : d)
 
-export default function PhoneInput({ value, onChange, className }: {
+export default function PhoneInput({ value, onChange, className, onCommit }: {
   value: string
   onChange: (v: string) => void
   className?: string
+  /** Fired on Enter or when focus leaves the whole control (for auto-save). */
+  onCommit?: () => void
 }) {
   // Split a stored value into a dial code + the rest, longest match wins.
   const { dial, rest } = useMemo(() => {
@@ -45,7 +47,8 @@ export default function PhoneInput({ value, onChange, className }: {
   }
 
   return (
-    <div className="flex gap-1.5 min-w-0">
+    <div className="flex gap-1.5 min-w-0"
+      onBlur={onCommit ? (e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) onCommit() } : undefined}>
       <StyledSelect value={COUNTRIES.find((c) => realDial(c.dial) === dial)?.dial ?? "+1"}
         onChange={(e) => emit(e.target.value, rest)}
         className="w-[76px] shrink-0 text-sm border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none focus:border-zinc-400">
@@ -54,6 +57,7 @@ export default function PhoneInput({ value, onChange, className }: {
       <input
         value={rest}
         onChange={(e) => emit(dial, e.target.value)}
+        onKeyDown={onCommit ? (e) => { if (e.key === "Enter") { e.preventDefault(); onCommit() } } : undefined}
         placeholder="Phone number"
         className="min-w-0 flex-1 w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400"
         autoFocus

@@ -2144,14 +2144,16 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
       }))
     : OBJECT_PROPERTY_DEFS[objectKey] ?? REFERRAL_PROPERTY_DEFS
   const objectEntity = OBJECT_CUSTOM_ENTITY[objectKey]
-  const customDefs = (objectEntity ? customPropsByEntity[objectEntity] ?? [] : []).map(customPropertyToDef)
+  const rawCustoms = objectEntity ? customPropsByEntity[objectEntity] ?? [] : []
+  const customDefs = rawCustoms.map(customPropertyToDef)
   const objectActions = actionsForObject(objectKey)
   const objectTokens = tokensForObject(objectKey)
   // Fields menu for message bodies: native tokens + every custom property of the
-  // object ({cp_<id>}), so newly-created properties are usable in workflow sends.
+  // object, addressed by its readable internal name, so newly-created properties
+  // are usable in workflow sends.
   const objectFieldTokens: PersonalizationToken[] = [
     ...tokensFromStrings(objectTokens),
-    ...customDefs.map(d => ({ label: d.label, value: `{cp_${d.path.replace(/^custom:/, "")}}` })),
+    ...rawCustoms.map(c => ({ label: c.name, value: `{${c.internalName || c.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}}` })),
   ]
 
   function handleObjectChange(key: string) {

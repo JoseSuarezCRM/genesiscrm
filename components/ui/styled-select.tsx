@@ -16,6 +16,8 @@ interface Props {
   children: React.ReactNode
   className?: string
   disabled?: boolean
+  /** Open the menu as soon as it mounts (for click-to-edit inline fields). */
+  autoOpen?: boolean
 }
 
 type Option = { value: string; label: string }
@@ -36,11 +38,14 @@ function collectOptions(children: React.ReactNode, out: Option[]) {
   })
 }
 
-export default function StyledSelect({ value, onChange, children, className, disabled }: Props) {
+export default function StyledSelect({ value, onChange, children, className, disabled, autoOpen }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, width: 0, maxHeight: 288 })
+
+  // Open on mount when requested (one-click inline editing).
+  useEffect(() => { if (autoOpen && !disabled) { place(); setOpen(true) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Layout classes (width/flex/grid) belong on the wrapper; the rest style the trigger
   const classes = (className ?? "").split(/\s+/).filter(Boolean)

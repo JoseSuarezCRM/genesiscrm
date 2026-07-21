@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import Sidebar from "@/components/sidebar"
 import SessionWatcher from "@/components/session-watcher"
 import TopToolbar from "@/components/top-toolbar"
+import ToastHost from "@/components/toast"
 
 export default async function DashboardLayout({
   children,
@@ -45,6 +46,7 @@ export default async function DashboardLayout({
         </main>
       </div>
       <SessionWatcher />
+      <ToastHost />
     </div>
   )
 }
