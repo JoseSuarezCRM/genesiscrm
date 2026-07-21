@@ -17,6 +17,7 @@ const PROP_TYPES: { value: CustomPropType; label: string }[] = [
   { value: "EMAIL", label: "Email" },
   { value: "PHONE", label: "Phone" },
   { value: "DATE", label: "Date" },
+  { value: "DATE_TIME", label: "Date & time" },
   { value: "CHECKBOX", label: "Checkbox" },
   { value: "DROPDOWN", label: "Dropdown" },
   { value: "MULTI_SELECT", label: "Multi-select" },

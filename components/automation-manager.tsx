@@ -17,7 +17,7 @@ import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
-import { RichTextEditor, tokensFromStrings } from "@/components/rich-text-editor"
+import { RichTextEditor, tokensFromStrings, type PersonalizationToken } from "@/components/rich-text-editor"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
@@ -892,7 +892,7 @@ function RecipientRows({
 interface MessageTemplateOption { id: string; name: string; channel: string }
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, dateProps = [], templates = [], writableProps = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -900,6 +900,8 @@ function ActionConfigFields({
   users: User[]
   tags: Tag[]
   tokens?: string[]
+  // Rich labelled tokens (native + custom props) for the message-body Fields menu.
+  fieldTokens?: PersonalizationToken[]
   dateProps?: PropertyDef[]
   templates?: MessageTemplateOption[]
   // Properties of the workflow's object that SET_PROPERTY can write to.
@@ -1296,7 +1298,7 @@ function ActionConfigFields({
             onChange={html => set("body", html)}
             minHeight={140}
             placeholder="e.g. Hi, A new referral for {patient_name} was received from {practice_name}."
-            tokens={tokensFromStrings(tokens)}
+            tokens={fieldTokens ?? tokensFromStrings(tokens)}
           />
         </div>
         </>}
@@ -1881,12 +1883,13 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, templates = [] }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
   users: User[]; tags: Tag[]; practices: Practice[]; locations: Location[]
   pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]; tokens: string[]
+  fieldTokens?: PersonalizationToken[]
   templates?: MessageTemplateOption[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
@@ -1917,7 +1920,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} dateProps={dateProps} templates={templates} writableProps={writableProps} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -2144,6 +2147,12 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const customDefs = (objectEntity ? customPropsByEntity[objectEntity] ?? [] : []).map(customPropertyToDef)
   const objectActions = actionsForObject(objectKey)
   const objectTokens = tokensForObject(objectKey)
+  // Fields menu for message bodies: native tokens + every custom property of the
+  // object ({cp_<id>}), so newly-created properties are usable in workflow sends.
+  const objectFieldTokens: PersonalizationToken[] = [
+    ...tokensFromStrings(objectTokens),
+    ...customDefs.map(d => ({ label: d.label, value: `{cp_${d.path.replace(/^custom:/, "")}}` })),
+  ]
 
   function handleObjectChange(key: string) {
     setObjectKey(key)
@@ -2308,7 +2317,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           onSave={(n) => { setGraph(pruneUnreachable(updateNode(graph, n))); setEditingNodeId(null) }}
           users={users} tags={tags} practices={practices} locations={locations}
           pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions} tokens={objectTokens}
-          templates={templates}
+          fieldTokens={objectFieldTokens} templates={templates}
         />
       )}
     </div>

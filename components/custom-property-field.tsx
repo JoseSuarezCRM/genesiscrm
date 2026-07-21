@@ -47,6 +47,8 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
         return property.value ? "✓ Yes" : "○ No"
       case "DATE":
         return new Date(property.value).toLocaleDateString()
+      case "DATE_TIME":
+        return new Date(property.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
       case "MULTI_SELECT":
         return Array.isArray(property.value) ? property.value.join(", ") : "—"
       default:
@@ -74,6 +76,15 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
           <input
             type="date"
             value={value ? new Date(value).toISOString().split("T")[0] : ""}
+            onChange={(e) => setEditValue(e.target.value ? new Date(e.target.value).toISOString() : null)}
+            className={inputClasses}
+          />
+        )
+      case "DATE_TIME":
+        return (
+          <input
+            type="datetime-local"
+            value={value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
             onChange={(e) => setEditValue(e.target.value ? new Date(e.target.value).toISOString() : null)}
             className={inputClasses}
           />

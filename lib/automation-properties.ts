@@ -188,12 +188,12 @@ export const OBJECT_PROPERTY_DEFS: Record<string, PropertyDef[]> = {
 }
 
 // Which custom-property entity (if any) backs each workflow object.
-export const OBJECT_CUSTOM_ENTITY: Record<string, "REFERRAL" | "PROVIDER" | "PRACTICE" | null> = {
+export const OBJECT_CUSTOM_ENTITY: Record<string, "REFERRAL" | "PROVIDER" | "PRACTICE" | "LOCATION" | "SURGERY" | null> = {
   REFERRAL: "REFERRAL",
   PROVIDER: "PROVIDER",
   PRACTICE: "PRACTICE",
-  LOCATION: null,
-  SURGERY: null,
+  LOCATION: "LOCATION",
+  SURGERY: "SURGERY",
 }
 
 // Map a custom property (DB) into a PropertyDef the criteria builder can use.
@@ -210,6 +210,7 @@ export function customPropertyToDef(cp: CustomPropertyInput): PropertyDef {
     case "NUMBER":
       return { id: path, label: cp.name, type: "number", path }
     case "DATE":
+    case "DATE_TIME":
       return { id: path, label: cp.name, type: "date", path }
     case "CHECKBOX":
       return { id: path, label: cp.name, type: "boolean", path }

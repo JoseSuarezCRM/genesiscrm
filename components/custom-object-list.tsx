@@ -60,6 +60,7 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
   switch (p.type) {
     case "CHECKBOX": return v ? "Yes" : "No"
     case "DATE": return fmtDate(v)
+    case "DATE_TIME": return v ? new Date(v).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
     case "MULTI_SELECT": return Array.isArray(v) ? v.join(", ") : String(v)
     case "USER": return userMap[v] ?? String(v)
     default: return String(v)
@@ -336,6 +337,8 @@ function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, o
                 <input type="checkbox" checked={!!values[p.id]} onChange={(e) => set(p.id, e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
               ) : p.type === "DATE" ? (
                 <input type="date" className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)} />
+              ) : p.type === "DATE_TIME" ? (
+                <input type="datetime-local" className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)} />
               ) : p.type === "NUMBER" ? (
                 <input type="number" className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value === "" ? "" : Number(e.target.value))} />
               ) : p.type === "DROPDOWN" ? (

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
 export type CustomPropType =
-  | "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL" | "USER"
+  | "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "DATE_TIME" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL" | "USER"
 
 export interface CustomObjectProperty {
   id: string

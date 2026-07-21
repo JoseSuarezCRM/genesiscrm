@@ -13,7 +13,7 @@ import { RECORD_FIELDS, defaultCardFor, SURGERY_CLINICAL_FIELDS, type RecordFiel
 
 const CP_TYPE: Record<string, RecordFieldType> = {
   TEXT: "text", LONG_TEXT: "long_text", NUMBER: "number", EMAIL: "email",
-  PHONE: "phone", DATE: "date", CHECKBOX: "select", DROPDOWN: "select",
+  PHONE: "phone", DATE: "date", DATE_TIME: "datetime", CHECKBOX: "select", DROPDOWN: "select",
   MULTI_SELECT: "select", URL: "text",
 }
 

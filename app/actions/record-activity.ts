@@ -27,6 +27,14 @@ function tokenValueForDisplay(v: any): string {
   return String(v)
 }
 
+// Date + time, e.g. "July 21, 2026 at 9:00 AM" (used for datetime tokens).
+function fmtDateTimeToken(v: any): string {
+  if (v == null || v === "") return ""
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return String(v)
+  return d.toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
+}
+
 const OBJECT_LABELS: Record<string, string> = { REFERRAL: "Referral", PROVIDER: "Provider", PRACTICE: "Practice", LOCATION: "Location", SURGERY: "Surgery" }
 
 export type ActivityKind = "NOTE" | "TASK" | "ACTIVITY" | "EMAIL" | "SMS" | "MEETING" | "CALL"
@@ -343,7 +351,7 @@ async function recordTokenVars(recordType: string, recordId: string): Promise<Re
     const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { values: true } }).catch(() => null)
     const values: Record<string, any> = (rec?.values as any) ?? {}
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { properties: true } }).catch(() => null)
-    for (const p of ((def?.properties as any[]) ?? [])) vars[`cp_${p.id}`] = tokenValueForDisplay(values[p.id])
+    for (const p of ((def?.properties as any[]) ?? [])) vars[`cp_${p.id}`] = p.type === "DATE_TIME" ? fmtDateTimeToken(values[p.id]) : tokenValueForDisplay(values[p.id])
     return vars
   }
 
@@ -355,9 +363,12 @@ async function recordTokenVars(recordType: string, recordId: string): Promise<Re
       prisma.customProperty.findMany({ where: { entityType: meta.entity as any } }).catch(() => []),
     ])
     if (rec) {
-      for (const f of (RECORD_FIELDS[recordType] ?? [])) vars[snakeToken(f.key)] = tokenValueForDisplay((rec as any)[f.key])
+      for (const f of (RECORD_FIELDS[recordType] ?? [])) {
+        const raw = (rec as any)[f.key]
+        vars[snakeToken(f.key)] = f.type === "datetime" ? fmtDateTimeToken(raw) : tokenValueForDisplay(raw)
+      }
       const bag: Record<string, any> = (rec.customProperties as any) ?? {}
-      for (const d of defs) vars[`cp_${d.id}`] = tokenValueForDisplay(bag[d.id])
+      for (const d of defs) vars[`cp_${d.id}`] = (d.type as any) === "DATE_TIME" ? fmtDateTimeToken(bag[d.id]) : tokenValueForDisplay(bag[d.id])
     }
   }
 

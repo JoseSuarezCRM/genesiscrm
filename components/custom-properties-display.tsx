@@ -73,6 +73,8 @@ export default function CustomPropertiesDisplay({
         return prop.value ? "✓ Yes" : "○ No"
       case "DATE":
         return prop.value ? new Date(prop.value).toLocaleDateString() : "—"
+      case "DATE_TIME":
+        return prop.value ? new Date(prop.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
       case "MULTI_SELECT":
         return Array.isArray(prop.value) ? prop.value.join(", ") : "—"
       default:
@@ -98,6 +100,15 @@ export default function CustomPropertiesDisplay({
           <input
             type="date"
             value={value ? new Date(value).toISOString().split("T")[0] : ""}
+            onChange={(e) => setEditValue(e.target.value ? new Date(e.target.value).toISOString() : null)}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400"
+          />
+        )
+      case "DATE_TIME":
+        return (
+          <input
+            type="datetime-local"
+            value={value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
             onChange={(e) => setEditValue(e.target.value ? new Date(e.target.value).toISOString() : null)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400"
           />

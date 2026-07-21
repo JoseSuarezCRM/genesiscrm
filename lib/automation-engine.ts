@@ -62,6 +62,24 @@ interface TemplateVars {
   facility?: string
   // Generic record triggers (any object)
   record_name?: string
+  // Custom-property values keyed by property id, for {cp_<id>} tokens.
+  __custom?: Record<string, string>
+}
+
+// A record's custom-property values → display strings, keyed by property id.
+// Built-in objects store them under `customProperties`; custom objects under `values`.
+function customValueMap(record?: Record<string, unknown> | null): Record<string, string> {
+  const out: Record<string, string> = {}
+  const bag = (record?.customProperties ?? record?.values) as Record<string, unknown> | undefined
+  if (!bag || typeof bag !== "object") return out
+  for (const [k, v] of Object.entries(bag)) {
+    if (v == null) { out[k] = ""; continue }
+    if (Array.isArray(v)) { out[k] = v.filter(Boolean).join(", "); continue }
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) { out[k] = new Date(v).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Chicago" } as any); continue }
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) { out[k] = new Date(v).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Chicago" }); continue }
+    out[k] = String(v)
+  }
+  return out
 }
 
 function resolveTemplate(template: string, vars: TemplateVars): string {
@@ -88,6 +106,8 @@ function resolveTemplate(template: string, vars: TemplateVars): string {
     .replace(/\{record_name\}/g, vars.record_name ?? "the record")
     .replace(/\{referral_url\}/g, vars.referral_url ?? "")
     .replace(/\{referral_button\}/g, btnHtml)
+    // Custom-property tokens {cp_<id>} — resolve from the record, leave as-is if unknown.
+    .replace(/\{cp_([a-zA-Z0-9]+)\}/g, (m, id: string) => vars.__custom?.[id] ?? m)
 }
 
 function buildReferralUrl(referralId: string): string | undefined {
@@ -400,6 +420,8 @@ async function runSingleAction(
   recordRef?: RecordRef | null,
 ): Promise<string | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
+  // Make {cp_<id>} custom-property tokens resolvable from the triggering record.
+  vars = { ...vars, __custom: { ...customValueMap(record), ...(vars.__custom ?? {}) } }
 
   // If the action references a saved Communications template, load its content.
   // Referencing by id keeps workflow graphs small and lets edits propagate.

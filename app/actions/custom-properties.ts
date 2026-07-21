@@ -21,7 +21,7 @@ function cpDelegate(type: CPEntity): any {
 
 interface CreateCustomPropertyInput {
   name: string
-  type: "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL"
+  type: "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "DATE_TIME" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL"
   entityType: CPEntity
   required?: boolean
   description?: string

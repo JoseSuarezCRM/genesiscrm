@@ -148,6 +148,7 @@ enum CustomPropertyType {
   EMAIL
   PHONE
   DATE
+  DATE_TIME
   CHECKBOX
   DROPDOWN
   MULTI_SELECT
