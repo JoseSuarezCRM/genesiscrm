@@ -24,7 +24,9 @@ interface CreateCustomPropertyInput {
   type: "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "DATE_TIME" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL"
   entityType: CPEntity
   required?: boolean
+  unique?: boolean
   description?: string
+  defaultValue?: string
   options?: string[]
   internalName?: string
 }
@@ -87,7 +89,9 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
         type: data.type,
         entityType: data.entityType,
         required: data.required || false,
+        unique: data.unique || false,
         description: data.description,
+        defaultValue: data.defaultValue || null,
         options: data.options || [],
       },
     })
@@ -115,6 +119,8 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
         ...(internalName !== undefined ? { internalName } : {}),
         description: rest.description,
         required: rest.required,
+        ...(rest.unique !== undefined ? { unique: rest.unique } : {}),
+        ...(rest.defaultValue !== undefined ? { defaultValue: rest.defaultValue || null } : {}),
         options: rest.options,
       },
     })
@@ -138,6 +144,19 @@ export async function deleteCustomProperty(id: string) {
   }
 }
 
+// If a property requires unique values, returns an error string when another
+// record of the same entity already holds `value`; otherwise null. Cheap enough
+// for our data sizes (scans the entity's rows).
+export async function checkUniqueCustomValue(entityType: CPEntity, customPropertyId: string, value: any, excludeEntityId?: string): Promise<string | null> {
+  if (value == null || value === "") return null
+  const prop = await prisma.customProperty.findUnique({ where: { id: customPropertyId }, select: { unique: true, name: true } })
+  if (!prop?.unique) return null
+  const model = cpDelegate(entityType)
+  const rows = await model.findMany({ select: { id: true, customProperties: true } })
+  const clash = rows.some((r: any) => r.id !== excludeEntityId && (r.customProperties as any)?.[customPropertyId] === value)
+  return clash ? `Another record already uses that ${prop.name}.` : null
+}
+
 export async function saveCustomPropertyValue(
   entityType: CPEntity,
   entityId: string,
@@ -151,6 +170,8 @@ export async function saveCustomPropertyValue(
   if (!session?.user) throw new Error("Unauthorized")
 
   try {
+    const dup = await checkUniqueCustomValue(entityType, customPropertyId, value, entityId)
+    if (dup) return { error: dup }
     const model = cpDelegate(entityType)
     const current = await model.findUnique({ where: { id: entityId }, select: { customProperties: true } })
     const props = (current?.customProperties as Record<string, any>) || {}

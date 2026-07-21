@@ -85,7 +85,7 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
 
   const catalog: RecordFieldDef[] = [
     ...(RECORD_FIELDS[entityType] ?? []),
-    ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options })),
+    ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options, default: (c as any).defaultValue ?? undefined })),
     ...(hasMeta ? metaCatalog(ownerLabel!, false) : []),
   ]
 

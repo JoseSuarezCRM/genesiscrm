@@ -18,6 +18,8 @@ export interface RecordFieldDef {
   // For `select_or_other`: the option label that reveals a free-text box (the typed
   // value is stored in the same field), like Physical Therapy's "External".
   otherOption?: string
+  // Custom-property default — prefilled when you start editing an empty value.
+  default?: string
 }
 
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {

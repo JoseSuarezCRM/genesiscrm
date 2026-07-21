@@ -80,9 +80,11 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
   const Label = <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide">{f.label}</span>
 
   function beginEdit() {
-    setDraft(value ?? "")
+    // Empty custom fields start from their default value (HubSpot-style).
+    const start = (value === null || value === undefined || value === "") && f.default ? f.default : (value ?? "")
+    setDraft(start)
     if (f.type === "select_or_other") {
-      const v = String(value ?? "")
+      const v = String(start ?? "")
       if (v && !(f.options ?? []).includes(v)) { setSel(f.otherOption ?? "Other"); setOtherText(v) }
       else { setSel(v); setOtherText("") }
     }

@@ -5,8 +5,9 @@ import { CP_ENTITIES } from "@/lib/custom-property-entities"
 import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { createCustomProperty, updateCustomProperty, deleteCustomProperty } from "@/app/actions/custom-properties"
-import { Plus, Trash2, Pencil, X, Search } from "lucide-react"
+import { deleteCustomProperty } from "@/app/actions/custom-properties"
+import PropertyEditor from "@/components/property-editor"
+import { Plus, Trash2, Pencil, Search } from "lucide-react"
 
 interface CustomProperty {
   id: string
@@ -15,7 +16,9 @@ interface CustomProperty {
   type: string
   entityType: string
   required: boolean
+  unique?: boolean
   description: string | null
+  defaultValue?: string | null
   options: string[]
   createdAt: Date
 }
@@ -40,102 +43,6 @@ const PROPERTY_TYPES = [
   { value: "URL", label: "URL" },
 ]
 const typeLabel = (t: string) => PROPERTY_TYPES.find((p) => p.value === t)?.label ?? t
-
-const INPUT = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400"
-
-// Create/edit dialog. `editing` present → edit mode (type is locked, like HubSpot).
-function PropertyDialog({ entityType, editing, onClose }: { entityType: string; editing?: CustomProperty | null; onClose: () => void }) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [name, setName] = useState(editing?.name ?? "")
-  const [internalName, setInternalName] = useState(editing?.internalName ?? "")
-  // Once the user edits the internal name by hand, stop auto-filling it from the label.
-  const [internalTouched, setInternalTouched] = useState(!!editing?.internalName)
-  const [type, setType] = useState(editing?.type ?? "TEXT")
-  const [required, setRequired] = useState(editing?.required ?? false)
-  const [description, setDescription] = useState(editing?.description ?? "")
-  const [options, setOptions] = useState((editing?.options ?? []).join("\n"))
-  const [error, setError] = useState("")
-  const hasOptions = type === "DROPDOWN" || type === "MULTI_SELECT"
-
-  function onNameChange(v: string) {
-    setName(v)
-    if (!internalTouched) setInternalName(slugify(v))
-  }
-
-  function submit() {
-    if (!name.trim()) { setError("Property name is required"); return }
-    const optionsArray = hasOptions ? options.split("\n").map((o) => o.trim()).filter(Boolean) : []
-    if (hasOptions && optionsArray.length === 0) { setError("Add at least one option"); return }
-    const internal = slugify(internalName || name)
-
-    startTransition(async () => {
-      const res = editing
-        ? await updateCustomProperty({ id: editing.id, name: name.trim(), internalName: internal, required, description: description.trim() || undefined, options: optionsArray }) as any
-        : await createCustomProperty({ name: name.trim(), internalName: internal, type: type as any, entityType: entityType as any, required, description: description.trim() || undefined, options: optionsArray }) as any
-      if (res?.error) { setError(res.error); return }
-      router.refresh()
-      onClose()
-    })
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/30 backdrop-blur-sm p-4 sm:p-8" onMouseDown={onClose}>
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 my-4 sm:my-12" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-          <p className="text-sm font-semibold text-slate-900">{editing ? "Edit property" : "Create property"}</p>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button>
-        </div>
-        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Property label</label>
-            <input value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="e.g. Insurance Plan" className={INPUT} autoFocus />
-            <div className="mt-1.5 flex items-center gap-2">
-              <span className="text-xs text-slate-400 shrink-0">Internal name</span>
-              <input value={internalName} onChange={(e) => { setInternalName(slugify(e.target.value)); setInternalTouched(true) }}
-                placeholder="auto-filled from label"
-                className="flex-1 min-w-0 font-mono text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400" />
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">Used as the personalization token, e.g. <span className="font-mono">{`{${internalName || "field"}}`}</span></p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Type</label>
-              {editing ? (
-                <div className={INPUT + " bg-slate-50 text-slate-500"}>{typeLabel(type)}</div>
-              ) : (
-                <StyledSelect value={type} onChange={(e) => setType(e.target.value)} className={INPUT}>
-                  {PROPERTY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </StyledSelect>
-              )}
-            </div>
-            <label className="flex items-center gap-2 text-sm text-slate-700 self-end pb-2">
-              <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
-              Required
-            </label>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Description</label>
-            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" className={INPUT} />
-          </div>
-          {hasOptions && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Options (one per line)</label>
-              <textarea value={options} onChange={(e) => setOptions(e.target.value)} rows={5} placeholder={"Option 1\nOption 2"} className={INPUT + " font-mono resize-none"} />
-            </div>
-          )}
-          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-100">
-          <button onClick={onClose} className="h-8 px-3 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
-          <button onClick={submit} disabled={isPending} className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50">
-            {isPending ? "Saving…" : editing ? "Save changes" : "Create property"}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function CustomPropertyManager({ propsByEntity }: Props) {
   const router = useRouter()
@@ -213,7 +120,7 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
         )}
       </div>
 
-      {dialog && <PropertyDialog entityType={entity} editing={dialog.editing} onClose={() => setDialog(null)} />}
+      {dialog && <PropertyEditor entityType={entity} entityLabel={active?.label ?? entity} editing={dialog.editing} onClose={() => setDialog(null)} />}
     </div>
   )
 }

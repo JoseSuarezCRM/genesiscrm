@@ -5,6 +5,7 @@ import { requireAccess } from "@/lib/auth-guard"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { cpMeta, type CPEntity } from "@/lib/custom-property-entities"
+import { checkUniqueCustomValue } from "@/app/actions/custom-properties"
 import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 
 function delegateFor(type: CPEntity): any {
@@ -49,6 +50,8 @@ export async function updateRecordField(entityType: string, recordId: string, fi
   try {
     if (field.startsWith("cp_")) {
       const propId = field.slice(3)
+      const dup = await checkUniqueCustomValue(entityType as any, propId, value, recordId)
+      if (dup) return { error: dup }
       const current = await model.findUnique({ where: { id: recordId }, select: { customProperties: true } })
       const bag: Record<string, any> = (current?.customProperties as any) ?? {}
       bag[propId] = value
