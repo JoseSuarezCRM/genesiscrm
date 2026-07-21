@@ -323,6 +323,15 @@ function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, o
     })
   }
 
+  // Dependent options: narrow a dropdown's options by the controlling field's value.
+  const optsFor = (p: any): string[] => {
+    const c = p?.conditional
+    if (!c) return p.options ?? []
+    const cv = String(values[c.controllingPropertyId] ?? "")
+    const allowed = c.rules?.[cv]
+    return allowed ? (p.options ?? []).filter((o: string) => allowed.includes(o)) : (p.options ?? [])
+  }
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -344,11 +353,11 @@ function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, o
               ) : p.type === "DROPDOWN" ? (
                 <StyledSelect className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)}>
                   <option value="">— Select —</option>
-                  {(p.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                  {optsFor(p).map((o) => <option key={o} value={o}>{o}</option>)}
                 </StyledSelect>
               ) : p.type === "MULTI_SELECT" ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {(p.options ?? []).map((o) => {
+                  {optsFor(p).map((o) => {
                     const arr: string[] = Array.isArray(values[p.id]) ? values[p.id] : []
                     const on = arr.includes(o)
                     return <button key={o} type="button" onClick={() => set(p.id, on ? arr.filter((x) => x !== o) : [...arr, o])}

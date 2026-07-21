@@ -14,6 +14,12 @@ export interface CustomObjectProperty {
   options?: string[]
   required?: boolean
   primary?: boolean
+  // Extended (HubSpot-style) attributes — all optional, stored in the def JSON.
+  internalName?: string
+  description?: string
+  unique?: boolean
+  defaultValue?: string
+  conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
 }
 
 export interface CustomObjectCard {

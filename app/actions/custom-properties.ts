@@ -29,6 +29,7 @@ interface CreateCustomPropertyInput {
   defaultValue?: string
   options?: string[]
   internalName?: string
+  conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
 }
 
 // Token slug: lowercase, non-alphanumerics → underscore. Same rule as the UI.
@@ -93,6 +94,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
         description: data.description,
         defaultValue: data.defaultValue || null,
         options: data.options || [],
+        conditional: (data.conditional ?? undefined) as any,
       },
     })
     revalidatePath("/settings/custom-properties")
@@ -121,6 +123,7 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
         required: rest.required,
         ...(rest.unique !== undefined ? { unique: rest.unique } : {}),
         ...(rest.defaultValue !== undefined ? { defaultValue: rest.defaultValue || null } : {}),
+        ...(rest.conditional !== undefined ? { conditional: (rest.conditional ?? null) as any } : {}),
         options: rest.options,
       },
     })

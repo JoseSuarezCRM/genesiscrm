@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Plus, Trash2, Loader2, Check, ChevronDown, ChevronRight, Box, GripVertical, ExternalLink } from "lucide-react"
+import { Plus, Trash2, Loader2, Check, ChevronDown, ChevronRight, Box, GripVertical, ExternalLink, Pencil } from "lucide-react"
 import {
   createCustomObject, updateCustomObject, saveCustomObjectProperties, saveCustomObjectCards, deleteCustomObject,
   type CustomObjectDefLite, type CustomObjectProperty, type CustomObjectCard, type CustomPropType,
 } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
+import PropertyEditor, { type PropertyDraft } from "@/components/property-editor"
 
 const PROP_TYPES: { value: CustomPropType; label: string }[] = [
   { value: "TEXT", label: "Text" },
@@ -109,15 +110,25 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
   const [props, setProps] = useState<CustomObjectProperty[]>(object.properties)
   const [cards, setCards] = useState<CustomObjectCard[]>(object.cards)
   const [saved, setSaved] = useState(false)
+  const [editingProp, setEditingProp] = useState<CustomObjectProperty | "new" | null>(null)
 
-  function patch(id: string, p: Partial<CustomObjectProperty>) {
-    setProps((prev) => prev.map((x) => (x.id === id ? { ...x, ...p } : x)))
-  }
-  function addProp() {
-    setProps((prev) => [...prev, { id: newPropId(), name: "", type: "TEXT" }])
-  }
   function removeProp(id: string) {
-    setProps((prev) => prev.filter((x) => x.id !== id))
+    const next = props.filter((x) => x.id !== id)
+    setProps(next)
+    startTransition(async () => { await saveCustomObjectProperties(object.id, next); router.refresh() })
+  }
+  // Persist a created/edited property from the full editor into the def.
+  async function saveProp(draft: PropertyDraft, existing: CustomObjectProperty | null) {
+    const prop: CustomObjectProperty = {
+      id: existing?.id ?? newPropId(),
+      name: draft.name, type: (existing?.type ?? draft.type) as CustomPropType,
+      options: draft.options, required: draft.required, primary: existing?.primary,
+      internalName: draft.internalName, description: draft.description,
+      unique: draft.unique, defaultValue: draft.defaultValue, conditional: draft.conditional,
+    }
+    const next = existing ? props.map((p) => (p.id === existing.id ? prop : p)) : [...props, prop]
+    setProps(next)
+    return await saveCustomObjectProperties(object.id, next).then(() => { router.refresh(); return {} }).catch((e: any) => ({ error: e?.message ?? "Failed to save." }))
   }
   // Card layout
   function addCard() { setCards((prev) => [...prev, { id: newPropId(), title: "New card", column: "MIDDLE", propertyIds: [] }]) }
@@ -157,31 +168,39 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
 
       <div>
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Properties</p>
-        <div className="space-y-2">
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white divide-y divide-slate-100">
           {props.map((p) => (
-            <div key={p.id} className="flex items-center gap-2">
+            <div key={p.id} className="group flex items-center gap-2 px-3 py-2">
               <GripVertical className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-              <input className={inputCls + " flex-1 min-w-0"} value={p.name} disabled={p.primary}
-                onChange={(e) => patch(p.id, { name: e.target.value })} placeholder="Property name" />
-              <select className={inputCls + " w-36 shrink-0"} value={p.type} disabled={p.primary}
-                onChange={(e) => patch(p.id, { type: e.target.value as CustomPropType })}>
-                {PROP_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              {(p.type === "DROPDOWN" || p.type === "MULTI_SELECT") && (
-                <input className={inputCls + " w-48 shrink-0"} value={(p.options ?? []).join(", ")}
-                  onChange={(e) => patch(p.id, { options: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-                  placeholder="Option A, Option B" />
-              )}
-              {p.primary
-                ? <span className="text-[10px] font-medium text-slate-400 uppercase w-16 text-center shrink-0">Primary</span>
-                : <button onClick={() => removeProp(p.id)} className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{p.name || <span className="text-slate-400">Untitled</span>}</p>
+                {(p.options?.length ?? 0) > 0 && <p className="text-xs text-slate-400 truncate">Options: {(p.options ?? []).join(", ")}</p>}
+              </div>
+              <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-600 shrink-0">{PROP_TYPES.find((t) => t.value === p.type)?.label ?? p.type}</span>
+              {p.primary && <span className="text-[10px] font-medium text-slate-400 uppercase shrink-0">Primary</span>}
+              <button onClick={() => setEditingProp(p)} className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-slate-400 hover:text-zinc-900 hover:bg-slate-100 rounded-lg"><Pencil className="h-3.5 w-3.5" /></button>
+              {!p.primary && <button onClick={() => removeProp(p.id)} className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>}
             </div>
           ))}
         </div>
-        <button onClick={addProp} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
+        <button onClick={() => setEditingProp("new")} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
           <Plus className="h-3.5 w-3.5" /> Add property
         </button>
       </div>
+
+      {editingProp && (
+        <PropertyEditor
+          entityLabel={object.plural}
+          editing={editingProp === "new" ? null : {
+            id: editingProp.id, name: editingProp.name, internalName: editingProp.internalName, type: editingProp.type,
+            required: editingProp.required, unique: editingProp.unique, description: editingProp.description,
+            defaultValue: editingProp.defaultValue, options: editingProp.options, conditional: editingProp.conditional,
+          }}
+          controllingProps={props.filter((p) => p.type === "DROPDOWN" && (editingProp === "new" || p.id !== editingProp.id)).map((p) => ({ id: p.id, name: p.name, options: p.options ?? [] }))}
+          onSave={(d) => saveProp(d, editingProp === "new" ? null : editingProp)}
+          onClose={() => setEditingProp(null)}
+        />
+      )}
 
       {/* Detail card layout */}
       <div>

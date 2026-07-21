@@ -176,6 +176,7 @@ model CustomProperty {
   description  String?
   defaultValue String?                                     // pre-filled on new records
   options      String[]                   @default([])  // for DROPDOWN and MULTI_SELECT
+  conditional  Json?                                       // { controllingPropertyId, rules: { value: [opts] } }
   createdAt    DateTime                   @default(now())
   updatedAt    DateTime                   @updatedAt
 

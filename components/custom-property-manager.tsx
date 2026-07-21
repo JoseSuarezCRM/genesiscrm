@@ -5,8 +5,8 @@ import { CP_ENTITIES } from "@/lib/custom-property-entities"
 import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { deleteCustomProperty } from "@/app/actions/custom-properties"
-import PropertyEditor from "@/components/property-editor"
+import { createCustomProperty, updateCustomProperty, deleteCustomProperty } from "@/app/actions/custom-properties"
+import PropertyEditor, { type PropertyDraft } from "@/components/property-editor"
 import { Plus, Trash2, Pencil, Search } from "lucide-react"
 
 interface CustomProperty {
@@ -120,7 +120,19 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
         )}
       </div>
 
-      {dialog && <PropertyEditor entityType={entity} entityLabel={active?.label ?? entity} editing={dialog.editing} onClose={() => setDialog(null)} />}
+      {dialog && (
+        <PropertyEditor
+          entityLabel={active?.label ?? entity}
+          editing={dialog.editing as any}
+          controllingProps={all.filter((p) => p.type === "DROPDOWN" && p.id !== dialog.editing?.id).map((p) => ({ id: p.id, name: p.name, options: p.options }))}
+          onSave={async (d: PropertyDraft) => {
+            return dialog.editing
+              ? await updateCustomProperty({ id: dialog.editing.id, name: d.name, internalName: d.internalName, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, conditional: d.conditional })
+              : await createCustomProperty({ name: d.name, internalName: d.internalName, type: d.type as any, entityType: entity as any, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, conditional: d.conditional })
+          }}
+          onClose={() => setDialog(null)}
+        />
+      )}
     </div>
   )
 }

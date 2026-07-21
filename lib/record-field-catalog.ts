@@ -20,6 +20,8 @@ export interface RecordFieldDef {
   otherOption?: string
   // Custom-property default — prefilled when you start editing an empty value.
   default?: string
+  // Dependent options: another property's value controls which options show.
+  conditional?: { controllingPropertyId: string; rules: Record<string, string[]> }
 }
 
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {

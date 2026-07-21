@@ -64,9 +64,17 @@ function isoToLocalInput(iso: any): string {
 
 // One property row — label on top, value underneath (matching Referrals). Click
 // the value to edit it in place; the owner is a dropdown; audit fields are read-only.
-function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
-  f: RecordFieldDef; value: any; recordId: string; entityType: string; canEdit: boolean; users: UserOpt[]; userMap: Record<string, string>
+function FieldRow({ f, value, values, recordId, entityType, canEdit, users, userMap }: {
+  f: RecordFieldDef; value: any; values: Record<string, any>; recordId: string; entityType: string; canEdit: boolean; users: UserOpt[]; userMap: Record<string, string>
 }) {
+  // Dependent options: a controlling property's value narrows this select's options.
+  const effectiveOptions = (() => {
+    const c = f.conditional
+    if (!c) return f.options ?? []
+    const cv = String(values[`cp_${c.controllingPropertyId}`] ?? "")
+    const allowed = c.rules[cv]
+    return allowed ? (f.options ?? []).filter((o) => allowed.includes(o)) : (f.options ?? [])
+  })()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
@@ -160,7 +168,7 @@ function FieldRow({ f, value, recordId, entityType, canEdit, users, userMap }: {
       {f.type === "select" ? (
         <StyledSelect autoOpen value={String(draft ?? "")} onChange={(e) => commit(e.target.value)} className={input}>
           <option value="">—</option>
-          {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+          {effectiveOptions.map((o) => <option key={o} value={o}>{o}</option>)}
         </StyledSelect>
       ) : f.type === "select_or_other" ? (
         <>
@@ -284,7 +292,7 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
                   .filter(Boolean)
                   .map((f) => (
                     <div key={f.key} className={(card.columns ?? 1) > 1 ? "" : "border-b border-slate-50 last:border-0"}>
-                      <FieldRow f={f} value={values[f.key]} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />
+                      <FieldRow f={f} value={values[f.key]} values={values} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />
                     </div>
                   ))
               )}
