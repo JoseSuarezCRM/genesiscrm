@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { createPortal } from "react-dom"
 import {
-  X, Code2, GripVertical, Plus, Trash2, Search,
+  X, Code2, GripVertical, Plus, Trash2, Search, ChevronLeft, ChevronRight,
   Type, AlignLeft, Hash, ChevronDownCircle, ListChecks, CheckSquare, Calendar, CalendarClock, Mail, Phone, Link2,
 } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
@@ -73,6 +74,8 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [options, setOptions] = useState<string[]>(editing?.options ?? [])
   const [optQuery, setOptQuery] = useState("")
   const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [optPage, setOptPage] = useState(0)
+  const OPT_PAGE = 10
 
   // Conditional options
   const [controlId, setControlId] = useState(editing?.conditional?.controllingPropertyId ?? "")
@@ -88,8 +91,14 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   }
 
   const setOpt = (i: number, v: string) => setOptions((o) => o.map((x, idx) => (idx === i ? v : x)))
-  const addOpt = () => setOptions((o) => [...o, ""])
+  const addOpt = () => { setOptions((o) => [...o, ""]); setOptPage(Math.floor(options.length / OPT_PAGE)) }
   const removeOpt = (i: number) => setOptions((o) => o.filter((_, idx) => idx !== i))
+
+  // Options are paginated (10/page). Search filters across all, then paginates.
+  const optFiltered = options.map((o, i) => ({ o, i })).filter(({ o }) => !optQuery || o.toLowerCase().includes(optQuery.toLowerCase()))
+  const optPages = Math.max(1, Math.ceil(optFiltered.length / OPT_PAGE))
+  const optPageC = Math.min(optPage, optPages - 1)
+  const optVisible = optFiltered.slice(optPageC * OPT_PAGE, optPageC * OPT_PAGE + OPT_PAGE)
   function moveOpt(from: number, to: number) {
     setOptions((o) => { const next = [...o]; const [m] = next.splice(from, 1); next.splice(to, 0, m); return next })
   }
@@ -139,8 +148,9 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
     </div>
   )
 
-  return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col">
+  if (typeof document === "undefined") return null
+  return createPortal((
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col">
       <div className="flex items-center justify-between px-5 h-14 bg-zinc-900 text-white shrink-0">
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate">{editing ? name || "Edit property" : "Create new property"}</p>
@@ -240,21 +250,28 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                       <div className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
                         <span></span><span>Label</span><span>Internal name</span><span></span>
                       </div>
-                      {options.map((opt, i) => {
-                        if (optQuery && !opt.toLowerCase().includes(optQuery.toLowerCase())) return null
-                        return (
-                          <div key={i} draggable onDragStart={() => setDragIdx(i)}
-                            onDragOver={(e) => { e.preventDefault(); if (dragIdx !== null && dragIdx !== i) { moveOpt(dragIdx, i); setDragIdx(i) } }}
-                            onDragEnd={() => setDragIdx(null)}
-                            className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 items-center px-3 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                            <GripVertical className="h-4 w-4 text-slate-300 cursor-grab" />
-                            <input value={opt} onChange={(e) => setOpt(i, e.target.value)} placeholder="Option label" className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400" />
-                            <span className="text-xs font-mono text-slate-400 truncate">{slugify(opt) || "—"}</span>
-                            <button onClick={() => removeOpt(i)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
-                          </div>
-                        )
-                      })}
+                      {optVisible.map(({ o: opt, i }) => (
+                        <div key={i} draggable onDragStart={() => setDragIdx(i)}
+                          onDragOver={(e) => { e.preventDefault(); if (dragIdx !== null && dragIdx !== i) { moveOpt(dragIdx, i); setDragIdx(i) } }}
+                          onDragEnd={() => setDragIdx(null)}
+                          className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 items-center px-3 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                          <GripVertical className="h-4 w-4 text-slate-300 cursor-grab" />
+                          <input value={opt} onChange={(e) => setOpt(i, e.target.value)} placeholder="Option label" className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400" />
+                          <span className="text-xs font-mono text-slate-400 truncate">{slugify(opt) || "—"}</span>
+                          <button onClick={() => removeOpt(i)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
+                      ))}
                       <button onClick={addOpt} className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-slate-50 flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Add option</button>
+                      {optFiltered.length > OPT_PAGE && (
+                        <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 text-xs text-slate-500">
+                          <span>Showing {optPageC * OPT_PAGE + 1}–{Math.min(optFiltered.length, optPageC * OPT_PAGE + OPT_PAGE)} of {optFiltered.length}</span>
+                          <div className="flex items-center gap-1">
+                            <button disabled={optPageC === 0} onClick={() => setOptPage(optPageC - 1)} className="h-6 w-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+                            <span>{optPageC + 1} / {optPages}</span>
+                            <button disabled={optPageC >= optPages - 1} onClick={() => setOptPage(optPageC + 1)} className="h-6 w-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -360,7 +377,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
         </div>
       </div>
     </div>
-  )
+  ), document.body)
 }
 
 function PreviewField({ type, options, defaultValue }: { type: string; options: string[]; defaultValue: string }) {
