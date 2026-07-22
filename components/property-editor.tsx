@@ -150,7 +150,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
 
   if (typeof document === "undefined") return null
   return createPortal((
-    <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <div className="flex items-center justify-between px-5 h-14 bg-zinc-900 text-white shrink-0">
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate">{editing ? name || "Edit property" : "Create new property"}</p>
@@ -182,7 +182,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
         </aside>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-8 py-8">
+          <div className="max-w-2xl mx-auto px-8 py-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
             {step === "details" && (
               <div className="space-y-5">
                 <h2 className="text-lg font-semibold text-slate-900">Add property details</h2>
