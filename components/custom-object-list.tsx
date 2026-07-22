@@ -5,6 +5,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
+import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
+import { ChevronUp } from "lucide-react"
 import { createCustomObjectRecord, bulkDeleteCustomObjectRecords } from "@/app/actions/custom-object-records"
 import type { CustomObjectProperty } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
@@ -107,6 +109,26 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     return matchesFilter(r, filter, filterFields)
   })
   const filtersActive = activeConditionCount(filter, filterFields) > 0
+
+  // Column resize + client-side sort (all records are loaded here).
+  const { colWidth, startResize } = useColumnResize(`co_${objectKey}_colWidths`)
+  const [sortKey, setSortKey] = useState<string>("__id")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const toggleSort = (k: string) => { if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc")); else { setSortKey(k); setSortDir("asc") } }
+  const sortVal = (r: RecordRow, key: string): string | number => {
+    if (key === "__id") return r.recordNumber ?? 0
+    if (key === "__name") return (primary ? displayValue(primary, r.values[primary.id], userMap) : "").toLowerCase()
+    if (key === "__owner") return (r.ownerName ?? "").toLowerCase()
+    if (key === "__created") return new Date(r.createdAt).getTime()
+    const p = otherProps.find((x) => x.id === key)
+    return p ? displayValue(p, r.values[key], userMap).toLowerCase() : ""
+  }
+  const sorted = [...filtered].sort((a, b) => {
+    const va = sortVal(a, sortKey), vb = sortVal(b, sortKey)
+    const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))
+    return sortDir === "asc" ? cmp : -cmp
+  })
+  const SortIcon = ({ k }: { k: string }) => sortKey === k ? (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : null
 
   // Saved views (applied in-memory).
   const [showSaveForm, setShowSaveForm] = useState(false)
@@ -253,28 +275,45 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                <col style={{ width: colWidth("__id") ?? 96 }} />
+                <col style={{ width: colWidth("__name") }} />
+                {cols.map((c) => <col key={c.key} style={{ width: colWidth(c.key) }} />)}
+              </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-4 py-3 w-10">
                     <input type="checkbox" checked={allChecked} onChange={() => setSelected(allChecked ? new Set() : new Set(filtered.map((r) => r.id)))} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  <th className="px-4 py-3 font-semibold w-24">Record ID</th>
-                  <th className="px-4 py-3 font-semibold">{primary?.name ?? "Name"}</th>
-                  {cols.map((c) => <th key={c.key} className="px-4 py-3 font-semibold">{c.label}</th>)}
+                  <th className="px-4 py-3 font-semibold relative">
+                    <button onClick={() => toggleSort("__id")} className="inline-flex items-center gap-1 hover:text-slate-800">Record ID <SortIcon k="__id" /></button>
+                    <ColResizer onMouseDown={(e) => startResize("__id", e)} />
+                  </th>
+                  <th className="px-4 py-3 font-semibold relative">
+                    <button onClick={() => toggleSort("__name")} className="inline-flex items-center gap-1 hover:text-slate-800">{primary?.name ?? "Name"} <SortIcon k="__name" /></button>
+                    <ColResizer onMouseDown={(e) => startResize("__name", e)} />
+                  </th>
+                  {cols.map((c) => (
+                    <th key={c.key} className="px-4 py-3 font-semibold relative">
+                      <button onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 hover:text-slate-800">{c.label} <SortIcon k={c.key} /></button>
+                      <ColResizer onMouseDown={(e) => startResize(c.key, e)} />
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((r) => (
+                {sorted.map((r) => (
                   <tr key={r.id} className={cn("transition-colors", selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50")}>
                     <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
                     <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{r.recordNumber != null ? `#${r.recordNumber}` : "—"}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 truncate" style={{ maxWidth: colWidth("__name") }}>
                       <Link href={`/objects/${objectKey}/${r.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                         {(primary && displayValue(primary, r.values[primary.id], userMap)) || "Untitled"}
                       </Link>
                     </td>
                     {cols.map((c) => (
-                      <td key={c.key} className="px-4 py-2.5 text-slate-600">
+                      <td key={c.key} className="px-4 py-2.5 text-slate-600 truncate" style={{ maxWidth: colWidth(c.key) }}>
                         {c.key === "__owner" ? (r.ownerName ?? "—")
                           : c.key === "__created" ? fmtDate(r.createdAt)
                           : displayValue(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)}

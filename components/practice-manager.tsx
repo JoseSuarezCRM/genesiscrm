@@ -20,6 +20,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
 import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save, Globe, Users, UserCog, Lock, Download } from "lucide-react"
+import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -339,6 +340,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
 
   // Provider table columns + saved views
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_PROVIDER_COLUMNS)
+  const { colWidth, startResize } = useColumnResize("providerColWidths")
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
   const [savedViews, setSavedViews] = useState<SavedProviderView[]>(initialSavedViews)
@@ -780,18 +782,25 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
+                  <colgroup>
+                    <col style={{ width: colWidth("name") }} />
+                    {["title", "practice", "npi", "phone", "officePhone", "email", "locations", "referrals", "owner"].filter((k) => shows(k)).map((k) => (
+                      <col key={k} style={{ width: colWidth(k) }} />
+                    ))}
+                    {isAdmin && <col style={{ width: 80 }} />}
+                  </colgroup>
                   <thead>
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th className="px-4 py-2.5 font-semibold">Name</th>
-                      {shows("title") && <th className="px-4 py-2.5 font-semibold">Title</th>}
-                      {shows("practice") && <th className="px-4 py-2.5 font-semibold">Practice</th>}
-                      {shows("npi") && <th className="px-4 py-2.5 font-semibold">NPI</th>}
-                      {shows("phone") && <th className="px-4 py-2.5 font-semibold">Phone</th>}
-                      {shows("officePhone") && <th className="px-4 py-2.5 font-semibold">Office Phone</th>}
-                      {shows("email") && <th className="px-4 py-2.5 font-semibold">Email</th>}
-                      {shows("locations") && <th className="px-4 py-2.5 font-semibold">Locations</th>}
-                      {shows("referrals") && <th className="px-4 py-2.5 font-semibold text-right">Referrals</th>}
-                      {shows("owner") && <th className="px-4 py-2.5 font-semibold">Provider Owner</th>}
+                      <th className="px-4 py-2.5 font-semibold relative">Name<ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      {shows("title") && <th className="px-4 py-2.5 font-semibold relative">Title<ColResizer onMouseDown={(e) => startResize("title", e)} /></th>}
+                      {shows("practice") && <th className="px-4 py-2.5 font-semibold relative">Practice<ColResizer onMouseDown={(e) => startResize("practice", e)} /></th>}
+                      {shows("npi") && <th className="px-4 py-2.5 font-semibold relative">NPI<ColResizer onMouseDown={(e) => startResize("npi", e)} /></th>}
+                      {shows("phone") && <th className="px-4 py-2.5 font-semibold relative">Phone<ColResizer onMouseDown={(e) => startResize("phone", e)} /></th>}
+                      {shows("officePhone") && <th className="px-4 py-2.5 font-semibold relative">Office Phone<ColResizer onMouseDown={(e) => startResize("officePhone", e)} /></th>}
+                      {shows("email") && <th className="px-4 py-2.5 font-semibold relative">Email<ColResizer onMouseDown={(e) => startResize("email", e)} /></th>}
+                      {shows("locations") && <th className="px-4 py-2.5 font-semibold relative">Locations<ColResizer onMouseDown={(e) => startResize("locations", e)} /></th>}
+                      {shows("referrals") && <th className="px-4 py-2.5 font-semibold text-right relative">Referrals<ColResizer onMouseDown={(e) => startResize("referrals", e)} /></th>}
+                      {shows("owner") && <th className="px-4 py-2.5 font-semibold relative">Provider Owner<ColResizer onMouseDown={(e) => startResize("owner", e)} /></th>}
                       {isAdmin && <th className="px-4 py-2.5 font-semibold text-right w-20"></th>}
                     </tr>
                   </thead>

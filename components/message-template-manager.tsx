@@ -7,6 +7,7 @@ import {
   Table2, LayoutList, Columns3, Download, Check, ChevronUp, ChevronDown,
 } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
+import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { Button } from "@/components/ui/button"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import TokenTextarea from "@/components/ui/token-textarea"
@@ -76,6 +77,7 @@ export default function MessageTemplateManager({ channel, templates, canManage =
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_TEMPLATE_COLS)
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
+  const { colWidth, startResize } = useColumnResize(`templateColWidths_${channel}`)
   const [sortKey, setSortKey] = useState<"name" | "created" | "updated">("updated")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -229,16 +231,22 @@ export default function MessageTemplateManager({ channel, templates, canManage =
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                {cols.map((col) => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+                <col style={{ width: 64 }} />
+              </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
                   <th className="px-4 py-3 w-10"><input type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
                   {cols.map((col) => (
-                    <th key={col.key} className="text-left px-4 py-3 font-semibold">
+                    <th key={col.key} className="text-left px-4 py-3 font-semibold relative">
                       {col.sortable ? (
                         <button onClick={() => toggleSort(col.key as "name" | "created" | "updated")} className="inline-flex items-center gap-1 hover:text-slate-800">
                           {col.label}{sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                         </button>
                       ) : col.label}
+                      <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}
                   <th className="px-4 py-3 w-16"></th>
@@ -248,7 +256,7 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                 {sorted.map((t) => (
                   <tr key={t.id} className={`border-b transition-colors ${selected.has(t.id) ? "bg-blue-50" : "hover:bg-slate-50"}`}>
                     <td className="px-4 py-3"><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleRow(t.id)} className="rounded border-slate-300 cursor-pointer" /></td>
-                    {cols.map((col) => <td key={col.key} className="px-4 py-3 max-w-[220px] truncate">{renderCell(t, col.key)}</td>)}
+                    {cols.map((col) => <td key={col.key} className="px-4 py-3 truncate" style={{ maxWidth: colWidth(col.key) ?? 220 }}>{renderCell(t, col.key)}</td>)}
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex gap-0.5">
                         {canManage && <button onClick={() => openEdit(t)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>}

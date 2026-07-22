@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Phone, ChevronDown, Loader2 } from "lucide-react"
 import BulkActionBar, { bulkBtn } from "@/components/ui/bulk-action-bar"
+import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate, formatPhone } from "@/lib/utils"
 import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
@@ -58,6 +59,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
   const tagRemoveRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
+  const { colWidth, startResize } = useColumnResize("referralColWidths")
   const router = useRouter()
 
   const allPageChecked = referrals.length > 0 && referrals.every((r) => selected.has(r.id))
@@ -309,6 +311,12 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
       </BulkActionBar>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
+          <colgroup>
+            <col style={{ width: 40 }} />
+            {["patient", "phone", "practice", "tags", "referralDate", "apptDate", "calls", "status"].map((k) => (
+              <col key={k} style={{ width: colWidth(k) }} />
+            ))}
+          </colgroup>
           <thead>
             <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <th className="px-4 py-3 w-10">
@@ -320,14 +328,16 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                   className="rounded border-slate-300 cursor-pointer"
                 />
               </th>
-              <th className="text-left px-4 py-3 font-semibold">Patient</th>
-              <th className="text-left px-4 py-3 font-semibold">Phone</th>
-              <th className="text-left px-4 py-3 font-semibold">Referring Practice</th>
-              <th className="text-left px-4 py-3 font-semibold">Tags</th>
-              <th className="text-left px-4 py-3 font-semibold">Referral Date</th>
-              <th className="text-left px-4 py-3 font-semibold">Appt Date</th>
-              <th className="text-left px-4 py-3 font-semibold">Calls</th>
-              <th className="text-left px-4 py-3 font-semibold">Status</th>
+              {[
+                ["patient", "Patient"], ["phone", "Phone"], ["practice", "Referring Practice"],
+                ["tags", "Tags"], ["referralDate", "Referral Date"], ["apptDate", "Appt Date"],
+                ["calls", "Calls"], ["status", "Status"],
+              ].map(([k, label]) => (
+                <th key={k} className="text-left px-4 py-3 font-semibold relative">
+                  {label}
+                  <ColResizer onMouseDown={(e) => startResize(k, e)} />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>

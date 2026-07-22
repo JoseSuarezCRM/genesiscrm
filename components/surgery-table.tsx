@@ -7,6 +7,7 @@ import {
   LayoutList, Table2, Download, Columns3, Check, Stethoscope,
 } from "lucide-react"
 import BulkActionBar, { bulkBtn, bulkDanger } from "@/components/ui/bulk-action-bar"
+import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
@@ -109,6 +110,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
 
   const sortKey = searchParams.get("sort") ?? ""
   const sortDir: "asc" | "desc" = searchParams.get("dir") === "asc" ? "asc" : "desc"
+  const { colWidth, startResize } = useColumnResize("surgeryColWidths")
 
   // Persist view prefs across navigation (loaded after mount to avoid hydration mismatch).
   useEffect(() => {
@@ -339,19 +341,24 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                {cols.map((col) => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+              </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
                   <th className="px-4 py-3 w-10">
                     <input ref={headerCheckRef} type="checkbox" checked={allPageChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
                   {cols.map((col) => (
-                    <th key={col.key} className="text-left px-4 py-3 font-semibold">
+                    <th key={col.key} className="text-left px-4 py-3 font-semibold relative">
                       {col.sortable ? (
                         <button onClick={() => toggleSort(col.key as "patient" | "status" | "surgeryDate")} className="inline-flex items-center gap-1 hover:text-slate-800">
                           {col.label}
                           {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                         </button>
                       ) : col.label}
+                      <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}
                 </tr>
@@ -363,7 +370,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
                       <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleRow(c.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
                     {cols.map((col) => (
-                      <td key={col.key} className={cn("px-4 py-3", col.key === "diagnosis" && "max-w-[200px] truncate")}>{renderCell(c, col.key)}</td>
+                      <td key={col.key} className="px-4 py-3 truncate" style={{ maxWidth: colWidth(col.key) ?? (col.key === "diagnosis" ? 200 : 240) }}>{renderCell(c, col.key)}</td>
                     ))}
                   </tr>
                 ))}

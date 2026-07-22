@@ -8,6 +8,7 @@ import {
   LayoutList, Table2, Download, Columns3, ChevronDown, ChevronUp,
 } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
+import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
@@ -73,6 +74,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_LOCATION_COLS)
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const { colWidth, startResize } = useColumnResize("locationColWidths")
   const [sortKey, setSortKey] = useState<SortKey>("referrals")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -259,23 +261,31 @@ export default function LocationManager({ locations, practices, customPropertyDe
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                <col style={{ width: colWidth("name") }} />
+                {cols.map((col) => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+                {canEdit && <col style={{ width: 80 }} />}
+              </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-4 py-3 w-10">
                     <input ref={headerCheckRef} type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  <th className="px-4 py-3 font-semibold">
+                  <th className="px-4 py-3 font-semibold relative">
                     <button onClick={() => toggleSort("name")} className="inline-flex items-center gap-1 hover:text-slate-800">
                       Name {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                     </button>
+                    <ColResizer onMouseDown={(e) => startResize("name", e)} />
                   </th>
                   {cols.map((col) => (
-                    <th key={col.key} className={cn("px-4 py-3 font-semibold", col.align === "right" && "text-right")}>
+                    <th key={col.key} className={cn("px-4 py-3 font-semibold relative", col.align === "right" && "text-right")}>
                       {col.sortable ? (
                         <button onClick={() => toggleSort(col.key as SortKey)} className="inline-flex items-center gap-1 hover:text-slate-800">
                           {col.label} {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                         </button>
                       ) : col.label}
+                      <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}
                   {canEdit && <th className="px-4 py-3 w-20" />}
@@ -287,13 +297,13 @@ export default function LocationManager({ locations, practices, customPropertyDe
                     <td className="px-4 py-2.5">
                       <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleRow(l.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 truncate" style={{ maxWidth: colWidth("name") }}>
                       <Link href={`/locations/${l.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                         {l.name}
                       </Link>
                     </td>
                     {cols.map((col) => (
-                      <td key={col.key} className={cn("px-4 py-2.5 text-slate-600", col.align === "right" && "text-right")}>
+                      <td key={col.key} className={cn("px-4 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right")} style={{ maxWidth: colWidth(col.key) }}>
                         {col.key === "practice" && <Link href={`/practices/${l.practiceId}`} className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200">{l.practiceName}</Link>}
                         {col.key === "address" && <span className="text-slate-500">{l.address || "—"}</span>}
                         {col.key === "phone" && <span className="text-slate-500">{l.phone || "—"}</span>}
