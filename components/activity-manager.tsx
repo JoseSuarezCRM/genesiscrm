@@ -24,6 +24,7 @@ import {
   Building2, MapPin, User, ChevronDown, Tag, Check, Save,
   Globe, Users, UserCog, Lock, LayoutList, Table2, Download, Columns3, ChevronUp, Mail, Send,
 } from "lucide-react"
+import BulkActionBar, { bulkBtn, bulkDanger } from "@/components/ui/bulk-action-bar"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
@@ -1488,20 +1489,10 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         </div>
       ) : viewMode === "table" ? (
         <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
-          {selectedIds.size > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-blue-600 text-white text-sm animate-bar-in">
-              <span className="font-medium">{selectedIds.size} selected</span>
-              <button onClick={() => setReportOpen(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">
-                <Mail className="h-3.5 w-3.5" /> Email report
-              </button>
-              <button onClick={bulkDelete} disabled={isPending}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">
-                <Trash2 className="h-3.5 w-3.5" /> Delete
-              </button>
-              <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-zinc-300 hover:text-white">Clear</button>
-            </div>
-          )}
+          <BulkActionBar embedded count={selectedIds.size} onClear={() => setSelectedIds(new Set())}>
+            <button onClick={() => setReportOpen(true)} className={bulkBtn}><Mail className="h-3.5 w-3.5" /> Email report</button>
+            <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+          </BulkActionBar>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

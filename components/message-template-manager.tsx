@@ -6,6 +6,7 @@ import {
   Plus, Loader2, X, Pencil, Trash2, MessageSquare, Mail,
   Table2, LayoutList, Columns3, Download, Check, ChevronUp, ChevronDown,
 } from "lucide-react"
+import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import TokenTextarea from "@/components/ui/token-textarea"
@@ -211,12 +212,10 @@ export default function MessageTemplateManager({ channel, templates, canManage =
         </div>
       </div>
 
-      {canDelete && selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm animate-bar-in">
-          <span className="font-medium">{selected.size} selected</span>
-          <button onClick={bulkDelete} disabled={pending} className="inline-flex items-center gap-1.5 h-7 px-3 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-white/60 hover:text-white text-xs">Clear</button>
-        </div>
+      {canDelete && (
+        <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+          <button onClick={bulkDelete} disabled={pending} className={bulkDanger}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+        </BulkActionBar>
       )}
 
       {templates.length === 0 ? (

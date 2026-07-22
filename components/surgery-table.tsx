@@ -6,6 +6,7 @@ import {
   Phone, FileText, ChevronDown, ChevronUp, Loader2, Trash2,
   LayoutList, Table2, Download, Columns3, Check, Stethoscope,
 } from "lucide-react"
+import BulkActionBar, { bulkBtn, bulkDanger } from "@/components/ui/bulk-action-bar"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
@@ -296,34 +297,28 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
       </div>
 
       {/* Bulk action bar */}
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm animate-bar-in">
-          <span className="font-medium">{selected.size} selected</span>
-          <div className="relative" ref={menuRef}>
-            <button onClick={() => setMenuOpen(!menuOpen)} disabled={isPending}
-              className="inline-flex items-center gap-1.5 h-7 px-3 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors">
-              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Change Status
-              <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-            </button>
-            {menuOpen && (
-              <div className="absolute top-full mt-1.5 left-0 z-50 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden min-w-[180px]">
-                {STATUS_OPTIONS.map((s) => (
-                  <button key={s.id} onClick={() => bulkSetStatus(s.id)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-800 hover:bg-zinc-50 transition-colors text-left">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${STATUS_COLORS[s.id] ?? "bg-zinc-100 text-zinc-700"}`}>{s.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={bulkDelete} disabled={isPending}
-            className="inline-flex items-center gap-1.5 h-7 px-3 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors">
-            <Trash2 className="h-3.5 w-3.5" /> Delete
+      <BulkActionBar count={selected.size} onClear={clearSelection}>
+        <div className="relative" ref={menuRef}>
+          <button onClick={() => setMenuOpen(!menuOpen)} disabled={isPending} className={bulkBtn}>
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Change Status
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
           </button>
-          <button onClick={clearSelection} className="ml-auto text-white/60 hover:text-white text-xs transition-colors">Clear</button>
+          {menuOpen && (
+            <div className="absolute top-full mt-1.5 left-0 z-50 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden min-w-[180px]">
+              {STATUS_OPTIONS.map((s) => (
+                <button key={s.id} onClick={() => bulkSetStatus(s.id)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-800 hover:bg-zinc-50 transition-colors text-left">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${STATUS_COLORS[s.id] ?? "bg-zinc-100 text-zinc-700"}`}>{s.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+        <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}>
+          <Trash2 className="h-3.5 w-3.5" /> Delete
+        </button>
+      </BulkActionBar>
 
       {/* Select-all-pages banner (shared between views) */}
       {(showSelectAllBanner || allPagesSelected) && (

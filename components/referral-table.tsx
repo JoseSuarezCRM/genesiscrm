@@ -2,7 +2,8 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
-import { Phone, X, ChevronDown, Loader2 } from "lucide-react"
+import { Phone, ChevronDown, Loader2 } from "lucide-react"
+import BulkActionBar, { bulkBtn } from "@/components/ui/bulk-action-bar"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate, formatPhone } from "@/lib/utils"
 import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
@@ -166,6 +167,146 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
 
   return (
     <>
+      {/* Bulk action bar */}
+      <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              disabled={isPending}
+              className={bulkBtn}
+            >
+              {isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  Move to pipeline
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </>
+              )}
+            </button>
+
+            {menuOpen && (
+              <div className="absolute top-full mt-2 left-0 z-50 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
+                {pipelines.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => moveTo(p.id)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                    {p.name}
+                  </button>
+                ))}
+                {pipelines.length > 0 && <div className="border-t border-zinc-100" />}
+                <button
+                  onClick={() => moveTo(null)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left text-slate-400 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-slate-300" />
+                  Remove from pipeline
+                </button>
+              </div>
+            )}
+          </div>
+
+          {allTags.length > 0 && (
+            <>
+              <span className="w-px h-5 bg-slate-200 mx-0.5" />
+
+              {/* Add tag */}
+              <div className="relative" ref={tagAddRef}>
+                <button
+                  onClick={() => { setTagAddOpen((v) => !v); setTagRemoveOpen(false) }}
+                  disabled={isPending}
+                  className={bulkBtn}
+                >
+                  <TagIcon className="h-3.5 w-3.5" />
+                  Add tag
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {tagAddOpen && (
+                  <div className="absolute top-full mt-2 left-0 z-50 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Add tag to selected</p>
+                    {allTags.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => addTag(t.id)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Remove tag */}
+              <div className="relative" ref={tagRemoveRef}>
+                <button
+                  onClick={() => { setTagRemoveOpen((v) => !v); setTagAddOpen(false) }}
+                  disabled={isPending}
+                  className={bulkBtn}
+                >
+                  <TagIcon className="h-3.5 w-3.5" />
+                  Remove tag
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {tagRemoveOpen && (
+                  <div className="absolute top-full mt-2 left-0 z-50 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Remove tag from selected</p>
+                    {allTags.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => removeTag(t.id)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          <span className="w-px h-5 bg-slate-200 mx-0.5" />
+
+          {/* Change status */}
+          <div className="relative" ref={statusRef}>
+            <button
+              onClick={() => { setStatusOpen((v) => !v); setMenuOpen(false); setTagAddOpen(false); setTagRemoveOpen(false) }}
+              disabled={isPending}
+              className={bulkBtn}
+            >
+              Change status
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {statusOpen && (
+              <div className="absolute top-full mt-2 left-0 z-50 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
+                <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Set status for selected</p>
+                {[
+                  { value: "NEW", label: "New" },
+                  { value: "READY_FOR_CALL", label: "Ready for Call" },
+                  { value: "CONTACTED", label: "Contacted" },
+                  { value: "SCHEDULED", label: "Scheduled" },
+                  { value: "COMPLETED", label: "Completed" },
+                  { value: "NO_SHOW", label: "No Show" },
+                ].map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => changeStatus(s.value)}
+                    className="w-full flex items-center px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+      </BulkActionBar>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -287,160 +428,6 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
         </table>
       </div>
 
-      {/* Floating bulk action bar */}
-      {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-blue-600 text-white px-5 py-3 rounded-2xl shadow-2xl border border-blue-500 animate-bar-in">
-          <span className="text-sm font-medium tabular-nums">
-            {selected.size} selected
-          </span>
-          <div className="w-px h-4 bg-slate-600" />
-
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              disabled={isPending}
-              className="flex items-center gap-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <>
-                  Move to pipeline
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </>
-              )}
-            </button>
-
-            {menuOpen && (
-              <div className="absolute bottom-full mb-2 left-0 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
-                {pipelines.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => moveTo(p.id)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-                    {p.name}
-                  </button>
-                ))}
-                {pipelines.length > 0 && <div className="border-t border-zinc-100" />}
-                <button
-                  onClick={() => moveTo(null)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left text-slate-400 transition-colors"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-slate-300" />
-                  Remove from pipeline
-                </button>
-              </div>
-            )}
-          </div>
-
-          {allTags.length > 0 && (
-            <>
-              <div className="w-px h-4 bg-slate-600" />
-
-              {/* Add tag */}
-              <div className="relative" ref={tagAddRef}>
-                <button
-                  onClick={() => { setTagAddOpen((v) => !v); setTagRemoveOpen(false) }}
-                  disabled={isPending}
-                  className="flex items-center gap-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <TagIcon className="h-3.5 w-3.5" />
-                  Add tag
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-                {tagAddOpen && (
-                  <div className="absolute bottom-full mb-2 left-0 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
-                    <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Add tag to selected</p>
-                    {allTags.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => addTag(t.id)}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
-                      >
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                        {t.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Remove tag */}
-              <div className="relative" ref={tagRemoveRef}>
-                <button
-                  onClick={() => { setTagRemoveOpen((v) => !v); setTagAddOpen(false) }}
-                  disabled={isPending}
-                  className="flex items-center gap-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <TagIcon className="h-3.5 w-3.5" />
-                  Remove tag
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-                {tagRemoveOpen && (
-                  <div className="absolute bottom-full mb-2 left-0 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
-                    <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Remove tag from selected</p>
-                    {allTags.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => removeTag(t.id)}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
-                      >
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-                        {t.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="w-px h-4 bg-slate-600" />
-
-          {/* Change status */}
-          <div className="relative" ref={statusRef}>
-            <button
-              onClick={() => { setStatusOpen((v) => !v); setMenuOpen(false); setTagAddOpen(false); setTagRemoveOpen(false) }}
-              disabled={isPending}
-              className="flex items-center gap-1.5 text-sm font-medium bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-            >
-              Change status
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {statusOpen && (
-              <div className="absolute bottom-full mb-2 left-0 bg-white text-slate-900 rounded-xl shadow-xl border border-zinc-200 min-w-48 overflow-hidden">
-                <p className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-zinc-100">Set status for selected</p>
-                {[
-                  { value: "NEW", label: "New" },
-                  { value: "READY_FOR_CALL", label: "Ready for Call" },
-                  { value: "CONTACTED", label: "Contacted" },
-                  { value: "SCHEDULED", label: "Scheduled" },
-                  { value: "COMPLETED", label: "Completed" },
-                  { value: "NO_SHOW", label: "No Show" },
-                ].map((s) => (
-                  <button
-                    key={s.value}
-                    onClick={() => changeStatus(s.value)}
-                    className="w-full flex items-center px-3 py-2.5 text-sm hover:bg-slate-50 text-left transition-colors"
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => setSelected(new Set())}
-            className="text-slate-400 hover:text-white transition-colors ml-1"
-            title="Clear selection"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
     </>
   )
 }

@@ -7,6 +7,7 @@ import {
   Plus, Pencil, Trash2, Loader2, MapPin, Building2, Search, X, Check,
   LayoutList, Table2, Download, Columns3, ChevronDown, ChevronUp,
 } from "lucide-react"
+import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
@@ -241,18 +242,13 @@ export default function LocationManager({ locations, practices, customPropertyDe
       )}
 
       {/* Bulk bar */}
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm animate-bar-in">
-          <span className="font-medium">{selected.size} selected</span>
-          {canDelete && (
-            <button onClick={bulkDelete} disabled={isPending}
-              className="inline-flex items-center gap-1.5 h-7 px-3 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-medium transition-colors">
-              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
-            </button>
-          )}
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-white/60 hover:text-white text-xs">Clear</button>
-        </div>
-      )}
+      <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        {canDelete && (
+          <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}>
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+          </button>
+        )}
+      </BulkActionBar>
 
       {/* List */}
       {sorted.length === 0 ? (

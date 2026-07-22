@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-react"
+import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { createCustomObjectRecord, bulkDeleteCustomObjectRecords } from "@/app/actions/custom-object-records"
 import type { CustomObjectProperty } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
@@ -236,17 +237,13 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
         </div>
       </div>
 
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm animate-bar-in">
-          <span className="font-medium">{selected.size} selected</span>
-          {canDelete && (
-            <button onClick={bulkDelete} disabled={isPending} className="inline-flex items-center gap-1.5 h-7 px-3 bg-red-500 hover:bg-red-600 rounded-lg font-medium">
-              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
-            </button>
-          )}
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-white/60 hover:text-white text-xs">Clear</button>
-        </div>
-      )}
+      <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        {canDelete && (
+          <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}>
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+          </button>
+        )}
+      </BulkActionBar>
 
       {filtered.length === 0 ? (
         <div className="bg-white border rounded-xl py-16 text-center text-slate-400">
