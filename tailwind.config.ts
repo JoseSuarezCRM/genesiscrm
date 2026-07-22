@@ -64,12 +64,12 @@ const config: Config = {
           to: { height: "0" },
         },
         "panel-in": {
-          from: { opacity: "0", transform: "translateY(16px)" },
+          from: { opacity: "0", transform: "translateY(14px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "panel-out": {
           from: { opacity: "1", transform: "translateY(0)" },
-          to: { opacity: "0", transform: "translateY(16px)" },
+          to: { opacity: "0", transform: "translateY(14px)" },
         },
         "content-in": {
           from: { opacity: "0", transform: "translateY(8px)" },
@@ -79,14 +79,29 @@ const config: Config = {
           from: { opacity: "0", transform: "translateY(8px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        // Centered modals (fade + subtle rise & scale) and their backdrops.
+        "modal-in": {
+          from: { opacity: "0", transform: "translateY(6px) scale(0.97)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "modal-out": {
+          from: { opacity: "1", transform: "translateY(0) scale(1)" },
+          to: { opacity: "0", transform: "translateY(6px) scale(0.97)" },
+        },
+        "overlay-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        "overlay-out": { from: { opacity: "1" }, to: { opacity: "0" } },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "panel-in": "panel-in 0.3s ease-out",
-        "panel-out": "panel-out 0.2s ease-in forwards",
-        "content-in": "content-in 0.45s ease-out",
-        "toast-in": "toast-in 0.2s ease-out",
+        "panel-in": "panel-in 0.18s ease-out",
+        "panel-out": "panel-out 0.14s ease-in forwards",
+        "content-in": "content-in 0.28s ease-out",
+        "toast-in": "toast-in 0.15s ease-out",
+        "modal-in": "modal-in 0.15s ease-out",
+        "modal-out": "modal-out 0.12s ease-in forwards",
+        "overlay-in": "overlay-in 0.15s ease-out",
+        "overlay-out": "overlay-out 0.12s ease-in forwards",
       },
     },
   },

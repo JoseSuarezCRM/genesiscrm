@@ -64,7 +64,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [error, setError] = useState("")
   const [closing, setClosing] = useState(false)
   // Play the exit animation, then actually unmount.
-  const close = () => { setClosing(true); setTimeout(onClose, 200) }
+  const close = () => { setClosing(true); setTimeout(onClose, 150) }
 
   const [name, setName] = useState(editing?.name ?? "")
   const [internalName, setInternalName] = useState(editing?.internalName ?? "")

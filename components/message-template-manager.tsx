@@ -295,8 +295,8 @@ export default function MessageTemplateManager({ channel, templates, canManage =
         defaultName={`${isEmail ? "email" : "sms"}-templates-${new Date().toISOString().slice(0, 10)}`} getData={buildExportData} />
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-overlay-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh] animate-modal-in">
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h2 className="text-base font-semibold text-slate-900">{editId ? "Edit template" : `New ${isEmail ? "email" : "SMS"} template`}</h2>
               <button onClick={close} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button>

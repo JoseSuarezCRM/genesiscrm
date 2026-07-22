@@ -1903,8 +1903,8 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-overlay-in" onMouseDown={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto animate-modal-in" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-sm font-semibold text-slate-800">
             {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : draft.kind === "delay" ? "Edit delay" : "Edit action"}
@@ -2277,8 +2277,8 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
 
       {/* Trigger edit modal */}
       {triggerOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setTriggerOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[88vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-overlay-in" onMouseDown={() => setTriggerOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[88vh] overflow-y-auto animate-modal-in" onMouseDown={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b">
               <div className="flex items-center gap-2">
                 <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center"><Zap className="h-4 w-4" /></span>

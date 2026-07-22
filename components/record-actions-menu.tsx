@@ -117,8 +117,8 @@ function DeleteDialog({ title, isPending, onConfirm, onClose }: {
   const ok = text.trim().toUpperCase() === "DELETE"
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-overlay-in" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3 animate-modal-in">
         <div className="flex items-center gap-2">
           <span className="h-9 w-9 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0"><Trash2 className="h-4 w-4" /></span>
           <h2 className="text-base font-semibold text-slate-900">Delete this record?</h2>
@@ -223,8 +223,8 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh]">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-overlay-in" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh] animate-modal-in">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <h2 className="text-base font-semibold text-slate-900">Merge records</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="h-5 w-5" /></button>

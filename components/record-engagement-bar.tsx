@@ -254,9 +254,9 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
       )}
 
       {isModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/30 backdrop-blur-sm p-4 sm:p-8"
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/30 backdrop-blur-sm p-4 sm:p-8 animate-overlay-in"
           onMouseDown={() => setOpen(null)}>
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 my-4 sm:my-12"
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 my-4 sm:my-12 animate-modal-in"
             onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
               <p className="text-sm font-semibold text-slate-900">{open === "EMAIL" ? "Send an email" : "Send an SMS"}</p>

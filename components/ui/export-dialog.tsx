@@ -63,8 +63,8 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onMouseDown={handleClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onMouseDown={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4 animate-overlay-in" onMouseDown={handleClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-modal-in" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
           <h2 className="text-base font-semibold text-zinc-900">Export view</h2>
           <button onClick={handleClose} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button>
