@@ -11,10 +11,9 @@ import { decodeFilterParam, customPropertyFilterFields, type FilterField } from 
 // Records are gated by the object's own permission key: "CO:<objectKey>".
 function objKey(key: string) { return `CO:${key}` }
 
-// How big an object gets before its list switches from "load everything" to
-// server-side pagination + sort + filter. Tunable.
-export const CO_SERVER_THRESHOLD = 2000
-export const CO_PAGE_SIZE = 50
+// A "use server" file can only export async functions — the list threshold /
+// page size live in a plain module (lib/custom-object-config) instead.
+const CO_PAGE_SIZE = 50
 
 // Filter fields for server-side translation — native columns carry a `column`,
 // custom properties carry `column` + `jsonBag: "values"` (via the shared helper).
