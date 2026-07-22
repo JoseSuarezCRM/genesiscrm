@@ -25,6 +25,7 @@ import {
   Globe, Users, UserCog, Lock, LayoutList, Table2, Download, Columns3, ChevronUp, Mail, Send,
 } from "lucide-react"
 import BulkActionBar, { bulkBtn, bulkDanger } from "@/components/ui/bulk-action-bar"
+import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
@@ -758,7 +759,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_ACTIVITY_COLS)
   const [colMenuOpen, setColMenuOpen] = useState(false)
   const colMenuRef = useRef<HTMLDivElement>(null)
-  const [sortKey, setSortKey] = useState<"date" | "account">("date")
+  const [sortKey, setSortKey] = useState<string>("date")
+  const { colWidth, startResize } = useColumnResize("activityColWidths")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -1137,12 +1139,26 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   }
 
   // Sorted rows for the table view.
+  // Comparable value per column, so any header can sort.
+  const sortVal = (a: ActivityRow, key: string): string | number => {
+    switch (key) {
+      case "date": return activityDay(a.date).getTime()
+      case "account": return a.practice?.name?.toLowerCase() ?? ""
+      case "location": return a.location?.name?.toLowerCase() ?? ""
+      case "providers": return a.providers.map(p => p.doctor.name).join(", ").toLowerCase()
+      case "type": return (a.flyer ?? "").toLowerCase()
+      case "nextStep": return (a.nextStep ?? "").toLowerCase()
+      case "frontDesk": return (a.frontDesk ?? "").toLowerCase()
+      case "tags": return a.tags.map(t => t.name).join(", ").toLowerCase()
+      case "loggedBy": return (a.createdBy.name ?? a.createdBy.email).toLowerCase()
+      default: return ""
+    }
+  }
   const sorted = useMemo(() => {
     const rows = [...filtered]
     rows.sort((a, b) => {
-      let cmp = 0
-      if (sortKey === "date") cmp = activityDay(a.date).getTime() - activityDay(b.date).getTime()
-      else cmp = (a.practice?.name ?? "").localeCompare(b.practice?.name ?? "")
+      const va = sortVal(a, sortKey), vb = sortVal(b, sortKey)
+      const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))
       return sortDir === "asc" ? cmp : -cmp
     })
     return rows
@@ -1151,7 +1167,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const cols = ACTIVITY_COLUMNS.filter(c => visibleCols.includes(c.key))
   const toggleCol = (key: string) =>
     setVisibleCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
-  const toggleSort = (key: "date" | "account") => {
+  const toggleSort = (key: string) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc")
     else { setSortKey(key); setSortDir("desc") }
   }
@@ -1495,6 +1511,11 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           </BulkActionBar>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                {cols.map(col => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+                <col style={{ width: 64 }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
                   <th className="px-4 py-2.5 w-10">
@@ -1504,13 +1525,12 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                     </button>
                   </th>
                   {cols.map(col => (
-                    <th key={col.key} className="px-4 py-2.5">
-                      {col.sortable ? (
-                        <button onClick={() => toggleSort(col.key as "date" | "account")} className="inline-flex items-center gap-1 hover:text-zinc-800">
-                          {col.label}
-                          {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                        </button>
-                      ) : col.label}
+                    <th key={col.key} className="px-4 py-2.5 relative">
+                      <button onClick={() => toggleSort(col.key)} className="inline-flex items-center gap-1 hover:text-zinc-800">
+                        {col.label}
+                        {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                      </button>
+                      <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}
                   <th className="px-4 py-2.5 w-16"></th>
@@ -1526,7 +1546,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                       </button>
                     </td>
                     {cols.map(col => (
-                      <td key={col.key} className="px-4 py-3 max-w-[240px] truncate">{renderCell(a, col.key)}</td>
+                      <td key={col.key} className="px-4 py-3 truncate" style={{ maxWidth: colWidth(col.key) ?? 240 }}>{renderCell(a, col.key)}</td>
                     ))}
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex gap-0.5">
