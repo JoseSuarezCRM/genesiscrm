@@ -50,7 +50,9 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): st
   if (f.type === "user") return userMap[v] ?? String(v)
   if (f.type === "datetime") return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
   if (f.type === "date") return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-  if (Array.isArray(v)) return v.join(", ")
+  const lbl = f.optionLabels
+  if (Array.isArray(v)) return v.map((x) => lbl?.[String(x)] ?? String(x)).join(", ")
+  if (f.type === "select" && lbl) return lbl[String(v)] ?? String(v)
   return String(v)
 }
 
@@ -168,7 +170,7 @@ function FieldRow({ f, value, values, recordId, entityType, canEdit, users, user
       {f.type === "select" ? (
         <StyledSelect autoOpen value={String(draft ?? "")} onChange={(e) => commit(e.target.value)} className={input}>
           <option value="">—</option>
-          {effectiveOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+          {effectiveOptions.map((o) => <option key={o} value={o}>{f.optionLabels?.[o] ?? o}</option>)}
         </StyledSelect>
       ) : f.type === "select_or_other" ? (
         <>

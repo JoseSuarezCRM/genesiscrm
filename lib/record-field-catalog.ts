@@ -22,6 +22,8 @@ export interface RecordFieldDef {
   default?: string
   // Dependent options: another property's value controls which options show.
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> }
+  // Dropdown/select display labels keyed by the stored internal value.
+  optionLabels?: Record<string, string>
 }
 
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {

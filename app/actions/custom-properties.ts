@@ -29,6 +29,7 @@ interface CreateCustomPropertyInput {
   description?: string
   defaultValue?: string
   options?: string[]
+  optionLabels?: Record<string, string>
   internalName?: string
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
 }
@@ -95,6 +96,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
         description: data.description,
         defaultValue: data.defaultValue || null,
         options: data.options || [],
+        optionLabels: (data.optionLabels ?? undefined) as any,
         conditional: (data.conditional ?? undefined) as any,
       },
     })
@@ -125,6 +127,7 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
         ...(rest.unique !== undefined ? { unique: rest.unique } : {}),
         ...(rest.defaultValue !== undefined ? { defaultValue: rest.defaultValue || null } : {}),
         ...(rest.conditional !== undefined ? { conditional: (rest.conditional ?? null) as any } : {}),
+        ...(rest.optionLabels !== undefined ? { optionLabels: (rest.optionLabels ?? null) as any } : {}),
         options: rest.options,
       },
     })

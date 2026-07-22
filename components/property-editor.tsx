@@ -13,13 +13,14 @@ export type Conditional = { controllingPropertyId: string; rules: Record<string,
 
 export interface PropertyDraft {
   name: string; internalName: string; type: string; description?: string
-  required: boolean; unique: boolean; defaultValue?: string; options: string[]; conditional: Conditional
+  required: boolean; unique: boolean; defaultValue?: string; options: string[]
+  optionLabels?: Record<string, string>; conditional: Conditional
 }
 
 export interface EditingProperty {
   id: string; name: string; internalName?: string | null; type: string
   required?: boolean; unique?: boolean; description?: string | null; defaultValue?: string | null
-  options?: string[]; conditional?: Conditional
+  options?: string[]; optionLabels?: Record<string, string> | null; conditional?: Conditional
 }
 
 // A sibling single-select property that can control this one's options.
@@ -74,7 +75,12 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [required, setRequired] = useState(editing?.required ?? false)
   const [unique, setUnique] = useState(editing?.unique ?? false)
   const [defaultValue, setDefaultValue] = useState(editing?.defaultValue ?? "")
-  const [options, setOptions] = useState<string[]>(editing?.options ?? [])
+  // Each option carries a display label + a stable internal value (what records
+  // store). `locked` = existed when the editor opened → its value is immutable.
+  const [optRows, setOptRows] = useState<{ label: string; value: string; locked: boolean; touched: boolean }[]>(() => {
+    const labels = (editing?.optionLabels ?? {}) as Record<string, string>
+    return (editing?.options ?? []).map((v) => ({ label: labels[v] ?? v, value: v, locked: true, touched: true }))
+  })
   const [optQuery, setOptQuery] = useState("")
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [optPage, setOptPage] = useState(0)
@@ -93,21 +99,24 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
     if (!internalTouched) setInternalName(slugify(v))
   }
 
-  const setOpt = (i: number, v: string) => setOptions((o) => o.map((x, idx) => (idx === i ? v : x)))
-  const addOpt = () => { setOptions((o) => [...o, ""]); setOptPage(Math.floor(options.length / OPT_PAGE)) }
-  const removeOpt = (i: number) => setOptions((o) => o.filter((_, idx) => idx !== i))
+  const setRowLabel = (i: number, label: string) => setOptRows((rs) => rs.map((r, idx) => idx === i ? { ...r, label, value: r.locked || r.touched ? r.value : slugify(label) } : r))
+  const setRowValue = (i: number, value: string) => setOptRows((rs) => rs.map((r, idx) => idx === i ? { ...r, value: slugify(value), touched: true } : r))
+  const addOpt = () => { setOptRows((rs) => [...rs, { label: "", value: "", locked: false, touched: false }]); setOptPage(Math.floor(optRows.length / OPT_PAGE)) }
+  const removeOpt = (i: number) => setOptRows((rs) => rs.filter((_, idx) => idx !== i))
 
   // Options are paginated (10/page). Search filters across all, then paginates.
-  const optFiltered = options.map((o, i) => ({ o, i })).filter(({ o }) => !optQuery || o.toLowerCase().includes(optQuery.toLowerCase()))
+  const optFiltered = optRows.map((r, i) => ({ r, i })).filter(({ r }) => !optQuery || `${r.label} ${r.value}`.toLowerCase().includes(optQuery.toLowerCase()))
   const optPages = Math.max(1, Math.ceil(optFiltered.length / OPT_PAGE))
   const optPageC = Math.min(optPage, optPages - 1)
   const optVisible = optFiltered.slice(optPageC * OPT_PAGE, optPageC * OPT_PAGE + OPT_PAGE)
   function moveOpt(from: number, to: number) {
-    setOptions((o) => { const next = [...o]; const [m] = next.splice(from, 1); next.splice(to, 0, m); return next })
+    setOptRows((rs) => { const next = [...rs]; const [m] = next.splice(from, 1); next.splice(to, 0, m); return next })
   }
 
-  // For the active controlling value, which of THIS property's options are allowed.
-  const cleanOptions = options.map((o) => o.trim()).filter(Boolean)
+  // Cleaned rows → the stable values records store, plus a value→label lookup.
+  const cleanRows = optRows.map((r) => ({ label: r.label.trim(), value: r.value.trim() || slugify(r.label) })).filter((r) => r.value)
+  const cleanOptions = cleanRows.map((r) => r.value)
+  const labelOfValue = (v: string) => cleanRows.find((r) => r.value === v)?.label || v
   const allowedFor = (v: string) => rules[v] ?? cleanOptions
   function toggleAllowed(controlValue: string, opt: string) {
     setRules((prev) => {
@@ -126,10 +135,12 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
     const conditional: Conditional = controlId && hasOptions && Object.keys(rules).length > 0
       ? { controllingPropertyId: controlId, rules }
       : null
+    const labelMap = Object.fromEntries(cleanRows.filter((r) => r.label && r.label !== r.value).map((r) => [r.value, r.label]))
     const draft: PropertyDraft = {
       name: name.trim(), internalName: slugify(internalName || name), type,
       description: description.trim() || undefined, required, unique,
-      defaultValue: defaultValue || undefined, options: cleanOptions, conditional,
+      defaultValue: defaultValue || undefined, options: cleanOptions,
+      optionLabels: Object.keys(labelMap).length ? labelMap : undefined, conditional,
     }
     startTransition(async () => {
       const res = await onSave(draft)
@@ -241,8 +252,8 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                 {hasOptions && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-slate-700">Options ({options.length})</label>
-                      {options.length > 6 && (
+                      <label className="text-sm font-medium text-slate-700">Options ({optRows.length})</label>
+                      {optRows.length > 6 && (
                         <div className="relative">
                           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                           <input value={optQuery} onChange={(e) => setOptQuery(e.target.value)} placeholder="Search" className="pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
@@ -253,14 +264,16 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                       <div className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
                         <span></span><span>Label</span><span>Internal name</span><span></span>
                       </div>
-                      {optVisible.map(({ o: opt, i }) => (
+                      {optVisible.map(({ r: row, i }) => (
                         <div key={i} draggable onDragStart={() => setDragIdx(i)}
                           onDragOver={(e) => { e.preventDefault(); if (dragIdx !== null && dragIdx !== i) { moveOpt(dragIdx, i); setDragIdx(i) } }}
                           onDragEnd={() => setDragIdx(null)}
                           className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 items-center px-3 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                           <GripVertical className="h-4 w-4 text-slate-300 cursor-grab" />
-                          <input value={opt} onChange={(e) => setOpt(i, e.target.value)} placeholder="Option label" className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400" />
-                          <span className="text-xs font-mono text-slate-400 truncate">{slugify(opt) || "—"}</span>
+                          <input value={row.label} onChange={(e) => setRowLabel(i, e.target.value)} placeholder="Option label" className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400" />
+                          <input value={row.value} onChange={(e) => setRowValue(i, e.target.value)} disabled={row.locked}
+                            title={row.locked ? "Internal value is fixed once saved (records reference it)" : "Internal value"}
+                            placeholder="internal_value" className="text-xs font-mono border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400 disabled:bg-slate-50 disabled:text-slate-400" />
                           <button onClick={() => removeOpt(i)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
@@ -286,7 +299,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                     {hasOptions ? (
                       <StyledSelect value={defaultValue} onChange={(e) => setDefaultValue(e.target.value)} className={INPUT}>
                         <option value="">No default</option>
-                        {cleanOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                        {cleanOptions.map((o) => <option key={o} value={o}>{labelOfValue(o)}</option>)}
                       </StyledSelect>
                     ) : (
                       <input type={type === "NUMBER" ? "number" : type === "DATE" ? "date" : type === "DATE_TIME" ? "datetime-local" : "text"}
@@ -342,7 +355,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                                 return (
                                   <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
                                     <input type="checkbox" checked={checked} onChange={() => toggleAllowed(activeControlValue, opt)} className="h-4 w-4 rounded border-slate-300" />
-                                    <span className="truncate">{opt}</span>
+                                    <span className="truncate">{labelOfValue(opt)}</span>
                                   </label>
                                 )
                               })}
@@ -372,7 +385,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                 <p className="text-sm text-slate-500">How this property appears on a record.</p>
                 <div className="max-w-sm border border-slate-200 rounded-xl p-4">
                   <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">{name || "Property label"}{required && <span className="text-red-500"> *</span>}</span>
-                  <PreviewField type={type} options={cleanOptions} defaultValue={defaultValue} />
+                  <PreviewField type={type} options={cleanOptions.map(labelOfValue)} defaultValue={defaultValue ? labelOfValue(defaultValue) : ""} />
                 </div>
               </div>
             )}

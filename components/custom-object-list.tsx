@@ -69,7 +69,8 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
     case "CHECKBOX": return v ? "Yes" : "No"
     case "DATE": return fmtDate(v)
     case "DATE_TIME": return v ? new Date(v).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
-    case "MULTI_SELECT": return Array.isArray(v) ? v.join(", ") : String(v)
+    case "DROPDOWN": { const l = (p as any).optionLabels as Record<string, string> | undefined; return l?.[String(v)] ?? String(v) }
+    case "MULTI_SELECT": { const l = (p as any).optionLabels as Record<string, string> | undefined; return Array.isArray(v) ? v.map((x) => l?.[String(x)] ?? String(x)).join(", ") : String(v) }
     case "USER": return userMap[v] ?? String(v)
     default: return String(v)
   }
@@ -451,7 +452,7 @@ function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, o
               ) : p.type === "DROPDOWN" ? (
                 <StyledSelect className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)}>
                   <option value="">— Select —</option>
-                  {optsFor(p).map((o) => <option key={o} value={o}>{o}</option>)}
+                  {optsFor(p).map((o) => <option key={o} value={o}>{(p as any).optionLabels?.[o] ?? o}</option>)}
                 </StyledSelect>
               ) : p.type === "MULTI_SELECT" ? (
                 <div className="flex flex-wrap gap-1.5">
@@ -459,7 +460,7 @@ function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, o
                     const arr: string[] = Array.isArray(values[p.id]) ? values[p.id] : []
                     const on = arr.includes(o)
                     return <button key={o} type="button" onClick={() => set(p.id, on ? arr.filter((x) => x !== o) : [...arr, o])}
-                      className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border", on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200")}>{o}</button>
+                      className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border", on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200")}>{(p as any).optionLabels?.[o] ?? o}</button>
                   })}
                 </div>
               ) : p.type === "USER" ? (

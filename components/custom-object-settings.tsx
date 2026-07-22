@@ -122,7 +122,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
     const prop: CustomObjectProperty = {
       id: existing?.id ?? newPropId(),
       name: draft.name, type: (existing?.type ?? draft.type) as CustomPropType,
-      options: draft.options, required: draft.required, primary: existing?.primary,
+      options: draft.options, optionLabels: draft.optionLabels, required: draft.required, primary: existing?.primary,
       internalName: draft.internalName, description: draft.description,
       unique: draft.unique, defaultValue: draft.defaultValue, conditional: draft.conditional,
     }
@@ -194,7 +194,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
           editing={editingProp === "new" ? null : {
             id: editingProp.id, name: editingProp.name, internalName: editingProp.internalName, type: editingProp.type,
             required: editingProp.required, unique: editingProp.unique, description: editingProp.description,
-            defaultValue: editingProp.defaultValue, options: editingProp.options, conditional: editingProp.conditional,
+            defaultValue: editingProp.defaultValue, options: editingProp.options, optionLabels: editingProp.optionLabels, conditional: editingProp.conditional,
           }}
           controllingProps={props.filter((p) => p.type === "DROPDOWN" && (editingProp === "new" || p.id !== editingProp.id)).map((p) => ({ id: p.id, name: p.name, options: p.options ?? [] }))}
           onSave={(d) => saveProp(d, editingProp === "new" ? null : editingProp)}

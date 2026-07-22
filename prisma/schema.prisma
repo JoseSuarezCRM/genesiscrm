@@ -175,7 +175,8 @@ model CustomProperty {
   unique       Boolean                    @default(false)  // require unique values across records
   description  String?
   defaultValue String?                                     // pre-filled on new records
-  options      String[]                   @default([])  // for DROPDOWN and MULTI_SELECT
+  options      String[]                   @default([])  // DROPDOWN/MULTI_SELECT: the stable internal VALUES records store
+  optionLabels Json?                                       // { [value]: displayLabel } — rename labels without breaking records
   conditional  Json?                                       // { controllingPropertyId, rules: { value: [opts] } }
   createdAt    DateTime                   @default(now())
   updatedAt    DateTime                   @updatedAt

@@ -12,6 +12,7 @@ export interface CustomObjectProperty {
   name: string
   type: CustomPropType
   options?: string[]
+  optionLabels?: Record<string, string>
   required?: boolean
   primary?: boolean
   // Extended (HubSpot-style) attributes — all optional, stored in the def JSON.

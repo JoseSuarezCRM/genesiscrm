@@ -12,6 +12,7 @@ interface CustomProperty {
   type: string
   required: boolean
   options: string[]
+  optionLabels?: Record<string, string> | null
   value?: any
 }
 
@@ -50,7 +51,9 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
       case "DATE_TIME":
         return new Date(property.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
       case "MULTI_SELECT":
-        return Array.isArray(property.value) ? property.value.join(", ") : "—"
+        return Array.isArray(property.value) ? property.value.map((x) => property.optionLabels?.[String(x)] ?? String(x)).join(", ") : "—"
+      case "DROPDOWN":
+        return property.optionLabels?.[String(property.value)] ?? String(property.value)
       default:
         return String(property.value)
     }
@@ -95,7 +98,7 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
             <option value="">Select...</option>
             {property.options.map((opt) => (
               <option key={opt} value={opt}>
-                {opt}
+                {property.optionLabels?.[opt] ?? opt}
               </option>
             ))}
           </StyledSelect>
