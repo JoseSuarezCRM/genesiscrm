@@ -62,6 +62,9 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [isPending, startTransition] = useTransition()
   const [step, setStep] = useState<Step>("details")
   const [error, setError] = useState("")
+  const [closing, setClosing] = useState(false)
+  // Play the exit animation, then actually unmount.
+  const close = () => { setClosing(true); setTimeout(onClose, 200) }
 
   const [name, setName] = useState(editing?.name ?? "")
   const [internalName, setInternalName] = useState(editing?.internalName ?? "")
@@ -131,7 +134,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
     startTransition(async () => {
       const res = await onSave(draft)
       if (res && (res as any).error) { setError((res as any).error); return }
-      onClose()
+      close()
     })
   }
 
@@ -150,14 +153,15 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
 
   if (typeof document === "undefined") return null
   return createPortal((
-    <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+    <div className={cn("fixed inset-0 z-[100] bg-white flex flex-col ease-out",
+      closing ? "animate-out fade-out slide-out-to-bottom-4 duration-200" : "animate-in fade-in slide-in-from-bottom-4 duration-300")}>
       <div className="flex items-center justify-between px-5 h-14 bg-zinc-900 text-white shrink-0">
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate">{editing ? name || "Edit property" : "Create new property"}</p>
           <p className="text-[11px] text-zinc-400 truncate">{entityLabel}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onClose} className="h-8 px-3 text-sm rounded-lg border border-zinc-700 hover:bg-zinc-800">Cancel</button>
+          <button onClick={close} className="h-8 px-3 text-sm rounded-lg border border-zinc-700 hover:bg-zinc-800">Cancel</button>
           <button onClick={submit} disabled={isPending} className="h-8 px-4 text-sm font-medium rounded-lg bg-white text-zinc-900 hover:bg-zinc-100 disabled:opacity-50">
             {isPending ? "Saving…" : "Save"}
           </button>
