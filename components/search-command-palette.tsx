@@ -146,7 +146,7 @@ export default function SearchCommandPalette({ permissions, isAdmin }: Props) {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search... (Cmd+K)"
+            placeholder="Search..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)
