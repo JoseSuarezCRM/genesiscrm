@@ -63,7 +63,10 @@ export async function updateRecordField(entityType: string, recordId: string, fi
       })
     }
 
-    await runTrigger_RecordPropertyChanged(entityType, recordId, { [field]: value }, uid ?? undefined).catch(() => {})
+    // Custom properties are watched by workflows under "custom:<id>" (matching
+    // customPropertyToDef), so translate "cp_<id>" → "custom:<id>" when firing.
+    const triggerKey = field.startsWith("cp_") ? `custom:${field.slice(3)}` : field
+    await runTrigger_RecordPropertyChanged(entityType, recordId, { [triggerKey]: value }, uid ?? undefined).catch(() => {})
     revalidatePath(`/${meta.basePath}/${recordId}`)
     return { success: true }
   } catch (err: any) {

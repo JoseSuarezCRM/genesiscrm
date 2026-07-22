@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { cpMeta, type CPEntity } from "@/lib/custom-property-entities"
+import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 
 // One delegate per object that carries a customProperties JSON bag.
 function cpDelegate(type: CPEntity): any {
@@ -180,6 +181,11 @@ export async function saveCustomPropertyValue(
     const props = (current?.customProperties as Record<string, any>) || {}
     props[customPropertyId] = value
     await model.update({ where: { id: entityId }, data: { customProperties: props } })
+
+    // Fire the "Property changed" automation trigger. Custom properties are
+    // watched under the "custom:<id>" key (matching customPropertyToDef), so key
+    // the change that way — not "cp_<id>".
+    await runTrigger_RecordPropertyChanged(entityType, entityId, { [`custom:${customPropertyId}`]: value }, (session.user as any).id).catch(() => {})
 
     revalidatePath(`/${meta.basePath}/${entityId}`)
     return { success: true }
