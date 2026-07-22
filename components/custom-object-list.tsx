@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown, ExternalLink } from "lucide-react"
+import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-react"
 import { createCustomObjectRecord, bulkDeleteCustomObjectRecords } from "@/app/actions/custom-object-records"
 import type { CustomObjectProperty } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
@@ -272,9 +272,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                     <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
                     <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{r.recordNumber != null ? `#${r.recordNumber}` : "—"}</td>
                     <td className="px-4 py-2.5">
-                      <Link href={`/objects/${objectKey}/${r.id}`} className="font-medium text-blue-600 hover:underline inline-flex items-center gap-1">
+                      <Link href={`/objects/${objectKey}/${r.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                         {(primary && displayValue(primary, r.values[primary.id], userMap)) || "Untitled"}
-                        <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
                       </Link>
                     </td>
                     {cols.map((c) => (

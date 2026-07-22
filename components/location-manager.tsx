@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Plus, Pencil, Trash2, Loader2, MapPin, Building2, Search, X, Check,
-  LayoutList, Table2, Download, Columns3, ChevronDown, ChevronUp, ExternalLink,
+  LayoutList, Table2, Download, Columns3, ChevronDown, ChevronUp,
 } from "lucide-react"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
@@ -292,8 +292,8 @@ export default function LocationManager({ locations, practices, customPropertyDe
                       <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleRow(l.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
                     <td className="px-4 py-2.5">
-                      <Link href={`/locations/${l.id}`} className="font-medium text-blue-600 hover:underline inline-flex items-center gap-1">
-                        {l.name} <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
+                      <Link href={`/locations/${l.id}`} className="font-medium text-slate-900 hover:text-blue-600">
+                        {l.name}
                       </Link>
                     </td>
                     {cols.map((col) => (

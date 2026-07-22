@@ -799,9 +799,8 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                     {filtered.map((d) => (
                       <tr key={d.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-2.5">
-                          <Link href={`/referring-doctors/${d.id}`} className="font-medium text-blue-600 hover:underline inline-flex items-center gap-1">
+                          <Link href={`/referring-doctors/${d.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                             {d.name}
-                            <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
                           </Link>
                         </td>
                         {shows("title") && <td className="px-4 py-2.5 text-slate-500">{(d as any).title || "—"}</td>}
@@ -947,9 +946,8 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                       <div className="space-y-1.5">
                         {p.doctors.map((d) => (
                           <div key={d.id} className="flex items-center gap-2 bg-white border rounded-md px-3 py-2 text-sm">
-                            <Link href={`/referring-doctors/${d.id}`} className="font-medium text-blue-600 hover:underline flex-1 min-w-0 truncate flex items-center gap-1">
-                              {(d as any).title ? <span className="text-slate-500 font-normal">{(d as any).title}</span> : null}{d.name}
-                              <ExternalLink className="h-3 w-3 text-slate-400 shrink-0" />
+                            <Link href={`/referring-doctors/${d.id}`} className="font-medium text-slate-900 hover:text-blue-600 flex-1 min-w-0 truncate">
+                              {(d as any).title ? <span className="text-slate-500 font-normal">{(d as any).title} </span> : null}{d.name}
                             </Link>
                             <span className="text-xs text-slate-400 hidden sm:block shrink-0">
                               {(() => {
