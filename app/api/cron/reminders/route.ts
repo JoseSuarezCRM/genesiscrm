@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
+import { assertCron } from "@/lib/cron-auth"
 import { prisma } from "@/lib/prisma"
 import { triggerAutoOutreach } from "@/app/actions/outreach"
 import { OutreachTrigger } from "@prisma/client"
 
 export async function GET(req: NextRequest) {
   // Verify the request is from Vercel Cron (or manual trigger with secret)
-  const authHeader = req.headers.get("authorization")
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new NextResponse("Unauthorized", { status: 401 })
-  }
+  const _cronErr = assertCron(req)
+  if (_cronErr) return _cronErr
 
   const now = new Date()
   const in23Hours = new Date(now.getTime() + 23 * 60 * 60 * 1000)

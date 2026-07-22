@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { assertCron } from "@/lib/cron-auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
 import { resolveWorkflowSender } from "@/lib/sender-resolve"
@@ -10,10 +11,8 @@ function resolveBody(template: string, referral: any): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization")
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const _cronErr = assertCron(req)
+  if (_cronErr) return _cronErr
 
   const now = new Date()
 

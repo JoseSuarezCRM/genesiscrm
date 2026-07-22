@@ -50,15 +50,11 @@ export async function POST(req: NextRequest) {
       params
     )
 
+    // Fail closed: reject any request whose Twilio signature doesn't verify
+    // (a forged inbound SMS could otherwise spoof senders and trigger workflows).
     if (!isValid) {
-      if (process.env.TWILIO_WEBHOOK_URL) {
-        // URL is explicitly set — safe to enforce
-        console.error("[twilio] Invalid signature for URL:", webhookUrl)
-        return new NextResponse("Forbidden", { status: 403 })
-      }
-      // URL was inferred — log the warning but allow through so messages
-      // aren't dropped while the env var is being configured
-      console.warn("[twilio] Signature mismatch (set TWILIO_WEBHOOK_URL to enforce). URL tried:", webhookUrl)
+      console.error("[twilio] Invalid signature — rejecting. URL tried:", webhookUrl)
+      return new NextResponse("Forbidden", { status: 403 })
     }
 
     const from: string        = params.From ?? ""

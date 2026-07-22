@@ -1,5 +1,6 @@
 "use client"
 
+import DOMPurify from "isomorphic-dompurify"
 import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition, useRef, useEffect } from "react"
 import { sendDirectEmail } from "@/app/actions/direct-email"
@@ -187,7 +188,7 @@ function SentEmailRow({ email }: { email: SentEmail }) {
           )}
           <div
             className="text-sm text-slate-700 border border-slate-200 rounded-lg bg-white px-3 py-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-blue-600 [&_a]:underline whitespace-pre-wrap"
-            dangerouslySetInnerHTML={{ __html: email.body }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(email.body ?? "") }}
           />
         </div>
       )}
