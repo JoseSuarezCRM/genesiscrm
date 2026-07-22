@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
@@ -15,7 +15,7 @@ import FilterBuilder from "@/components/ui/filter-builder"
 import ExportDialog from "@/components/ui/export-dialog"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { createCustomObjectView, deleteCustomObjectView } from "@/app/actions/custom-object-views"
-import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
+import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields, decodeFilterParam } from "@/lib/filters"
 import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -43,6 +43,11 @@ interface Props {
   savedViews?: SavedView[]
   shareUsers?: ShareUser[]
   shareTeams?: ShareTeam[]
+  // Server-side mode (large objects): `records` is one already-sorted/filtered page.
+  serverMode?: boolean
+  serverTotal?: number
+  serverPage?: number
+  serverPageSize?: number
 }
 
 interface SavedView {
@@ -70,8 +75,17 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
   }
 }
 
-export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [] }: Props) {
+export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [], serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50 }: Props) {
   const router = useRouter()
+  const pathname = usePathname()
+  const urlParams = useSearchParams()
+  const isServer = serverMode
+  // Push list state into the URL (server mode drives the query from it).
+  function pushParams(patch: Record<string, string | null>) {
+    const params = new URLSearchParams(urlParams.toString())
+    for (const [k, v] of Object.entries(patch)) { if (v === null || v === "") params.delete(k); else params.set(k, v) }
+    router.push(`${pathname}?${params.toString()}`)
+  }
   const [isPending, startTransition] = useTransition()
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
 
@@ -97,10 +111,13 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     { key: "__created", label: "Created", type: "date", getValue: (r) => r.createdAt },
     ...customPropertyFilterFields(properties.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })), "values"),
   ]
-  const [filter, setFilter] = useState<FilterState>(emptyFilter())
-  const [search, setSearch] = useState("")
+  // Filter/search seed from the URL in server mode so the UI reflects the query.
+  const [filter, setFilter] = useState<FilterState>(() => (isServer ? decodeFilterParam(urlParams.get("filter")) ?? emptyFilter() : emptyFilter()))
+  const [search, setSearch] = useState(() => (isServer ? urlParams.get("search") ?? "" : ""))
   const [exportOpen, setExportOpen] = useState(false)
-  const filtered = records.filter((r) => {
+
+  // Server mode: `records` is already the filtered+sorted page — render as-is.
+  const filtered = isServer ? records : records.filter((r) => {
     const q = search.toLowerCase().trim()
     if (q) {
       const hay = Object.values(r.values).map((v) => (Array.isArray(v) ? v.join(" ") : String(v ?? ""))).join(" ").toLowerCase()
@@ -110,12 +127,18 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   })
   const filtersActive = activeConditionCount(filter, filterFields) > 0
 
-  // Column resize + client-side sort (all records are loaded here).
   const { colWidth, startResize } = useColumnResize(`co_${objectKey}_colWidths`)
-  const [sortKey, setSortKey] = useState<string>("__id")
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const [sortKeyC, setSortKeyC] = useState<string>("__id")
+  const [sortDirC, setSortDirC] = useState<"asc" | "desc">("asc")
+  const sortKey = isServer ? (urlParams.get("sort") ?? "__id") : sortKeyC
+  const sortDir: "asc" | "desc" = isServer ? (urlParams.get("dir") === "asc" ? "asc" : "desc") : sortDirC
   // Text columns start A→Z; id/date columns start newest/highest first.
-  const toggleSort = (k: string) => { if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc")); else { setSortKey(k); setSortDir(k === "__id" || k === "__created" ? "desc" : "asc") } }
+  const toggleSort = (k: string) => {
+    const firstDir = k === "__id" || k === "__created" ? "desc" : "asc"
+    const nextDir = sortKey === k ? (sortDir === "asc" ? "desc" : "asc") : firstDir
+    if (isServer) { pushParams({ sort: k, dir: nextDir, page: "1" }); return }
+    if (sortKeyC === k) setSortDirC((d) => (d === "asc" ? "desc" : "asc")); else { setSortKeyC(k); setSortDirC(firstDir) }
+  }
   const sortVal = (r: RecordRow, key: string): string | number => {
     if (key === "__id") return r.recordNumber ?? 0
     if (key === "__name") return (primary ? displayValue(primary, r.values[primary.id], userMap) : "").toLowerCase()
@@ -124,12 +147,28 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     const p = otherProps.find((x) => x.id === key)
     return p ? displayValue(p, r.values[key], userMap).toLowerCase() : ""
   }
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = isServer ? filtered : [...filtered].sort((a, b) => {
     const va = sortVal(a, sortKey), vb = sortVal(b, sortKey)
     const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))
     return sortDir === "asc" ? cmp : -cmp
   })
   const SortIcon = ({ k }: { k: string }) => sortKey === k ? (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : null
+
+  // Server-mode search: debounce URL updates so typing doesn't spam the server.
+  useEffect(() => {
+    if (!isServer) return
+    const cur = urlParams.get("search") ?? ""
+    if (search === cur) return
+    const t = setTimeout(() => pushParams({ search: search || null, page: "1" }), 400)
+    return () => clearTimeout(t)
+  }, [search, isServer]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Server-mode filter: push the encoded filter to the URL when it changes.
+  function onFilterChange(next: FilterState) {
+    setFilter(next)
+    if (isServer) pushParams({ filter: activeConditionCount(next, filterFields) > 0 ? JSON.stringify(next) : null, page: "1" })
+  }
+  const totalPages = isServer ? Math.max(1, Math.ceil(serverTotal / serverPageSize)) : 1
 
   // Saved views (applied in-memory).
   const [showSaveForm, setShowSaveForm] = useState(false)
@@ -175,7 +214,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <FilterBuilder fields={filterFields} value={filter} onChange={setFilter} />
+        <FilterBuilder fields={filterFields} value={filter} onChange={onFilterChange} />
         <div className="relative" ref={colRef}>
           <button onClick={() => setColMenu((v) => !v)}
             className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
@@ -213,7 +252,9 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
         <input type="text" placeholder={`Search ${plural.toLowerCase()}…`} value={search} onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
-      {(filtersActive || search) && <p className="text-xs text-slate-400 -mt-1">{filtered.length} of {records.length}</p>}
+      {isServer
+        ? (filtersActive || search) && <p className="text-xs text-slate-400 -mt-1">{serverTotal} {serverTotal === 1 ? singular.toLowerCase() : plural.toLowerCase()} match</p>
+        : (filtersActive || search) && <p className="text-xs text-slate-400 -mt-1">{filtered.length} of {records.length}</p>}
 
       {/* Saved views */}
       <div className="flex flex-wrap items-center gap-2">
@@ -324,6 +365,20 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Server-side pagination */}
+      {isServer && serverTotal > serverPageSize && (
+        <div className="flex items-center justify-between text-sm text-slate-500">
+          <span>Showing {(serverPage - 1) * serverPageSize + 1}–{Math.min(serverTotal, serverPage * serverPageSize)} of {serverTotal}</span>
+          <div className="flex items-center gap-1">
+            <button disabled={serverPage <= 1} onClick={() => pushParams({ page: String(serverPage - 1) })}
+              className="h-8 px-2.5 inline-flex items-center rounded-lg border border-slate-200 bg-white hover:border-slate-400 disabled:opacity-40">Prev</button>
+            <span className="px-2 tabular-nums">Page {serverPage} of {totalPages}</span>
+            <button disabled={serverPage >= totalPages} onClick={() => pushParams({ page: String(serverPage + 1) })}
+              className="h-8 px-2.5 inline-flex items-center rounded-lg border border-slate-200 bg-white hover:border-slate-400 disabled:opacity-40">Next</button>
           </div>
         </div>
       )}

@@ -5,9 +5,27 @@ import { auth } from "@/lib/auth"
 import { requireAccess, requireDelete } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { runTrigger_RecordCreated, runTrigger_RecordPropertyChanged, runTrigger_RecordOwnerChanged } from "@/lib/automation-engine"
+import { filterStateToWhere } from "@/lib/filter-to-prisma"
+import { decodeFilterParam, customPropertyFilterFields, type FilterField } from "@/lib/filters"
 
 // Records are gated by the object's own permission key: "CO:<objectKey>".
 function objKey(key: string) { return `CO:${key}` }
+
+// How big an object gets before its list switches from "load everything" to
+// server-side pagination + sort + filter. Tunable.
+export const CO_SERVER_THRESHOLD = 2000
+export const CO_PAGE_SIZE = 50
+
+// Filter fields for server-side translation — native columns carry a `column`,
+// custom properties carry `column` + `jsonBag: "values"` (via the shared helper).
+function serverFilterFields(properties: any[]): FilterField[] {
+  return [
+    { key: "__recordNumber", label: "Record ID", type: "number", column: "recordNumber" } as any,
+    { key: "__owner", label: "Owner", type: "select", column: "ownerId" } as any,
+    { key: "__created", label: "Created", type: "date", column: "createdAt" } as any,
+    ...customPropertyFilterFields(properties.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })), "values"),
+  ]
+}
 
 export interface CustomRecordRow {
   id: string
@@ -52,6 +70,72 @@ export async function listCustomObjectRecords(objectKey: string): Promise<Custom
     lastViewedById: r.lastViewedById, lastViewedByName: r.lastViewedById ? names[r.lastViewedById] ?? null : null,
     lastViewedAt: r.lastViewedAt, createdAt: r.createdAt, updatedAt: r.updatedAt,
   }))
+}
+
+export interface CustomRecordsPage { rows: CustomRecordRow[]; total: number; page: number; pageSize: number }
+
+// Count all records for an object (used to pick client vs server list mode).
+export async function countCustomObjectRecords(objectKey: string): Promise<number> {
+  await requireAccess(objKey(objectKey), "VIEW")
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true } })
+  if (!def) return 0
+  return (prisma as any).customObjectRecord.count({ where: { objectDefId: def.id } })
+}
+
+// Server-side page: filter (reusing the FilterBuilder → Prisma translator),
+// search, sort, and paginate in the database so a huge object stays fast and
+// the sort holds across pages. Sorting a built-in column is a plain orderBy;
+// sorting a custom (JSON) property is done over the matching set.
+export async function queryCustomObjectRecords(objectKey: string, opts: { page?: number; sort?: string; dir?: "asc" | "desc"; search?: string; filter?: string }): Promise<CustomRecordsPage> {
+  await requireAccess(objKey(objectKey), "VIEW")
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
+  if (!def) return { rows: [], total: 0, page: 1, pageSize: CO_PAGE_SIZE }
+  const properties: any[] = (def.properties as any[]) ?? []
+  const primary = properties.find((p) => p.primary) ?? properties[0]
+  const page = Math.max(1, opts.page ?? 1)
+  const dir: "asc" | "desc" = opts.dir === "asc" ? "asc" : "desc"
+  const skip = (page - 1) * CO_PAGE_SIZE
+
+  const filterWhere = filterStateToWhere(decodeFilterParam(opts.filter), serverFilterFields(properties))
+  const search = (opts.search ?? "").trim()
+  const searchWhere = search
+    ? { OR: properties.filter((p) => ["TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL"].includes(p.type) || p.id === primary?.id)
+        .map((p) => ({ values: { path: [p.id], string_contains: search } })) }
+    : {}
+  const where: any = { objectDefId: def.id, AND: [filterWhere, searchWhere].filter((w) => w && Object.keys(w).length > 0) }
+
+  const total = await (prisma as any).customObjectRecord.count({ where })
+
+  const nativeOrderBy = opts.sort === "__id" ? { recordNumber: dir }
+    : opts.sort === "__created" ? { createdAt: dir }
+    : opts.sort === "__owner" ? { ownerId: dir }
+    : null
+
+  let records: any[]
+  if (nativeOrderBy) {
+    records = await (prisma as any).customObjectRecord.findMany({ where, orderBy: nativeOrderBy, skip, take: CO_PAGE_SIZE })
+  } else {
+    // Custom-property sort: order the matching set by the JSON value, then take the page.
+    const propId = !opts.sort || opts.sort === "__name" ? primary?.id : opts.sort
+    const all = await (prisma as any).customObjectRecord.findMany({ where, select: { id: true, values: true } })
+    const valOf = (r: any) => { const v = r.values?.[propId]; return v == null ? "" : Array.isArray(v) ? v.join(", ") : String(v) }
+    all.sort((a: any, b: any) => { const c = valOf(a).localeCompare(valOf(b), undefined, { numeric: true, sensitivity: "base" }); return dir === "asc" ? c : -c })
+    const pageIds = all.slice(skip, skip + CO_PAGE_SIZE).map((r: any) => r.id)
+    const fetched = await (prisma as any).customObjectRecord.findMany({ where: { id: { in: pageIds } } })
+    const byId: Record<string, any> = Object.fromEntries(fetched.map((r: any) => [r.id, r]))
+    records = pageIds.map((id: string) => byId[id]).filter(Boolean)
+  }
+
+  const names = await resolveNames(records.flatMap((r: any) => [r.ownerId, r.createdById, r.updatedById, r.lastViewedById]))
+  const rows: CustomRecordRow[] = records.map((r: any) => ({
+    id: r.id, recordNumber: r.recordNumber ?? null, values: (r.values as Record<string, any>) ?? {},
+    ownerId: r.ownerId, ownerName: r.ownerId ? names[r.ownerId] ?? null : null,
+    createdById: r.createdById, createdByName: r.createdById ? names[r.createdById] ?? null : null,
+    updatedById: r.updatedById, updatedByName: r.updatedById ? names[r.updatedById] ?? null : null,
+    lastViewedById: r.lastViewedById, lastViewedByName: r.lastViewedById ? names[r.lastViewedById] ?? null : null,
+    lastViewedAt: r.lastViewedAt, createdAt: r.createdAt, updatedAt: r.updatedAt,
+  }))
+  return { rows, total, page, pageSize: CO_PAGE_SIZE }
 }
 
 export async function getCustomObjectRecord(objectKey: string, id: string): Promise<CustomRecordRow | null> {
