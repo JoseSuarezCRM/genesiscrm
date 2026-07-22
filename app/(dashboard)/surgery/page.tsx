@@ -161,7 +161,7 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
                   href={buildUrl({ page: String(p) })}
                   className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border text-sm font-medium transition-colors ${
                     p === page
-                      ? "bg-zinc-900 text-white border-zinc-900"
+                      ? "bg-blue-600 text-white border-blue-600"
                       : "border-zinc-200 hover:border-zinc-400 hover:text-slate-900"
                   }`}
                 >

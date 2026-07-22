@@ -45,7 +45,7 @@ export default function CallLogCard({ recordType, recordId, maxCalls = 3, canEdi
           const c = done[done.length - 1 - i] // oldest first in the slots
           return (
             <div key={i} className={cn("flex-1 min-w-[90px] h-10 rounded-lg border flex items-center justify-center text-xs font-medium px-2 text-center",
-              c ? "bg-zinc-900 text-white border-zinc-900" : "bg-white border-slate-200 text-slate-300")}>
+              c ? "bg-blue-600 text-white border-blue-600" : "bg-white border-slate-200 text-slate-300")}>
               {c ? (c.outcome ?? "Logged") : `Call ${i + 1}`}
             </div>
           )
@@ -69,7 +69,7 @@ export default function CallLogCard({ recordType, recordId, maxCalls = 3, canEdi
             className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:border-zinc-400" />
           <div className="flex items-center gap-1">
             <button onClick={save} disabled={isPending || !notes.trim()}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />} Log call
             </button>
             <button onClick={() => setAdding(false)} className="h-8 px-2 text-sm text-slate-500 hover:text-slate-800">Cancel</button>

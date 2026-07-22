@@ -104,7 +104,7 @@ export default function PipelineManager({ pipelines: initial }: { pipelines: Pip
                   onKeyDown={e => { if (e.key === "Enter") handleSaveEdit(p.id); if (e.key === "Escape") cancelEdit() }}
                   className="flex-1 border border-slate-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:border-blue-500"
                 />
-                <button onClick={() => handleSaveEdit(p.id)} disabled={isPending} className="p-1.5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+                <button onClick={() => handleSaveEdit(p.id)} disabled={isPending} className="p-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
                   <Check className="h-3.5 w-3.5" />
                 </button>
                 <button onClick={cancelEdit} className="p-1.5 rounded-md text-slate-400 hover:text-slate-600">
@@ -146,7 +146,7 @@ export default function PipelineManager({ pipelines: initial }: { pipelines: Pip
               placeholder="Pipeline name…"
               className="flex-1 border border-slate-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:border-blue-500"
             />
-            <button onClick={handleCreate} disabled={isPending || !newName.trim()} className="p-1.5 rounded-md bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+            <button onClick={handleCreate} disabled={isPending || !newName.trim()} className="p-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
               <Check className="h-3.5 w-3.5" />
             </button>
             <button onClick={() => setCreating(false)} className="p-1.5 rounded-md text-slate-400 hover:text-slate-600">

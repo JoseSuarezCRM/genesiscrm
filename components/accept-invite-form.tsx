@@ -73,7 +73,7 @@ export default function AcceptInviteForm({ token, name }: { token: string; name:
 
       {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{error}</p>}
       <button type="submit" disabled={!canSubmit}
-        className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed">
+        className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
         Activate account
       </button>

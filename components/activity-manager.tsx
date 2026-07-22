@@ -484,7 +484,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
           <div className="flex flex-wrap gap-1.5 mt-1">
             {locations.map(l => (
               <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border transition-colors ${locationIds.includes(l.id) ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border transition-colors ${locationIds.includes(l.id) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
                 {locationIds.includes(l.id) && <Check className="h-2.5 w-2.5" />}
                 {l.name}
               </button>
@@ -494,7 +494,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
       )}
       <div className="flex gap-2 pt-1">
         <button type="button" onClick={handleSubmit as any} disabled={isPending}
-          className="flex-1 h-8 bg-zinc-900 text-white rounded-lg text-xs font-semibold hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+          className="flex-1 h-8 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
           {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
           Create & Add
         </button>
@@ -603,7 +603,7 @@ function FilterDropdown({ label, options, selected, onToggle, onClear, mode, onM
           active && isExclude
             ? "bg-rose-600 text-white border-rose-600 hover:bg-rose-700"
             : active
-            ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
+            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
             : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
         }`}
       >
@@ -621,7 +621,7 @@ function FilterDropdown({ label, options, selected, onToggle, onClear, mode, onM
           {/* Any of / None of */}
           <div className="flex items-center gap-1 p-2 border-b border-zinc-100">
             <button onClick={() => onModeChange("any")}
-              className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${!isExclude ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}>
+              className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${!isExclude ? "bg-blue-600 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}>
               Any of
             </button>
             <button onClick={() => onModeChange("none")}
@@ -641,7 +641,7 @@ function FilterDropdown({ label, options, selected, onToggle, onClear, mode, onM
                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
                 <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
                   selected.includes(opt.id)
-                    ? isExclude ? "bg-rose-600 border-rose-600" : "bg-zinc-900 border-zinc-900"
+                    ? isExclude ? "bg-rose-600 border-rose-600" : "bg-blue-600 border-blue-600"
                     : "border-zinc-300"
                 }`}>
                   {selected.includes(opt.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
@@ -1219,14 +1219,14 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         <button
           onClick={clearView}
           className={`h-8 px-3 rounded-lg text-sm font-medium border transition-all ${
-            !activeViewId ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+            !activeViewId ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
           }`}
         >
           All
         </button>
         {savedViews.map(view => (
           <div key={view.id} className={`inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden ${
-            activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+            activeViewId === view.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
           }`}>
             <button className={`pl-3 h-full ${view.isOwner === false ? "pr-3" : "pr-1.5"}`} onClick={() => applyView(view)}>
               {view.name}
@@ -1267,7 +1267,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSaveView} disabled={savingView || !newViewName.trim()}
-                  className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  className="flex-1 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
                   {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   Save view
                 </button>
@@ -1288,7 +1288,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               onClick={() => setViewMode("cards")}
               title="Card view"
               className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors ${
-                viewMode === "cards" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800"
+                viewMode === "cards" ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-800"
               }`}
             >
               <LayoutList className="h-3.5 w-3.5" />
@@ -1297,7 +1297,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               onClick={() => setViewMode("table")}
               title="Table view"
               className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors ${
-                viewMode === "table" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800"
+                viewMode === "table" ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-800"
               }`}
             >
               <Table2 className="h-3.5 w-3.5" />
@@ -1319,7 +1319,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   {ACTIVITY_COLUMNS.map(col => (
                     <button key={col.key} onClick={() => toggleCol(col.key)}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
-                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300")}>
+                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
                         {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                       </span>
                       <span className="text-zinc-700">{col.label}</span>
@@ -1385,7 +1385,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 <ViewAccessSelector value={editAccessValue} onChange={setEditAccessValue} users={shareUsers} teams={shareTeams} />
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => handleSaveAccess(editAccessView)} disabled={savingAccess}
-                    className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    className="flex-1 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {savingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                     Save access
                   </button>
@@ -1489,7 +1489,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       ) : viewMode === "table" ? (
         <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900 text-white text-sm">
+            <div className="flex items-center gap-3 px-4 py-2 bg-blue-600 text-white text-sm animate-bar-in">
               <span className="font-medium">{selectedIds.size} selected</span>
               <button onClick={() => setReportOpen(true)}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">
@@ -1508,7 +1508,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
                   <th className="px-4 py-2.5 w-10">
                     <button onClick={toggleSelectAll}
-                      className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center align-middle", allSelected ? "bg-zinc-900 border-zinc-900" : "border-zinc-300 hover:border-zinc-400")}>
+                      className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center align-middle", allSelected ? "bg-blue-600 border-blue-600" : "border-zinc-300 hover:border-zinc-400")}>
                       {allSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                     </button>
                   </th>
@@ -1530,7 +1530,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   <tr key={a.id} className={cn("hover:bg-zinc-50 transition-colors align-top", selectedIds.has(a.id) && "bg-blue-50/40")}>
                     <td className="px-4 py-3">
                       <button onClick={() => toggleSelect(a.id)}
-                        className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center", selectedIds.has(a.id) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300 hover:border-zinc-400")}>
+                        className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center", selectedIds.has(a.id) ? "bg-blue-600 border-blue-600" : "border-zinc-300 hover:border-zinc-400")}>
                         {selectedIds.has(a.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                       </button>
                     </td>

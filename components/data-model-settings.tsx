@@ -58,7 +58,7 @@ export default function DataModelSettings({ defs, types }: { defs: Def[]; types:
         </div>
         {err && <p className="text-xs text-red-600">{err}</p>}
         <button type="submit" disabled={isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Add relationship
         </button>
       </form>

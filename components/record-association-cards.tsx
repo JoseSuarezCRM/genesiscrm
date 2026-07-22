@@ -59,7 +59,7 @@ export default function RecordAssociationCards({ recordType, recordId, cards, ca
             <button key={c.type} onClick={() => toggleCard(c.type, !c.visible)} disabled={isPending}
               className="w-full flex items-center gap-2 px-1 py-1.5 text-sm text-left rounded-md hover:bg-slate-50">
               <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center",
-                c.visible ? "bg-zinc-900 border-zinc-900" : "border-slate-300")}>
+                c.visible ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
                 {c.visible && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
               </span>
               <span className="text-slate-700">{c.label}</span>

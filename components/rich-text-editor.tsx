@@ -147,7 +147,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
       onMouseDown={e => { e.preventDefault(); onClick() }}
       className={cn(
         "h-7 w-7 flex items-center justify-center rounded-md transition-colors",
-        active ? "bg-zinc-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+        active ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
       )}
     >
       {children}
@@ -185,7 +185,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                 onMouseDown={e => { e.preventDefault(); toggleTokenMenu() }}
                 className={cn(
                   "h-7 px-1.5 flex items-center gap-1 rounded-md text-xs font-medium transition-colors",
-                  tokenMenuOpen ? "bg-zinc-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  tokenMenuOpen ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                 )}
               >
                 <Braces className="h-3.5 w-3.5" />

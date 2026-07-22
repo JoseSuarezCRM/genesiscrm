@@ -74,10 +74,10 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${active?.label ?? ""} properties…`}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400" />
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-zinc-400" />
         </div>
         <button onClick={() => setDialog({ editing: null })}
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800">
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">
           <Plus className="h-4 w-4" /> Create property
         </button>
       </div>

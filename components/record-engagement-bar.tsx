@@ -36,7 +36,7 @@ const ACTIONS: { key: Composer; label: string; icon: typeof StickyNote }[] = [
 ]
 
 const CALL_OUTCOMES = ["Connected", "Left voicemail", "No answer", "Busy", "Wrong number"]
-const INPUT = "text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400"
+const INPUT = "text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-zinc-400"
 
 export default function RecordEngagementBar({ recordType, recordId, users = [], canEdit, compact = false, onLogged }: {
   recordType: string
@@ -131,7 +131,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
 
   const SubmitBtn = ({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) => (
     <button onClick={onClick} disabled={isPending || disabled}
-      className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+      className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
       {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {label}
     </button>
   )
@@ -177,7 +177,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
             <span className={cn(
               "rounded-full border flex items-center justify-center transition-colors",
               compact ? "h-7 w-7" : "h-8 w-8",
-              open === key ? "bg-zinc-900 border-zinc-900 text-white" : "bg-white border-slate-200 text-slate-600 group-hover:border-zinc-400 group-hover:text-zinc-900",
+              open === key ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-600 group-hover:border-zinc-400 group-hover:text-zinc-900",
             )}>
               <Icon className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
             </span>

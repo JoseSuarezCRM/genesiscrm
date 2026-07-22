@@ -369,7 +369,7 @@ function CriteriaGroupsBuilder({ groups, onChange, data }: {
       <div className="space-y-2">
         <p className="text-xs text-slate-400 italic">No criteria — runs for all records.</p>
         <button type="button" onClick={addGroup}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-zinc-900 text-white hover:bg-zinc-800">
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700">
           <Plus className="h-3.5 w-3.5" /> Add criteria
         </button>
       </div>
@@ -1998,9 +1998,9 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
               <p className="text-xs text-slate-500">Pause until a date, then continue. Useful for time-based sends (e.g. 1 day before a date on the record).</p>
               <div className="inline-flex bg-zinc-100 rounded-lg p-0.5 text-xs">
                 <button type="button" onClick={() => setDraft({ ...draft, mode: "field" })}
-                  className={cn("px-2.5 py-1 rounded-md font-medium", draft.mode === "field" ? "bg-zinc-900 text-white" : "text-zinc-500")}>Record date property</button>
+                  className={cn("px-2.5 py-1 rounded-md font-medium", draft.mode === "field" ? "bg-blue-600 text-white" : "text-zinc-500")}>Record date property</button>
                 <button type="button" onClick={() => setDraft({ ...draft, mode: "fixed" })}
-                  className={cn("px-2.5 py-1 rounded-md font-medium", draft.mode === "fixed" ? "bg-zinc-900 text-white" : "text-zinc-500")}>Specific date</button>
+                  className={cn("px-2.5 py-1 rounded-md font-medium", draft.mode === "fixed" ? "bg-blue-600 text-white" : "text-zinc-500")}>Specific date</button>
               </div>
               {draft.mode === "field" ? (
                 <div className="space-y-2">
@@ -2078,7 +2078,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
         </div>
         <div className="flex justify-end gap-2 p-4 border-t">
           <button onClick={onClose} className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
-          <button onClick={() => onSave(draft)} className="px-3 py-1.5 text-sm bg-zinc-900 text-white rounded-md hover:bg-zinc-800">Done</button>
+          <button onClick={() => onSave(draft)} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">Done</button>
         </div>
       </div>
     </div>
@@ -2306,7 +2306,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
               />
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t">
-              <button onClick={() => setTriggerOpen(false)} className="px-4 py-2 text-sm font-medium rounded-md bg-zinc-900 text-white hover:bg-zinc-800">Done</button>
+              <button onClick={() => setTriggerOpen(false)} className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700">Done</button>
             </div>
           </div>
         </div>

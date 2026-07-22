@@ -162,7 +162,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
               {allCols.map((c) => (
                 <button key={c.key} onClick={() => setVisibleCols((prev) => prev.includes(c.key) ? prev.filter((k) => k !== c.key) : [...prev, c.key])}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 text-left">
-                  <span className={cn("w-[14px] h-[14px] rounded border flex items-center justify-center", visibleCols.includes(c.key) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300")}>
+                  <span className={cn("w-[14px] h-[14px] rounded border flex items-center justify-center", visibleCols.includes(c.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
                     {visibleCols.includes(c.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                   </span>
                   <span className="text-zinc-700 truncate">{c.label}</span>
@@ -177,7 +177,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
         </button>
         {canEdit && (
           <button onClick={() => setAddOpen(true)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800">
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
             <Plus className="h-3.5 w-3.5" /> Add {singular}
           </button>
         )}
@@ -194,11 +194,11 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
       {/* Saved views */}
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={applyDefault}
-          className={cn("inline-flex items-center h-8 px-3 rounded-lg border text-sm font-medium transition-all", activeViewId === "__default__" ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+          className={cn("inline-flex items-center h-8 px-3 rounded-lg border text-sm font-medium transition-all", activeViewId === "__default__" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
           Default
         </button>
         {savedViews.map((v) => (
-          <div key={v.id} className={cn("inline-flex items-center h-8 rounded-lg border text-sm font-medium overflow-hidden", activeViewId === v.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+          <div key={v.id} className={cn("inline-flex items-center h-8 rounded-lg border text-sm font-medium overflow-hidden", activeViewId === v.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
             <button className={cn("pl-3 h-full", v.isOwner === false ? "pr-3" : "pr-1.5")} onClick={() => applyView(v)}>
               {v.name}
               {v.isOwner === false && v.visibility && v.visibility !== "PRIVATE" && (
@@ -226,7 +226,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
               <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
               <div className="flex gap-2 pt-1">
                 <button onClick={saveView} disabled={savingView || !newViewName.trim()}
-                  className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  className="flex-1 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
                   {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save view
                 </button>
                 <button onClick={() => { setShowSaveForm(false); setNewViewName("") }} className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">Cancel</button>
@@ -237,7 +237,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
       </div>
 
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm animate-bar-in">
           <span className="font-medium">{selected.size} selected</span>
           {canDelete && (
             <button onClick={bulkDelete} disabled={isPending} className="inline-flex items-center gap-1.5 h-7 px-3 bg-red-500 hover:bg-red-600 rounded-lg font-medium">
@@ -360,7 +360,7 @@ function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, o
                     const arr: string[] = Array.isArray(values[p.id]) ? values[p.id] : []
                     const on = arr.includes(o)
                     return <button key={o} type="button" onClick={() => set(p.id, on ? arr.filter((x) => x !== o) : [...arr, o])}
-                      className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border", on ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200")}>{o}</button>
+                      className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border", on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200")}>{o}</button>
                   })}
                 </div>
               ) : p.type === "USER" ? (
@@ -382,7 +382,7 @@ function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, o
           </div>
           {err && <p className="text-xs text-red-600">{err}</p>}
           <div className="flex gap-2 pt-1">
-            <button onClick={save} disabled={isPending} className="h-9 px-4 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 inline-flex items-center gap-1.5">
+            <button onClick={save} disabled={isPending} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5">
               {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Create
             </button>
             <button onClick={onClose} className="h-9 px-3 text-sm text-slate-500 hover:text-slate-800">Cancel</button>

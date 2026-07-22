@@ -69,7 +69,7 @@ export function ViewAccessSelector({ value, onChange, users, teams }: {
               type="button"
               onClick={() => pick(o.value)}
               className={`flex items-center gap-1.5 h-9 px-2.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap ${
-                active ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+                active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
               }`}
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -112,7 +112,7 @@ export function ViewAccessSelector({ value, onChange, users, teams }: {
                 onClick={() => toggleUser(u.id)}
                 className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-slate-50 text-left"
               >
-                <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center ${value.sharedUserIds.includes(u.id) ? "bg-zinc-900 border-zinc-900" : "border-slate-300"}`}>
+                <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center ${value.sharedUserIds.includes(u.id) ? "bg-blue-600 border-blue-600" : "border-slate-300"}`}>
                   {value.sharedUserIds.includes(u.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                 </span>
                 <span className="text-slate-700 truncate">{u.name ?? u.email}</span>

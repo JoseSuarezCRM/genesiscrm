@@ -96,7 +96,7 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-zinc-100">
           <button onClick={handleClose} className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-200 text-zinc-600 hover:border-zinc-300">Cancel</button>
           <button onClick={handleExport} disabled={busy || (getData && rowCount === 0)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             Export
           </button>

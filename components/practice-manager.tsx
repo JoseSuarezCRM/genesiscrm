@@ -601,7 +601,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                   <ViewAccessSelector value={editAccessValue} onChange={setEditAccessValue} users={shareUsers} teams={shareTeams} />
                   <div className="flex gap-2 pt-1">
                     <button onClick={() => handleSaveAccess(editAccessView)} disabled={savingAccess}
-                      className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                      className="flex-1 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
                       {savingAccess ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                       Save access
                     </button>
@@ -631,7 +631,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                       onClick={() => toggleCol(col.key)}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-left"
                     >
-                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-zinc-900 border-zinc-900" : "border-slate-300")}>
+                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
                         {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                       </span>
                       <span className="text-slate-700">{col.label}</span>
@@ -707,12 +707,12 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => { setActiveViewId(null); setVisibleCols(DEFAULT_PROVIDER_COLUMNS) }}
-            className={cn("h-8 px-3 rounded-lg text-sm font-medium border transition-all", !activeViewId ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}
+            className={cn("h-8 px-3 rounded-lg text-sm font-medium border transition-all", !activeViewId ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}
           >
             Default
           </button>
           {savedViews.map(view => (
-            <div key={view.id} className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden", activeViewId === view.id ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+            <div key={view.id} className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden", activeViewId === view.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
               <button className={cn("pl-3 h-full", view.isOwner === false ? "pr-3" : "pr-1.5")} onClick={() => applyProviderView(view)}>
                 {view.name}
                 {view.isOwner === false && view.visibility && view.visibility !== "PRIVATE" && (
@@ -752,7 +752,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                 <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
                 <div className="flex gap-2 pt-1">
                   <button onClick={handleSaveProviderView} disabled={savingView || !newViewName.trim()}
-                    className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    className="flex-1 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                     Save view
                   </button>

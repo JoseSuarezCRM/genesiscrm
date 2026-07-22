@@ -180,11 +180,11 @@ export default function LocationManager({ locations, practices, customPropertyDe
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex items-center rounded-lg border border-zinc-200 bg-white p-0.5">
           <button onClick={() => setViewMode("table")} title="Table view"
-            className={cn("inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors", viewMode === "table" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800")}>
+            className={cn("inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors", viewMode === "table" ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-800")}>
             <Table2 className="h-3.5 w-3.5" />
           </button>
           <button onClick={() => setViewMode("cards")} title="Card view"
-            className={cn("inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors", viewMode === "cards" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800")}>
+            className={cn("inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors", viewMode === "cards" ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-800")}>
             <LayoutList className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -202,7 +202,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                 {LOCATION_COLUMNS.map((col) => (
                   <button key={col.key} onClick={() => toggleCol(col.key)}
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
-                    <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center", visibleCols.includes(col.key) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300")}>
+                    <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
                       {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                     </span>
                     <span className="text-zinc-700">{col.label}</span>
@@ -220,7 +220,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
         {canEdit && (
           <button onClick={() => setAddOpen(true)}
-            className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
+            className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
             <Plus className="h-3.5 w-3.5" /> Add Location
           </button>
         )}
@@ -242,7 +242,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
       {/* Bulk bar */}
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm animate-bar-in">
           <span className="font-medium">{selected.size} selected</span>
           {canDelete && (
             <button onClick={bulkDelete} disabled={isPending}
@@ -426,7 +426,7 @@ function LocationForm({ practices, defaultValues, onSubmit, isPending, onClose }
       </div>
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={isPending}
-          className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 inline-flex items-center gap-1.5">
+          className="h-9 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5">
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
         </button>
         <button type="button" onClick={onClose} className="h-9 px-3 text-sm text-slate-500 hover:text-slate-800">Cancel</button>

@@ -50,7 +50,7 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "preview", label: "Preview" },
 ]
 
-const INPUT = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400"
+const INPUT = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-zinc-400"
 
 export default function PropertyEditor({ entityLabel, editing, controllingProps = [], onSave, onClose }: {
   entityLabel: string
@@ -154,13 +154,13 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   if (typeof document === "undefined") return null
   return createPortal((
     <div className={cn("fixed inset-0 z-[100] bg-white flex flex-col", closing ? "animate-panel-out" : "animate-panel-in")}>
-      <div className="flex items-center justify-between px-5 h-14 bg-zinc-900 text-white shrink-0">
+      <div className="flex items-center justify-between px-5 h-14 bg-blue-600 text-white shrink-0">
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate">{editing ? name || "Edit property" : "Create new property"}</p>
           <p className="text-[11px] text-zinc-400 truncate">{entityLabel}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={close} className="h-8 px-3 text-sm rounded-lg border border-zinc-700 hover:bg-zinc-800">Cancel</button>
+          <button onClick={close} className="h-8 px-3 text-sm rounded-lg border border-zinc-700 hover:bg-blue-700">Cancel</button>
           <button onClick={submit} disabled={isPending} className="h-8 px-4 text-sm font-medium rounded-lg bg-white text-zinc-900 hover:bg-zinc-100 disabled:opacity-50">
             {isPending ? "Saving…" : "Save"}
           </button>
@@ -196,7 +196,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                     <Code2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                     <span className="text-xs text-slate-400 shrink-0">Internal name</span>
                     <input value={internalName} onChange={(e) => { setInternalName(slugify(e.target.value)); setInternalTouched(true) }}
-                      placeholder="auto-filled" className="flex-1 min-w-0 font-mono text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
+                      placeholder="auto-filled" className="flex-1 min-w-0 font-mono text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-600/10" />
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">Personalization token: <span className="font-mono">{`{${internalName || "field"}}`}</span></p>
                 </div>
@@ -209,7 +209,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                   <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={INPUT + " resize-none"} placeholder="Optional — what this property is for" />
                 </div>
                 <div className="pt-2">
-                  <button onClick={() => setStep("field")} className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800">Next: Field type</button>
+                  <button onClick={() => setStep("field")} className="h-9 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Next: Field type</button>
                 </div>
               </div>
             )}
@@ -228,7 +228,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                       const I = ft.icon
                       return (
                         <button key={ft.value} onClick={() => setType(ft.value)}
-                          className={cn("flex flex-col items-start gap-1.5 p-3 rounded-xl border text-left transition-colors", type === ft.value ? "border-zinc-900 bg-zinc-50 ring-1 ring-zinc-900" : "border-slate-200 hover:border-slate-300")}>
+                          className={cn("flex flex-col items-start gap-1.5 p-3 rounded-xl border text-left transition-colors", type === ft.value ? "border-blue-600 bg-zinc-50 ring-1 ring-blue-600" : "border-slate-200 hover:border-slate-300")}>
                           <I className="h-4 w-4 text-slate-600" />
                           <span className="text-sm font-medium text-slate-800">{ft.label}</span>
                           <span className="text-[11px] text-slate-400">{ft.desc}</span>

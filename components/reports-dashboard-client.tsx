@@ -132,7 +132,7 @@ export default function DashboardListClient({ dashboards }: { dashboards: Dashbo
         </div>
         <button
           onClick={() => setShowInput(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
         >
           <PlusCircle className="h-3.5 w-3.5" />
           New Dashboard
@@ -152,12 +152,12 @@ export default function DashboardListClient({ dashboards }: { dashboards: Dashbo
               if (e.key === "Enter") handleCreate()
               if (e.key === "Escape") { setNewName(""); setShowInput(false) }
             }}
-            className="flex-1 text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            className="flex-1 text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
           />
           <button
             onClick={handleCreate}
             disabled={creating || !newName.trim()}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
           >
             {creating ? "Creating…" : "Create"}
           </button>
@@ -178,7 +178,7 @@ export default function DashboardListClient({ dashboards }: { dashboards: Dashbo
           <p className="text-slate-400 text-sm">Create a dashboard to organize your saved reports.</p>
           <button
             onClick={() => setShowInput(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 mt-2 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 mt-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
           >
             <PlusCircle className="h-3.5 w-3.5" />
             Create a Dashboard

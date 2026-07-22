@@ -56,7 +56,7 @@ function MultiSelect({ options, value, onChange }: {
               return (
                 <button key={o.value} type="button" onClick={() => toggle(o.value)}
                   className="w-full text-left px-2.5 py-1.5 flex items-center gap-2 hover:bg-slate-50">
-                  <span className={cn("h-4 w-4 rounded border flex items-center justify-center shrink-0", on ? "bg-zinc-900 border-zinc-900" : "border-slate-300")}>
+                  <span className={cn("h-4 w-4 rounded border flex items-center justify-center shrink-0", on ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
                     {on && <Check className="h-3 w-3 text-white" />}
                   </span>
                   <span className="text-sm text-slate-700 truncate">{o.label}</span>
@@ -76,7 +76,7 @@ function CombinatorToggle({ value, onChange }: { value: Combinator; onChange: (c
     <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden text-[11px] font-medium">
       {(["AND", "OR"] as Combinator[]).map((c) => (
         <button key={c} type="button" onClick={() => onChange(c)}
-          className={cn("px-2 py-1 transition-colors", value === c ? "bg-zinc-900 text-white" : "bg-white text-slate-500 hover:bg-slate-50")}>
+          className={cn("px-2 py-1 transition-colors", value === c ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50")}>
           {c === "AND" ? "And" : "Or"}
         </button>
       ))}
@@ -130,7 +130,7 @@ export default function FilterBuilder({ fields, value, onChange }: Props) {
       <button type="button" onClick={() => setOpen((o) => !o)}
         className={cn(
           "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-colors",
-          count > 0 ? "border-zinc-900 bg-zinc-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+          count > 0 ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
         )}>
         <Filter className="h-3.5 w-3.5" /> Filter
         {count > 0 && <span className="ml-0.5 h-4 min-w-4 px-1 rounded-full bg-white/20 text-[10px] inline-flex items-center justify-center">{count}</span>}

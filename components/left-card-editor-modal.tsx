@@ -147,7 +147,7 @@ export default function LeftCardEditorModal({
                 {[["PROPERTIES", "Properties"], ["CALL_LOG", "Call log"]].map(([v, l]) => (
                   <button key={v} type="button" onClick={() => setKind(v)}
                     className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors",
-                      kind === v ? "bg-zinc-900 text-white" : "text-slate-600 hover:bg-slate-100")}>
+                      kind === v ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100")}>
                     {l}
                   </button>
                 ))}
@@ -171,7 +171,7 @@ export default function LeftCardEditorModal({
                 {[1, 2, 3].map((n) => (
                   <button key={n} type="button" onClick={() => setColumns(n)}
                     className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors",
-                      columns === n ? "bg-zinc-900 text-white" : "text-slate-600 hover:bg-slate-100")}>
+                      columns === n ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100")}>
                     {n} column{n > 1 ? "s" : ""}
                   </button>
                 ))}

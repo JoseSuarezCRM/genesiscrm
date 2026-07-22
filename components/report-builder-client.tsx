@@ -465,7 +465,7 @@ export default function ReportBuilderClient({
           {hasRun && (
             <button
               onClick={() => { setSaveName(""); setSaveDialogOpen(true) }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
             >
               <Bookmark className="h-3.5 w-3.5" />
               Save Report
@@ -526,13 +526,13 @@ export default function ReportBuilderClient({
                 value={saveName}
                 onChange={(e) => setSaveName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
               {dashboards.length > 0 && (
                 <StyledSelect
                   value={saveDashboardId}
                   onChange={(e) => setSaveDashboardId(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                  className="w-full border rounded-lg px-3 py-2 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
                 >
                   <option value="">No dashboard (save to library only)</option>
                   {dashboards.map((d) => (
@@ -551,7 +551,7 @@ export default function ReportBuilderClient({
               <button
                 onClick={handleSave}
                 disabled={saving || !saveName.trim()}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
               >
                 {saving ? "Saving…" : "Save"}
               </button>
@@ -572,7 +572,7 @@ export default function ReportBuilderClient({
                 onClick={() => applyGroupBy(opt.value)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                   groupBy === opt.value && hasRun
-                    ? "bg-zinc-900 text-white border-zinc-900"
+                    ? "bg-blue-600 text-white border-blue-600"
                     : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
                 }`}
               >
@@ -593,7 +593,7 @@ export default function ReportBuilderClient({
                   onClick={() => applyGranularity(opt.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                     granularity === opt.value
-                      ? "bg-zinc-900 text-white border-zinc-900"
+                      ? "bg-blue-600 text-white border-blue-600"
                       : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
                   }`}
                 >
@@ -614,7 +614,7 @@ export default function ReportBuilderClient({
                 onClick={() => applyRange(opt.value)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                   range === opt.value
-                    ? "bg-zinc-900 text-white border-zinc-900"
+                    ? "bg-blue-600 text-white border-blue-600"
                     : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
                 }`}
               >
@@ -630,7 +630,7 @@ export default function ReportBuilderClient({
               <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
                 className="border rounded-lg px-2 py-1.5 text-sm" />
               <button onClick={applyCustom}
-                className="px-3 py-1.5 rounded-lg text-sm bg-zinc-900 text-white hover:bg-zinc-800 transition-colors">
+                className="px-3 py-1.5 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 transition-colors">
                 Apply
               </button>
             </div>
@@ -707,7 +707,7 @@ export default function ReportBuilderClient({
                     onClick={() => { setSortKey(opt.key); setSortDir(opt.dir) }}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                       sortKey === opt.key && sortDir === opt.dir
-                        ? "bg-zinc-900 text-white border-zinc-900"
+                        ? "bg-blue-600 text-white border-blue-600"
                         : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
                     }`}
                   >
@@ -743,7 +743,7 @@ export default function ReportBuilderClient({
                     onClick={() => setMinRows(opt.value)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                       minRows === opt.value
-                        ? "bg-zinc-900 text-white border-zinc-900"
+                        ? "bg-blue-600 text-white border-blue-600"
                         : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400 hover:text-zinc-900"
                     }`}
                   >
@@ -1269,7 +1269,7 @@ function MultiSelectDropdown({
           isExclude
             ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
             : active
-            ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
+            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
             : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
         }`}
       >
@@ -1291,7 +1291,7 @@ function MultiSelectDropdown({
               <button
                 onClick={() => onModeChange("include")}
                 className={`flex-1 py-1 text-xs font-medium rounded-md transition-all ${
-                  mode === "include" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-100"
+                  mode === "include" ? "bg-blue-600 text-white" : "text-zinc-500 hover:bg-zinc-100"
                 }`}
               >
                 Any of
@@ -1329,7 +1329,7 @@ function MultiSelectDropdown({
                 >
                   <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
                     selected.includes(opt.id)
-                      ? mode === "exclude" ? "bg-red-600 border-red-600" : "bg-zinc-900 border-zinc-900"
+                      ? mode === "exclude" ? "bg-red-600 border-red-600" : "bg-blue-600 border-blue-600"
                       : "border-zinc-300"
                   }`}>
                     {selected.includes(opt.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}

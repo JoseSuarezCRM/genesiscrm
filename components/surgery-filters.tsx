@@ -68,7 +68,7 @@ function MultiSelectDropdown({
           active && isExclude
             ? "bg-rose-600 text-white border-rose-600 hover:bg-rose-700"
             : active
-            ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
+            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
             : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
         }`}
       >
@@ -88,7 +88,7 @@ function MultiSelectDropdown({
               <button
                 onClick={() => onModeChange("any")}
                 className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${
-                  !isExclude ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-50"
+                  !isExclude ? "bg-blue-600 text-white" : "text-zinc-500 hover:bg-zinc-50"
                 }`}
               >
                 Any of
@@ -113,7 +113,7 @@ function MultiSelectDropdown({
                 <span
                   className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
                     selected.includes(opt.id)
-                      ? isExclude ? "bg-rose-600 border-rose-600" : "bg-zinc-900 border-zinc-900"
+                      ? isExclude ? "bg-rose-600 border-rose-600" : "bg-blue-600 border-blue-600"
                       : "border-zinc-300"
                   }`}
                 >
@@ -174,7 +174,7 @@ function DateRangeFilter({
         onClick={() => setOpen(!open)}
         className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all select-none ${
           active
-            ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
+            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
             : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
         }`}
       >
@@ -210,7 +210,7 @@ function DateRangeFilter({
             <div className="flex gap-2 pt-0.5">
               <button
                 onClick={() => { onApply(localFrom || null, localTo || null); setOpen(false) }}
-                className="flex-1 h-8 bg-zinc-900 text-white text-sm font-medium rounded-lg hover:bg-zinc-800 transition-colors"
+                className="flex-1 h-8 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Apply
               </button>

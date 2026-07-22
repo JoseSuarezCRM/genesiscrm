@@ -99,7 +99,7 @@ function InlineForm({ onCancel, onSubmit, isPending, children }: {
       {children}
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={isPending}
-          className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1.5">
+          className="h-8 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Save
         </button>
         <button type="button" onClick={onCancel} className="h-8 px-3 text-sm text-zinc-500 hover:text-zinc-800 transition-colors">Cancel</button>
@@ -389,7 +389,7 @@ function DoctorFormFields({ form, onChange, locations, onToggleLoc }: {
           <div className="flex flex-wrap gap-2 mt-1">
             {locations.map((l) => (
               <button key={l.id} type="button" onClick={() => onToggleLoc(l.id)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${form.locationIds.includes(l.id) ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${form.locationIds.includes(l.id) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"}`}>
                 {form.locationIds.includes(l.id) && <Check className="h-3 w-3" />}
                 {l.name}
               </button>

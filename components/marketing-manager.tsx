@@ -182,7 +182,7 @@ export default function MarketingManager({ categories: initialCategories, orders
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium capitalize border-b-2 transition-colors -mb-px ${
-              tab === t ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-700"
+              tab === t ? "border-blue-600 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-700"
             }`}
           >
             {t}
@@ -215,7 +215,7 @@ export default function MarketingManager({ categories: initialCategories, orders
               <button
                 onClick={saveEmail}
                 disabled={isPending}
-                className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                className="h-9 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
               >
                 {emailSaved ? <><Check className="h-3.5 w-3.5" /> Saved</> : "Save"}
               </button>
@@ -237,7 +237,7 @@ export default function MarketingManager({ categories: initialCategories, orders
                       onKeyDown={(e) => { if (e.key === "Enter") applyRename(cat.id); if (e.key === "Escape") setRenamingId(null) }}
                       className="flex-1 h-8 px-2 text-sm border border-zinc-300 rounded-lg focus:outline-none focus:border-zinc-500 max-w-xs"
                     />
-                    <button onClick={() => applyRename(cat.id)} disabled={isPending} className="text-xs px-3 h-8 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50">Save</button>
+                    <button onClick={() => applyRename(cat.id)} disabled={isPending} className="text-xs px-3 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">Save</button>
                     <button onClick={() => setRenamingId(null)} className="h-8 w-8 flex items-center justify-center text-zinc-400 hover:text-zinc-700 rounded-lg"><X className="h-3.5 w-3.5" /></button>
                   </div>
                 ) : (
@@ -305,7 +305,7 @@ export default function MarketingManager({ categories: initialCategories, orders
                       />
                     </div>
                     <div className="flex items-center gap-3">
-                      <label className={`flex items-center gap-2 h-9 px-4 text-sm font-medium rounded-lg border cursor-pointer transition-colors ${uploadTitle[cat.id]?.trim() ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800" : "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed"}`}>
+                      <label className={`flex items-center gap-2 h-9 px-4 text-sm font-medium rounded-lg border cursor-pointer transition-colors ${uploadTitle[cat.id]?.trim() ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700" : "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed"}`}>
                         {uploading[cat.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                         Choose file
                         <input
@@ -346,7 +346,7 @@ export default function MarketingManager({ categories: initialCategories, orders
                 onKeyDown={(e) => { if (e.key === "Enter") addCategory(); if (e.key === "Escape") setAddingCat(false) }}
                 className="h-9 px-3 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:border-zinc-400 w-64"
               />
-              <button onClick={addCategory} disabled={isPending || !newCatName.trim()} className="h-9 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50">Add</button>
+              <button onClick={addCategory} disabled={isPending || !newCatName.trim()} className="h-9 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">Add</button>
               <button onClick={() => setAddingCat(false)} className="text-sm text-zinc-400 hover:text-zinc-700 transition-colors">Cancel</button>
             </div>
           ) : (
@@ -410,7 +410,7 @@ export default function MarketingManager({ categories: initialCategories, orders
                           <button
                             onClick={() => markReviewed(o.id)}
                             disabled={isPending}
-                            className="h-7 px-2.5 text-xs font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+                            className="h-7 px-2.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                             title="Mark reviewed"
                           >
                             <Check className="h-3 w-3" />

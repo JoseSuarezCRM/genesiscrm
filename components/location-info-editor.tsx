@@ -104,7 +104,7 @@ export default function LocationInfoEditor({ location, practices, canEdit }: Pro
             </div>
             <div className="flex gap-2 pt-2">
               <button type="submit" disabled={isPending}
-                className="h-8 px-4 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center gap-1.5">
+                className="h-8 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
                 {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
               </button>
               <button type="button" onClick={handleCancel} className="h-8 px-3 text-sm text-zinc-500 hover:text-zinc-800">Cancel</button>

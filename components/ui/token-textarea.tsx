@@ -58,7 +58,7 @@ export default function TokenTextarea({ value, onChange, tokenGroups, tokens, ro
           <button type="button" onClick={() => (open ? close() : setOpen(true))}
             className={cn(
               "inline-flex items-center gap-1 h-7 px-1.5 rounded-md text-xs font-medium transition-colors",
-              open ? "bg-zinc-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
+              open ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
             )}>
             <Braces className="h-3.5 w-3.5" /> Fields <ChevronDown className="h-3 w-3 opacity-60" />
           </button>

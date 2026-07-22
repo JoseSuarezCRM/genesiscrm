@@ -68,7 +68,7 @@ export default function CustomObjectSettings({ objects }: { objects: CustomObjec
         </div>
         {err && <p className="text-xs text-red-600">{err}</p>}
         <button type="submit" disabled={isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create object
         </button>
       </form>
@@ -221,7 +221,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
                 {props.filter((p) => p.name.trim()).map((p) => {
                   const on = card.propertyIds.includes(p.id)
                   return <button key={p.id} type="button" onClick={() => toggleCardProp(card.id, p.id)}
-                    className={"px-2 py-0.5 rounded-lg text-xs font-medium border " + (on ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200")}>{p.name}</button>
+                    className={"px-2 py-0.5 rounded-lg text-xs font-medium border " + (on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200")}>{p.name}</button>
                 })}
               </div>
             </div>
@@ -234,7 +234,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
 
       <div className="flex items-center gap-2 pt-1">
         <button onClick={save} disabled={isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
         </button>
         {saved && <span className="text-xs text-green-600">Saved</span>}

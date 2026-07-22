@@ -704,7 +704,7 @@ function MultiSelectDropdown({
           active && isExclude
             ? "bg-rose-600 text-white border-rose-600 hover:bg-rose-700"
             : active
-            ? "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800"
+            ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
             : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:text-zinc-900"
         }`}
       >
@@ -724,7 +724,7 @@ function MultiSelectDropdown({
             <div className="flex items-center gap-1 p-2 border-b border-zinc-100">
               <button
                 onClick={() => onModeChange("any")}
-                className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${!isExclude ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}
+                className={`flex-1 h-7 text-xs rounded-md font-medium transition-colors ${!isExclude ? "bg-blue-600 text-white" : "text-zinc-500 hover:bg-zinc-50"}`}
               >
                 Any of
               </button>
@@ -759,7 +759,7 @@ function MultiSelectDropdown({
                 >
                   <span className={`shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all ${
                     selected.includes(opt.id)
-                      ? isExclude ? "bg-rose-600 border-rose-600" : "bg-zinc-900 border-zinc-900"
+                      ? isExclude ? "bg-rose-600 border-rose-600" : "bg-blue-600 border-blue-600"
                       : "border-zinc-300"
                   }`}>
                     {selected.includes(opt.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}

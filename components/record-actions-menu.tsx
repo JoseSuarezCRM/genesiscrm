@@ -210,10 +210,10 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
   const Head = ({ side, name }: { side: "this" | "other"; name: string }) => (
     <button onClick={() => choosePrimary(side)}
       className={cn("flex-1 min-w-0 text-left px-3 py-2 rounded-lg border transition-colors",
-        primary === side ? "border-zinc-900 bg-zinc-50" : "border-slate-200 hover:border-slate-300")}>
+        primary === side ? "border-blue-600 bg-zinc-50" : "border-slate-200 hover:border-slate-300")}>
       <span className={cn("flex items-center gap-1.5 text-xs font-medium", primary === side ? "text-zinc-900" : "text-slate-500")}>
-        <span className={cn("h-3.5 w-3.5 rounded-full border flex items-center justify-center shrink-0", primary === side ? "border-zinc-900" : "border-slate-300")}>
-          {primary === side && <span className="h-1.5 w-1.5 rounded-full bg-zinc-900" />}
+        <span className={cn("h-3.5 w-3.5 rounded-full border flex items-center justify-center shrink-0", primary === side ? "border-blue-600" : "border-slate-300")}>
+          {primary === side && <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />}
         </span>
         {primary === side ? "Primary — kept" : "Merged in"}
       </span>
@@ -275,8 +275,8 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
                     <button onClick={() => setChoices((c) => ({ ...c, [f.key]: side }))}
                       className={cn("flex items-start gap-1.5 text-left rounded-md px-1.5 py-1 min-w-0 transition-colors",
                         active ? "bg-zinc-50" : "hover:bg-slate-50")}>
-                      <span className={cn("mt-0.5 h-3 w-3 rounded-full border flex items-center justify-center shrink-0", active ? "border-zinc-900" : "border-slate-300")}>
-                        {active && <span className="h-1.5 w-1.5 rounded-full bg-zinc-900" />}
+                      <span className={cn("mt-0.5 h-3 w-3 rounded-full border flex items-center justify-center shrink-0", active ? "border-blue-600" : "border-slate-300")}>
+                        {active && <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />}
                       </span>
                       <span className={cn("block break-words text-sm", active ? "text-slate-900" : "text-slate-400", diff && active && "font-medium")}>{text}</span>
                     </button>
@@ -300,7 +300,7 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
                     {/* Live preview of the resulting record */}
                     <div className="lg:sticky lg:top-0 self-start">
                       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Merged result</p>
-                      <div className="border border-zinc-900/10 bg-zinc-50 rounded-xl p-3 space-y-2.5">
+                      <div className="border border-blue-600/10 bg-zinc-50 rounded-xl p-3 space-y-2.5">
                         <p className="text-sm font-semibold text-slate-900 break-words">{primary === "this" ? title : picked.name}</p>
                         {shownFields.map((f) => {
                           const val = resolved(f)
@@ -324,7 +324,7 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
             <div className="flex justify-between gap-2 px-5 py-4 border-t border-slate-200">
               <button onClick={() => { setPicked(null); setOtherValues(null) }} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-900">Back</button>
               <button onClick={doMerge} disabled={isPending}
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50">
+                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                 {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitMerge className="h-3.5 w-3.5" />} Merge records
               </button>
             </div>

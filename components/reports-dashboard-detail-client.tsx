@@ -168,7 +168,7 @@ function AddReportPicker({
                   <button
                     onClick={() => handleAdd(r.id)}
                     disabled={adding && addingId === r.id}
-                    className="ml-3 shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
+                    className="ml-3 shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
                   >
                     {adding && addingId === r.id ? "Adding…" : "Add"}
                   </button>
@@ -234,7 +234,7 @@ export default function DashboardDetailClient({
                   if (e.key === "Enter") handleRename()
                   if (e.key === "Escape") { setName(dashboard.name); setEditingName(false) }
                 }}
-                className="text-2xl font-bold text-slate-900 border-b-2 border-zinc-400 focus:outline-none focus:border-zinc-900 bg-transparent"
+                className="text-2xl font-bold text-slate-900 border-b-2 border-zinc-400 focus:outline-none focus:border-blue-600 bg-transparent"
               />
             ) : (
               <button
@@ -257,7 +257,7 @@ export default function DashboardDetailClient({
           </Link>
           <button
             onClick={() => setPickerOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Report
@@ -273,7 +273,7 @@ export default function DashboardDetailClient({
           <p className="text-slate-400 text-sm">Click <strong>Add Report</strong> to add saved reports to this dashboard.</p>
           <button
             onClick={() => setPickerOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 mt-2 text-sm font-medium bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 mt-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Report

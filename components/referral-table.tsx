@@ -289,7 +289,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
 
       {/* Floating bulk action bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-blue-600 text-white px-5 py-3 rounded-2xl shadow-2xl border border-blue-500 animate-bar-in">
           <span className="text-sm font-medium tabular-nums">
             {selected.size} selected
           </span>

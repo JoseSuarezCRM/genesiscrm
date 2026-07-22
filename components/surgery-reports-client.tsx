@@ -125,7 +125,7 @@ function MultiSelectDropdown({
         onClick={() => setOpen((o) => !o)}
         className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-sm font-medium transition-colors ${
           selected.length > 0
-            ? "bg-zinc-900 text-white border-zinc-900"
+            ? "bg-blue-600 text-white border-blue-600"
             : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
         }`}
       >
@@ -158,7 +158,7 @@ function MultiSelectDropdown({
                   onClick={() => onToggle(opt)}
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-zinc-50 text-left"
                 >
-                  <span className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${selected.includes(opt) ? "bg-zinc-900 border-zinc-900" : "border-zinc-300"}`}>
+                  <span className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${selected.includes(opt) ? "bg-blue-600 border-blue-600" : "border-zinc-300"}`}>
                     {selected.includes(opt) && <Check className="h-2.5 w-2.5 text-white" />}
                   </span>
                   <span className="truncate">{opt}</span>

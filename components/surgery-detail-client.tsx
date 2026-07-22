@@ -362,7 +362,7 @@ export default function SurgeryDetailClient({ surgeryCase, only }: { surgeryCase
           const call = calls[i]
           return (
             <div key={i} className={`flex-1 h-10 rounded-lg border flex items-center justify-center text-xs font-medium ${
-              call ? "bg-zinc-900 text-white border-zinc-900" : "bg-white border-zinc-200 text-slate-300"
+              call ? "bg-blue-600 text-white border-blue-600" : "bg-white border-zinc-200 text-slate-300"
             }`}>
               {call ? <span className={OUTCOME_LABELS[call.outcome]?.color ?? "text-white"}>{OUTCOME_LABELS[call.outcome]?.label ?? call.outcome}</span> : `Call ${i + 1}`}
             </div>
@@ -376,7 +376,7 @@ export default function SurgeryDetailClient({ surgeryCase, only }: { surgeryCase
             {Object.entries(OUTCOME_LABELS).map(([key, { label }]) => (
               <button key={key} onClick={() => setCallOutcome(key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                  callOutcome === key ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
+                  callOutcome === key ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
                 }`}>{label}</button>
             ))}
           </div>
@@ -392,7 +392,7 @@ export default function SurgeryDetailClient({ surgeryCase, only }: { surgeryCase
           {calls.map((call: any, i: number) => (
             <div key={call.id} className="flex items-start justify-between py-3 gap-3">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="shrink-0 w-6 h-6 rounded-full bg-zinc-900 text-white text-xs flex items-center justify-center font-medium mt-0.5">{i + 1}</div>
+                <div className="shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-medium mt-0.5">{i + 1}</div>
                 <div>
                   <span className={`text-sm font-medium ${OUTCOME_LABELS[call.outcome]?.color ?? "text-slate-700"}`}>{OUTCOME_LABELS[call.outcome]?.label ?? call.outcome}</span>
                   {call.notes && <p className="text-xs text-slate-500 mt-0.5">{call.notes}</p>}

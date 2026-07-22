@@ -98,7 +98,7 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
   }
 
   const pill = "inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden"
-  const activeCls = "bg-zinc-900 text-white border-zinc-900"
+  const activeCls = "bg-blue-600 text-white border-blue-600"
   const idleCls = "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
 
   return (
@@ -141,7 +141,7 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
             <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
             <div className="flex gap-2 pt-1">
               <button onClick={handleSave} disabled={saving || isPending || !newViewName.trim()}
-                className="flex-1 h-9 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                className="flex-1 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save view
               </button>
               <button onClick={() => { setShowSaveForm(false); setNewViewName("") }}

@@ -14,7 +14,7 @@ export default function RecordMiddleTabs({ overview, activities }: { overview: R
           <button key={t} onClick={() => setTab(t)}
             className={cn(
               "px-3 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors",
-              tab === t ? "border-zinc-900 text-zinc-900" : "border-transparent text-slate-500 hover:text-slate-800",
+              tab === t ? "border-blue-600 text-zinc-900" : "border-transparent text-slate-500 hover:text-slate-800",
             )}>
             {t}
           </button>
