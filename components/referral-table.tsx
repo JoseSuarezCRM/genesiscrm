@@ -66,9 +66,11 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
   const sortKey = searchParams.get("sort") ?? "referralDate"
   const sortDir: "asc" | "desc" = searchParams.get("dir") === "asc" ? "asc" : "desc"
   // Server-side sort: update the URL (reset to page 1) so it covers all pages.
+  // Text columns start A→Z; date/number columns start newest/highest first.
+  const DESC_FIRST = new Set(["referralDate", "apptDate", "calls"])
   function toggleSort(key: string) {
     const params = new URLSearchParams(searchParams.toString())
-    const nextDir = sortKey === key && sortDir === "desc" ? "asc" : "desc"
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : (DESC_FIRST.has(key) ? "desc" : "asc")
     params.set("sort", key); params.set("dir", nextDir); params.set("page", "1")
     router.push(`${pathname}?${params.toString()}`)
   }

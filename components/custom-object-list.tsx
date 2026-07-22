@@ -114,7 +114,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const { colWidth, startResize } = useColumnResize(`co_${objectKey}_colWidths`)
   const [sortKey, setSortKey] = useState<string>("__id")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
-  const toggleSort = (k: string) => { if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc")); else { setSortKey(k); setSortDir("asc") } }
+  // Text columns start A→Z; id/date columns start newest/highest first.
+  const toggleSort = (k: string) => { if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc")); else { setSortKey(k); setSortDir(k === "__id" || k === "__created" ? "desc" : "asc") } }
   const sortVal = (r: RecordRow, key: string): string | number => {
     if (key === "__id") return r.recordNumber ?? 0
     if (key === "__name") return (primary ? displayValue(primary, r.values[primary.id], userMap) : "").toLowerCase()

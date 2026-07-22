@@ -1167,9 +1167,10 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const cols = ACTIVITY_COLUMNS.filter(c => visibleCols.includes(c.key))
   const toggleCol = (key: string) =>
     setVisibleCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  // Text columns start A→Z; date starts newest first.
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc")
-    else { setSortKey(key); setSortDir("desc") }
+    else { setSortKey(key); setSortDir(key === "date" ? "desc" : "asc") }
   }
 
   const allSelected = sorted.length > 0 && sorted.every(a => selectedIds.has(a.id))
