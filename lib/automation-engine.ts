@@ -653,13 +653,22 @@ async function runSingleAction(
     }
   }
 
-  if ((automation.actionType as string) === "SEND_SMS" && referralId) {
+  if ((automation.actionType as string) === "SEND_SMS") {
     const body = resolveTemplate((tplBody ?? (cfg.body as string)) || "", vars)
-    if (body) {
+    if (!body) return "SMS body is empty"
+    // Resolve the recipient phone from the referral, or from the triggering record
+    // (property-changed / other record triggers pass the record, not referralId).
+    let phone: string | null = null
+    if (referralId) {
       const referral = await prisma.referral.findUnique({ where: { id: referralId }, select: { patientPhone: true } })
-      const phone = referral?.patientPhone
-      if (phone) await sendSMS(phone, body)
+      phone = referral?.patientPhone ?? null
+    } else if (record) {
+      const r = record as any
+      phone = r.patientPhone ?? r.phone ?? r.officePhone ?? r.patientCell ?? null
     }
+    if (!phone) return "No phone number on the record to send an SMS to"
+    const res = await sendSMS(phone, body)
+    if (!res.success) return res.error ?? "SMS failed to send"
   }
 
   if (automation.actionType === AutomationAction.ADD_TAG && referralId) {
@@ -1428,9 +1437,15 @@ export async function runTrigger_RecordPropertyChanged(
 ) {
   const keys = Object.keys(changes ?? {})
   if (!keys.length) return
+  // Friendly detail: resolve "custom:<id>" keys to the property's name for logs.
+  const labels = await Promise.all(keys.map(async (k) => {
+    if (!k.startsWith("custom:")) return k
+    const cp = await prisma.customProperty.findUnique({ where: { id: k.slice(7) }, select: { name: true } }).catch(() => null)
+    return cp?.name ?? k
+  }))
   await runRecordTrigger(
     "RECORD_PROPERTY_CHANGED" as AutomationTrigger,
-    recordType, recordId, `Property changed: ${keys.join(", ")}`, {},
+    recordType, recordId, `Property changed: ${labels.join(", ")}`, {},
     (cfg) => {
       const watched = cfg.property as string
       if (!watched) return true // no property named → any change fires it
