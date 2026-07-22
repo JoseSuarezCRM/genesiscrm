@@ -34,7 +34,7 @@ export default function ToastHost() {
     <div className="fixed bottom-4 left-4 z-[1000] flex flex-col gap-2">
       {toasts.map((t) => (
         <div key={t.id}
-          className="flex items-center gap-2.5 bg-white border border-slate-200 shadow-lg rounded-xl pl-3 pr-2 py-2.5 text-sm animate-in slide-in-from-bottom-2 fade-in duration-200">
+          className="flex items-center gap-2.5 bg-white border border-slate-200 shadow-lg rounded-xl pl-3 pr-2 py-2.5 text-sm animate-toast-in">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shrink-0"><Check className="h-3.5 w-3.5" /></span>
           <span className="text-slate-800 font-medium">{t.message}</span>
           {t.undo && (
