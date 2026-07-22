@@ -138,6 +138,47 @@ export async function queryCustomObjectRecords(objectKey: string, opts: { page?:
   return { rows, total, page, pageSize: CO_PAGE_SIZE }
 }
 
+// All matching rows (no pagination) for a server-side CSV export — same filter,
+// search, and sort as the on-screen list.
+export async function exportCustomObjectRecords(objectKey: string, opts: { sort?: string; dir?: "asc" | "desc"; search?: string; filter?: string }): Promise<CustomRecordRow[]> {
+  await requireAccess(objKey(objectKey), "VIEW")
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
+  if (!def) return []
+  const properties: any[] = (def.properties as any[]) ?? []
+  const primary = properties.find((p) => p.primary) ?? properties[0]
+  const dir: "asc" | "desc" = opts.dir === "asc" ? "asc" : "desc"
+
+  const filterWhere = filterStateToWhere(decodeFilterParam(opts.filter), serverFilterFields(properties))
+  const search = (opts.search ?? "").trim()
+  const searchWhere = search
+    ? { OR: properties.filter((p) => ["TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL"].includes(p.type) || p.id === primary?.id)
+        .map((p) => ({ values: { path: [p.id], string_contains: search } })) }
+    : {}
+  const where: any = { objectDefId: def.id, AND: [filterWhere, searchWhere].filter((w) => w && Object.keys(w).length > 0) }
+
+  const nativeOrderBy = opts.sort === "__id" ? { recordNumber: dir }
+    : opts.sort === "__created" ? { createdAt: dir }
+    : opts.sort === "__owner" ? { ownerId: dir }
+    : null
+
+  let records: any[] = await (prisma as any).customObjectRecord.findMany({ where, ...(nativeOrderBy ? { orderBy: nativeOrderBy } : {}) })
+  if (!nativeOrderBy) {
+    const propId = !opts.sort || opts.sort === "__name" ? primary?.id : opts.sort
+    const valOf = (r: any) => { const v = r.values?.[propId]; return v == null ? "" : Array.isArray(v) ? v.join(", ") : String(v) }
+    records.sort((a: any, b: any) => { const c = valOf(a).localeCompare(valOf(b), undefined, { numeric: true, sensitivity: "base" }); return dir === "asc" ? c : -c })
+  }
+
+  const names = await resolveNames(records.flatMap((r: any) => [r.ownerId, r.createdById, r.updatedById, r.lastViewedById]))
+  return records.map((r: any) => ({
+    id: r.id, recordNumber: r.recordNumber ?? null, values: (r.values as Record<string, any>) ?? {},
+    ownerId: r.ownerId, ownerName: r.ownerId ? names[r.ownerId] ?? null : null,
+    createdById: r.createdById, createdByName: r.createdById ? names[r.createdById] ?? null : null,
+    updatedById: r.updatedById, updatedByName: r.updatedById ? names[r.updatedById] ?? null : null,
+    lastViewedById: r.lastViewedById, lastViewedByName: r.lastViewedById ? names[r.lastViewedById] ?? null : null,
+    lastViewedAt: r.lastViewedAt, createdAt: r.createdAt, updatedAt: r.updatedAt,
+  }))
+}
+
 export async function getCustomObjectRecord(objectKey: string, id: string): Promise<CustomRecordRow | null> {
   await requireAccess(objKey(objectKey), "VIEW")
   const r = await (prisma as any).customObjectRecord.findUnique({ where: { id } })

@@ -12,13 +12,16 @@ interface Props {
   subject: string
   defaultName: string
   // Client-side export: lazily produce the data when the user clicks Export.
-  getData?: () => { headers: string[]; rows: (string | number | null | undefined)[][] }
+  // May be async (e.g. fetch all matching rows from the server).
+  getData?: () => ExportData | Promise<ExportData>
   // Server-side export: download from this URL instead (filename appended).
   href?: string
-  // Row count to display for server-side (href) exports, where the rows aren't
-  // available client-side. Ignored when getData is provided (that count wins).
+  // Row count to display. When provided it's used directly (so getData isn't
+  // called just to count — important for large/server-fetched exports).
   count?: number
 }
+
+type ExportData = { headers: string[]; rows: (string | number | null | undefined)[][] }
 
 // HubSpot-style export modal (a16z styling): name the file, pick a format, export.
 export default function ExportDialog({ open, onClose, subject, defaultName, getData, href, count }: Props) {
@@ -27,20 +30,20 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
   const [busy, setBusy] = useState(false)
   const [rowCount, setRowCount] = useState<number | null>(null)
 
-  // Refresh the client-side count whenever the dialog opens.
-  if (open && getData && rowCount === null) {
-    try { setRowCount(getData().rows.length) } catch { setRowCount(0) }
+  // Count from getData only when no explicit count and it's cheap (sync) — never
+  // fetch a big/async dataset just to show the number.
+  if (open && getData && count == null && rowCount === null) {
+    try { const d = getData() as any; if (d && typeof d.then !== "function") setRowCount((d as ExportData).rows.length) } catch { setRowCount(0) }
   }
 
-  // For server-side exports, fall back to the count passed in by the caller.
-  const shownCount = getData ? rowCount : (count ?? null)
+  const shownCount = count != null ? count : (getData ? rowCount : null)
 
   function handleClose() {
     setRowCount(null)
     onClose()
   }
 
-  function handleExport() {
+  async function handleExport() {
     setBusy(true)
     try {
       const filename = (name.trim() || defaultName)
@@ -51,7 +54,7 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
         link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`
         link.click()
       } else if (getData) {
-        const { headers, rows } = getData()
+        const { headers, rows } = await Promise.resolve(getData())
         downloadCsv(filename, toCsv(headers, rows))
       }
       handleClose()

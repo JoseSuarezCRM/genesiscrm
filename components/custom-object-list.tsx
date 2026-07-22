@@ -7,7 +7,7 @@ import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-reac
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { ChevronUp } from "lucide-react"
-import { createCustomObjectRecord, bulkDeleteCustomObjectRecords } from "@/app/actions/custom-object-records"
+import { createCustomObjectRecord, bulkDeleteCustomObjectRecords, exportCustomObjectRecords } from "@/app/actions/custom-object-records"
 import type { CustomObjectProperty } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -191,15 +191,22 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   }
   function deleteView(id: string) { startTransition(async () => { await deleteCustomObjectView(id); router.refresh() }) }
 
-  function buildExport() {
+  function buildExportRows(list: RecordRow[]) {
     const headers = ["Record ID", primary?.name ?? "Name", ...cols.map((c) => c.label)]
-    const rows = filtered.map((r) => [
+    const rows = list.map((r) => [
       r.recordNumber != null ? `#${r.recordNumber}` : "",
       primary ? displayValue(primary, r.values[primary.id], userMap) : "",
       ...cols.map((c) => c.key === "__owner" ? (r.ownerName ?? "") : c.key === "__created" ? fmtDate(r.createdAt) : displayValue(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)),
     ])
     return { headers, rows }
   }
+  // Client mode: export the filtered rows. Server mode: fetch ALL matching rows.
+  const exportData = isServer
+    ? async () => buildExportRows(await exportCustomObjectRecords(objectKey, {
+        sort: sortKey, dir: sortDir, search,
+        filter: activeConditionCount(filter, filterFields) > 0 ? JSON.stringify(filter) : undefined,
+      }) as RecordRow[])
+    : () => buildExportRows(filtered)
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const allChecked = filtered.length > 0 && filtered.every((r) => selected.has(r.id))
@@ -388,7 +395,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
           onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); router.refresh() }} />
       )}
 
-      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={plural} defaultName={objectKey} getData={buildExport} />
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={plural} defaultName={objectKey} getData={exportData} count={isServer ? serverTotal : undefined} />
     </div>
   )
 }
