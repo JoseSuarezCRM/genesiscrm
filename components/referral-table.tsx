@@ -2,14 +2,14 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
-import { Phone, ChevronDown, Loader2 } from "lucide-react"
+import { Phone, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
 import BulkActionBar, { bulkBtn } from "@/components/ui/bulk-action-bar"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate, formatPhone } from "@/lib/utils"
 import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
 import { bulkAddTag, bulkRemoveTag } from "@/app/actions/tags"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Tag as TagIcon } from "lucide-react"
 
 interface Pipeline {
@@ -61,6 +61,17 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
   const headerCheckRef = useRef<HTMLInputElement>(null)
   const { colWidth, startResize } = useColumnResize("referralColWidths")
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const sortKey = searchParams.get("sort") ?? "referralDate"
+  const sortDir: "asc" | "desc" = searchParams.get("dir") === "asc" ? "asc" : "desc"
+  // Server-side sort: update the URL (reset to page 1) so it covers all pages.
+  function toggleSort(key: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    const nextDir = sortKey === key && sortDir === "desc" ? "asc" : "desc"
+    params.set("sort", key); params.set("dir", nextDir); params.set("page", "1")
+    router.push(`${pathname}?${params.toString()}`)
+  }
 
   const allPageChecked = referrals.length > 0 && referrals.every((r) => selected.has(r.id))
   const allChecked = allPageChecked
@@ -334,7 +345,12 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                 ["calls", "Calls"], ["status", "Status"],
               ].map(([k, label]) => (
                 <th key={k} className="text-left px-4 py-3 font-semibold relative">
-                  {label}
+                  {k === "tags" ? label : (
+                    <button onClick={() => toggleSort(k)} className="inline-flex items-center gap-1 hover:text-slate-800">
+                      {label}
+                      {sortKey === k && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                    </button>
+                  )}
                   <ColResizer onMouseDown={(e) => startResize(k, e)} />
                 </th>
               ))}

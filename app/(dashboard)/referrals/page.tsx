@@ -27,6 +27,8 @@ interface PageProps {
     page?: string
     incomplete?: string
     pipeline?: string
+    sort?: string
+    dir?: string
   }
 }
 
@@ -35,11 +37,26 @@ function toArray(val: string | string[] | undefined): string[] {
   return Array.isArray(val) ? val : [val]
 }
 
+// Map a UI sort key → Prisma orderBy (server-side, covers all pages). Default newest first.
+function referralOrderBy(sort?: string, dir: "asc" | "desc" = "desc"): any {
+  switch (sort) {
+    case "patient": return [{ patientLastName: dir }, { patientFirstName: dir }]
+    case "phone": return { patientPhone: dir }
+    case "practice": return { referringPractice: { name: dir } }
+    case "referralDate": return { referralDate: dir }
+    case "apptDate": return { appointmentDate: { sort: dir, nulls: "last" } }
+    case "calls": return { callAttempts: { _count: dir } }
+    case "status": return { status: dir }
+    default: return { referralDate: "desc" }
+  }
+}
+
 const PAGE_SIZE = 20
 
 async function getReferrals(searchParams: PageProps["searchParams"]) {
   const page = Math.max(1, parseInt(searchParams.page ?? "1"))
   const skip = (page - 1) * PAGE_SIZE
+  const orderBy = referralOrderBy(searchParams.sort, searchParams.dir === "asc" ? "asc" : "desc")
 
   const statuses = toArray(searchParams.status).filter((s) =>
     Object.values(ReferralStatus).includes(s as ReferralStatus)
@@ -100,7 +117,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       where,
       take: PAGE_SIZE,
       skip,
-      orderBy: { referralDate: "desc" },
+      orderBy,
       include: {
         referringPractice: true,
         tags: { include: { tag: true } },
@@ -108,7 +125,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       },
     }),
     prisma.referral.count({ where }),
-    (prisma as any).referral.findMany({ where, select: { id: true }, orderBy: { referralDate: "desc" } }),
+    (prisma as any).referral.findMany({ where, select: { id: true }, orderBy }),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" } }),
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.referral.count({
