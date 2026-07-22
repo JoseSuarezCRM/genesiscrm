@@ -118,8 +118,12 @@ export default function StyledSelect({ value, onChange, children, className, dis
       {open && typeof document !== "undefined" && createPortal(
         <div
           ref={menuRef}
+          // Portaled to <body>: a Radix modal Dialog disables pointer events outside
+          // its content (pointerEvents:auto re-enables them) and dismisses on outside
+          // pointerdown (stopPropagation keeps it from closing the parent dialog).
+          onPointerDown={(e) => e.stopPropagation()}
           className="fixed z-[999] bg-white border border-slate-200 rounded-md shadow-lg overflow-y-auto py-1"
-          style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}
+          style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight, pointerEvents: "auto" }}
         >
           {options.map((o, i) => {
             const isSelected = current ? o.value === current.value : i === 0

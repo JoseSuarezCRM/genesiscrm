@@ -9,7 +9,7 @@ export interface ReportActivity {
   providers: { doctor: { name: string; title: string | null } }[]
   nextStep: string | null
   frontDesk: string | null
-  flyer: string | null
+  flyer: string | null // legacy column name — this is the activity "Type"
   notes: string | null
   tags: { name: string; color?: string | null }[]
   createdBy?: { name: string | null; email: string } | null
@@ -72,11 +72,11 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
         </tr>
       </table>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px;">
+        ${detailRow("Type", a.flyer)}
         ${detailRow("Location", a.location?.name ?? null)}
         ${detailRow("Providers", providerNames(a) || null)}
         ${detailRow("Next step", a.nextStep)}
         ${detailRow("Front desk", a.frontDesk)}
-        ${detailRow("Flyer", a.flyer)}
         ${detailRow("Notes", a.notes)}
       </table>
       ${a.tags.length ? `<div style="margin-top:10px;">${a.tags.map((t) => chip(t.name, t.color)).join("")}</div>` : ""}
