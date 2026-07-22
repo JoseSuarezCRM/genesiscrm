@@ -5,6 +5,8 @@ import { createActivity, updateActivity, deleteActivity } from "@/app/actions/ac
 import { createActivityView, updateActivityView, deleteActivityView } from "@/app/actions/activity-views"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
+import { emailActivityReport } from "@/app/actions/activity-report"
+import { showToast } from "@/components/toast"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import SelectedProvidersCard from "@/components/selected-providers-card"
 import ExportDialog from "@/components/ui/export-dialog"
@@ -20,7 +22,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Plus, Loader2, Trash2, Pencil, Search, X, CalendarDays,
   Building2, MapPin, User, ChevronDown, Tag, Check, Save,
-  Globe, Users, UserCog, Lock, LayoutList, Table2, Download, Columns3, ChevronUp,
+  Globe, Users, UserCog, Lock, LayoutList, Table2, Download, Columns3, ChevronUp, Mail, Send,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -744,6 +746,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards")
   const [exportOpen, setExportOpen] = useState(false)
 
+  // Email-report dialog
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportTo, setReportTo] = useState("")
+  const [reportSubject, setReportSubject] = useState("")
+  const [reportMessage, setReportMessage] = useState("")
+  const [reportPending, startReport] = useTransition()
+
   // Table view: columns, sort, selection
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_ACTIVITY_COLS)
   const [colMenuOpen, setColMenuOpen] = useState(false)
@@ -1162,6 +1171,25 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     })
   }
 
+  // Email report: reports on the selected rows, or the whole filtered view.
+  const reportScoped = selectedIds.size > 0
+  const reportIds = reportScoped ? Array.from(selectedIds) : filtered.map((a) => a.id)
+  const reportRecipients = reportTo.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean)
+  function addTeammate(email: string) {
+    if (!email) return
+    const have = new Set(reportRecipients.map((e) => e.toLowerCase()))
+    if (!have.has(email.toLowerCase())) setReportTo((prev) => (prev.trim() ? `${prev.replace(/[,\s]+$/, "")}, ${email}` : email))
+  }
+  function sendReport() {
+    if (reportRecipients.length === 0 || reportIds.length === 0) return
+    startReport(async () => {
+      const res = await emailActivityReport({ activityIds: reportIds, to: reportRecipients, subject: reportSubject || undefined, message: reportMessage || undefined }) as any
+      if (res?.error) { showToast(res.error); return }
+      setReportOpen(false); setReportTo(""); setReportSubject(""); setReportMessage("")
+      showToast(`Report sent to ${res.recipients} recipient${res.recipients === 1 ? "" : "s"}`)
+    })
+  }
+
   // One table cell's content for the given column.
   function renderCell(a: typeof filtered[number], key: string): React.ReactNode {
     switch (key) {
@@ -1301,6 +1329,16 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               )}
             </div>
           )}
+
+          {/* Email report */}
+          <button
+            onClick={() => setReportOpen(true)}
+            disabled={filtered.length === 0}
+            title="Email a report of the selected activities (or the current view)"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Mail className="h-3.5 w-3.5" /> Email report
+          </button>
 
           {/* Export to CSV */}
           <button
@@ -1453,6 +1491,10 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900 text-white text-sm">
               <span className="font-medium">{selectedIds.size} selected</span>
+              <button onClick={() => setReportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">
+                <Mail className="h-3.5 w-3.5" /> Email report
+              </button>
               <button onClick={bulkDelete} disabled={isPending}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors">
                 <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -1711,6 +1753,48 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         defaultName={`activities-${format(new Date(), "yyyy-MM-dd")}`}
         getData={buildExportData}
       />
+
+      {/* ── Email report dialog ── */}
+      <Dialog open={reportOpen} onOpenChange={v => !v && setReportOpen(false)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Email activity report</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-slate-600">
+              Reporting on <span className="font-semibold text-slate-900">{reportIds.length}</span> {reportScoped ? "selected " : ""}activit{reportIds.length === 1 ? "y" : "ies"}
+              {!reportScoped && <span className="text-slate-400"> (current view — select rows to narrow it down)</span>}
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1">Recipients</label>
+              <Input value={reportTo} onChange={e => setReportTo(e.target.value)} placeholder="name@example.com, another@example.com" />
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className="text-xs text-slate-400">Add teammate:</span>
+                <StyledSelect value="" onChange={e => { addTeammate(e.target.value); }} className="min-w-[180px] text-sm">
+                  <option value="">Choose…</option>
+                  {shareUsers.map(u => <option key={u.id} value={u.email}>{u.name || u.email}</option>)}
+                </StyledSelect>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1">Subject</label>
+              <Input value={reportSubject} onChange={e => setReportSubject(e.target.value)} placeholder={`Activity Report — ${reportIds.length} activit${reportIds.length === 1 ? "y" : "ies"}`} />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1">Message <span className="text-slate-400 font-normal">(optional)</span></label>
+              <Textarea rows={3} value={reportMessage} onChange={e => setReportMessage(e.target.value)} placeholder="A short note to include at the top of the report…" />
+            </div>
+            <p className="text-xs text-slate-400">Sends from your own email address. The report includes a summary plus each activity's details.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportOpen(false)}>Cancel</Button>
+            <Button disabled={reportPending || reportRecipients.length === 0 || reportIds.length === 0} onClick={sendReport}>
+              {reportPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Send className="h-4 w-4 mr-1.5" />} Send report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Delete confirm ── */}
       <Dialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
