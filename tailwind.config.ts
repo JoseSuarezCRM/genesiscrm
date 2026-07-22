@@ -90,6 +90,16 @@ const config: Config = {
         },
         "overlay-in": { from: { opacity: "0" }, to: { opacity: "1" } },
         "overlay-out": { from: { opacity: "1" }, to: { opacity: "0" } },
+        // For translate-centered dialogs (shadcn) — keeps the -50%,-50% offset so
+        // it animates in place instead of from the corner.
+        "dialog-in": {
+          from: { opacity: "0", transform: "translate(-50%, calc(-50% + 8px)) scale(0.97)" },
+          to: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+        },
+        "dialog-out": {
+          from: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+          to: { opacity: "0", transform: "translate(-50%, calc(-50% + 8px)) scale(0.97)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -102,6 +112,8 @@ const config: Config = {
         "modal-out": "modal-out 0.12s ease-in forwards",
         "overlay-in": "overlay-in 0.15s ease-out",
         "overlay-out": "overlay-out 0.12s ease-in forwards",
+        "dialog-in": "dialog-in 0.15s ease-out",
+        "dialog-out": "dialog-out 0.12s ease-in forwards",
       },
     },
   },
