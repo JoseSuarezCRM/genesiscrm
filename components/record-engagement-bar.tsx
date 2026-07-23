@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Loader2, Send, X, FileText, Braces } from "lucide-react"
 import {
@@ -9,21 +9,12 @@ import {
 } from "@/app/actions/record-activity"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import TokenTextarea from "@/components/ui/token-textarea"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import type { MessageTokenGroup } from "@/lib/message-tokens"
 import { cn } from "@/lib/utils"
 
 type Tpl = { id: string; name: string; subject: string; body: string }
-
-// Insert text at the caret of a controlled textarea, then restore the caret.
-function insertAtCaret(el: HTMLTextAreaElement | null, value: string, token: string, setValue: (v: string) => void) {
-  if (!el) { setValue(value + token); return }
-  const start = el.selectionStart ?? value.length
-  const end = el.selectionEnd ?? value.length
-  const next = value.slice(0, start) + token + value.slice(end)
-  setValue(next)
-  requestAnimationFrame(() => { el.focus(); const pos = start + token.length; el.setSelectionRange(pos, pos) })
-}
 
 type Composer = "NOTE" | "EMAIL" | "CALL" | "SMS" | "TASK" | "MEETING"
 
@@ -70,7 +61,6 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   const [emailTpls, setEmailTpls] = useState<Tpl[]>([])
   const [smsTpls, setSmsTpls] = useState<Tpl[]>([])
   const [tokenGroups, setTokenGroups] = useState<MessageTokenGroup[]>([])
-  const smBodyRef = useRef<HTMLTextAreaElement>(null)
   const [callOutcome, setCallOutcome] = useState(CALL_OUTCOMES[0])
   const [callBody, setCallBody] = useState("")
   const [mtTitle, setMtTitle] = useState("")
@@ -91,9 +81,6 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
     getComposeTemplates(recordType, recordId, "SMS" as any).then(setSmsTpls).catch(() => {})
     getRecordTokenGroups(recordType, recordId).then(setTokenGroups).catch(() => {})
   }, [recordType, recordId, canEdit])
-
-  // Flat, group-prefixed field list for the SMS picker (no rich editor there).
-  const flatTokens = tokenGroups.flatMap((g) => g.tokens.map((t) => ({ value: t.value, label: `${g.group}: ${t.label}` })))
 
   function applyTemplate(t: Tpl, channel: "EMAIL" | "SMS") {
     if (channel === "EMAIL") { if (t.subject) setEmSubject(t.subject); setEmBody(/<[a-z!/][^>]*>/i.test(t.body) ? t.body : t.body.replace(/\n/g, "<br>")) }
@@ -297,8 +284,8 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
               {open === "SMS" && (
                 <>
                   <input value={smTo} onChange={(e) => setSmTo(e.target.value)} placeholder="Phone number" className={INPUT + " w-full"} />
-                  <ComposerTools templates={smsTpls} onTemplate={(t) => applyTemplate(t, "SMS")} fields={flatTokens} onField={(tok) => insertAtCaret(smBodyRef.current, smBody, tok, setSmBody)} />
-                  <textarea ref={smBodyRef} rows={5} value={smBody} onChange={(e) => setSmBody(e.target.value)} placeholder="Write your message…" className={INPUT + " w-full resize-none"} />
+                  <ComposerTools templates={smsTpls} onTemplate={(t) => applyTemplate(t, "SMS")} />
+                  <TokenTextarea value={smBody} onChange={setSmBody} tokenGroups={tokenGroups} rows={5} placeholder="Write your message…" />
                   <div className="flex items-center pt-1">
                     <p className="text-xs text-slate-400">{smBody.length} characters</p>
                     <SubmitBtn label="Send SMS" disabled={!smTo.trim() || !smBody.trim()} onClick={submit.SMS} />

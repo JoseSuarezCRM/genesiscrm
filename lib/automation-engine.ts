@@ -448,8 +448,11 @@ async function runSingleAction(
         }
         for (const d of defs) {
           if (byId[d.id] === undefined) continue
-          const key = d.internalName || engineSlug(d.name)
-          if (key) custom[key] = byId[d.id]
+          // Register BOTH the internal name and the label-slug so a token resolves
+          // whether it was written as {internal_name} or {label_slug}.
+          if (d.internalName) custom[d.internalName] = byId[d.id]
+          const slug = engineSlug(d.name)
+          if (slug && custom[slug] === undefined) custom[slug] = byId[d.id]
         }
       } catch { /* defs unavailable — {cp_<id>} tokens still resolve */ }
     }
