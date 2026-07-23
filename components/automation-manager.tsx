@@ -18,6 +18,7 @@ import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings, type PersonalizationToken } from "@/components/rich-text-editor"
+import TokenTextarea from "@/components/ui/token-textarea"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
@@ -464,7 +465,7 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "ASSIGN_REFERRAL") return { userId: "" }
   if (type === "ADD_TAG") return { tagId: "" }
   if (type === "SEND_EMAIL") return { recipients: [{ type: "all_admins", value: "" }], cc: [], bcc: [], subject: "", body: "" }
-  if (type === "SEND_SMS") return { body: "" }
+  if (type === "SEND_SMS") return { body: "", to: { type: "record", value: "" } }
   if (type === "SET_PROPERTY") return { property: "", value: "" }
   if (type === "ASSIGN_OWNER") return { ownerId: "" }
   if (type === "SEND_MEETING_INVITE") return { recipients: [{ type: "all_admins", value: "" }], sender: "referrals", title: "", location: "", description: "", eventMode: "fixed", eventDatetime: null, eventField: "", eventTime: "", durationMinutes: 30 }
@@ -1111,37 +1112,45 @@ function ActionConfigFields({
   if ((type as string) === "SEND_SMS") {
     const body = (config.body as string) || ""
     const SMS_LIMIT = 160
+    const to = (config.to as { type?: string; value?: string }) ?? { type: "record", value: "" }
+    const setTo = (patch: Partial<{ type: string; value: string }>) => set("to", { ...to, ...patch })
     return (
       <div className="space-y-3">
-        <p className="text-xs text-slate-500">Sends an SMS to the patient's phone number on the referral.</p>
+        {/* Recipient */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Send to</label>
+          <StyledSelect className="w-full" value={to.type ?? "record"} onChange={e => setTo({ type: e.target.value, value: "" })}>
+            <option value="record">The record&apos;s phone number</option>
+            <option value="property">A phone property on the record</option>
+            <option value="custom">A custom phone number</option>
+          </StyledSelect>
+          {to.type === "property" && (
+            <StyledSelect className="w-full mt-2" value={to.value ?? ""} onChange={e => setTo({ value: e.target.value })}>
+              <option value="">Select a property…</option>
+              {writableProps.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </StyledSelect>
+          )}
+          {to.type === "custom" && (
+            <input className="w-full mt-2 h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+              placeholder="+1 555 123 4567 (tokens allowed)" value={to.value ?? ""} onChange={e => setTo({ value: e.target.value })} />
+          )}
+        </div>
+
         {TemplatePicker}
         {templateId ? null : (
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs font-medium text-slate-600">Message *</label>
-            <div className="flex items-center gap-3">
-              <span className={`text-xs ${body.length > SMS_LIMIT ? "text-red-600" : "text-slate-400"}`}>
-                {body.length} / {SMS_LIMIT}
-              </span>
-              <button type="button" onClick={() => setShowVars(v => !v)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                <Info className="h-3 w-3" /> Template vars
-              </button>
-            </div>
+            <span className={`text-xs ${body.length > SMS_LIMIT ? "text-red-600" : "text-slate-400"}`}>
+              {body.length} / {SMS_LIMIT}
+            </span>
           </div>
-          {showVars && (
-            <div className="flex flex-wrap gap-1 mb-2">
-              {tokens.map(v => (
-                <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
-                  onClick={() => set("body", body + v)}>{v}</span>
-              ))}
-            </div>
-          )}
-          <textarea
-            rows={3}
-            className="w-full border rounded-md px-3 py-2 text-sm resize-none"
-            placeholder="e.g. Hi {patient_first_name}, your appointment at {practice_name} is coming up. Reply STOP to opt out."
+          <TokenTextarea
             value={body}
-            onChange={e => set("body", e.target.value)}
+            onChange={v => set("body", v)}
+            tokens={fieldTokens ?? tokensFromStrings(tokens)}
+            rows={3}
+            placeholder="e.g. Hi {patient_first_name}, your appointment at {practice_name} is coming up. Reply STOP to opt out."
           />
         </div>
         )}

@@ -431,15 +431,20 @@ async function runSingleAction(
     const byId = customValueMap(record) // { propId: value }
     const custom: Record<string, string> = { ...(vars.__custom ?? {}) }
     for (const [id, v] of Object.entries(byId)) custom[`cp_${id}`] = v
-    const entity = recordRef?.type ?? (referralId ? "REFERRAL" : null)
-    if (entity) {
+    const ids = Object.keys(byId)
+    if (ids.length) {
       try {
         let defs: { id: string; internalName: string | null; name: string }[] = []
-        if (entity.startsWith("CO:")) {
-          const def = await (prisma as any).customObjectDef.findUnique({ where: { key: entity.slice(3) }, select: { properties: true } })
+        if (recordRef?.type?.startsWith("CO:")) {
+          // Custom objects keep property defs on the object definition, not in the
+          // CustomProperty table — needs the object key from recordRef.
+          const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordRef.type.slice(3) }, select: { properties: true } })
           defs = (((def?.properties as any[]) ?? [])).map((p: any) => ({ id: p.id, internalName: p.internalName ?? null, name: p.name }))
         } else {
-          defs = await prisma.customProperty.findMany({ where: { entityType: entity as any }, select: { id: true, internalName: true, name: true } })
+          // Built-in objects: resolve the defs straight from the property IDs the
+          // record actually carries. This does NOT depend on recordRef/entity, so
+          // internal-name tokens resolve even for delayed sends resumed by cron.
+          defs = await prisma.customProperty.findMany({ where: { id: { in: ids } }, select: { id: true, internalName: true, name: true } })
         }
         for (const d of defs) {
           if (byId[d.id] === undefined) continue
@@ -656,17 +661,30 @@ async function runSingleAction(
   if ((automation.actionType as string) === "SEND_SMS") {
     const body = resolveTemplate((tplBody ?? (cfg.body as string)) || "", vars)
     if (!body) return "SMS body is empty"
-    // Resolve the recipient phone from the referral, or from the triggering record
-    // (property-changed / other record triggers pass the record, not referralId).
+    // Recipient can be the record's own phone (default), a specific property on the
+    // record, or a fixed/custom number — configured in the action.
+    const toCfg = (cfg.to as { type?: string; value?: string } | undefined) ?? { type: "record" }
     let phone: string | null = null
-    if (referralId) {
-      const referral = await prisma.referral.findUnique({ where: { id: referralId }, select: { patientPhone: true } })
-      phone = referral?.patientPhone ?? null
-    } else if (record) {
-      const r = record as any
-      phone = r.patientPhone ?? r.phone ?? r.officePhone ?? r.patientCell ?? null
+    if (toCfg.type === "custom") {
+      phone = resolveTemplate(toCfg.value ?? "", vars).trim() || null
+    } else if (toCfg.type === "property" && toCfg.value) {
+      // A property holds the number — custom props live in the JSON bag, native
+      // fields on the record itself (both keyed the same as SET_PROPERTY).
+      const bag = ((record as any)?.customProperties ?? (record as any)?.values) as Record<string, unknown> | undefined
+      let raw: unknown = bag?.[toCfg.value] ?? (record as any)?.[toCfg.value] ?? null
+      if (Array.isArray(raw)) raw = raw[0] ?? null
+      phone = raw != null && String(raw).trim() ? String(raw).trim() : null
+    } else {
+      // "record" (default): the referral's / triggering record's own phone.
+      if (referralId) {
+        const referral = await prisma.referral.findUnique({ where: { id: referralId }, select: { patientPhone: true } })
+        phone = referral?.patientPhone ?? null
+      } else if (record) {
+        const r = record as any
+        phone = r.patientPhone ?? r.phone ?? r.officePhone ?? r.patientCell ?? null
+      }
     }
-    if (!phone) return "No phone number on the record to send an SMS to"
+    if (!phone) return "No phone number to send an SMS to"
     const res = await sendSMS(phone, body)
     if (!res.success) return res.error ?? "SMS failed to send"
   }
@@ -1404,7 +1422,11 @@ async function runRecordTrigger(
   if (!record) return
 
   const label = await genericRecordLabel(recordType, recordId, record)
-  const vars: TemplateVars = { ...extraVars, record_name: label } as TemplateVars
+  // Surgery cases carry native tokens ({surgery_date}, {procedure}, {facility}, …)
+  // that the generic path wouldn't otherwise fill — enrich them so "Property
+  // changed" surgery workflows resolve the same tokens as the status/call ones.
+  const base: Partial<TemplateVars> = recordType === "SURGERY" ? surgeryVars(withDerivedSurgeryFields(record)) : {}
+  const vars: TemplateVars = { ...base, ...extraVars, record_name: label } as TemplateVars
   const ref: RecordRef = { type: recordType, id: recordId }
 
   for (const auto of forThisObject) {
