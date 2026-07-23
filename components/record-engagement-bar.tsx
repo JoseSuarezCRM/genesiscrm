@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/record-activity"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import type { MessageTokenGroup } from "@/lib/message-tokens"
 import { cn } from "@/lib/utils"
 
@@ -63,6 +64,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   const [showCcBcc, setShowCcBcc] = useState(false)
   const [emSubject, setEmSubject] = useState("")
   const [emBody, setEmBody] = useState("")
+  const [emAttachments, setEmAttachments] = useState<AttachmentRef[]>([])
   const [smTo, setSmTo] = useState("")
   const [smBody, setSmBody] = useState("")
   const [emailTpls, setEmailTpls] = useState<Tpl[]>([])
@@ -119,7 +121,8 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
     EMAIL: () => run(() => sendEmailFromRecord(recordType, recordId, {
       to: emTo, subject: emSubject, body: emBody,
       cc: emCc.split(/[,;\s]+/).filter(Boolean), bcc: emBcc.split(/[,;\s]+/).filter(Boolean),
-    }), () => { setEmSubject(""); setEmBody(""); setEmCc(""); setEmBcc(""); setShowCcBcc(false) }),
+      attachments: emAttachments,
+    }), () => { setEmSubject(""); setEmBody(""); setEmCc(""); setEmBcc(""); setShowCcBcc(false); setEmAttachments([]) }),
     SMS: () => run(() => sendSmsFromRecord(recordType, recordId, { to: smTo, body: smBody }), () => setSmBody("")),
     CALL: () => run(() => logCall(recordType, recordId, { body: callBody, outcome: callOutcome }), () => setCallBody("")),
     MEETING: () => run(() => logMeeting(recordType, recordId, {
@@ -283,6 +286,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
                   <ComposerTools templates={emailTpls} onTemplate={(t) => applyTemplate(t, "EMAIL")} />
                   <input value={emSubject} onChange={(e) => setEmSubject(e.target.value)} placeholder="Subject" className={INPUT + " w-full"} />
                   <RichTextEditor value={emBody} onChange={setEmBody} placeholder="Write your message…" minHeight={180} tokenGroups={tokenGroups} className="w-full" />
+                  <EmailAttachments value={emAttachments} onChange={setEmAttachments} />
                   <div className="flex items-center pt-1">
                     <p className="text-xs text-slate-400">Sends from your own email address.</p>
                     <SubmitBtn label="Send email" disabled={!emTo.trim() || !emSubject.trim() || emBodyEmpty} onClick={submit.EMAIL} />

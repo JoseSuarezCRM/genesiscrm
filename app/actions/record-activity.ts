@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
 import { userCan } from "@/lib/permissions"
-import { sendEmail, sendEmailTracked, replyToMessage, sendCalendarInvite } from "@/lib/graph-mailer"
+import { sendEmail, sendEmailTracked, replyToMessage, sendCalendarInvite, type EmailAttachment } from "@/lib/graph-mailer"
 import { buildIcs } from "@/lib/ics"
 import { sendSMS } from "@/lib/twilio"
 import { resolveMyFromEmail } from "@/app/actions/account"
@@ -446,7 +446,7 @@ export async function getRecordContact(recordType: string, recordId: string) {
 }
 
 // Email sent straight from the record — always from the current user's own address.
-export async function sendEmailFromRecord(recordType: string, recordId: string, data: { to: string; subject: string; body: string; cc?: string[]; bcc?: string[] }) {
+export async function sendEmailFromRecord(recordType: string, recordId: string, data: { to: string; subject: string; body: string; cc?: string[]; bcc?: string[]; attachments?: EmailAttachment[] }) {
   await requireAccess(permKeyFor(recordType), "EDIT")
   const session = await auth()
   const uid = (session!.user as any).id
@@ -472,13 +472,14 @@ export async function sendEmailFromRecord(recordType: string, recordId: string, 
   // Tracked send captures the thread ids for threading/replies, but it needs
   // Mail.ReadWrite (draft). If that isn't granted, fall back to the plain send
   // (Mail.Send only) so email always works — threading just won't be available.
-  const tracked = await sendEmailTracked(fromEmail, to, subject, html, { cc, bcc })
+  const attachments = data.attachments ?? []
+  const tracked = await sendEmailTracked(fromEmail, to, subject, html, { cc, bcc, attachments })
   const result = tracked.success ? tracked : { success: false, error: tracked.error }
   let conversationId = tracked.conversationId
   let internetMessageId = tracked.internetMessageId
   let graphMessageId = tracked.graphMessageId
   if (!tracked.success) {
-    const plain = await sendEmail(to, subject, html, { fromEmail, cc, bcc })
+    const plain = await sendEmail(to, subject, html, { fromEmail, cc, bcc, attachments })
     result.success = plain.success
     result.error = plain.error
     conversationId = internetMessageId = graphMessageId = undefined
