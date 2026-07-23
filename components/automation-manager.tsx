@@ -113,18 +113,16 @@ const ACTION_LABELS: Record<string, string> = {
   ASSIGN_REFERRAL: "Assign referral to user",
   ADD_TAG: "Add tag to referral",
   SEND_EMAIL: "Send email",
-  SEND_SMS: "Send SMS to patient",
+  SEND_SMS: "Send SMS",
   SEND_MEETING_INVITE: "Send meeting invite",
   SET_PROPERTY: "Set a property value",
   ASSIGN_OWNER: "Assign record owner",
 }
 
-// Actions that act on a specific referral — only offered for referral workflows.
-const REFERRAL_ONLY_ACTIONS = new Set(["UPDATE_REFERRAL_STATUS", "ASSIGN_REFERRAL", "ADD_TAG", "SEND_SMS"])
-
-function actionsForObject(objectKey: string): AutomationAction[] {
-  const all = Object.keys(ACTION_LABELS) as AutomationAction[]
-  return objectKey === "REFERRAL" ? all : all.filter(a => !REFERRAL_ONLY_ACTIONS.has(a))
+// Every action is offered for every object type. Actions that resolve a
+// referral/phone/etc. simply no-op when the triggering record doesn't have one.
+function actionsForObject(_objectKey: string): AutomationAction[] {
+  return Object.keys(ACTION_LABELS) as AutomationAction[]
 }
 
 const TRIGGER_COLORS: Record<string, string> = {

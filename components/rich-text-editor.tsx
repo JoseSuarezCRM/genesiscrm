@@ -208,12 +208,11 @@ export function RichTextEditor({ value, onChange, placeholder = "Write your mess
                     key={t.value}
                     type="button"
                     onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertToken(t.value) }}
-                    className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between gap-2"
+                    className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-2"
                   >
                     <span className="text-sm text-slate-700 truncate">
                       {t.label}{t.group ? <span className="text-slate-400"> · {t.group}</span> : null}
                     </span>
-                    <span className="text-xs text-slate-400 font-mono truncate">{t.value}</span>
                   </button>
                 )
                 return (

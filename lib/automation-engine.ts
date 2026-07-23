@@ -1137,7 +1137,7 @@ export async function runTrigger_SurgeryStatusChanged(
     if (cfg.toStatus && cfg.toStatus !== toStatus) continue
     if (!checkConditions(sc, cfg)) continue
 
-    const log = await executeAction(auto, null, vars, triggeredByUserId, sc)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, sc, { type: "SURGERY", id: caseId })
     await prisma.automationRun.create({
       data: { automationId: auto.id, ...runData(log, "surgery", caseId, `Surgery status ${fromStatus} → ${toStatus}`) },
     })
@@ -1172,7 +1172,7 @@ export async function runTrigger_SurgeryCallAttemptsReached(
     })
     if (already) continue
 
-    const log = await executeAction(auto, null, vars, triggeredByUserId, sc)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, sc, { type: "SURGERY", id: caseId })
     await prisma.automationRun.create({
       data: { automationId: auto.id, ...runData(log, "surgery", key, `${callCount} surgery call attempts reached`) },
     })
