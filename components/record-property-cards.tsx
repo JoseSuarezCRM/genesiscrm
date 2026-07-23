@@ -190,7 +190,7 @@ function FieldRow({ f, value, values, recordId, entityType, canEdit, users, user
         <textarea rows={3} value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} onBlur={() => commit(draft)}
           onKeyDown={(e) => { if (e.key === "Escape") cancelEdit() }} className={input + " resize-none"} autoFocus />
       ) : f.type === "phone" ? (
-        <PhoneInput value={String(draft ?? "")} onChange={setDraft} onCommit={() => commit(draft)} />
+        <PhoneInput value={String(draft ?? "")} onChange={setDraft} onCommit={(v) => commit(v)} />
       ) : (
         <input
           type={f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "datetime" ? "datetime-local" : "text"}

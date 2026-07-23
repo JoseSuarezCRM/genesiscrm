@@ -118,6 +118,9 @@ export default function StyledSelect({ value, onChange, children, className, dis
       {open && typeof document !== "undefined" && createPortal(
         <div
           ref={menuRef}
+          // Marker so blur-commit editors (e.g. the phone field) know a portaled
+          // menu is open and don't commit/close while a value is being picked.
+          data-select-menu-open=""
           // Portaled to <body>: a Radix modal Dialog disables pointer events outside
           // its content (pointerEvents:auto re-enables them) and dismisses on outside
           // pointerdown (stopPropagation keeps it from closing the parent dialog).

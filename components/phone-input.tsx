@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import StyledSelect from "@/components/ui/styled-select"
 
 // A small, dependency-free country-code picker + number field. Stores the value as
@@ -63,12 +63,17 @@ export default function PhoneInput({ value, onChange, className, onCommit }: {
   value: string
   onChange: (v: string) => void
   className?: string
-  /** Fired on Enter or when focus leaves the whole control (for auto-save). */
-  onCommit?: () => void
+  /** Fired with the composed value on Enter or when focus leaves the control. */
+  onCommit?: (v: string) => void
 }) {
   const initial = parse(value)
   const [code, setCode] = useState(initial.code)
   const [rest, setRest] = useState(initial.rest)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // Always holds the freshest composed value. The blur-commit runs on a deferred
+  // timeout, so a state closure would be stale (that's what dropped the country
+  // change) — we read the value from here instead.
+  const latestRef = useRef<string>(value ?? "")
 
   // Re-sync when the value prop changes externally (e.g. a different record loads),
   // but NOT in response to our own emits — so picking a country before typing a
@@ -79,21 +84,29 @@ export default function PhoneInput({ value, onChange, className, onCommit }: {
       setCode(p.code)
       setRest(p.rest)
     }
+    latestRef.current = value ?? ""
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
-  function pickCountry(nextCode: string) {
-    setCode(nextCode)
-    onChange(compose(nextCode, rest))
-  }
-  function setNumber(next: string) {
-    setRest(next)
-    onChange(compose(code, next))
+  function emit(v: string) { latestRef.current = v; onChange(v) }
+  function pickCountry(nextCode: string) { setCode(nextCode); emit(compose(nextCode, rest)) }
+  function setNumber(next: string) { setRest(next); emit(compose(code, next)) }
+
+  // Commit only once focus has truly left the whole control. Defer so focus can
+  // settle onto the portaled country menu (which lives on <body>, outside this
+  // div) without us committing/closing the editor mid-selection.
+  function handleBlur() {
+    if (!onCommit) return
+    setTimeout(() => {
+      const active = document.activeElement
+      if (rootRef.current && active && rootRef.current.contains(active)) return
+      if (document.querySelector("[data-select-menu-open]")) return
+      onCommit(latestRef.current)
+    }, 0)
   }
 
   return (
-    <div className={"flex gap-1.5 min-w-0 " + (className ?? "")}
-      onBlur={onCommit ? (e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) onCommit() } : undefined}>
+    <div ref={rootRef} className={"flex gap-1.5 min-w-0 " + (className ?? "")} onBlur={handleBlur}>
       <StyledSelect value={code} onChange={(e) => pickCountry(e.target.value)}
         className="w-[92px] shrink-0 text-sm border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none focus:border-zinc-400">
         {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
@@ -101,7 +114,7 @@ export default function PhoneInput({ value, onChange, className, onCommit }: {
       <input
         value={rest}
         onChange={(e) => setNumber(e.target.value)}
-        onKeyDown={onCommit ? (e) => { if (e.key === "Enter") { e.preventDefault(); onCommit() } } : undefined}
+        onKeyDown={onCommit ? (e) => { if (e.key === "Enter") { e.preventDefault(); onCommit(latestRef.current) } } : undefined}
         placeholder="Phone number"
         className="min-w-0 flex-1 w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400"
         autoFocus
