@@ -921,7 +921,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                       <div className="space-y-1.5">
                         {p.locations.map((l) => (
                           <div key={l.id} className="flex items-center gap-2 bg-white border rounded-md px-3 py-2 text-sm">
-                            <span className="font-medium text-slate-800 flex-1 min-w-0 truncate">{l.name}</span>
+                            <Link href={`/locations/${l.id}`} className="font-medium text-slate-800 hover:text-blue-600 flex-1 min-w-0 truncate">{l.name}</Link>
                             {l.phone && <span className="text-slate-500 text-xs hidden lg:block">{l.phone}</span>}
                             <span className="text-xs text-slate-400 shrink-0">{l._count.referrals} ref.</span>
                             {isAdmin && (

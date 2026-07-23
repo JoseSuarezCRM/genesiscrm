@@ -6,14 +6,21 @@ import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
 import { userCan, userCanLevel } from "@/lib/permissions"
 
-export default async function PracticesPage() {
+export default async function PracticesPage({ searchParams }: { searchParams?: { sort?: string } }) {
   const session = await requireView("PRACTICES")
   const canManage = userCanLevel(session?.user as any, "PRACTICES", "EDIT")
   const currentUserId = (session?.user as any)?.id ?? ""
 
+  // "View all" from the reporting page's Top Referring Practices links here with
+  // ?sort=referrals so the list opens ranked by referral volume.
+  const orderBy =
+    searchParams?.sort === "referrals"
+      ? ({ referrals: { _count: "desc" } } as const)
+      : ({ name: "asc" } as const)
+
   const [practices, savedViews, shareOptions] = await Promise.all([
     prisma.referringPractice.findMany({
-      orderBy: { name: "asc" },
+      orderBy,
       include: {
         _count: { select: { referrals: true } },
         locations: {

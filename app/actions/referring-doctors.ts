@@ -521,6 +521,40 @@ export async function mergeDoctor(sourceId: string, targetId: string) {
   }
 }
 
+// Merge a whole batch of exact-duplicate pairs in one pass (the "Merge all exact
+// duplicates" button). Pairs can chain/overlap (A↔B, B↔C), so we track which ids
+// have been removed and redirect any later reference to the surviving record.
+export async function mergeExactDuplicates(
+  pairs: { kind: "practice" | "location" | "doctor"; keepId: string; sourceId: string }[]
+) {
+  await requirePermission("MERGE_RECORDS")
+
+  // removed id → survivor id (followed transitively)
+  const redirect = new Map<string, string>()
+  const resolve = (id: string) => { let cur = id; while (redirect.has(cur)) cur = redirect.get(cur)!; return cur }
+
+  let mergedCount = 0
+  const errors: string[] = []
+
+  for (const p of pairs) {
+    const keep = resolve(p.keepId)
+    const source = resolve(p.sourceId)
+    if (keep === source) continue // already merged together by an earlier pair
+
+    let result: { error?: string | null; success?: boolean } | undefined
+    if (p.kind === "practice") result = await mergePractice(source, keep)
+    else if (p.kind === "location") result = await mergeLocation(source, keep)
+    else result = await mergeDoctor(source, keep)
+
+    if (result?.error) { errors.push(result.error); continue }
+    redirect.set(source, keep)
+    mergedCount++
+  }
+
+  revalidatePath("/settings/duplicates")
+  return { success: true, mergedCount, errors }
+}
+
 export async function createProviderNote(providerId: string, content: string) {
   const session = await requireAccess("PROVIDERS", "EDIT")
   if (!content.trim()) return { error: "Note cannot be empty" }

@@ -29,6 +29,60 @@ import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
+// ─── Searchable teammate picker (email activity report) ─────────────────────────
+// Same searchable dropdown pattern as the filter builder: a search box + a list
+// that scrolls inside its own container (no more portal-scroll weirdness).
+function TeammatePicker({ users, selected, onAdd }: {
+  users: { id: string; name?: string | null; email: string }[]
+  selected: string[]
+  onAdd: (email: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState("")
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open])
+  const ql = q.toLowerCase().trim()
+  const chosen = new Set(selected.map((e) => e.toLowerCase()))
+  const filtered = users.filter((u) => {
+    if (chosen.has(u.email.toLowerCase())) return false
+    if (!ql) return true
+    return (u.name ?? "").toLowerCase().includes(ql) || u.email.toLowerCase().includes(ql)
+  })
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen((o) => !o)}
+        className="h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-slate-300">
+        <Plus className="h-3.5 w-3.5" /> Add teammate <ChevronDown className="h-3 w-3 text-slate-400" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-9 z-50 w-72 max-h-72 overflow-hidden bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col">
+          <div className="relative border-b border-slate-100 p-1.5">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search teammates…"
+              className="w-full pl-7 pr-2 py-1.5 text-sm rounded-md focus:outline-none" />
+          </div>
+          <div className="overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-slate-400">{ql ? "No matches" : "Everyone's already added"}</p>
+            ) : filtered.map((u) => (
+              <button key={u.id} type="button" onClick={() => { onAdd(u.email); setQ("") }}
+                className="w-full text-left px-2.5 py-1.5 hover:bg-slate-50">
+                <p className="text-sm text-slate-700 truncate">{u.name || u.email}</p>
+                {u.name && <p className="text-xs text-slate-400 truncate">{u.email}</p>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TagObj { id: string; name: string; color: string }
@@ -1779,12 +1833,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <div>
               <label className="text-xs font-medium text-slate-600 block mb-1">Recipients</label>
               <Input value={reportTo} onChange={e => setReportTo(e.target.value)} placeholder="name@example.com, another@example.com" />
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <span className="text-xs text-slate-400">Add teammate:</span>
-                <StyledSelect value="" onChange={e => { addTeammate(e.target.value); }} className="min-w-[180px] text-sm">
-                  <option value="">Choose…</option>
-                  {shareUsers.map(u => <option key={u.id} value={u.email}>{u.name || u.email}</option>)}
-                </StyledSelect>
+              <div className="mt-1.5">
+                <TeammatePicker users={shareUsers} selected={reportRecipients} onAdd={addTeammate} />
               </div>
             </div>
 

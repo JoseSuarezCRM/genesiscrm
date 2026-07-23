@@ -1,6 +1,6 @@
-import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import type { ReactNode } from "react"
+import SmartBackLink from "@/components/smart-back-link"
 
 /**
  * The standard record page — the same three-column layout Referrals uses, so every
@@ -34,9 +34,9 @@ export default function RecordDetailShell({
         <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
           <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <Link href={backHref} className="inline-flex items-center text-xs text-slate-500 hover:text-slate-800">
+              <SmartBackLink href={backHref} className="inline-flex items-center text-xs text-slate-500 hover:text-slate-800">
                 <ChevronLeft className="h-3.5 w-3.5 mr-0.5" /> {backLabel}
-              </Link>
+              </SmartBackLink>
               {actions}
             </div>
 

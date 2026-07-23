@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { mergePractice, mergeLocation, mergeDoctor } from "@/app/actions/referring-doctors"
+import { mergePractice, mergeLocation, mergeDoctor, mergeExactDuplicates } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, Building2, MapPin, User, Check, Loader2, X } from "lucide-react"
+import { AlertTriangle, Building2, MapPin, User, Check, Loader2, X, Merge } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -66,6 +66,8 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [merged, setMerged] = useState<string[]>([])
+  const [confirmMergeAll, setConfirmMergeAll] = useState(false)
+  const [mergingAll, startMergeAll] = useTransition()
 
   function dismiss(key: string) {
     setDismissed((prev) => [...prev, key])
@@ -113,12 +115,60 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
 
   const totalVisible = visiblePracticePairs.length + visibleLocationPairs.length + visibleDoctorPairs.length
 
+  // Every visible "Exact" pair, ready for a one-click batch merge. Keep the record
+  // with more referrals (same default as the single-merge dialog).
+  const exactPractice = visiblePracticePairs.filter((p) => p.reason === "exact")
+  const exactLocation = visibleLocationPairs.filter((p) => p.reason === "exact")
+  const exactDoctor = visibleDoctorPairs.filter((p) => p.reason === "exact")
+  const exactCount = exactPractice.length + exactLocation.length + exactDoctor.length
+
+  function handleMergeAllExact() {
+    const keepMore = (a: { id: string; referrals: number }, b: { id: string; referrals: number }) =>
+      a.referrals >= b.referrals ? { keepId: a.id, sourceId: b.id } : { keepId: b.id, sourceId: a.id }
+
+    const pairs = [
+      ...exactPractice.map(({ a, b }) => ({ kind: "practice" as const, ...keepMore({ id: a.id, referrals: a._count.referrals }, { id: b.id, referrals: b._count.referrals }) })),
+      ...exactLocation.map(({ a, b }) => ({ kind: "location" as const, ...keepMore({ id: a.id, referrals: a._count.referrals }, { id: b.id, referrals: b._count.referrals }) })),
+      ...exactDoctor.map(({ a, b }) => ({ kind: "doctor" as const, ...keepMore({ id: a.id, referrals: a._count.referrals }, { id: b.id, referrals: b._count.referrals }) })),
+    ]
+    const keys = [
+      ...exactPractice.map(({ a, b }) => `p-${a.id}-${b.id}`),
+      ...exactLocation.map(({ a, b }) => `l-${a.id}-${b.id}`),
+      ...exactDoctor.map(({ a, b }) => `d-${a.id}-${b.id}`),
+    ]
+
+    setError(null)
+    startMergeAll(async () => {
+      const res = await mergeExactDuplicates(pairs)
+      setConfirmMergeAll(false)
+      if (res?.errors?.length) setError(`${res.errors.length} merge${res.errors.length !== 1 ? "s" : ""} failed. ${res.errors[0]}`)
+      setMerged((prev) => [...prev, ...keys])
+      if (res?.mergedCount) {
+        setSuccess(`Merged ${res.mergedCount} exact duplicate${res.mergedCount !== 1 ? "s" : ""}.`)
+        setTimeout(() => setSuccess(null), 4000)
+      }
+    })
+  }
+
   return (
     <>
       {success && (
         <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
           <Check className="h-4 w-4 shrink-0" />
           {success}
+        </div>
+      )}
+
+      {exactCount > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-lg">
+          <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+          <p className="text-sm text-red-800 flex-1 min-w-0">
+            <strong>{exactCount}</strong> exact duplicate{exactCount !== 1 ? "s" : ""} found. Merging keeps the record with more referrals and transfers everything from the other.
+          </p>
+          <Button size="sm" onClick={() => setConfirmMergeAll(true)} disabled={mergingAll} className="shrink-0 bg-red-600 hover:bg-red-700">
+            {mergingAll ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Merge className="h-4 w-4 mr-2" />}
+            Merge all exact duplicates
+          </Button>
         </div>
       )}
 
@@ -221,6 +271,29 @@ export default function DuplicateManager({ practicePairs, locationPairs, doctorP
           })}
         </section>
       )}
+
+      {/* ── Merge-all confirm dialog ─────────────── */}
+      <Dialog open={confirmMergeAll} onOpenChange={(o) => !o && setConfirmMergeAll(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Merge all exact duplicates?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1 text-sm text-slate-600">
+            <p>
+              This will merge <strong>{exactCount}</strong> exact duplicate pair{exactCount !== 1 ? "s" : ""}. For each pair, the record with
+              more referrals is kept and the other is deleted — its referrals, locations, and links are transferred.
+            </p>
+            <p className="text-slate-500">This can&apos;t be undone. &quot;Similar&quot; (amber) pairs are left untouched.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmMergeAll(false)} disabled={mergingAll}>Cancel</Button>
+            <Button onClick={handleMergeAllExact} disabled={mergingAll} className="bg-red-600 hover:bg-red-700">
+              {mergingAll && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Merge {exactCount} duplicate{exactCount !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Merge confirm dialog ─────────────────── */}
       <Dialog open={!!mergeTarget} onOpenChange={(o) => !o && setMergeTarget(null)}>

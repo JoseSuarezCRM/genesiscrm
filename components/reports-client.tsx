@@ -445,7 +445,7 @@ export default function ReportsClient({
         <div className="bg-white border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-700">Top Referring Practices</h2>
-            <Link href="/referring-doctors" className="text-xs text-blue-600 hover:underline">View all</Link>
+            <Link href="/practices?sort=referrals" className="text-xs text-blue-600 hover:underline">View all</Link>
           </div>
           {practicesData.length === 0 ? (
             <p className="text-sm text-slate-400">No data in this period</p>

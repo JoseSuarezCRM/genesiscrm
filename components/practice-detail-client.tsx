@@ -262,7 +262,7 @@ export default function PracticeDetailClient({ practice, referrals, isAdmin, cus
             ) : (
               <div className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
                 <MapPin className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-                <span className="flex-1 text-sm text-slate-700 truncate">{loc.name}</span>
+                <Link href={`/locations/${loc.id}`} className="flex-1 text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors truncate">{loc.name}</Link>
                 <span className="text-xs text-slate-400 shrink-0">{loc._count.referrals} ref</span>
                 {isAdmin && (
                   <>
