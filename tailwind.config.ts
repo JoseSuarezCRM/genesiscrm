@@ -91,6 +91,10 @@ const config: Config = {
         "overlay-in": { from: { opacity: "0" }, to: { opacity: "1" } },
         "overlay-out": { from: { opacity: "1" }, to: { opacity: "0" } },
         "bar-in": { from: { opacity: "0", transform: "translateY(-6px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        // Dropdowns that grow out of / shrink back into their trigger. Pair with a
+        // transform-origin utility (e.g. origin-top-right) to aim at the button.
+        "dropdown-in": { from: { opacity: "0", transform: "scale(0.95)" }, to: { opacity: "1", transform: "scale(1)" } },
+        "dropdown-out": { from: { opacity: "1", transform: "scale(1)" }, to: { opacity: "0", transform: "scale(0.95)" } },
         // For translate-centered dialogs (shadcn) — keeps the -50%,-50% offset so
         // it animates in place instead of from the corner.
         "dialog-in": {
@@ -114,6 +118,8 @@ const config: Config = {
         "overlay-in": "overlay-in 0.15s ease-out",
         "overlay-out": "overlay-out 0.12s ease-in forwards",
         "bar-in": "bar-in 0.18s ease-out",
+        "dropdown-in": "dropdown-in 0.14s ease-out",
+        "dropdown-out": "dropdown-out 0.12s ease-in forwards",
         "dialog-in": "dialog-in 0.15s ease-out",
         "dialog-out": "dialog-out 0.12s ease-in forwards",
       },

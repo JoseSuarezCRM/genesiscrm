@@ -21,6 +21,8 @@ interface Props {
 
 export default function NotificationBell({ initialNotifications }: Props) {
   const [open, setOpen] = useState(false)
+  // Keep the panel mounted through its close animation before removing it.
+  const [render, setRender] = useState(false)
   const [notifications, setNotifications] = useState(initialNotifications)
   const [isPending, startTransition] = useTransition()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -29,6 +31,7 @@ export default function NotificationBell({ initialNotifications }: Props) {
   const unreadCount = notifications.filter(n => !n.read).length
 
   useEffect(() => { setNotifications(initialNotifications) }, [initialNotifications])
+  useEffect(() => { if (open) setRender(true) }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -68,8 +71,15 @@ export default function NotificationBell({ initialNotifications }: Props) {
         )}
       </button>
 
-      {open && (
-        <div className="absolute top-12 right-0 origin-top-right bg-white border border-slate-200 rounded-xl shadow-lg w-80 max-h-[420px] flex flex-col z-50 animate-panel-in">
+      {render && (
+        <div
+          data-state={open ? "open" : "closed"}
+          onAnimationEnd={() => { if (!open) setRender(false) }}
+          className={cn(
+            "absolute top-12 right-0 origin-top-right bg-white border border-slate-200 rounded-xl shadow-lg w-80 max-h-[420px] flex flex-col z-50",
+            open ? "animate-dropdown-in" : "animate-dropdown-out"
+          )}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <p className="text-sm font-semibold text-slate-800">Notifications</p>
             {unreadCount > 0 && (
