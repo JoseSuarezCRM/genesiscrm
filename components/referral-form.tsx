@@ -242,12 +242,17 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
       let matchedPracticeId: string | undefined
       if (prefillData.referringOrg) {
         const a = prefillData.referringOrg.toLowerCase().trim()
+        // Word-boundary contains — so a short name like "Ati" does NOT match the
+        // substring inside "Innovative Pl-ati-num Care" (that mis-assigned the wrong
+        // practice). Requires the whole name to appear as full words.
+        const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        const wordContains = (hay: string, needle: string) => needle.length > 0 && new RegExp(`\\b${esc(needle)}\\b`).test(hay)
         const scored = localPractices.map((p) => {
           const b = p.name.toLowerCase().trim()
           let score = 0
           if (a === b) score = 100
           else if (b.startsWith(a) || a.startsWith(b)) score = 80
-          else if (b.includes(a) || a.includes(b)) score = 60
+          else if (wordContains(b, a) || wordContains(a, b)) score = 60
           else {
             // Word-overlap: count shared meaningful words (length > 2) to catch
             // location-specific names like "Vna Health Highland Fp" → "VNA Health Care".
@@ -259,7 +264,13 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
             const bWords = new Set(b.split(/\W+/).filter((w) => w.length > 2))
             const shared = Array.from(bWords).filter((w) => aWords.has(w))
             const distinctiveShared = shared.filter((w) => !GENERIC_ORG_WORDS.has(w)).length
-            if (shared.length >= 2 && distinctiveShared >= 1) score = 40 + Math.min(distinctiveShared * 8, 20)
+            // If each name carries a distinctive word the other lacks (e.g. "Platinum"
+            // vs "Primary"), they're different orgs unless they share ≥2 distinctive
+            // words — don't let the shared "Innovative…Care" glue them together.
+            const aOnly = Array.from(aWords).filter((w) => !GENERIC_ORG_WORDS.has(w) && !bWords.has(w)).length
+            const bOnly = Array.from(bWords).filter((w) => !GENERIC_ORG_WORDS.has(w) && !aWords.has(w)).length
+            const conflict = aOnly > 0 && bOnly > 0 && distinctiveShared < 2
+            if (shared.length >= 2 && distinctiveShared >= 1 && !conflict) score = 40 + Math.min(distinctiveShared * 8, 20)
           }
           return { p, score }
         }).filter((x) => x.score > 0)
