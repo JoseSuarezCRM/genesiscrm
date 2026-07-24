@@ -10,6 +10,7 @@ import { evaluateRule as evalRule, evaluateGroups, selectBranch, type Automation
 import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/automation-graph"
 import { findProcedureLocation } from "@/lib/surgery-procedures"
 import { type RecordRef, loadRecord, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner } from "@/lib/automation-records"
+import { buildRecordTokenVars } from "@/lib/record-token-vars"
 
 // Attach derived surgical provider + body part (from the stored procedure) so
 // criteria can filter on them even though the case only stores `procedure`.
@@ -185,6 +186,7 @@ async function fetchReferralForEngine(referralId: string) {
     },
   })
 }
+
 
 // ─── Action executor ──────────────────────────────────────────────────────────
 
@@ -425,38 +427,25 @@ async function runSingleAction(
   recordRef?: RecordRef | null,
 ): Promise<string | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
-  // Make custom-property tokens resolvable from the triggering record — both the
-  // {cp_<id>} form and each property's readable internal name.
+  // Resolve every native + custom token for the triggering record via the shared
+  // per-object resolver, so {patient_name}, {surgery_date}, custom internal names,
+  // {cp_<id>}, etc. all fill in for ANY object type. Trigger-specific vars (count,
+  // status, …) still win over the record-derived ones.
   {
-    const byId = customValueMap(record) // { propId: value }
-    const custom: Record<string, string> = { ...(vars.__custom ?? {}) }
-    for (const [id, v] of Object.entries(byId)) custom[`cp_${id}`] = v
-    const ids = Object.keys(byId)
-    if (ids.length) {
-      try {
-        let defs: { id: string; internalName: string | null; name: string }[] = []
-        if (recordRef?.type?.startsWith("CO:")) {
-          // Custom objects keep property defs on the object definition, not in the
-          // CustomProperty table — needs the object key from recordRef.
-          const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordRef.type.slice(3) }, select: { properties: true } })
-          defs = (((def?.properties as any[]) ?? [])).map((p: any) => ({ id: p.id, internalName: p.internalName ?? null, name: p.name }))
-        } else {
-          // Built-in objects: resolve the defs straight from the property IDs the
-          // record actually carries. This does NOT depend on recordRef/entity, so
-          // internal-name tokens resolve even for delayed sends resumed by cron.
-          defs = await prisma.customProperty.findMany({ where: { id: { in: ids } }, select: { id: true, internalName: true, name: true } })
-        }
-        for (const d of defs) {
-          if (byId[d.id] === undefined) continue
-          // Register BOTH the internal name and the label-slug so a token resolves
-          // whether it was written as {internal_name} or {label_slug}.
-          if (d.internalName) custom[d.internalName] = byId[d.id]
-          const slug = engineSlug(d.name)
-          if (slug && custom[slug] === undefined) custom[slug] = byId[d.id]
-        }
-      } catch { /* defs unavailable — {cp_<id>} tokens still resolve */ }
+    const tokenRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
+    let tokenMap: Record<string, string> = {}
+    if (tokenRef) {
+      try { tokenMap = await buildRecordTokenVars(tokenRef.type, tokenRef.id) } catch { /* keep whatever vars has */ }
     }
-    vars = { ...vars, __custom: custom }
+    // Fold in any custom values already on the record snapshot (a delayed resume
+    // carries a snapshot even when tokenRef is missing).
+    const byId = customValueMap(record)
+    for (const [id, v] of Object.entries(byId)) if (tokenMap[`cp_${id}`] === undefined) tokenMap[`cp_${id}`] = v
+    vars = {
+      ...(tokenMap as any),
+      ...vars,
+      __custom: { ...tokenMap, ...(vars.__custom ?? {}) },
+    }
   }
 
   // If the action references a saved Communications template, load its content.
@@ -1425,11 +1414,9 @@ async function runRecordTrigger(
   if (!record) return
 
   const label = await genericRecordLabel(recordType, recordId, record)
-  // Surgery cases carry native tokens ({surgery_date}, {procedure}, {facility}, …)
-  // that the generic path wouldn't otherwise fill — enrich them so "Property
-  // changed" surgery workflows resolve the same tokens as the status/call ones.
-  const base: Partial<TemplateVars> = recordType === "SURGERY" ? surgeryVars(withDerivedSurgeryFields(record)) : {}
-  const vars: TemplateVars = { ...base, ...extraVars, record_name: label } as TemplateVars
+  // Native + custom tokens for this record are filled in by runSingleAction via
+  // the shared per-object resolver, so any object's tokens resolve here.
+  const vars: TemplateVars = { ...extraVars, record_name: label } as TemplateVars
   const ref: RecordRef = { type: recordType, id: recordId }
 
   for (const auto of forThisObject) {
