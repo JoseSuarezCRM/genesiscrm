@@ -436,6 +436,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
   const selectedPractice = localPractices.find((p) => p.id === practiceId)
   const availableLocations = selectedPractice?.locations ?? []
   const availableDoctors = (selectedPractice?.doctors ?? []).filter((d) => {
+    if (d.id === doctorId) return true // never hide the selected provider (e.g. a fax match tied to another location)
     if (!locationId || locationId === NONE) return true
     return d.locations.length === 0 || d.locations.some((dl) => dl.locationId === locationId)
   })
@@ -729,7 +730,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
               >
                 <SelectTrigger>
                   {doctorId && doctorId !== NONE
-                    ? <span>{(availableDoctors.find(d => d.id === doctorId) ?? crossOrgDoctors.find(d => d.id === doctorId))?.name ?? "Select provider..."}</span>
+                    ? <span>{(availableDoctors.find(d => d.id === doctorId) ?? crossOrgDoctors.find(d => d.id === doctorId))?.name ?? (doctorId === PENDING_DOCTOR_ID ? pendingDoctorData?.name : null) ?? "Select provider..."}</span>
                     : <span className="text-muted-foreground">
                         {!practiceId ? "Select practice first" : availableDoctors.length === 0 && crossOrgDoctors.length === 0 ? "No providers added" : "Select provider..."}
                       </span>}
