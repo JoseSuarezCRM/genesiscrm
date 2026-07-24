@@ -1,13 +1,13 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { getOrgRules } from "@/app/actions/org-rules"
+import { getOrgRules, getOrgRulesPoller } from "@/app/actions/org-rules"
 import OrgRulesManager from "@/components/org-rules-manager"
 
 export default async function OrgRulesPage() {
   const session = await auth()
   if ((session?.user as any)?.role !== "ADMIN") redirect("/")
 
-  const rules = await getOrgRules()
+  const [rules, poller] = await Promise.all([getOrgRules(), getOrgRulesPoller()])
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
@@ -19,7 +19,7 @@ export default async function OrgRulesPage() {
         </p>
       </div>
 
-      <OrgRulesManager initialRules={rules} />
+      <OrgRulesManager initialRules={rules} initialPoller={poller} />
     </div>
   )
 }

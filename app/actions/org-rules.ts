@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { applyRules } from "@/lib/org-rules-utils"
+import { mergeExistingPracticesByRules } from "@/lib/org-rules-merge"
 
 export interface OrgRuleInput {
   contains: string
@@ -149,63 +150,47 @@ export async function applyRulesToExistingPractices(): Promise<{ success: boolea
   const session = await auth()
   if ((session?.user as any)?.role !== "ADMIN") return { success: false, merged: 0, error: "Unauthorized" }
 
-  const [rules, allPractices] = await Promise.all([
-    prisma.orgNameRule.findMany({ orderBy: { order: "asc" } }),
-    prisma.referringPractice.findMany(),
-  ])
-
-  let merged = 0
-
-  for (const practice of allPractices) {
-    const canonical = applyRules(practice.name, rules)
-    if (canonical.toLowerCase() === practice.name.toLowerCase()) continue // already correct
-
-    // Find or create the canonical practice
-    let target = await prisma.referringPractice.findFirst({
-      where: { name: { equals: canonical, mode: "insensitive" } },
-    })
-    if (!target) {
-      target = await prisma.referringPractice.create({ data: { name: canonical } })
-    }
-    if (target.id === practice.id) continue
-
-    // Merge: move referrals, locations, doctors
-    await prisma.referral.updateMany({ where: { referringPracticeId: practice.id }, data: { referringPracticeId: target.id } })
-    await prisma.practiceLocation.updateMany({ where: { practiceId: practice.id }, data: { practiceId: target.id } })
-
-    const sourceDoctors = await prisma.referringDoctor.findMany({ where: { practiceId: practice.id }, select: { id: true, name: true } })
-    for (const doc of sourceDoctors) {
-      const existing = await prisma.referringDoctor.findFirst({
-        where: { practiceId: target.id, name: { equals: doc.name, mode: "insensitive" } },
-      })
-      if (!existing) {
-        await prisma.referringDoctor.update({ where: { id: doc.id }, data: { practiceId: target.id } })
-      } else {
-        await prisma.referral.updateMany({ where: { referringDoctorId: doc.id }, data: { referringDoctorId: existing.id } })
-        const sourceLinks = await prisma.doctorLocation.findMany({ where: { doctorId: doc.id } })
-        for (const link of sourceLinks) {
-          const already = await prisma.doctorLocation.findFirst({ where: { doctorId: existing.id, locationId: link.locationId } })
-          if (!already) {
-            await prisma.doctorLocation.update({
-              where: { doctorId_locationId: { doctorId: doc.id, locationId: link.locationId } },
-              data: { doctorId: existing.id },
-            })
-          } else {
-            await prisma.doctorLocation.delete({ where: { doctorId_locationId: { doctorId: doc.id, locationId: link.locationId } } })
-          }
-        }
-        await prisma.referringDoctor.delete({ where: { id: doc.id } })
-      }
-    }
-
-    await prisma.referringPractice.delete({ where: { id: practice.id } })
-    merged++
-  }
+  const merged = await mergeExistingPracticesByRules()
 
   revalidatePath("/referring-doctors")
   revalidatePath("/settings/org-rules")
   revalidatePath("/referrals")
   return { success: true, merged }
+}
+
+// ── Background poller config ─────────────────────────────────────────────────
+
+export interface OrgRulesPollerConfig {
+  enabled: boolean
+  intervalMinutes: number
+  lastRunAt: string | null
+  lastMerged: number
+}
+
+export async function getOrgRulesPoller(): Promise<OrgRulesPollerConfig> {
+  const cfg = await (prisma as any).orgRulesPoller.findUnique({ where: { id: "singleton" } })
+  return {
+    enabled: cfg?.enabled ?? false,
+    intervalMinutes: cfg?.intervalMinutes ?? 60,
+    lastRunAt: cfg?.lastRunAt ? cfg.lastRunAt.toISOString() : null,
+    lastMerged: cfg?.lastMerged ?? 0,
+  }
+}
+
+export async function setOrgRulesPoller(
+  input: { enabled: boolean; intervalMinutes: number }
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth()
+  if ((session?.user as any)?.role !== "ADMIN") return { success: false, error: "Unauthorized" }
+
+  const interval = Math.max(15, Math.min(10080, Math.round(input.intervalMinutes) || 60))
+  await (prisma as any).orgRulesPoller.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", enabled: input.enabled, intervalMinutes: interval },
+    update: { enabled: input.enabled, intervalMinutes: interval },
+  })
+  revalidatePath("/settings/org-rules")
+  return { success: true }
 }
 
 export async function reorderOrgRules(ids: string[]): Promise<{ success: boolean }> {

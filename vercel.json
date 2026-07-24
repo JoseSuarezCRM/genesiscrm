@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/inbound-email",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/org-rules",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

@@ -1010,6 +1010,16 @@ model OrgNameRule {
   @@index([order])
 }
 
+// Singleton config for the background poller that re-applies the org name rules
+// to existing practices on a schedule (so admins don't click "Re-apply" by hand).
+model OrgRulesPoller {
+  id              String    @id @default("singleton")
+  enabled         Boolean   @default(false)
+  intervalMinutes Int       @default(60)
+  lastRunAt       DateTime?
+  lastMerged      Int       @default(0)
+}
+
 model IvrConfig {
   id             String      @id @default(cuid())
   isActive       Boolean     @default(false)

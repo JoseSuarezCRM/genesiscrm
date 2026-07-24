@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Trash2, Pencil, GripVertical, CheckCircle2, AlertCircle, ArrowRight, RefreshCw } from "lucide-react"
+import { Plus, Trash2, Pencil, GripVertical, CheckCircle2, AlertCircle, ArrowRight, RefreshCw, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { createOrgRule, updateOrgRule, deleteOrgRule, reorderOrgRules, applyRulesToExistingPractices, OrgRuleInput } from "@/app/actions/org-rules"
+import { createOrgRule, updateOrgRule, deleteOrgRule, reorderOrgRules, applyRulesToExistingPractices, setOrgRulesPoller, OrgRuleInput, OrgRulesPollerConfig } from "@/app/actions/org-rules"
 
 interface Rule {
   id: string
@@ -14,6 +14,69 @@ interface Rule {
 
 interface Props {
   initialRules: Rule[]
+  initialPoller: OrgRulesPollerConfig
+}
+
+const INTERVAL_OPTIONS = [
+  { value: 15, label: "Every 15 minutes" },
+  { value: 30, label: "Every 30 minutes" },
+  { value: 60, label: "Every hour" },
+  { value: 360, label: "Every 6 hours" },
+  { value: 720, label: "Every 12 hours" },
+  { value: 1440, label: "Once a day" },
+]
+
+// Automatic re-apply: enable the background poller + choose how often it runs.
+function PollerCard({ initial, onFlash }: { initial: OrgRulesPollerConfig; onFlash: (m: string, e?: boolean) => void }) {
+  const [enabled, setEnabled] = useState(initial.enabled)
+  const [interval, setInterval] = useState(initial.intervalMinutes)
+  const lastRunAt = initial.lastRunAt
+  const [isPending, startTransition] = useTransition()
+
+  function save(next: { enabled: boolean; intervalMinutes: number }) {
+    setEnabled(next.enabled); setInterval(next.intervalMinutes)
+    startTransition(async () => {
+      const res = await setOrgRulesPoller(next)
+      if (!res.success) { onFlash(res.error ?? "Failed to save.", true); return }
+      onFlash(next.enabled ? "Automatic re-apply is on." : "Automatic re-apply is off.")
+    })
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 px-5 py-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-slate-400" /> Automatic re-apply
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Runs the rules against existing practices on a schedule, so you don&apos;t have to click
+            &ldquo;Re-apply to existing&rdquo; each time.
+            {lastRunAt && <span className="text-slate-500"> Last run {new Date(lastRunAt).toLocaleString()}.</span>}
+          </p>
+        </div>
+        <button
+          type="button" role="switch" aria-checked={enabled} disabled={isPending}
+          onClick={() => save({ enabled: !enabled, intervalMinutes: interval })}
+          className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50", enabled ? "bg-blue-600" : "bg-slate-300")}
+        >
+          <span className={cn("inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform", enabled ? "translate-x-5" : "translate-x-0.5")} />
+        </button>
+      </div>
+      {enabled && (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">Frequency</span>
+          <select
+            value={interval} disabled={isPending}
+            onChange={(e) => save({ enabled, intervalMinutes: Number(e.target.value) })}
+            className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            {INTERVAL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function RuleForm({
@@ -70,7 +133,7 @@ function RuleForm({
   )
 }
 
-export default function OrgRulesManager({ initialRules }: Props) {
+export default function OrgRulesManager({ initialRules, initialPoller }: Props) {
   const [rules,      setRules]      = useState<Rule[]>(initialRules)
   const [showForm,   setShowForm]   = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
@@ -170,6 +233,8 @@ export default function OrgRulesManager({ initialRules }: Props) {
           </button>
         </div>
       </div>
+
+      <PollerCard initial={initialPoller} onFlash={flash} />
 
       {success && (
         <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
