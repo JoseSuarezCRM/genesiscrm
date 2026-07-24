@@ -93,7 +93,7 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
   const [isPending, startTransition] = useTransition()
   const [adding, setAdding] = useState(false)
   const [q, setQ] = useState("")
-  const [results, setResults] = useState<{ id: string; name: string; url: string }[]>([])
+  const [results, setResults] = useState<{ id: string; name: string; url: string; sub?: string }[]>([])
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<{ id: string; name: string } | null>(null)
 
@@ -196,8 +196,9 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
               {isPending && <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>}
               {results.map((r) => (
                 <button key={r.id} onClick={() => add(r.id)} disabled={isPending}
-                  className="w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-700 truncate">
-                  {r.name}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50">
+                  <p className="text-sm text-slate-700 truncate">{r.name}</p>
+                  {r.sub && <p className="text-xs text-slate-400 truncate">{r.sub}</p>}
                 </button>
               ))}
               {q.trim().length >= 2 && !isPending && results.length === 0 && (

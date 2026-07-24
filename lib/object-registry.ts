@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma"
 
-export interface RegistryRecord { id: string; name: string; url: string }
+export interface RegistryRecord { id: string; name: string; url: string; sub?: string }
 export interface ObjectType { key: string; label: string }
 
 interface Resolver {
@@ -38,12 +38,12 @@ const BUILTINS: Record<string, Omit<Resolver, "byIds" | "list"> & {
     label: "Providers",
     url: (id) => `/referring-doctors/${id}`,
     list: async (q) => {
-      const rows = await prisma.referringDoctor.findMany({ where: q ? { name: { contains: q, mode: "insensitive" } } : {}, select: { id: true, name: true }, take: 25, orderBy: { name: "asc" } })
-      return rows.map((r) => ({ id: r.id, name: r.name, url: `/referring-doctors/${r.id}` }))
+      const rows = await prisma.referringDoctor.findMany({ where: q ? { name: { contains: q, mode: "insensitive" } } : {}, select: { id: true, name: true, practice: { select: { name: true } } }, take: 25, orderBy: { name: "asc" } })
+      return rows.map((r) => ({ id: r.id, name: r.name, url: `/referring-doctors/${r.id}`, sub: r.practice?.name ?? undefined }))
     },
     byIds: async (ids) => {
-      const rows = await prisma.referringDoctor.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
-      return rows.map((r) => ({ id: r.id, name: r.name, url: `/referring-doctors/${r.id}` }))
+      const rows = await prisma.referringDoctor.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, practice: { select: { name: true } } } })
+      return rows.map((r) => ({ id: r.id, name: r.name, url: `/referring-doctors/${r.id}`, sub: r.practice?.name ?? undefined }))
     },
   },
   PRACTICE: {
@@ -62,12 +62,12 @@ const BUILTINS: Record<string, Omit<Resolver, "byIds" | "list"> & {
     label: "Locations",
     url: (id) => `/locations/${id}`,
     list: async (q) => {
-      const rows = await prisma.practiceLocation.findMany({ where: q ? { name: { contains: q, mode: "insensitive" } } : {}, select: { id: true, name: true }, take: 25, orderBy: { name: "asc" } })
-      return rows.map((r) => ({ id: r.id, name: r.name, url: `/locations/${r.id}` }))
+      const rows = await prisma.practiceLocation.findMany({ where: q ? { name: { contains: q, mode: "insensitive" } } : {}, select: { id: true, name: true, practice: { select: { name: true } } }, take: 25, orderBy: { name: "asc" } })
+      return rows.map((r) => ({ id: r.id, name: r.name, url: `/locations/${r.id}`, sub: r.practice?.name ?? undefined }))
     },
     byIds: async (ids) => {
-      const rows = await prisma.practiceLocation.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
-      return rows.map((r) => ({ id: r.id, name: r.name, url: `/locations/${r.id}` }))
+      const rows = await prisma.practiceLocation.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, practice: { select: { name: true } } } })
+      return rows.map((r) => ({ id: r.id, name: r.name, url: `/locations/${r.id}`, sub: r.practice?.name ?? undefined }))
     },
   },
   SURGERY: {
