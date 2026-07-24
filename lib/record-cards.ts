@@ -93,6 +93,13 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
   const values: Record<string, any> = { ...record }
   for (const c of customProps) values[`cp_${c.id}`] = bag[c.id]
 
+  // Referrals expose native relations as read-only fields — flatten them to a
+  // display string so the catalog fields ({pipeline}, {assignedTo}) render names.
+  if (entityType === "REFERRAL") {
+    values.pipeline = (record.pipeline as any)?.name ?? null
+    values.assignedTo = (record.assignedTo as any)?.name ?? (record.assignedTo as any)?.email ?? null
+  }
+
   if (hasMeta) {
     values.__owner = record.ownerId ?? null
     values.__createdBy = record.createdBy?.name ?? record.createdBy?.email ?? null

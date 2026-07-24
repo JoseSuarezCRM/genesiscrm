@@ -34,6 +34,12 @@ export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
     { key: "patientPhone", label: "Phone", type: "phone" },
     { key: "patientEmail", label: "Email", type: "email" },
     { key: "insuranceProvider", label: "Insurance", type: "text" },
+    // Native pipeline/status/date/owner — read-only here (managed by the
+    // referral's own status + pipeline controls); flattened in lib/record-cards.
+    { key: "status", label: "Status", type: "text", readOnly: true },
+    { key: "pipeline", label: "Pipeline", type: "text", readOnly: true },
+    { key: "referralDate", label: "Referral Date", type: "date", readOnly: true },
+    { key: "assignedTo", label: "Assigned To", type: "text", readOnly: true },
     { key: "notes", label: "Notes", type: "long_text" },
   ],
   PROVIDER: [
