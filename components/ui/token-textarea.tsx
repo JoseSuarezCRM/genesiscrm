@@ -26,6 +26,25 @@ export default function TokenTextarea({ value, onChange, tokenGroups, tokens, ro
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const ref = useRef<HTMLTextAreaElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  // Fixed positioning (computed from the button) so the menu escapes any
+  // overflow-clipped container it lives in (e.g. a modal), like the email editor.
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, top: 0, maxHeight: 288 })
+
+  function openMenu() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) {
+      const below = window.innerHeight - r.bottom
+      const above = r.top
+      const openUp = below < 260 && above > below
+      // Right-align the 256px-wide menu under the button.
+      const left = Math.max(8, r.right - 256)
+      setPos(openUp
+        ? { left, bottom: window.innerHeight - r.top + 4, maxHeight: Math.min(288, above - 16) }
+        : { left, top: r.bottom + 4, maxHeight: Math.min(288, below - 16) })
+    }
+    setOpen(true)
+  }
 
   const groups: TokenGroup[] = tokenGroups && tokenGroups.length > 0
     ? tokenGroups
@@ -73,7 +92,7 @@ export default function TokenTextarea({ value, onChange, tokenGroups, tokens, ro
     <div>
       <div className="flex justify-end mb-1">
         <div className="relative">
-          <button type="button" onClick={() => (open ? close() : setOpen(true))}
+          <button ref={btnRef} type="button" onClick={() => (open ? close() : openMenu())}
             className={cn(
               "inline-flex items-center gap-1 h-7 px-1.5 rounded-md text-xs font-medium transition-colors",
               open ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
@@ -82,8 +101,11 @@ export default function TokenTextarea({ value, onChange, tokenGroups, tokens, ro
           </button>
           {open && (
             <>
-              <div className="fixed inset-0 z-40" onClick={close} />
-              <div className="absolute right-0 top-8 z-50 w-64 max-h-72 flex flex-col bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+              <div className="fixed inset-0 z-[998]" onClick={close} />
+              <div
+                className="fixed z-[999] w-64 flex flex-col bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+                style={{ left: pos.left, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
+              >
                 <div className="p-1.5 border-b border-slate-100">
                   <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50">
                     <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
