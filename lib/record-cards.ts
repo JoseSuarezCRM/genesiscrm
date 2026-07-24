@@ -83,8 +83,19 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
   // owner/audit meta (they have no owner). Everything else does.
   const hasMeta = entityType !== "REFERRAL" && !!ownerLabel
 
+  // Referral pipeline: a dynamic select whose options come from the Pipeline table.
+  let pipelineField: RecordFieldDef["options"] | null = null
+  let pipelineLabels: Record<string, string> = {}
+  if (entityType === "REFERRAL") {
+    const pipelines = await prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
+    pipelineField = pipelines.map((p) => p.id)
+    pipelineLabels = Object.fromEntries(pipelines.map((p) => [p.id, p.name]))
+  }
+
   const catalog: RecordFieldDef[] = [
-    ...(RECORD_FIELDS[entityType] ?? []),
+    ...(RECORD_FIELDS[entityType] ?? []).map((f) =>
+      f.key === "pipelineId" && pipelineField ? { ...f, options: pipelineField, optionLabels: pipelineLabels } : f
+    ),
     ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options, default: (c as any).defaultValue ?? undefined, conditional: (c as any).conditional ?? undefined, optionLabels: (c as any).optionLabels ?? undefined })),
     ...(hasMeta ? metaCatalog(ownerLabel!, false) : []),
   ]
@@ -93,10 +104,10 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
   const values: Record<string, any> = { ...record }
   for (const c of customProps) values[`cp_${c.id}`] = bag[c.id]
 
-  // Referrals expose native relations as read-only fields — flatten them to a
-  // display string so the catalog fields ({pipeline}, {assignedTo}) render names.
+  // Referrals: pipelineId edits via the select (optionLabels render its name);
+  // assignedTo is a read-only display string.
   if (entityType === "REFERRAL") {
-    values.pipeline = (record.pipeline as any)?.name ?? null
+    values.pipelineId = (record as any).pipelineId ?? ""
     values.assignedTo = (record.assignedTo as any)?.name ?? (record.assignedTo as any)?.email ?? null
   }
 

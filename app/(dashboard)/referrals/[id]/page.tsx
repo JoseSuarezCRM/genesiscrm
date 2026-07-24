@@ -17,9 +17,10 @@ import ReferralNotesEditor from "@/components/referral-notes-editor"
 import OutreachDialog from "@/components/outreach-dialog"
 import CallTracker from "@/components/call-tracker"
 import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
-import { getCardLayout, getCardLayouts } from "@/app/actions/card-layouts"
+import { getCardLayouts } from "@/app/actions/card-layouts"
 import ReferralDetailLeftColumn from "@/components/referral-detail-left-column"
-import ReferralDetailRightColumn from "@/components/referral-detail-right-column"
+import RecordAssociationCards from "@/components/record-association-cards"
+import { loadAssociationCards } from "@/lib/record-associations"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordPropertyCards from "@/components/record-property-cards"
@@ -61,7 +62,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
 
   if (!referral) notFound()
 
-  const [allTags, users, practices, pipelines, customProperties, referralCardLayout, practiceCardLayout, providerCardLayout, leftCards] = await Promise.all([
+  const [allTags, users, practices, pipelines, customProperties, leftCards] = await Promise.all([
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.referringPractice.findMany({
@@ -79,15 +80,13 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
     loadCustomPropertiesForDetail("REFERRAL", params.id),
-    getCardLayout("REFERRAL", "Referral"),
-    getCardLayout("REFERRAL", "Practice"),
-    getCardLayout("REFERRAL", "Provider"),
     getCardLayouts("REFERRAL", "LEFT"),
   ])
 
   const referralActivity = await listRecordActivities("REFERRAL", referral.id)
   const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
   const propertyCards = await loadPropertyCards("REFERRAL", referral as any)
+  const assocCards = await loadAssociationCards("REFERRAL", referral.id)
 
   return (
     <div className="p-6 space-y-6 lg:h-full lg:flex lg:flex-col">
@@ -231,15 +230,11 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           />
         </div>
 
-        {/* RIGHT: Associated Objects (Customizable) */}
-        <ReferralDetailRightColumn
-          referral={referral}
-          referralCardLayout={referralCardLayout}
-          practiceCardLayout={practiceCardLayout}
-          providerCardLayout={providerCardLayout}
-          isAdmin={isAdmin}
-          canEditCards={canEditCards}
-        />
+        {/* RIGHT: Associated Objects — same shared cards every object uses
+            (Practice / Provider / Location) with Add/Remove association. */}
+        <div className="lg:col-span-1 space-y-4 lg:overflow-y-auto lg:pr-1">
+          <RecordAssociationCards recordType="REFERRAL" recordId={referral.id} cards={assocCards} canEdit={isAdmin} />
+        </div>
       </div>
     </div>
   )
