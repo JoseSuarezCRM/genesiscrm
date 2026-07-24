@@ -13,6 +13,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { getAssociationsFor, getAssociationCardPrefs } from "@/app/actions/associations"
+import { resolverFor } from "@/lib/object-registry"
 
 export interface AssocCard {
   /** Registry key of the associated type — also the preference's cardType. */
@@ -42,6 +43,20 @@ function nativeCardObjectType(cardType: string): string {
   return "REFERRAL"
 }
 
+// Extra records of `otherType` linked to (type,id) via objectAssociation — the
+// "additional" side of the practice↔location / practice↔provider many-to-many
+// (beyond the primary FK, whose ids are excluded).
+async function assocRecs(type: string, id: string, otherType: string, exclude: Set<string>): Promise<Rec[]> {
+  const links = await (prisma as any).objectAssociation.findMany({
+    where: { OR: [{ fromType: type, fromId: id, toType: otherType }, { fromType: otherType, toType: type, toId: id }] },
+  })
+  const ids = Array.from(new Set(links.map((l: any) => (l.fromType === otherType ? l.fromId : l.toId)))).filter((x) => !exclude.has(x as string)) as string[]
+  if (!ids.length) return []
+  const resolver = await resolverFor(otherType)
+  const recs = resolver ? await resolver.byIds(ids) : []
+  return recs.map((r: any) => ({ id: r.id, name: r.name, url: r.url }))
+}
+
 async function nativeCards(recordType: string, recordId: string): Promise<Omit<AssocCard, "visible">[]> {
   // native + (addType, removable) filled in per card at the end.
   const raw: (Omit<AssocCard, "visible" | "native" | "addType" | "removable"> & { removable: boolean })[] = []
@@ -56,8 +71,10 @@ async function nativeCards(recordType: string, recordId: string): Promise<Omit<A
       },
     })
     if (!d) return []
-    // A provider's practice is required (can move, not remove); locations + referrals are removable.
-    raw.push({ type: "NATIVE_PRACTICE", label: "Practice", removable: false, records: d.practice ? [{ id: d.practice.id, name: d.practice.name, url: `/practices/${d.practice.id}` }] : [] })
+    // Primary practice (FK) + any additional linked practices.
+    const dFkPractice: Rec[] = d.practice ? [{ id: d.practice.id, name: d.practice.name, url: `/practices/${d.practice.id}` }] : []
+    const dExtraPractices = await assocRecs("PROVIDER", recordId, "PRACTICE", new Set(dFkPractice.map((x) => x.id)))
+    raw.push({ type: "NATIVE_PRACTICE", label: "Practice", removable: true, records: [...dFkPractice, ...dExtraPractices] })
     raw.push({ type: "NATIVE_LOCATIONS", label: "Locations", removable: true, records: d.locations.map((l) => ({ id: l.location.id, name: l.location.name, url: `/locations/${l.location.id}` })) })
     raw.push({ type: "NATIVE_REFERRALS", label: "Referrals", removable: true, records: d.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
   }
@@ -72,7 +89,9 @@ async function nativeCards(recordType: string, recordId: string): Promise<Omit<A
       },
     })
     if (!l) return []
-    raw.push({ type: "NATIVE_PRACTICE", label: "Practice", removable: false, records: [{ id: l.practice.id, name: l.practice.name, url: `/practices/${l.practice.id}` }] })
+    const lFkPractice: Rec[] = [{ id: l.practice.id, name: l.practice.name, url: `/practices/${l.practice.id}` }]
+    const lExtraPractices = await assocRecs("LOCATION", recordId, "PRACTICE", new Set(lFkPractice.map((x) => x.id)))
+    raw.push({ type: "NATIVE_PRACTICE", label: "Practice", removable: true, records: [...lFkPractice, ...lExtraPractices] })
     raw.push({ type: "NATIVE_PROVIDERS", label: "Providers", removable: true, records: l.doctors.map((d) => ({ id: d.doctor.id, name: providerName(d.doctor), url: `/referring-doctors/${d.doctor.id}` })) })
     raw.push({ type: "NATIVE_REFERRALS", label: "Referrals", removable: true, records: l.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
   }
@@ -87,9 +106,13 @@ async function nativeCards(recordType: string, recordId: string): Promise<Omit<A
       },
     })
     if (!p) return []
-    // Locations + providers must belong to a practice (can move, not remove); referrals are removable.
-    raw.push({ type: "NATIVE_LOCATIONS", label: "Locations", removable: false, records: p.locations.map((l) => ({ id: l.id, name: l.name, url: `/locations/${l.id}` })) })
-    raw.push({ type: "NATIVE_PROVIDERS", label: "Providers", removable: false, records: p.doctors.map((d) => ({ id: d.id, name: providerName(d), url: `/referring-doctors/${d.id}` })) })
+    // FK-owned locations/providers + any additional linked ones (many-to-many).
+    const pFkLocs: Rec[] = p.locations.map((l) => ({ id: l.id, name: l.name, url: `/locations/${l.id}` }))
+    const pExtraLocs = await assocRecs("PRACTICE", recordId, "LOCATION", new Set(pFkLocs.map((x) => x.id)))
+    const pFkDocs: Rec[] = p.doctors.map((d) => ({ id: d.id, name: providerName(d), url: `/referring-doctors/${d.id}` }))
+    const pExtraDocs = await assocRecs("PRACTICE", recordId, "PROVIDER", new Set(pFkDocs.map((x) => x.id)))
+    raw.push({ type: "NATIVE_LOCATIONS", label: "Locations", removable: true, records: [...pFkLocs, ...pExtraLocs] })
+    raw.push({ type: "NATIVE_PROVIDERS", label: "Providers", removable: true, records: [...pFkDocs, ...pExtraDocs] })
     raw.push({ type: "NATIVE_REFERRALS", label: "Referrals", removable: true, records: p.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
   }
 

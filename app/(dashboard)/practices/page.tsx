@@ -52,15 +52,10 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
     getViewShareOptions(),
   ])
 
-  // Merge direct doctors + cross-org doctors (linked via locations), deduplicated
+  // A provider belongs to its own practice (the FK) — we do NOT pull in providers
+  // merely linked through a shared location, so the list matches the record page.
   const enriched = practices.map((p) => {
-    const directIds = new Set(p.doctors.map((d) => d.id))
-    const viaLocations = p.locations
-      .flatMap((l) => l.doctors.map((dl) => dl.doctor))
-      .filter((d) => !directIds.has(d.id))
-    const seen = new Set<string>()
-    const uniqueVia = viaLocations.filter((d) => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
-    const allDoctors = [...p.doctors, ...uniqueVia].sort((a, b) => b._count.referrals - a._count.referrals)
+    const allDoctors = [...p.doctors].sort((a, b) => b._count.referrals - a._count.referrals)
     const locationsClean = p.locations.map(({ doctors: _d, ...rest }) => rest)
     return { ...p, locations: locationsClean, doctors: allDoctors }
   })

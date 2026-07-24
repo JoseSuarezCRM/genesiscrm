@@ -140,12 +140,63 @@ function nativeCardObjectType(cardType: string): string | null {
   return null
 }
 
+// A location/provider has a primary practice (required FK) plus any number of
+// additional practices (objectAssociation rows). This keeps them many-to-many
+// while never leaving the FK empty: removing the primary promotes another.
+async function upsertAssoc(typeA: string, idA: string, typeB: string, idB: string) {
+  const dup = await (prisma as any).objectAssociation.findFirst({
+    where: { OR: [
+      { fromType: typeA, fromId: idA, toType: typeB, toId: idB },
+      { fromType: typeB, fromId: idB, toType: typeA, toId: idA },
+    ] },
+  })
+  if (!dup) await (prisma as any).objectAssociation.create({ data: { fromType: typeA, fromId: idA, toType: typeB, toId: idB } })
+}
+async function deleteAssoc(typeA: string, idA: string, typeB: string, idB: string) {
+  await (prisma as any).objectAssociation.deleteMany({
+    where: { OR: [
+      { fromType: typeA, fromId: idA, toType: typeB, toId: idB },
+      { fromType: typeB, fromId: idB, toType: typeA, toId: idA },
+    ] },
+  })
+}
+async function assocIdsOf(type: string, id: string, otherType: string): Promise<string[]> {
+  const links = await (prisma as any).objectAssociation.findMany({
+    where: { OR: [{ fromType: type, fromId: id, toType: otherType }, { fromType: otherType, toType: type, toId: id }] },
+  })
+  return links.map((l: any) => (l.fromType === otherType ? l.fromId : l.toId))
+}
+
+// Link/unlink a child (location or provider) to a practice, spanning the primary
+// FK + extra associations so the child can belong to several practices.
+async function setPracticeChildLink(childType: "LOCATION" | "PROVIDER", childId: string, practiceId: string, add: boolean) {
+  const model = childType === "LOCATION" ? prisma.practiceLocation : prisma.referringDoctor
+  const child = await (model as any).findUnique({ where: { id: childId }, select: { practiceId: true } })
+  if (!child) return { error: "Record not found." }
+
+  if (add) {
+    if (child.practiceId !== practiceId) await upsertAssoc("PRACTICE", practiceId, childType, childId)
+    return { success: true }
+  }
+  // remove
+  if (child.practiceId === practiceId) {
+    // It's the primary FK — promote another linked practice into it (can't be empty).
+    const others = (await assocIdsOf(childType, childId, "PRACTICE")).filter((p) => p !== practiceId)
+    if (!others.length) return { error: `A ${childType === "LOCATION" ? "location" : "provider"} must be linked to at least one practice.` }
+    await (model as any).update({ where: { id: childId }, data: { practiceId: others[0] } })
+    await deleteAssoc("PRACTICE", others[0], childType, childId)
+  } else {
+    await deleteAssoc("PRACTICE", practiceId, childType, childId)
+  }
+  return { success: true }
+}
+
 export async function setNativeAssociation(
   recordType: string, recordId: string, cardType: string, otherId: string, action: "add" | "remove",
 ) {
   await requireAccess(permKeyFor(recordType), "EDIT")
   const add = action === "add"
-  const requiredMsg = "This link is required — pick a different one to move it instead of removing it."
+  let result: { success?: boolean; error?: string } = { success: true }
 
   if (recordType === "REFERRAL") {
     const field = cardType === "NATIVE_PRACTICE" ? "referringPracticeId"
@@ -154,38 +205,29 @@ export async function setNativeAssociation(
     if (!field) return { error: "Unsupported association." }
     await prisma.referral.update({ where: { id: recordId }, data: { [field]: add ? otherId : null } })
   } else if (recordType === "PRACTICE") {
-    if (cardType === "NATIVE_LOCATIONS") {
-      if (!add) return { error: requiredMsg }
-      await prisma.practiceLocation.update({ where: { id: otherId }, data: { practiceId: recordId } })
-    } else if (cardType === "NATIVE_PROVIDERS") {
-      if (!add) return { error: requiredMsg }
-      await prisma.referringDoctor.update({ where: { id: otherId }, data: { practiceId: recordId } })
-    } else if (cardType === "NATIVE_REFERRALS") {
-      await prisma.referral.update({ where: { id: otherId }, data: { referringPracticeId: add ? recordId : null } })
-    } else return { error: "Unsupported association." }
+    if (cardType === "NATIVE_LOCATIONS") result = await setPracticeChildLink("LOCATION", otherId, recordId, add)
+    else if (cardType === "NATIVE_PROVIDERS") result = await setPracticeChildLink("PROVIDER", otherId, recordId, add)
+    else if (cardType === "NATIVE_REFERRALS") await prisma.referral.update({ where: { id: otherId }, data: { referringPracticeId: add ? recordId : null } })
+    else return { error: "Unsupported association." }
   } else if (recordType === "PROVIDER") {
-    if (cardType === "NATIVE_PRACTICE") {
-      if (!add) return { error: requiredMsg }
-      await prisma.referringDoctor.update({ where: { id: recordId }, data: { practiceId: otherId } })
-    } else if (cardType === "NATIVE_LOCATIONS") {
+    if (cardType === "NATIVE_PRACTICE") result = await setPracticeChildLink("PROVIDER", recordId, otherId, add)
+    else if (cardType === "NATIVE_LOCATIONS") {
       if (add) await prisma.doctorLocation.upsert({ where: { doctorId_locationId: { doctorId: recordId, locationId: otherId } }, create: { doctorId: recordId, locationId: otherId }, update: {} })
       else await prisma.doctorLocation.deleteMany({ where: { doctorId: recordId, locationId: otherId } })
-    } else if (cardType === "NATIVE_REFERRALS") {
-      await prisma.referral.update({ where: { id: otherId }, data: { referringDoctorId: add ? recordId : null } })
-    } else return { error: "Unsupported association." }
+    } else if (cardType === "NATIVE_REFERRALS") await prisma.referral.update({ where: { id: otherId }, data: { referringDoctorId: add ? recordId : null } })
+    else return { error: "Unsupported association." }
   } else if (recordType === "LOCATION") {
-    if (cardType === "NATIVE_PRACTICE") {
-      if (!add) return { error: requiredMsg }
-      await prisma.practiceLocation.update({ where: { id: recordId }, data: { practiceId: otherId } })
-    } else if (cardType === "NATIVE_PROVIDERS") {
+    if (cardType === "NATIVE_PRACTICE") result = await setPracticeChildLink("LOCATION", recordId, otherId, add)
+    else if (cardType === "NATIVE_PROVIDERS") {
       if (add) await prisma.doctorLocation.upsert({ where: { doctorId_locationId: { doctorId: otherId, locationId: recordId } }, create: { doctorId: otherId, locationId: recordId }, update: {} })
       else await prisma.doctorLocation.deleteMany({ where: { doctorId: otherId, locationId: recordId } })
-    } else if (cardType === "NATIVE_REFERRALS") {
-      await prisma.referral.update({ where: { id: otherId }, data: { referringLocationId: add ? recordId : null } })
-    } else return { error: "Unsupported association." }
+    } else if (cardType === "NATIVE_REFERRALS") await prisma.referral.update({ where: { id: otherId }, data: { referringLocationId: add ? recordId : null } })
+    else return { error: "Unsupported association." }
   } else {
     return { error: "Unsupported association." }
   }
+
+  if (result.error) return result
 
   const here = detailPath(recordType, recordId)
   if (here) revalidatePath(here)
