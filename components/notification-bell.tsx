@@ -69,7 +69,7 @@ export default function NotificationBell({ initialNotifications }: Props) {
       </button>
 
       {open && (
-        <div className="absolute top-12 right-0 bg-white border border-slate-200 rounded-xl shadow-lg w-80 max-h-[420px] flex flex-col z-50">
+        <div className="absolute top-12 right-0 origin-top-right bg-white border border-slate-200 rounded-xl shadow-lg w-80 max-h-[420px] flex flex-col z-50 animate-panel-in">
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <p className="text-sm font-semibold text-slate-800">Notifications</p>
             {unreadCount > 0 && (
