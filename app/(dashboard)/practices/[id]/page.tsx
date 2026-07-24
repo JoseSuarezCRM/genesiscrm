@@ -77,8 +77,8 @@ export default async function PracticeDetailPage({ params }: Props) {
 
   return (
     <RecordDetailShell
-      backHref="/referring-doctors"
-      backLabel="Back to Referring Providers"
+      backHref="/practices"
+      backLabel="Back to Practices"
       title={practice.name}
       actions={
         <RecordActionsMenu entityType="PRACTICE" recordId={practice.id} title={practice.name}

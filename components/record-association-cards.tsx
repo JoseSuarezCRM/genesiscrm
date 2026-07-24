@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { SlidersHorizontal, Plus, X, Check, Loader2, Search, GripVertical } from "lucide-react"
 import {
-  searchAssociableRecords, associateRecords, unassociateRecords, setAssociationCardVisible, reorderAssociationCards,
+  searchAssociableRecords, associateRecords, unassociateRecords, setNativeAssociation, setAssociationCardVisible, reorderAssociationCards,
 } from "@/app/actions/associations"
 import type { AssocCard } from "@/lib/record-associations"
 import { useCardReorder } from "@/components/use-card-reorder"
@@ -92,25 +92,38 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
   const [adding, setAdding] = useState(false)
   const [q, setQ] = useState("")
   const [results, setResults] = useState<{ id: string; name: string; url: string }[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  // Native cards link via the FK/join mutation; Data-Model cards via objectAssociation.
+  const searchType = card.native ? (card.addType ?? card.type) : card.type
+  const canRemove = card.native ? !!card.removable : true
 
   function search(value: string) {
     setQ(value)
     if (value.trim().length < 2) { setResults([]); return }
     startTransition(async () => {
-      setResults(await searchAssociableRecords(card.type, value))
+      setResults(await searchAssociableRecords(searchType, value))
     })
   }
 
   function add(id: string) {
+    setError(null)
     startTransition(async () => {
-      await associateRecords(recordType, recordId, card.type, id)
+      const res = card.native
+        ? await setNativeAssociation(recordType, recordId, card.type, id, "add")
+        : await associateRecords(recordType, recordId, card.type, id)
+      if ((res as any)?.error) { setError((res as any).error); return }
       setQ(""); setResults([]); setAdding(false); router.refresh()
     })
   }
 
   function remove(id: string) {
+    setError(null)
     startTransition(async () => {
-      await unassociateRecords(recordType, recordId, card.type, id)
+      const res = card.native
+        ? await setNativeAssociation(recordType, recordId, card.type, id, "remove")
+        : await unassociateRecords(recordType, recordId, card.type, id)
+      if ((res as any)?.error) { setError((res as any).error); return }
       router.refresh()
     })
   }
@@ -128,29 +141,7 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
             {card.label} <span className="text-slate-400 font-normal">{card.records.length}</span>
           </h2>
         </div>
-        {canEdit && !card.native && (
-          <button onClick={() => setAdding((v) => !v)} title={`Associate a ${card.label}`} className="text-slate-400 hover:text-slate-800 shrink-0">
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        )}
       </div>
-
-      {adding && (
-        <div className="px-4 py-3 border-b border-slate-100 space-y-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input value={q} onChange={(e) => search(e.target.value)} placeholder="Search…" autoFocus
-              className="w-full h-8 pl-8 pr-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
-          </div>
-          {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
-          {results.map((r) => (
-            <button key={r.id} onClick={() => add(r.id)}
-              className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-50 text-slate-700">
-              {r.name}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="p-4 max-h-72 overflow-y-auto">
         {card.records.length === 0 ? (
@@ -160,8 +151,8 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
             {card.records.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-2 py-2">
                 <Link href={r.url} className="text-sm text-blue-600 hover:underline truncate">{r.name}</Link>
-                {canEdit && !card.native && (
-                  <button onClick={() => remove(r.id)} disabled={isPending}
+                {canEdit && canRemove && (
+                  <button onClick={() => remove(r.id)} disabled={isPending} title="Remove association"
                     className="h-6 w-6 shrink-0 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded">
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -171,6 +162,38 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
           </div>
         )}
       </div>
+
+      {canEdit && (
+        <div className="border-t border-slate-100 px-4 py-2.5">
+          {adding ? (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input value={q} onChange={(e) => search(e.target.value)} placeholder={`Search ${card.label.toLowerCase()}…`} autoFocus
+                  className="w-full h-8 pl-8 pr-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
+              </div>
+              {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+              {results.map((r) => (
+                <button key={r.id} onClick={() => add(r.id)}
+                  className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-50 text-slate-700 truncate">
+                  {r.name}
+                </button>
+              ))}
+              {q.trim().length >= 2 && !isPending && results.length === 0 && (
+                <p className="px-2 py-1.5 text-xs text-slate-400">No matches.</p>
+              )}
+              <button onClick={() => { setAdding(false); setQ(""); setResults([]); setError(null) }}
+                className="text-xs text-slate-400 hover:text-slate-600 px-2">Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => setAdding(true)}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700">
+              <Plus className="h-3.5 w-3.5" /> Add association
+            </button>
+          )}
+          {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+        </div>
+      )}
     </div>
   )
 }

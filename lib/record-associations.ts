@@ -20,8 +20,12 @@ export interface AssocCard {
   label: string
   records: { id: string; name: string; url: string }[]
   visible: boolean
-  /** Native FK relations can't be linked/unlinked from the card. */
+  /** Native FK relation (vs a Data-Model objectAssociation). */
   native?: boolean
+  /** For native cards: the object type to search when adding a link. */
+  addType?: string
+  /** For native cards: whether a link can be removed (nullable FK / join row). */
+  removable?: boolean
 }
 
 type Rec = { id: string; name: string; url: string }
@@ -29,8 +33,18 @@ type Rec = { id: string; name: string; url: string }
 const providerName = (d: any) => (d.title ? `${d.name}, ${d.title}` : d.name)
 const referralName = (r: any) => `${r.patientFirstName ?? ""} ${r.patientLastName ?? ""}`.trim() || "Referral"
 
+// The object type you search when adding to a native card. Kept in sync with the
+// same mapping in app/actions/associations.ts.
+function nativeCardObjectType(cardType: string): string {
+  if (cardType === "NATIVE_PRACTICE") return "PRACTICE"
+  if (cardType === "NATIVE_PROVIDER" || cardType === "NATIVE_PROVIDERS") return "PROVIDER"
+  if (cardType === "NATIVE_LOCATION" || cardType === "NATIVE_LOCATIONS") return "LOCATION"
+  return "REFERRAL"
+}
+
 async function nativeCards(recordType: string, recordId: string): Promise<Omit<AssocCard, "visible">[]> {
-  const cards: Omit<AssocCard, "visible">[] = []
+  // native + (addType, removable) filled in per card at the end.
+  const raw: (Omit<AssocCard, "visible" | "native" | "addType" | "removable"> & { removable: boolean })[] = []
 
   if (recordType === "PROVIDER") {
     const d = await prisma.referringDoctor.findUnique({
@@ -41,10 +55,11 @@ async function nativeCards(recordType: string, recordId: string): Promise<Omit<A
         referrals: { orderBy: { referralDate: "desc" }, take: 50, select: { id: true, patientFirstName: true, patientLastName: true } },
       },
     })
-    if (!d) return cards
-    cards.push({ type: "NATIVE_PRACTICE", label: "Practice", native: true, records: d.practice ? [{ id: d.practice.id, name: d.practice.name, url: `/practices/${d.practice.id}` }] : [] })
-    cards.push({ type: "NATIVE_LOCATIONS", label: "Locations", native: true, records: d.locations.map((l) => ({ id: l.location.id, name: l.location.name, url: `/locations/${l.location.id}` })) })
-    cards.push({ type: "NATIVE_REFERRALS", label: "Referrals", native: true, records: d.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
+    if (!d) return []
+    // A provider's practice is required (can move, not remove); locations + referrals are removable.
+    raw.push({ type: "NATIVE_PRACTICE", label: "Practice", removable: false, records: d.practice ? [{ id: d.practice.id, name: d.practice.name, url: `/practices/${d.practice.id}` }] : [] })
+    raw.push({ type: "NATIVE_LOCATIONS", label: "Locations", removable: true, records: d.locations.map((l) => ({ id: l.location.id, name: l.location.name, url: `/locations/${l.location.id}` })) })
+    raw.push({ type: "NATIVE_REFERRALS", label: "Referrals", removable: true, records: d.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
   }
 
   if (recordType === "LOCATION") {
@@ -56,10 +71,10 @@ async function nativeCards(recordType: string, recordId: string): Promise<Omit<A
         referrals: { orderBy: { referralDate: "desc" }, take: 50, select: { id: true, patientFirstName: true, patientLastName: true } },
       },
     })
-    if (!l) return cards
-    cards.push({ type: "NATIVE_PRACTICE", label: "Practice", native: true, records: [{ id: l.practice.id, name: l.practice.name, url: `/practices/${l.practice.id}` }] })
-    cards.push({ type: "NATIVE_PROVIDERS", label: "Providers", native: true, records: l.doctors.map((d) => ({ id: d.doctor.id, name: providerName(d.doctor), url: `/referring-doctors/${d.doctor.id}` })) })
-    cards.push({ type: "NATIVE_REFERRALS", label: "Referrals", native: true, records: l.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
+    if (!l) return []
+    raw.push({ type: "NATIVE_PRACTICE", label: "Practice", removable: false, records: [{ id: l.practice.id, name: l.practice.name, url: `/practices/${l.practice.id}` }] })
+    raw.push({ type: "NATIVE_PROVIDERS", label: "Providers", removable: true, records: l.doctors.map((d) => ({ id: d.doctor.id, name: providerName(d.doctor), url: `/referring-doctors/${d.doctor.id}` })) })
+    raw.push({ type: "NATIVE_REFERRALS", label: "Referrals", removable: true, records: l.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
   }
 
   if (recordType === "PRACTICE") {
@@ -71,10 +86,11 @@ async function nativeCards(recordType: string, recordId: string): Promise<Omit<A
         referrals: { orderBy: { referralDate: "desc" }, take: 50, select: { id: true, patientFirstName: true, patientLastName: true } },
       },
     })
-    if (!p) return cards
-    cards.push({ type: "NATIVE_LOCATIONS", label: "Locations", native: true, records: p.locations.map((l) => ({ id: l.id, name: l.name, url: `/locations/${l.id}` })) })
-    cards.push({ type: "NATIVE_PROVIDERS", label: "Providers", native: true, records: p.doctors.map((d) => ({ id: d.id, name: providerName(d), url: `/referring-doctors/${d.id}` })) })
-    cards.push({ type: "NATIVE_REFERRALS", label: "Referrals", native: true, records: p.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
+    if (!p) return []
+    // Locations + providers must belong to a practice (can move, not remove); referrals are removable.
+    raw.push({ type: "NATIVE_LOCATIONS", label: "Locations", removable: false, records: p.locations.map((l) => ({ id: l.id, name: l.name, url: `/locations/${l.id}` })) })
+    raw.push({ type: "NATIVE_PROVIDERS", label: "Providers", removable: false, records: p.doctors.map((d) => ({ id: d.id, name: providerName(d), url: `/referring-doctors/${d.id}` })) })
+    raw.push({ type: "NATIVE_REFERRALS", label: "Referrals", removable: true, records: p.referrals.map((r) => ({ id: r.id, name: referralName(r), url: `/referrals/${r.id}` })) })
   }
 
   if (recordType === "REFERRAL") {
@@ -86,16 +102,17 @@ async function nativeCards(recordType: string, recordId: string): Promise<Omit<A
         referringLocation: { select: { id: true, name: true } },
       },
     })
-    if (!r) return cards
+    if (!r) return []
     const practice: Rec[] = r.referringPractice ? [{ id: r.referringPractice.id, name: r.referringPractice.name, url: `/practices/${r.referringPractice.id}` }] : []
     const provider: Rec[] = r.referringDoctor ? [{ id: r.referringDoctor.id, name: providerName(r.referringDoctor), url: `/referring-doctors/${r.referringDoctor.id}` }] : []
     const location: Rec[] = r.referringLocation ? [{ id: r.referringLocation.id, name: r.referringLocation.name, url: `/locations/${r.referringLocation.id}` }] : []
-    cards.push({ type: "NATIVE_PRACTICE", label: "Practice", native: true, records: practice })
-    cards.push({ type: "NATIVE_PROVIDER", label: "Provider", native: true, records: provider })
-    cards.push({ type: "NATIVE_LOCATION", label: "Location", native: true, records: location })
+    // All three are nullable FKs — freely link/unlink.
+    raw.push({ type: "NATIVE_PRACTICE", label: "Practice", removable: true, records: practice })
+    raw.push({ type: "NATIVE_PROVIDER", label: "Provider", removable: true, records: provider })
+    raw.push({ type: "NATIVE_LOCATION", label: "Location", removable: true, records: location })
   }
 
-  return cards
+  return raw.map((c) => ({ ...c, native: true, addType: nativeCardObjectType(c.type) }))
 }
 
 export async function loadAssociationCards(recordType: string, recordId: string): Promise<AssocCard[]> {

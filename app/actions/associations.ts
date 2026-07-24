@@ -119,6 +119,81 @@ export async function unassociateRecords(typeKey: string, recordId: string, othe
   return { success: true }
 }
 
+// ── Native (FK-based) associations ───────────────────────────────────────────
+// The right-column cards for a built-in object's own relationships (a referral's
+// practice/provider/location, a practice's locations/providers/referrals, …) are
+// FK links, not rows in objectAssociation. Adding/removing sets the FK (or a
+// DoctorLocation join row). Required FKs (a location/provider must belong to a
+// practice) can be reassigned but not cleared.
+
+function detailPath(type: string, id: string): string | null {
+  return ({ REFERRAL: `/referrals/${id}`, PROVIDER: `/referring-doctors/${id}`, PRACTICE: `/practices/${id}`, LOCATION: `/locations/${id}` } as Record<string, string>)[type] ?? null
+}
+
+// The object type you search when adding to a native card (e.g. NATIVE_PROVIDERS
+// → PROVIDER). Kept in sync with the same mapping in lib/record-associations.ts.
+function nativeCardObjectType(cardType: string): string | null {
+  if (cardType === "NATIVE_PRACTICE") return "PRACTICE"
+  if (cardType === "NATIVE_PROVIDER" || cardType === "NATIVE_PROVIDERS") return "PROVIDER"
+  if (cardType === "NATIVE_LOCATION" || cardType === "NATIVE_LOCATIONS") return "LOCATION"
+  if (cardType === "NATIVE_REFERRALS") return "REFERRAL"
+  return null
+}
+
+export async function setNativeAssociation(
+  recordType: string, recordId: string, cardType: string, otherId: string, action: "add" | "remove",
+) {
+  await requireAccess(permKeyFor(recordType), "EDIT")
+  const add = action === "add"
+  const requiredMsg = "This link is required — pick a different one to move it instead of removing it."
+
+  if (recordType === "REFERRAL") {
+    const field = cardType === "NATIVE_PRACTICE" ? "referringPracticeId"
+      : cardType === "NATIVE_PROVIDER" ? "referringDoctorId"
+      : cardType === "NATIVE_LOCATION" ? "referringLocationId" : null
+    if (!field) return { error: "Unsupported association." }
+    await prisma.referral.update({ where: { id: recordId }, data: { [field]: add ? otherId : null } })
+  } else if (recordType === "PRACTICE") {
+    if (cardType === "NATIVE_LOCATIONS") {
+      if (!add) return { error: requiredMsg }
+      await prisma.practiceLocation.update({ where: { id: otherId }, data: { practiceId: recordId } })
+    } else if (cardType === "NATIVE_PROVIDERS") {
+      if (!add) return { error: requiredMsg }
+      await prisma.referringDoctor.update({ where: { id: otherId }, data: { practiceId: recordId } })
+    } else if (cardType === "NATIVE_REFERRALS") {
+      await prisma.referral.update({ where: { id: otherId }, data: { referringPracticeId: add ? recordId : null } })
+    } else return { error: "Unsupported association." }
+  } else if (recordType === "PROVIDER") {
+    if (cardType === "NATIVE_PRACTICE") {
+      if (!add) return { error: requiredMsg }
+      await prisma.referringDoctor.update({ where: { id: recordId }, data: { practiceId: otherId } })
+    } else if (cardType === "NATIVE_LOCATIONS") {
+      if (add) await prisma.doctorLocation.upsert({ where: { doctorId_locationId: { doctorId: recordId, locationId: otherId } }, create: { doctorId: recordId, locationId: otherId }, update: {} })
+      else await prisma.doctorLocation.deleteMany({ where: { doctorId: recordId, locationId: otherId } })
+    } else if (cardType === "NATIVE_REFERRALS") {
+      await prisma.referral.update({ where: { id: otherId }, data: { referringDoctorId: add ? recordId : null } })
+    } else return { error: "Unsupported association." }
+  } else if (recordType === "LOCATION") {
+    if (cardType === "NATIVE_PRACTICE") {
+      if (!add) return { error: requiredMsg }
+      await prisma.practiceLocation.update({ where: { id: recordId }, data: { practiceId: otherId } })
+    } else if (cardType === "NATIVE_PROVIDERS") {
+      if (add) await prisma.doctorLocation.upsert({ where: { doctorId_locationId: { doctorId: otherId, locationId: recordId } }, create: { doctorId: otherId, locationId: recordId }, update: {} })
+      else await prisma.doctorLocation.deleteMany({ where: { doctorId: otherId, locationId: recordId } })
+    } else if (cardType === "NATIVE_REFERRALS") {
+      await prisma.referral.update({ where: { id: otherId }, data: { referringLocationId: add ? recordId : null } })
+    } else return { error: "Unsupported association." }
+  } else {
+    return { error: "Unsupported association." }
+  }
+
+  const here = detailPath(recordType, recordId)
+  if (here) revalidatePath(here)
+  const other = detailPath(nativeCardObjectType(cardType) ?? "", otherId)
+  if (other) revalidatePath(other)
+  return { success: true }
+}
+
 // ── Right-column association cards (every object: built-in + custom) ──────────
 
 export async function getAssociationCardPrefs(objectType: string) {
