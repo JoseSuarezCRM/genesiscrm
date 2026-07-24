@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { SlidersHorizontal, Plus, X, Check, Loader2, Search, GripVertical } from "lucide-react"
+import { SlidersHorizontal, Plus, X, Check, Loader2, Search, GripVertical, AlertTriangle } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 import {
   searchAssociableRecords, associateRecords, unassociateRecords, setNativeAssociation, setAssociationCardVisible, reorderAssociationCards,
 } from "@/app/actions/associations"
@@ -93,10 +95,15 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
   const [q, setQ] = useState("")
   const [results, setResults] = useState<{ id: string; name: string; url: string }[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<{ id: string; name: string } | null>(null)
 
   // Native cards link via the FK/join mutation; Data-Model cards via objectAssociation.
   const searchType = card.native ? (card.addType ?? card.type) : card.type
   const canRemove = card.native ? !!card.removable : true
+  const singular = card.label.replace(/s$/, "").toLowerCase()
+
+  function openAdd() { setAdding(true); setQ(""); setResults([]); setError(null) }
+  function closeAdd() { setAdding(false); setQ(""); setResults([]) }
 
   function search(value: string) {
     setQ(value)
@@ -113,7 +120,7 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
         ? await setNativeAssociation(recordType, recordId, card.type, id, "add")
         : await associateRecords(recordType, recordId, card.type, id)
       if ((res as any)?.error) { setError((res as any).error); return }
-      setQ(""); setResults([]); setAdding(false); router.refresh()
+      closeAdd(); router.refresh()
     })
   }
 
@@ -123,8 +130,8 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
       const res = card.native
         ? await setNativeAssociation(recordType, recordId, card.type, id, "remove")
         : await unassociateRecords(recordType, recordId, card.type, id)
-      if ((res as any)?.error) { setError((res as any).error); return }
-      router.refresh()
+      if ((res as any)?.error) { setConfirm(null); setError((res as any).error); return }
+      setConfirm(null); router.refresh()
     })
   }
 
@@ -152,7 +159,7 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
               <div key={r.id} className="flex items-center justify-between gap-2 py-2">
                 <Link href={r.url} className="text-sm text-blue-600 hover:underline truncate">{r.name}</Link>
                 {canEdit && canRemove && (
-                  <button onClick={() => remove(r.id)} disabled={isPending} title="Remove association"
+                  <button onClick={() => { setError(null); setConfirm({ id: r.id, name: r.name }) }} disabled={isPending} title="Remove association"
                     className="h-6 w-6 shrink-0 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded">
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -165,35 +172,67 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
 
       {canEdit && (
         <div className="border-t border-slate-100 px-4 py-2.5">
-          {adding ? (
-            <div className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                <input value={q} onChange={(e) => search(e.target.value)} placeholder={`Search ${card.label.toLowerCase()}…`} autoFocus
-                  className="w-full h-8 pl-8 pr-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
-              </div>
-              {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+          <div className="flex justify-end">
+            <button onClick={openAdd}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700">
+              <Plus className="h-3.5 w-3.5" /> Add association
+            </button>
+          </div>
+          {error && <p className="mt-1.5 text-xs text-red-600 text-right">{error}</p>}
+        </div>
+      )}
+
+      {/* Add-association modal */}
+      <Dialog open={adding} onOpenChange={(o) => !o && closeAdd()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Add {singular}</DialogTitle></DialogHeader>
+          <div className="space-y-2 pt-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input value={q} onChange={(e) => search(e.target.value)} placeholder={`Search ${card.label.toLowerCase()}…`} autoFocus
+                className="w-full h-10 pl-9 pr-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+            <div className="max-h-72 overflow-y-auto -mx-1 px-1">
+              {isPending && <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>}
               {results.map((r) => (
-                <button key={r.id} onClick={() => add(r.id)}
-                  className="w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-slate-50 text-slate-700 truncate">
+                <button key={r.id} onClick={() => add(r.id)} disabled={isPending}
+                  className="w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-700 truncate">
                   {r.name}
                 </button>
               ))}
               {q.trim().length >= 2 && !isPending && results.length === 0 && (
-                <p className="px-2 py-1.5 text-xs text-slate-400">No matches.</p>
+                <p className="px-3 py-3 text-sm text-slate-400 text-center">No matches.</p>
               )}
-              <button onClick={() => { setAdding(false); setQ(""); setResults([]); setError(null) }}
-                className="text-xs text-slate-400 hover:text-slate-600 px-2">Cancel</button>
+              {q.trim().length < 2 && !isPending && (
+                <p className="px-3 py-3 text-sm text-slate-400 text-center">Type at least 2 characters to search.</p>
+              )}
             </div>
-          ) : (
-            <button onClick={() => setAdding(true)}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700">
-              <Plus className="h-3.5 w-3.5" /> Add association
-            </button>
-          )}
-          {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
-        </div>
-      )}
+            {error && <p className="text-xs text-red-600">{error}</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove-association confirmation */}
+      <Dialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Remove association?</DialogTitle></DialogHeader>
+          <div className="flex items-start gap-3 py-1">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+            </span>
+            <p className="text-sm text-slate-600">
+              Are you sure you want to remove the association with <span className="font-medium text-slate-900">{confirm?.name}</span>?
+              This unlinks the two records — it doesn&apos;t delete either one.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirm(null)} disabled={isPending}>Cancel</Button>
+            <Button onClick={() => confirm && remove(confirm.id)} disabled={isPending} className="bg-red-600 hover:bg-red-700">
+              {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
