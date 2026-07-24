@@ -137,17 +137,6 @@ const PENDING_PRACTICE_ID = "__pending_practice__"
 const PENDING_LOCATION_ID = "__pending_location__"
 const PENDING_DOCTOR_ID = "__pending_doctor__"
 
-// Generic words that appear across many practice names. They carry almost no
-// identifying signal, so a name match resting only on these must NOT link two
-// different organizations during fax auto-matching.
-const GENERIC_ORG_WORDS = new Set([
-  "family", "practice", "practices", "medical", "medicine", "center", "centre",
-  "group", "clinic", "clinics", "associates", "association", "health", "healthcare",
-  "care", "physicians", "physician", "services", "service", "specialists", "specialty",
-  "hospital", "community", "regional", "the", "and", "for", "inc", "llc", "pllc",
-  "pc", "ltd", "of", "primary",
-])
-
 // Normalize name to Proper Case (handles ALL CAPS and all lowercase)
 function toProperCase(str: string): string {
   if (!str) return str
@@ -242,36 +231,24 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
       let matchedPracticeId: string | undefined
       if (prefillData.referringOrg) {
         const a = prefillData.referringOrg.toLowerCase().trim()
-        // Word-boundary contains — so a short name like "Ati" does NOT match the
-        // substring inside "Innovative Pl-ati-num Care" (that mis-assigned the wrong
-        // practice). Requires the whole name to appear as full words.
+        // CONSERVATIVE matching: only auto-select an existing practice on a
+        // confident signal — an exact name, or one name that fully contains the
+        // other as whole words ("VNA Health" ⊂ "VNA Health Care Peds"). We do NOT
+        // do fuzzy word-overlap: sharing a common word ("Advanced … Medicine",
+        // "Innovative … Care") but differing on the distinctive one ("Integrative"
+        // vs "Family", "Platinum" vs "Primary") is a DIFFERENT org. When nothing
+        // matches confidently, we stage a new practice the user can still change.
         const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-        const wordContains = (hay: string, needle: string) => needle.length > 0 && new RegExp(`\\b${esc(needle)}\\b`).test(hay)
+        // Whole-word containment: `needle` appears in `hay` bounded by word breaks.
+        const wordContains = (hay: string, needle: string) => needle.length > 2 && new RegExp(`\\b${esc(needle)}\\b`).test(hay)
+        // Prefix that ends on a word boundary (avoids "advanced" ⊂ "advancedcare").
+        const prefixWord = (long: string, short: string) => short.length > 2 && long.startsWith(short) && (long.length === short.length || long[short.length] === " ")
         const scored = localPractices.map((p) => {
           const b = p.name.toLowerCase().trim()
           let score = 0
           if (a === b) score = 100
-          else if (b.startsWith(a) || a.startsWith(b)) score = 80
+          else if (prefixWord(b, a) || prefixWord(a, b)) score = 80
           else if (wordContains(b, a) || wordContains(a, b)) score = 60
-          else {
-            // Word-overlap: count shared meaningful words (length > 2) to catch
-            // location-specific names like "Vna Health Highland Fp" → "VNA Health Care".
-            // Generic industry words (family, practice, medical…) are shared by most
-            // org names, so a match on those ALONE must not link two different orgs
-            // ("Golden Rule Family Practice" ≠ "Hidden Pine Family Practice"). Require
-            // at least one distinctive (non-generic) word in common.
-            const aWords = new Set(a.split(/\W+/).filter((w) => w.length > 2))
-            const bWords = new Set(b.split(/\W+/).filter((w) => w.length > 2))
-            const shared = Array.from(bWords).filter((w) => aWords.has(w))
-            const distinctiveShared = shared.filter((w) => !GENERIC_ORG_WORDS.has(w)).length
-            // If each name carries a distinctive word the other lacks (e.g. "Platinum"
-            // vs "Primary"), they're different orgs unless they share ≥2 distinctive
-            // words — don't let the shared "Innovative…Care" glue them together.
-            const aOnly = Array.from(aWords).filter((w) => !GENERIC_ORG_WORDS.has(w) && !bWords.has(w)).length
-            const bOnly = Array.from(bWords).filter((w) => !GENERIC_ORG_WORDS.has(w) && !aWords.has(w)).length
-            const conflict = aOnly > 0 && bOnly > 0 && distinctiveShared < 2
-            if (shared.length >= 2 && distinctiveShared >= 1 && !conflict) score = 40 + Math.min(distinctiveShared * 8, 20)
-          }
           return { p, score }
         }).filter((x) => x.score > 0)
 
