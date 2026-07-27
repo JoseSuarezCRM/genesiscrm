@@ -243,44 +243,51 @@ function SearchablePicker({
 }) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
   const selected = items.find((i) => i.id === value)
   const filtered = query.trim()
     ? items.filter((i) => i.label.toLowerCase().includes(query.toLowerCase()) || (i.sub ?? "").toLowerCase().includes(query.toLowerCase()))
     : items
 
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery("") } }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [open])
+
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between border rounded-lg px-3 py-2.5 text-sm bg-white hover:bg-slate-50 transition-colors text-left"
-      >
-        {selected ? (
-          <div className="min-w-0">
-            {renderSelected ? renderSelected(selected) : <span className="font-medium text-slate-800 truncate block">{selected.label}</span>}
-          </div>
-        ) : (
-          <span className="text-slate-400">{placeholder}</span>
-        )}
-        <Search className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
-      </button>
+    <div className="relative" ref={ref}>
+      {open ? (
+        // One search box (replaces the trigger while open) — no redundant second field.
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            autoFocus type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Type to search…"
+            className="w-full pl-9 pr-3 py-2.5 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => { setOpen(true); setQuery("") }}
+          className="w-full flex items-center justify-between border rounded-lg px-3 py-2.5 text-sm bg-white hover:bg-slate-50 transition-colors text-left"
+        >
+          {selected ? (
+            <div className="min-w-0">
+              {renderSelected ? renderSelected(selected) : <span className="font-medium text-slate-800 truncate block">{selected.label}</span>}
+            </div>
+          ) : (
+            <span className="text-slate-400">{placeholder}</span>
+          )}
+          <Search className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+        </button>
+      )}
 
       {open && (
         <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg overflow-hidden">
-          <div className="p-2 border-b">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                autoFocus
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Type to search..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-          <div className="max-h-56 overflow-y-auto">
+          <div className="max-h-60 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="px-3 py-4 text-sm text-slate-400 text-center">No results</p>
             ) : (
