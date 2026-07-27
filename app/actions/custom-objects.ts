@@ -21,6 +21,7 @@ export interface CustomObjectProperty {
   unique?: boolean
   defaultValue?: string
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
+  visibilityRule?: { controllingKey: string; equals: string[] } | null
 }
 
 export interface CustomObjectCard {

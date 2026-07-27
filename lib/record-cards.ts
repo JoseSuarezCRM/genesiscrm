@@ -43,7 +43,7 @@ async function loadCustomObjectCards(objectType: string, record: Record<string, 
   const props: any[] = (def?.properties as any[]) ?? []
 
   const catalog: RecordFieldDef[] = [
-    ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", options: p.options ?? [] })),
+    ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined, visibilityRule: (p as any).visibilityRule ?? undefined })),
     ...metaCatalog(ownerLabel || `${def?.singular ?? "Record"} Owner`, true),
   ]
 
