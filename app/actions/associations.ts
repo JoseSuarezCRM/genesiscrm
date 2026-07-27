@@ -256,6 +256,19 @@ export async function setAssociationCardVisible(objectType: string, cardType: st
   return { success: true }
 }
 
+// Which fields of the associated object to show under each record on a card.
+export async function setAssociationCardFields(objectType: string, cardType: string, fields: string[]) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  await (prisma as any).associationCardPref.upsert({
+    where: { objectType_cardType: { objectType, cardType } },
+    create: { objectType, cardType, fields },
+    update: { fields },
+  })
+  revalidatePath("/", "layout")
+  return { success: true }
+}
+
 // Persist the right-column card order (the full ordered list of card types).
 export async function reorderAssociationCards(objectType: string, cardTypes: string[]) {
   const session = await auth()

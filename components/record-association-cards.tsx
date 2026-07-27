@@ -3,11 +3,11 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { SlidersHorizontal, Plus, X, Check, Loader2, Search, GripVertical, AlertTriangle } from "lucide-react"
+import { SlidersHorizontal, Plus, X, Check, Loader2, Search, GripVertical, AlertTriangle, Settings2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import {
-  searchAssociableRecords, associateRecords, unassociateRecords, setNativeAssociation, setAssociationCardVisible, reorderAssociationCards,
+  searchAssociableRecords, associateRecords, unassociateRecords, setNativeAssociation, setAssociationCardVisible, reorderAssociationCards, setAssociationCardFields,
 } from "@/app/actions/associations"
 import type { AssocCard } from "@/lib/record-associations"
 import { useCardReorder } from "@/components/use-card-reorder"
@@ -96,6 +96,8 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
   const [results, setResults] = useState<{ id: string; name: string; url: string; sub?: string }[]>([])
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<{ id: string; name: string } | null>(null)
+  const [customizing, setCustomizing] = useState(false)
+  const [picked, setPicked] = useState<string[]>(card.selectedFields ?? [])
 
   // Native cards link via the FK/join mutation; Data-Model cards via objectAssociation.
   const searchType = card.native ? (card.addType ?? card.type) : card.type
@@ -135,6 +137,16 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
     })
   }
 
+  function toggleField(key: string) {
+    setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
+  function saveFields() {
+    startTransition(async () => {
+      await setAssociationCardFields(recordType, card.type, picked)
+      setCustomizing(false); router.refresh()
+    })
+  }
+
   return (
     <div {...cardProps} className={cn("bg-white border border-slate-200 rounded-xl transition-shadow", dragging && "opacity-50 ring-2 ring-zinc-300")}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
@@ -148,6 +160,12 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
             {card.label} <span className="text-slate-400 font-normal">{card.records.length}</span>
           </h2>
         </div>
+        {canEdit && (card.availableFields?.length ?? 0) > 0 && (
+          <button onClick={() => { setPicked(card.selectedFields ?? []); setCustomizing(true) }} title="Choose fields to show"
+            className="text-slate-300 hover:text-slate-600 shrink-0">
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       <div className="p-4 max-h-72 overflow-y-auto">
@@ -156,13 +174,25 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
         ) : (
           <div className="divide-y divide-slate-100">
             {card.records.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-2 py-2">
-                <Link href={r.url} className="text-sm text-blue-600 hover:underline truncate">{r.name}</Link>
-                {canEdit && canRemove && (
-                  <button onClick={() => { setError(null); setConfirm({ id: r.id, name: r.name }) }} disabled={isPending} title="Remove association"
-                    className="h-6 w-6 shrink-0 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+              <div key={r.id} className="py-2.5 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-2">
+                  <Link href={r.url} className="text-sm font-medium text-blue-600 hover:underline truncate">{r.name}</Link>
+                  {canEdit && canRemove && (
+                    <button onClick={() => { setError(null); setConfirm({ id: r.id, name: r.name }) }} disabled={isPending} title="Remove association"
+                      className="h-6 w-6 shrink-0 inline-flex items-center justify-center text-slate-300 hover:text-red-500 rounded">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {(r.fields?.length ?? 0) > 0 && (
+                  <dl className="mt-1.5 space-y-1">
+                    {r.fields!.map((f) => (
+                      <div key={f.key}>
+                        <dt className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">{f.label}</dt>
+                        <dd className="text-sm text-slate-700 break-words">{f.value ?? "—"}</dd>
+                      </div>
+                    ))}
+                  </dl>
                 )}
               </div>
             ))}
@@ -210,6 +240,29 @@ function AssociationCard({ recordType, recordId, card, canEdit, dragging, handle
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Choose which fields of the associated record to show */}
+      <Dialog open={customizing} onOpenChange={(o) => !o && setCustomizing(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{card.label} card fields</DialogTitle></DialogHeader>
+          <p className="text-sm text-slate-500 -mt-1">Pick which fields show under each {singular.toLowerCase()}&apos;s name.</p>
+          <div className="max-h-72 overflow-y-auto -mx-1 px-1 py-1 space-y-0.5">
+            {(card.availableFields ?? []).map((f) => (
+              <button key={f.key} type="button" onClick={() => toggleField(f.key)}
+                className="w-full flex items-center gap-2 px-1.5 py-1.5 text-sm text-left rounded-md hover:bg-slate-50">
+                <span className={cn("shrink-0 w-[15px] h-[15px] rounded border flex items-center justify-center", picked.includes(f.key) ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
+                  {picked.includes(f.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                </span>
+                <span className="text-slate-700">{f.label}</span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomizing(false)} disabled={isPending}>Cancel</Button>
+            <Button onClick={saveFields} disabled={isPending}>{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -14,12 +14,15 @@
 import { prisma } from "@/lib/prisma"
 import { getAssociationsFor, getAssociationCardPrefs } from "@/app/actions/associations"
 import { resolverFor } from "@/lib/object-registry"
+import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+
+export interface CardFieldValue { key: string; label: string; value: string | null }
 
 export interface AssocCard {
   /** Registry key of the associated type — also the preference's cardType. */
   type: string
   label: string
-  records: { id: string; name: string; url: string }[]
+  records: { id: string; name: string; url: string; fields?: CardFieldValue[] }[]
   visible: boolean
   /** Native FK relation (vs a Data-Model objectAssociation). */
   native?: boolean
@@ -27,9 +30,69 @@ export interface AssocCard {
   addType?: string
   /** For native cards: whether a link can be removed (nullable FK / join row). */
   removable?: boolean
+  /** Field keys of the associated object shown under each record's name. */
+  selectedFields?: string[]
+  /** Fields the user can choose to show on this card (for the customize modal). */
+  availableFields?: { key: string; label: string }[]
 }
 
-type Rec = { id: string; name: string; url: string }
+type Rec = { id: string; name: string; url: string; fields?: CardFieldValue[] }
+
+// The object type whose records a card lists (for loading extra field values).
+function cardObjectType(card: { type: string; native?: boolean; addType?: string }): string {
+  return card.native ? (card.addType ?? card.type) : card.type
+}
+
+const CARD_DELEGATES: Record<string, () => any> = {
+  REFERRAL: () => prisma.referral,
+  PROVIDER: () => prisma.referringDoctor,
+  PRACTICE: () => prisma.referringPractice,
+  LOCATION: () => prisma.practiceLocation,
+  SURGERY: () => (prisma as any).surgeryCase,
+}
+
+function fmtFieldValue(v: any): string | null {
+  if (v == null || v === "") return null
+  if (v instanceof Date) return v.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
+  if (Array.isArray(v)) return v.filter(Boolean).join(", ") || null
+  return String(v)
+}
+
+// Fields the user may show on a card for a given associated object type.
+async function availableFieldsFor(type: string): Promise<{ key: string; label: string }[]> {
+  if (type.startsWith("CO:")) {
+    const def = await (prisma as any).customObjectDef.findUnique({ where: { key: type.slice(3) }, select: { properties: true } })
+    return ((def?.properties as any[]) ?? []).map((p) => ({ key: p.id, label: p.name as string }))
+  }
+  // The record's own fields, minus the primary name (already the card's blue title).
+  return (RECORD_FIELDS[type] ?? []).filter((f) => f.key !== "name").map((f) => ({ key: f.key, label: f.label }))
+}
+
+// Values of `fieldKeys` for each record id of `type`, keyed by record id.
+async function loadCardFieldValues(type: string, ids: string[], fieldKeys: string[]): Promise<Map<string, CardFieldValue[]>> {
+  const out = new Map<string, CardFieldValue[]>()
+  if (!ids.length || !fieldKeys.length) return out
+
+  if (type.startsWith("CO:")) {
+    const def = await (prisma as any).customObjectDef.findUnique({ where: { key: type.slice(3) }, select: { properties: true } })
+    const props: any[] = (def?.properties as any[]) ?? []
+    const recs = await (prisma as any).customObjectRecord.findMany({ where: { id: { in: ids } }, select: { id: true, values: true } })
+    for (const r of recs) {
+      const vals: Record<string, any> = (r.values as any) ?? {}
+      out.set(r.id, fieldKeys.map((k) => ({ key: k, label: (props.find((p) => p.id === k)?.name as string) ?? k, value: fmtFieldValue(vals[k]) })))
+    }
+    return out
+  }
+
+  const model = CARD_DELEGATES[type]?.()
+  if (!model) return out
+  const defs = RECORD_FIELDS[type] ?? []
+  const recs = await model.findMany({ where: { id: { in: ids } } })
+  for (const r of recs) {
+    out.set(r.id, fieldKeys.map((k) => ({ key: k, label: defs.find((d) => d.key === k)?.label ?? k, value: fmtFieldValue((r as any)[k]) })))
+  }
+  return out
+}
 
 const providerName = (d: any) => (d.title ? `${d.name}, ${d.title}` : d.name)
 const referralName = (r: any) => `${r.patientFirstName ?? ""} ${r.patientLastName ?? ""}`.trim() || "Referral"
@@ -147,11 +210,26 @@ export async function loadAssociationCards(recordType: string, recordId: string)
 
   const hidden = new Set(prefs.filter((p: any) => !p.visible).map((p: any) => p.cardType))
   const orderOf = new Map<string, number>(prefs.map((p: any) => [p.cardType, p.order]))
+  const fieldsOf = new Map<string, string[]>(prefs.filter((p: any) => Array.isArray(p.fields)).map((p: any) => [p.cardType, p.fields as string[]]))
 
   const all: AssocCard[] = [
     ...native.map((c) => ({ ...c, visible: !hidden.has(c.type) })),
     ...groups.map((g) => ({ type: g.type, label: g.label, records: g.records, visible: !hidden.has(g.type) })),
   ]
+
+  // Attach the chosen extra fields (values per record) + the list of available
+  // fields, so each card can show name + secondary fields and be customized.
+  await Promise.all(all.map(async (c) => {
+    const objType = cardObjectType(c)
+    c.availableFields = await availableFieldsFor(objType)
+    const selected = (fieldsOf.get(c.type) ?? []).filter((k) => c.availableFields!.some((f) => f.key === k))
+    c.selectedFields = selected
+    if (selected.length && c.records.length) {
+      const valueMap = await loadCardFieldValues(objType, c.records.map((r) => r.id), selected)
+      c.records = c.records.map((r) => ({ ...r, fields: valueMap.get(r.id) ?? [] }))
+    }
+  }))
+
   // Apply the saved order; cards without a saved order keep their natural position.
   return all
     .map((c, i) => ({ c, i, o: orderOf.has(c.type) ? orderOf.get(c.type)! : 1000 + i }))
