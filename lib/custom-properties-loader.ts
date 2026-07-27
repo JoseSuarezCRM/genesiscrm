@@ -40,6 +40,9 @@ export async function loadCustomPropertiesForDetail(
         type: prop.type,
         required: prop.required,
         options: prop.options,
+        optionLabels: (prop as any).optionLabels ?? undefined,
+        conditional: (prop as any).conditional ?? undefined,
+        visibilityRule: (prop as any).visibilityRule ?? undefined,
         display: {
           visible: true,
           order: 0,
