@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ReferralStatus } from "@prisma/client"
 import { STATUS_LABELS, formatDate, formatPhone } from "@/lib/utils"
-import { updateReferralStatus, updateReferralField } from "@/app/actions/referrals"
+import { updateReferralStatus, updateReferralField, updateReferralPipeline } from "@/app/actions/referrals"
+import StyledSelect from "@/components/ui/styled-select"
 import ReferralAssignee from "@/components/referral-assignee"
 import TagSelector from "@/components/tag-selector"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
@@ -29,6 +30,7 @@ interface Props {
   allTags: any[]
   leftCards: CardLayout[]
   customProperties: any[]
+  pipelines?: { id: string; name: string }[]
   isAdmin: boolean
   canEditCards?: boolean
 }
@@ -61,6 +63,28 @@ function PropertyRow({
           {value ?? <span className="text-slate-400">—</span>}
         </span>
       )}
+    </div>
+  )
+}
+
+// Pipeline as an inline editable select (admins); read-only name otherwise.
+function PipelineRow({ referralId, value, name, pipelines, canEdit }: {
+  referralId: string; value: string | null; name: string | null | undefined
+  pipelines: { id: string; name: string }[]; canEdit: boolean
+}) {
+  const router = useRouter()
+  const [, startTransition] = useTransition()
+  const [cur, setCur] = useState(value ?? "")
+  if (!canEdit) return <PropertyRow label="Pipeline" value={name} />
+  return (
+    <div className="py-2.5 border-b border-slate-100 last:border-0">
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pipeline</span>
+      <StyledSelect value={cur}
+        onChange={(e) => { const v = e.target.value; setCur(v); startTransition(async () => { await updateReferralPipeline(referralId, v || null); router.refresh() }) }}
+        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400">
+        <option value="">—</option>
+        {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </StyledSelect>
     </div>
   )
 }
@@ -213,6 +237,7 @@ export default function ReferralDetailLeftColumn({
   allTags,
   leftCards,
   customProperties,
+  pipelines = [],
   isAdmin,
   canEditCards = isAdmin,
 }: Props) {
@@ -336,7 +361,7 @@ export default function ReferralDetailLeftColumn({
       case "insurance":
         return <EditableRow key={fieldId} referralId={referral.id} field="insuranceProvider" label="Insurance" value={referral.insuranceProvider} />
       case "pipeline":
-        return <PropertyRow key={fieldId} label="Pipeline" value={referral.pipeline?.name} />
+        return <PipelineRow key={fieldId} referralId={referral.id} value={referral.pipelineId ?? null} name={referral.pipeline?.name} pipelines={pipelines} canEdit={isAdmin} />
       case "referralDate":
         return <EditableRow key={fieldId} referralId={referral.id} field="referralDate" label="Referral Date" value={referral.referralDate} type="date" format={formatDate} />
       case "appointmentDate":

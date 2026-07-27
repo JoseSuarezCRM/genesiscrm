@@ -275,6 +275,25 @@ export async function updateReferralField(id: string, field: string, value: stri
   return { success: true }
 }
 
+export async function updateReferralPipeline(id: string, pipelineId: string | null) {
+  await requireAccess("REFERRALS", "EDIT")
+  const { session } = await assertReferralAccess(id)
+
+  await prisma.referral.update({ where: { id }, data: { pipelineId: pipelineId || null } })
+
+  await createAuditLog({
+    userId: session.user.id,
+    action: AuditAction.REFERRAL_UPDATE,
+    resourceType: "Referral",
+    resourceId: id,
+    metadata: { field: "pipelineId" },
+  })
+
+  revalidatePath(`/referrals/${id}`)
+  revalidatePath("/referrals")
+  return { success: true }
+}
+
 export async function updateReferralNotes(id: string, notes: string) {
   await requireAccess("REFERRALS", "EDIT")
   const { session } = await assertReferralAccess(id)

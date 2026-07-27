@@ -134,6 +134,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             allTags={allTags}
             leftCards={leftCards as any}
             customProperties={customProperties}
+            pipelines={pipelines as any}
             isAdmin={isAdmin}
             canEditCards={canEditCards}
           />
