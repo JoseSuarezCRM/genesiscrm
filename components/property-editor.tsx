@@ -327,6 +327,10 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
             {step === "conditional" && (
               <div className="space-y-5">
                 <h2 className="text-lg font-semibold text-slate-900">Conditional property options</h2>
+                <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  This controls which <strong>dropdown options</strong> appear based on another field. To show or hide the
+                  <strong> whole property</strong> (e.g. only when Pipeline = Clinical), use the <strong>Rules</strong> tab → Conditional visibility — that works for any field type.
+                </p>
                 {!hasOptions ? (
                   <p className="text-sm text-slate-500">Only dropdown / multi-select properties can have conditional options. Change the field type to enable this.</p>
                 ) : controllingProps.length === 0 ? (
