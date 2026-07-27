@@ -20,6 +20,7 @@ import { loadCustomPropertiesForDetail } from "@/lib/custom-properties-loader"
 import { getCardLayouts } from "@/app/actions/card-layouts"
 import ReferralDetailLeftColumn from "@/components/referral-detail-left-column"
 import RecordAssociationCards from "@/components/record-association-cards"
+import ReferralPipelineSelect from "@/components/referral-pipeline-select"
 import { loadAssociationCards } from "@/lib/record-associations"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordActivityFeed from "@/components/record-activity-feed"
@@ -166,7 +167,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Pipeline</p>
-                  <p className="text-sm font-medium text-slate-900">{referral.pipeline?.name ?? "—"}</p>
+                  <ReferralPipelineSelect referralId={referral.id} value={referral.pipelineId} name={referral.pipeline?.name} pipelines={pipelines as any} canEdit={isAdmin} />
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Created</p>
