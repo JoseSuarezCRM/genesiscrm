@@ -8,7 +8,7 @@ import { isMergeable } from "@/lib/record-urls"
 import { searchAssociableRecords } from "@/app/actions/associations"
 import { getRecordValues } from "@/app/actions/record-fields"
 import { listUrlFor } from "@/lib/record-urls"
-import type { RecordFieldDef } from "@/lib/record-field-catalog"
+import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import { cn } from "@/lib/utils"
 
 interface Props {
@@ -181,8 +181,8 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
     startTransition(async () => setOtherValues(await getRecordValues(entityType, r.id)))
   }
 
-  // Only real data fields — skip owner/audit meta.
-  const fields = catalog.filter((f) => !f.key.startsWith("__"))
+  // Only real data fields — skip owner/audit meta and rule-hidden properties.
+  const fields = catalog.filter((f) => !f.key.startsWith("__") && isPropertyVisible((f as any).visibilityRule, values))
   const rawFor = (side: "this" | "other", key: string) => (side === "this" ? values : otherValues ?? {})[key]
 
   function doMerge() {

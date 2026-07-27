@@ -11,20 +11,26 @@ import { cn } from "@/lib/utils"
 
 export type Conditional = { controllingPropertyId: string; rules: Record<string, string[]> } | null
 
+// Show this property only when the controlling field's value is one of `equals`.
+export type VisibilityRule = { controllingKey: string; equals: string[] } | null
+
 export interface PropertyDraft {
   name: string; internalName: string; type: string; description?: string
   required: boolean; unique: boolean; defaultValue?: string; options: string[]
-  optionLabels?: Record<string, string>; conditional: Conditional
+  optionLabels?: Record<string, string>; conditional: Conditional; visibilityRule: VisibilityRule
 }
 
 export interface EditingProperty {
   id: string; name: string; internalName?: string | null; type: string
   required?: boolean; unique?: boolean; description?: string | null; defaultValue?: string | null
-  options?: string[]; optionLabels?: Record<string, string> | null; conditional?: Conditional
+  options?: string[]; optionLabels?: Record<string, string> | null; conditional?: Conditional; visibilityRule?: VisibilityRule
 }
 
 // A sibling single-select property that can control this one's options.
 export interface ControllingProp { id: string; name: string; options: string[] }
+
+// A field (native or custom) that can control this property's visibility.
+export interface VisibilityController { key: string; name: string; options: string[]; optionLabels?: Record<string, string> }
 
 const FIELD_TYPES = [
   { value: "TEXT", label: "Single-line text", icon: Type, desc: "Short free text" },
@@ -53,10 +59,11 @@ const STEPS: { key: Step; label: string }[] = [
 
 const INPUT = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-zinc-400"
 
-export default function PropertyEditor({ entityLabel, editing, controllingProps = [], onSave, onClose }: {
+export default function PropertyEditor({ entityLabel, editing, controllingProps = [], visibilityControllers = [], onSave, onClose }: {
   entityLabel: string
   editing?: EditingProperty | null
   controllingProps?: ControllingProp[]
+  visibilityControllers?: VisibilityController[]
   onSave: (draft: PropertyDraft) => Promise<{ error?: string } | void>
   onClose: () => void
 }) {
@@ -90,6 +97,12 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [controlId, setControlId] = useState(editing?.conditional?.controllingPropertyId ?? "")
   const [rules, setRules] = useState<Record<string, string[]>>(editing?.conditional?.rules ?? {})
   const [activeControlValue, setActiveControlValue] = useState<string | null>(null)
+
+  // Conditional visibility
+  const [visKey, setVisKey] = useState(editing?.visibilityRule?.controllingKey ?? "")
+  const [visValues, setVisValues] = useState<string[]>(editing?.visibilityRule?.equals ?? [])
+  const visController = visibilityControllers.find((c) => c.key === visKey) || null
+  const toggleVisValue = (v: string) => setVisValues((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
 
   const hasOptions = type === "DROPDOWN" || type === "MULTI_SELECT"
   const controlling = controllingProps.find((c) => c.id === controlId) || null
@@ -135,12 +148,13 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
     const conditional: Conditional = controlId && hasOptions && Object.keys(rules).length > 0
       ? { controllingPropertyId: controlId, rules }
       : null
+    const visibilityRule: VisibilityRule = visKey && visValues.length > 0 ? { controllingKey: visKey, equals: visValues } : null
     const labelMap = Object.fromEntries(cleanRows.filter((r) => r.label && r.label !== r.value).map((r) => [r.value, r.label]))
     const draft: PropertyDraft = {
       name: name.trim(), internalName: slugify(internalName || name), type,
       description: description.trim() || undefined, required, unique,
       defaultValue: defaultValue || undefined, options: cleanOptions,
-      optionLabels: Object.keys(labelMap).length ? labelMap : undefined, conditional,
+      optionLabels: Object.keys(labelMap).length ? labelMap : undefined, conditional, visibilityRule,
     }
     startTransition(async () => {
       const res = await onSave(draft)
@@ -375,6 +389,47 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                 <div className="border border-slate-200 rounded-xl px-4">
                   <Toggle on={required} set={setRequired} label="Required" hint="Records can't be saved without a value (where enforced)." />
                   <Toggle on={unique} set={setUnique} label="Require unique values" hint="No two records of this object can share the same value." />
+                </div>
+
+                {/* Conditional visibility */}
+                <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">Conditional visibility</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Show this property on a record only when another field has a certain value (e.g. show it only when Pipeline is Clinical).</p>
+                  </div>
+                  {visibilityControllers.length === 0 ? (
+                    <p className="text-sm text-slate-400">No fields available to base a rule on.</p>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 block mb-1">Controlling field</label>
+                        <StyledSelect className={INPUT} value={visKey} onChange={(e) => { setVisKey(e.target.value); setVisValues([]) }}>
+                          <option value="">Always show</option>
+                          {visibilityControllers.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
+                        </StyledSelect>
+                      </div>
+                      {visController && (
+                        <div>
+                          <label className="text-xs font-medium text-slate-500 block mb-1.5">Show this property when {visController.name} is any of:</label>
+                          <div className="space-y-1 max-h-56 overflow-y-auto">
+                            {visController.options.map((v) => {
+                              const on = visValues.includes(v)
+                              return (
+                                <button key={v} type="button" onClick={() => toggleVisValue(v)}
+                                  className="w-full flex items-center gap-2 px-1.5 py-1.5 text-sm text-left rounded-md hover:bg-slate-50">
+                                  <span className={cn("shrink-0 w-[15px] h-[15px] rounded border flex items-center justify-center", on ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
+                                    {on && <span className="block w-2 h-2 rounded-sm bg-white" />}
+                                  </span>
+                                  <span className="text-slate-700">{visController.optionLabels?.[v] ?? v}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {visValues.length === 0 && <p className="text-xs text-amber-600 mt-1.5">Pick at least one value, or the rule won&apos;t be saved.</p>}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             )}

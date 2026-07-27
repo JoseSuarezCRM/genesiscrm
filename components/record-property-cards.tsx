@@ -11,7 +11,7 @@ import { useCardReorder } from "@/components/use-card-reorder"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import CallLogCard from "@/components/call-log-card"
 import PhoneInput from "@/components/phone-input"
-import type { RecordFieldDef } from "@/lib/record-field-catalog"
+import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
 
@@ -292,6 +292,7 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
                 card.fields
                   .map((key) => byKey[key])
                   .filter(Boolean)
+                  .filter((f) => isPropertyVisible(f.visibilityRule, values))
                   .map((f) => (
                     <div key={f.key} className={(card.columns ?? 1) > 1 ? "" : "border-b border-slate-50 last:border-0"}>
                       <FieldRow f={f} value={values[f.key]} values={values} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />

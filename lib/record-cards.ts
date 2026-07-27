@@ -96,7 +96,7 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
     ...(RECORD_FIELDS[entityType] ?? []).map((f) =>
       f.key === "pipelineId" && pipelineField ? { ...f, options: pipelineField, optionLabels: pipelineLabels } : f
     ),
-    ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options, default: (c as any).defaultValue ?? undefined, conditional: (c as any).conditional ?? undefined, optionLabels: (c as any).optionLabels ?? undefined })),
+    ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options, default: (c as any).defaultValue ?? undefined, conditional: (c as any).conditional ?? undefined, optionLabels: (c as any).optionLabels ?? undefined, visibilityRule: (c as any).visibilityRule ?? undefined })),
     ...(hasMeta ? metaCatalog(ownerLabel!, false) : []),
   ]
 

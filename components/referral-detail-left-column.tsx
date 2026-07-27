@@ -15,6 +15,7 @@ import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import { useCardReorder } from "@/components/use-card-reorder"
 import CustomPropertyField from "@/components/custom-property-field"
+import { isPropertyVisible } from "@/lib/record-field-catalog"
 
 interface CardLayout {
   cardName: string
@@ -220,6 +221,14 @@ export default function ReferralDetailLeftColumn({
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingCard, setEditingCard] = useState<CardLayout | null>(null)
 
+  // Values used to evaluate a custom property's conditional-visibility rule:
+  // native fields (pipeline/status) + custom values keyed as cp_<id>.
+  const visValues: Record<string, any> = {
+    pipelineId: (referral as any).pipelineId ?? "",
+    status: (referral as any).status ?? "",
+    ...Object.fromEntries(Object.entries(((referral as any).customProperties ?? {}) as Record<string, any>).map(([k, v]) => [`cp_${k}`, v])),
+  }
+
   const openEditor = (card: CardLayout | null) => {
     setEditingCard(card)
     setEditorOpen(true)
@@ -254,6 +263,7 @@ export default function ReferralDetailLeftColumn({
       const propertyId = fieldId.slice("custom:".length)
       const property = customProperties.find((p) => p.id === propertyId)
       if (!property) return null
+      if (!isPropertyVisible((property as any).visibilityRule, visValues)) return null
       return (
         <CustomPropertyField
           key={fieldId}

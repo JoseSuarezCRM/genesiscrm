@@ -3,9 +3,9 @@
 import { CP_ENTITIES } from "@/lib/custom-property-entities"
 
 import StyledSelect from "@/components/ui/styled-select"
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createCustomProperty, updateCustomProperty, deleteCustomProperty } from "@/app/actions/custom-properties"
+import { createCustomProperty, updateCustomProperty, deleteCustomProperty, getNativeVisibilityControllers } from "@/app/actions/custom-properties"
 import PropertyEditor, { type PropertyDraft } from "@/components/property-editor"
 import { Plus, Trash2, Pencil, Search } from "lucide-react"
 
@@ -53,6 +53,16 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
 
   const active = CP_ENTITIES.find((e) => e.type === entity) ?? CP_ENTITIES[0]
   const all = propsByEntity[entity] ?? []
+
+  // Native fields (Pipeline, Status…) usable as visibility controllers for this object.
+  const [nativeCtrls, setNativeCtrls] = useState<{ key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[]>([])
+  useEffect(() => { getNativeVisibilityControllers(entity as any).then(setNativeCtrls).catch(() => setNativeCtrls([])) }, [entity])
+  // Custom select properties + native fields, minus the property being edited.
+  const visibilityControllers = [
+    ...all.filter((p) => (p.type === "DROPDOWN" || p.type === "MULTI_SELECT") && p.id !== dialog?.editing?.id)
+      .map((p) => ({ key: `cp_${p.id}`, name: p.name, options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined })),
+    ...nativeCtrls,
+  ]
   const q = query.trim().toLowerCase()
   const list = q ? all.filter((p) => p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q)) : all
 
@@ -125,10 +135,11 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
           entityLabel={active?.label ?? entity}
           editing={dialog.editing as any}
           controllingProps={all.filter((p) => p.type === "DROPDOWN" && p.id !== dialog.editing?.id).map((p) => ({ id: p.id, name: p.name, options: p.options }))}
+          visibilityControllers={visibilityControllers}
           onSave={async (d: PropertyDraft) => {
             return dialog.editing
-              ? await updateCustomProperty({ id: dialog.editing.id, name: d.name, internalName: d.internalName, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional })
-              : await createCustomProperty({ name: d.name, internalName: d.internalName, type: d.type as any, entityType: entity as any, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional })
+              ? await updateCustomProperty({ id: dialog.editing.id, name: d.name, internalName: d.internalName, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional, visibilityRule: d.visibilityRule })
+              : await createCustomProperty({ name: d.name, internalName: d.internalName, type: d.type as any, entityType: entity as any, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional, visibilityRule: d.visibilityRule })
           }}
           onClose={() => setDialog(null)}
         />

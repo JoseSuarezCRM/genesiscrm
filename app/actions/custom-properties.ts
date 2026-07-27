@@ -32,6 +32,24 @@ interface CreateCustomPropertyInput {
   optionLabels?: Record<string, string>
   internalName?: string
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
+  visibilityRule?: { controllingKey: string; equals: string[] } | null
+}
+
+// Native (non-custom) fields that can control a property's conditional
+// visibility, per entity — keyed the same way loadPropertyCards exposes them.
+export async function getNativeVisibilityControllers(
+  entity: CPEntity
+): Promise<{ key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[]> {
+  const session = await auth()
+  if (!session?.user) return []
+  if (entity === "REFERRAL") {
+    const pipelines = await (prisma as any).pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
+    return [
+      { key: "pipelineId", name: "Pipeline", options: pipelines.map((p: any) => p.id), optionLabels: Object.fromEntries(pipelines.map((p: any) => [p.id, p.name])) },
+      { key: "status", name: "Status", options: ["NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "NO_SHOW"] },
+    ]
+  }
+  return []
 }
 
 // Token slug: lowercase, non-alphanumerics → underscore. Same rule as the UI.
@@ -98,6 +116,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
         options: data.options || [],
         optionLabels: (data.optionLabels ?? undefined) as any,
         conditional: (data.conditional ?? undefined) as any,
+        visibilityRule: (data.visibilityRule ?? undefined) as any,
       },
     })
     revalidatePath("/settings/custom-properties")
@@ -127,6 +146,7 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
         ...(rest.unique !== undefined ? { unique: rest.unique } : {}),
         ...(rest.defaultValue !== undefined ? { defaultValue: rest.defaultValue || null } : {}),
         ...(rest.conditional !== undefined ? { conditional: (rest.conditional ?? null) as any } : {}),
+        ...(rest.visibilityRule !== undefined ? { visibilityRule: (rest.visibilityRule ?? null) as any } : {}),
         ...(rest.optionLabels !== undefined ? { optionLabels: (rest.optionLabels ?? null) as any } : {}),
         options: rest.options,
       },

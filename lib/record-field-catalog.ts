@@ -24,6 +24,19 @@ export interface RecordFieldDef {
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> }
   // Dropdown/select display labels keyed by the stored internal value.
   optionLabels?: Record<string, string>
+  // Show this field on the record only when the controlling field's value matches.
+  visibilityRule?: { controllingKey: string; equals: string[] } | null
+}
+
+// Whether a property with a visibility rule should show, given the record's values.
+export function isPropertyVisible(
+  rule: { controllingKey: string; equals: string[] } | null | undefined,
+  values: Record<string, any>,
+): boolean {
+  if (!rule || !rule.controllingKey || !(rule.equals?.length)) return true
+  const v = values[rule.controllingKey]
+  if (Array.isArray(v)) return v.some((x) => rule.equals.includes(String(x)))
+  return rule.equals.includes(String(v ?? ""))
 }
 
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
