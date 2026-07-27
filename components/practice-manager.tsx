@@ -1,6 +1,6 @@
 "use client"
 
-import StyledSelect from "@/components/ui/styled-select"
+import ProviderTitleField from "@/components/provider-title-field"
 import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
@@ -145,8 +145,6 @@ function LocationForm({ practiceId, defaultValues, onSubmit, isPending, onClose 
 
 // ─── Provider Form ─────────────────────────────────────────────────────────────
 
-const PROVIDER_TITLES = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Other"]
-
 function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending, onClose, practices }: {
   practiceId: string
   locations: LocationWithCount[]
@@ -178,14 +176,12 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
     <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, title, npi, specialty, phone, officePhone, email, practiceId: selectedPracticeId, locationIds: selectedLocs }) }} className="space-y-4">
       {practices && (
         <Field label="Practice *">
-          <StyledSelect
+          <SearchablePicker
+            items={practices.map((p) => ({ id: p.id, label: p.name }))}
             value={selectedPracticeId}
-            onChange={(e) => { setSelectedPracticeId(e.target.value); setSelectedLocs([]) }}
-            className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            <option value="">— Select practice —</option>
-            {practices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </StyledSelect>
+            onChange={(id) => { setSelectedPracticeId(id); setSelectedLocs([]) }}
+            placeholder="Search practices…"
+          />
         </Field>
       )}
       <div className="grid grid-cols-2 gap-3">
@@ -193,21 +189,14 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
           <Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Sarah Johnson" />
         </Field>
         <Field label="Title">
-          <StyledSelect
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            <option value="">— Select —</option>
-            {PROVIDER_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </StyledSelect>
+          <ProviderTitleField value={title} onChange={setTitle} />
         </Field>
       </div>
       <Field label="NPI (National Provider Identifier)">
         <Input value={npi} onChange={(e) => setNpi(e.target.value)} placeholder="1234567890" maxLength={10} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
+        <Field label="Cell Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
         <Field label="Office Phone"><PhoneInput value={officePhone} onChange={setWorkPhone} /></Field>
       </div>
       <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="dr.johnson@clinic.com" /></Field>

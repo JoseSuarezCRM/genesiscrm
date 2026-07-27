@@ -12,7 +12,7 @@ import SelectedProvidersCard from "@/components/selected-providers-card"
 import ExportDialog from "@/components/ui/export-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import StyledSelect from "@/components/ui/styled-select"
+import ProviderTitleField from "@/components/provider-title-field"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -454,7 +454,6 @@ function Picker({ placeholder, value, options, onSelect, onClear, onQuickCreate 
 
 // ─── Create Provider Modal ────────────────────────────────────────────────────
 
-const PROVIDER_TITLE_OPTIONS = ["MD", "DO", "NP", "PA-C", "DPM", "DC", "PT", "OT", "RN", "Front Desk", "Manager", "Referral Coordinator", "Custom..."]
 
 function InlineCreateProvider({ initialName, practiceId, locations, onCancel, onCreate }: {
   initialName: string
@@ -464,8 +463,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
   onCreate: (provider: { id: string; label: string; name: string; title: string | null }) => void
 }) {
   const [name, setName] = useState(initialName)
-  const [titleSelect, setTitleSelect] = useState("")
-  const [titleCustom, setTitleCustom] = useState("")
+  const [title, setTitle] = useState("")
   const [npi, setNpi] = useState("")
   const [phone, setPhone] = useState("")
   const [officePhone, setOfficePhone] = useState("")
@@ -474,8 +472,7 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
   const [isPending, startTransition] = useTransition()
   const [err, setErr] = useState("")
 
-  const isCustomTitle = titleSelect === "Custom..."
-  const finalTitle = isCustomTitle ? titleCustom.trim() : titleSelect
+  const finalTitle = title.trim()
 
   function toggleLoc(id: string) {
     setLocationIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -508,21 +505,14 @@ function InlineCreateProvider({ initialName, practiceId, locations, onCancel, on
         </div>
         <div>
           <label className={labelCls}>Title</label>
-          <StyledSelect value={titleSelect} onChange={e => setTitleSelect(e.target.value)} className="w-full">
-            <option value="">— None —</option>
-            {PROVIDER_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-          </StyledSelect>
-          {isCustomTitle && (
-            <input value={titleCustom} onChange={e => setTitleCustom(e.target.value)}
-              className={inputCls + " mt-1.5"} placeholder="e.g. Director of Care Coordination" autoFocus />
-          )}
+          <ProviderTitleField value={title} onChange={setTitle} placeholder="— None —" />
         </div>
         <div>
           <label className={labelCls}>NPI</label>
           <input value={npi} onChange={e => setNpi(e.target.value)} className={inputCls} placeholder="1234567890" maxLength={10} />
         </div>
         <div>
-          <label className={labelCls}>Phone</label>
+          <label className={labelCls}>Cell Phone</label>
           <PhoneInput value={phone} onChange={setPhone} className="h-[38px] text-sm bg-white" />
         </div>
         <div>
