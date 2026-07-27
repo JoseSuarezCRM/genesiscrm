@@ -222,10 +222,9 @@ export default function ReferralDetailLeftColumn({
   const [editingCard, setEditingCard] = useState<CardLayout | null>(null)
 
   // Values used to evaluate a custom property's conditional-visibility rule:
-  // native fields (pipeline/status) + custom values keyed as cp_<id>.
+  // all native fields of the referral + custom values keyed as cp_<id>.
   const visValues: Record<string, any> = {
-    pipelineId: (referral as any).pipelineId ?? "",
-    status: (referral as any).status ?? "",
+    ...(referral as any),
     ...Object.fromEntries(Object.entries(((referral as any).customProperties ?? {}) as Record<string, any>).map(([k, v]) => [`cp_${k}`, v])),
   }
 

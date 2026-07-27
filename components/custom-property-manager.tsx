@@ -57,10 +57,11 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
   // Native fields (Pipeline, Status…) usable as visibility controllers for this object.
   const [nativeCtrls, setNativeCtrls] = useState<{ key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[]>([])
   useEffect(() => { getNativeVisibilityControllers(entity as any).then(setNativeCtrls).catch(() => setNativeCtrls([])) }, [entity])
-  // Custom select properties + native fields, minus the property being edited.
+  // Every other custom property + native fields, minus the one being edited.
+  // Select props expose option checkboxes; other types take a typed value.
   const visibilityControllers = [
-    ...all.filter((p) => (p.type === "DROPDOWN" || p.type === "MULTI_SELECT") && p.id !== dialog?.editing?.id)
-      .map((p) => ({ key: `cp_${p.id}`, name: p.name, options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined })),
+    ...all.filter((p) => p.id !== dialog?.editing?.id)
+      .map((p) => ({ key: `cp_${p.id}`, name: p.name, options: (p.type === "DROPDOWN" || p.type === "MULTI_SELECT") ? (p.options ?? []) : [], optionLabels: (p as any).optionLabels ?? undefined })),
     ...nativeCtrls,
   ]
   const q = query.trim().toLowerCase()

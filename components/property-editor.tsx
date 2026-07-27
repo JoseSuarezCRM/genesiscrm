@@ -415,21 +415,30 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                       {visController && (
                         <div>
                           <label className="text-xs font-medium text-slate-500 block mb-1.5">Show this property when {visController.name} is any of:</label>
-                          <div className="space-y-1 max-h-56 overflow-y-auto">
-                            {visController.options.map((v) => {
-                              const on = visValues.includes(v)
-                              return (
-                                <button key={v} type="button" onClick={() => toggleVisValue(v)}
-                                  className="w-full flex items-center gap-2 px-1.5 py-1.5 text-sm text-left rounded-md hover:bg-slate-50">
-                                  <span className={cn("shrink-0 w-[15px] h-[15px] rounded border flex items-center justify-center", on ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
-                                    {on && <span className="block w-2 h-2 rounded-sm bg-white" />}
-                                  </span>
-                                  <span className="text-slate-700">{visController.optionLabels?.[v] ?? v}</span>
-                                </button>
-                              )
-                            })}
-                          </div>
-                          {visValues.length === 0 && <p className="text-xs text-amber-600 mt-1.5">Pick at least one value, or the rule won&apos;t be saved.</p>}
+                          {visController.options.length > 0 ? (
+                            <div className="space-y-1 max-h-56 overflow-y-auto">
+                              {visController.options.map((v) => {
+                                const on = visValues.includes(v)
+                                return (
+                                  <button key={v} type="button" onClick={() => toggleVisValue(v)}
+                                    className="w-full flex items-center gap-2 px-1.5 py-1.5 text-sm text-left rounded-md hover:bg-slate-50">
+                                    <span className={cn("shrink-0 w-[15px] h-[15px] rounded border flex items-center justify-center", on ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
+                                      {on && <span className="block w-2 h-2 rounded-sm bg-white" />}
+                                    </span>
+                                    <span className="text-slate-700">{visController.optionLabels?.[v] ?? v}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <>
+                              <input className={INPUT} value={visValues.join(", ")}
+                                onChange={(e) => setVisValues(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+                                placeholder="e.g. United Healthcare, Aetna" />
+                              <p className="text-[11px] text-slate-400 mt-1">Comma-separated. The property shows when {visController.name} exactly equals one of these.</p>
+                            </>
+                          )}
+                          {visValues.length === 0 && <p className="text-xs text-amber-600 mt-1.5">Pick or type at least one value, or the rule won&apos;t be saved.</p>}
                         </div>
                       )}
                     </>

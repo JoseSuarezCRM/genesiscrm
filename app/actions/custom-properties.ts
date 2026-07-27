@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { cpMeta, type CPEntity } from "@/lib/custom-property-entities"
 import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
+import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 
 // One delegate per object that carries a customProperties JSON bag.
 function cpDelegate(type: CPEntity): any {
@@ -42,14 +43,23 @@ export async function getNativeVisibilityControllers(
 ): Promise<{ key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[]> {
   const session = await auth()
   if (!session?.user) return []
+
+  const out: { key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[] = []
+
   if (entity === "REFERRAL") {
     const pipelines = await (prisma as any).pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
-    return [
-      { key: "pipelineId", name: "Pipeline", options: pipelines.map((p: any) => p.id), optionLabels: Object.fromEntries(pipelines.map((p: any) => [p.id, p.name])) },
-      { key: "status", name: "Status", options: ["NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "NO_SHOW"] },
-    ]
+    out.push({ key: "pipelineId", name: "Pipeline", options: pipelines.map((p: any) => p.id), optionLabels: Object.fromEntries(pipelines.map((p: any) => [p.id, p.name])) })
+    out.push({ key: "status", name: "Status", options: ["NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "NO_SHOW"] })
   }
-  return []
+
+  // Every other native field of the object as a controller. Select fields expose
+  // their options as checkboxes; everything else takes a typed value.
+  const covered = new Set(out.map((c) => c.key))
+  for (const f of RECORD_FIELDS[entity] ?? []) {
+    if (covered.has(f.key) || f.readOnly) continue
+    out.push({ key: f.key, name: f.label, options: f.type === "select" ? (f.options ?? []) : [], optionLabels: f.optionLabels })
+  }
+  return out
 }
 
 // Token slug: lowercase, non-alphanumerics → underscore. Same rule as the UI.
