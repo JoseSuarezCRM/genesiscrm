@@ -65,13 +65,17 @@ function CanonicalCombo({ value, onChange, practiceNames }: { value: string; onC
 // Recent runs: what got merged, most recent first, each expandable.
 function RunLogSection({ logs }: { logs: OrgRulesRunLogEntry[] }) {
   const [openId, setOpenId] = useState<string | null>(null)
-  if (logs.length === 0) return null
   return (
     <div className="bg-white rounded-xl border border-slate-200 px-5 py-4">
       <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
         <History className="h-4 w-4 text-slate-400" /> Recent runs
       </p>
       <p className="text-xs text-slate-400 mt-0.5">What was merged the last times the rules ran (manually or automatically).</p>
+      {logs.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400 text-center border-2 border-dashed border-slate-200 rounded-lg py-6">
+          No merges yet. When a run merges a practice into its canonical name, it&apos;ll show up here.
+        </p>
+      ) : (
       <div className="mt-3 space-y-1.5">
         {logs.map((log) => {
           const isOpen = openId === log.id
@@ -105,6 +109,7 @@ function RunLogSection({ logs }: { logs: OrgRulesRunLogEntry[] }) {
           )
         })}
       </div>
+      )}
     </div>
   )
 }
