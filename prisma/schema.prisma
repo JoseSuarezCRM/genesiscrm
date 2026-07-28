@@ -1022,6 +1022,17 @@ model OrgRulesPoller {
   lastMerged      Int       @default(0)
 }
 
+// Maps a merged-away record id to its surviving record, so open URLs/bookmarks
+// for the deleted record redirect to the survivor instead of 404ing.
+model MergeRedirect {
+  entity    String // "PROVIDER" | "PRACTICE" | "LOCATION"
+  fromId    String
+  toId      String
+  createdAt DateTime @default(now())
+
+  @@id([entity, fromId])
+}
+
 // A history entry for each org-rules run that merged practices (manual or auto).
 model OrgRulesRunLog {
   id          String   @id @default(cuid())

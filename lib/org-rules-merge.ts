@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { applyRules } from "@/lib/org-rules-utils"
+import { recordMergeRedirect } from "@/lib/merge-redirect"
 
 export interface PracticeMerge { from: string; to: string }
 
@@ -55,10 +56,12 @@ export async function mergeExistingPracticesByRules(): Promise<PracticeMerge[]> 
           }
         }
         await prisma.referringDoctor.delete({ where: { id: doc.id } })
+        await recordMergeRedirect("PROVIDER", doc.id, existing.id)
       }
     }
 
     await prisma.referringPractice.delete({ where: { id: practice.id } })
+    await recordMergeRedirect("PRACTICE", practice.id, target.id)
     merges.push({ from: practice.name, to: canonical })
   }
 

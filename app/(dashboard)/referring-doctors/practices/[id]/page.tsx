@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { userCan, userCanLevel } from "@/lib/permissions"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
+import { resolveMergeRedirect } from "@/lib/merge-redirect"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import PracticeDetailClient from "@/components/practice-detail-client"
@@ -45,7 +46,11 @@ export default async function PracticeDetailPage({ params }: Props) {
     }),
   ])
 
-  if (!practice) notFound()
+  if (!practice) {
+    const to = await resolveMergeRedirect("PRACTICE", params.id)
+    if (to) redirect(`/referring-doctors/practices/${to}`)
+    notFound()
+  }
 
   return (
     <div className="p-6 max-w-5xl space-y-6">

@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
 import { userCan, userCanLevel, userCanDelete } from "@/lib/permissions"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
+import { resolveMergeRedirect } from "@/lib/merge-redirect"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import PracticeDetailClient from "@/components/practice-detail-client"
@@ -61,7 +62,11 @@ export default async function PracticeDetailPage({ params }: Props) {
     loadCustomPropertiesForDetail("PRACTICE", params.id),
   ])
 
-  if (!practice) notFound()
+  if (!practice) {
+    const to = await resolveMergeRedirect("PRACTICE", params.id)
+    if (to) redirect(`/practices/${to}`)
+    notFound()
+  }
 
   const [activityItems, feedUsers] = await Promise.all([
     listRecordActivities("PRACTICE", practice.id),

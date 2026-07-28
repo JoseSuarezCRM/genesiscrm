@@ -6,6 +6,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess, requireDelete, requirePermission, requireAnyAccess, requireAnyDelete } from "@/lib/auth-guard"
+import { recordMergeRedirect } from "@/lib/merge-redirect"
 
 // A location is reachable both as a first-class Locations object and from within
 // its Practice, so writes are allowed with edit/delete on either.
@@ -312,6 +313,7 @@ export async function mergeLocation(sourceId: string, targetId: string) {
 
     // Delete the source location
     await prisma.practiceLocation.delete({ where: { id: sourceId } })
+    await recordMergeRedirect("LOCATION", sourceId, targetId)
 
     revalidatePath("/referring-doctors")
     revalidatePath("/locations")
@@ -356,10 +358,12 @@ export async function mergePractice(sourceId: string, targetId: string) {
         }
 
         await prisma.referringDoctor.delete({ where: { id: doc.id } })
+        await recordMergeRedirect("PROVIDER", doc.id, existing.id)
       }
     }
 
     await prisma.referringPractice.delete({ where: { id: sourceId } })
+    await recordMergeRedirect("PRACTICE", sourceId, targetId)
 
     revalidatePath("/referring-doctors")
     revalidatePath("/referrals")
@@ -511,6 +515,7 @@ export async function mergeDoctor(sourceId: string, targetId: string) {
     }
 
     await prisma.referringDoctor.delete({ where: { id: sourceId } })
+    await recordMergeRedirect("PROVIDER", sourceId, targetId)
 
     revalidatePath("/referring-doctors")
     revalidatePath("/referrals")

@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
 import { userCan, userCanLevel } from "@/lib/permissions"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
+import { resolveMergeRedirect } from "@/lib/merge-redirect"
 import Link from "next/link"
 import { ChevronLeft, Building2, MapPin } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -71,7 +72,12 @@ export default async function ProviderDetailPage({ params }: Props) {
     loadCustomPropertiesForDetail("PROVIDER", params.id),
   ])
 
-  if (!provider) notFound()
+  if (!provider) {
+    // The provider may have been merged into another; follow the redirect.
+    const to = await resolveMergeRedirect("PROVIDER", params.id)
+    if (to) redirect(`/referring-doctors/${to}`)
+    notFound()
+  }
 
   const [activityItems, feedUsers] = await Promise.all([
     listRecordActivities("PROVIDER", provider.id),
