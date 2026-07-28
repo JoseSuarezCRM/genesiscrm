@@ -89,7 +89,15 @@ export default function FilterBuilder({ fields, value, onChange }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
-    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    function onDoc(e: MouseEvent) {
+      const t = e.target as Node
+      if (ref.current?.contains(t)) return
+      // A field/operator StyledSelect portals its menu to <body> (outside our ref).
+      // Clicking an option must not be treated as an outside click, or the whole
+      // popover closes before the option's onClick can run.
+      if ((t as Element)?.closest?.("[data-select-menu-open]")) return
+      setOpen(false)
+    }
     document.addEventListener("mousedown", onDoc)
     return () => document.removeEventListener("mousedown", onDoc)
   }, [open])

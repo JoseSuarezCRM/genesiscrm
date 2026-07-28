@@ -1,18 +1,21 @@
 import { prisma } from "@/lib/prisma"
 import { applyRules } from "@/lib/org-rules-utils"
 
+export interface PracticeMerge { from: string; to: string }
+
 // Scan all practices, apply the org name rules, and merge any whose canonical
 // name differs from their current name into the canonical practice (moving
-// referrals, locations, and doctors). Returns how many practices were merged.
+// referrals, locations, and doctors). Returns the list of merges performed
+// (source name → canonical name) so callers can log what happened.
 // No auth here — callers (the admin action + the cron) gate access themselves.
-export async function mergeExistingPracticesByRules(): Promise<number> {
+export async function mergeExistingPracticesByRules(): Promise<PracticeMerge[]> {
   const [rules, allPractices] = await Promise.all([
     prisma.orgNameRule.findMany({ orderBy: { order: "asc" } }),
     prisma.referringPractice.findMany(),
   ])
-  if (!rules.length) return 0
+  if (!rules.length) return []
 
-  let merged = 0
+  const merges: PracticeMerge[] = []
 
   for (const practice of allPractices) {
     const canonical = applyRules(practice.name, rules)
@@ -56,10 +59,25 @@ export async function mergeExistingPracticesByRules(): Promise<number> {
     }
 
     await prisma.referringPractice.delete({ where: { id: practice.id } })
-    merged++
+    merges.push({ from: practice.name, to: canonical })
   }
 
-  return merged
+  return merges
+}
+
+// Record a run in the log (only when something merged, to keep it meaningful).
+async function logRun(trigger: "manual" | "auto", merges: PracticeMerge[]) {
+  if (!merges.length) return
+  await (prisma as any).orgRulesRunLog.create({
+    data: { trigger, mergedCount: merges.length, merges },
+  })
+}
+
+// Run the merge and record a log entry. Shared by the admin action and the cron.
+export async function mergeAndLog(trigger: "manual" | "auto"): Promise<PracticeMerge[]> {
+  const merges = await mergeExistingPracticesByRules()
+  await logRun(trigger, merges)
+  return merges
 }
 
 // Run the merge if the poller is enabled and its interval has elapsed. Used by
@@ -71,10 +89,10 @@ export async function runOrgRulesPollerIfDue(): Promise<{ ran: boolean; merged: 
   const dueAfter = cfg.lastRunAt ? new Date(cfg.lastRunAt.getTime() + cfg.intervalMinutes * 60_000) : new Date(0)
   if (Date.now() < dueAfter.getTime()) return { ran: false, merged: 0 }
 
-  const merged = await mergeExistingPracticesByRules()
+  const merges = await mergeAndLog("auto")
   await (prisma as any).orgRulesPoller.update({
     where: { id: "singleton" },
-    data: { lastRunAt: new Date(), lastMerged: merged },
+    data: { lastRunAt: new Date(), lastMerged: merges.length },
   })
-  return { ran: true, merged }
+  return { ran: true, merged: merges.length }
 }

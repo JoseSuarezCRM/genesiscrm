@@ -1022,6 +1022,17 @@ model OrgRulesPoller {
   lastMerged      Int       @default(0)
 }
 
+// A history entry for each org-rules run that merged practices (manual or auto).
+model OrgRulesRunLog {
+  id          String   @id @default(cuid())
+  ranAt       DateTime @default(now())
+  trigger     String   // "manual" | "auto"
+  mergedCount Int      @default(0)
+  merges      Json     // [{ from, to }]
+
+  @@index([ranAt])
+}
+
 model IvrConfig {
   id             String      @id @default(cuid())
   isActive       Boolean     @default(false)

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { applyRules } from "@/lib/org-rules-utils"
-import { mergeExistingPracticesByRules } from "@/lib/org-rules-merge"
+import { mergeAndLog } from "@/lib/org-rules-merge"
 
 export interface OrgRuleInput {
   contains: string
@@ -150,12 +150,36 @@ export async function applyRulesToExistingPractices(): Promise<{ success: boolea
   const session = await auth()
   if ((session?.user as any)?.role !== "ADMIN") return { success: false, merged: 0, error: "Unauthorized" }
 
-  const merged = await mergeExistingPracticesByRules()
+  const merges = await mergeAndLog("manual")
 
   revalidatePath("/referring-doctors")
   revalidatePath("/settings/org-rules")
   revalidatePath("/referrals")
-  return { success: true, merged }
+  return { success: true, merged: merges.length }
+}
+
+// ── Run log ──────────────────────────────────────────────────────────────────
+
+export interface OrgRulesRunLogEntry {
+  id: string
+  ranAt: string
+  trigger: "manual" | "auto"
+  mergedCount: number
+  merges: { from: string; to: string }[]
+}
+
+export async function getOrgRulesRunLogs(limit = 20): Promise<OrgRulesRunLogEntry[]> {
+  const logs = await (prisma as any).orgRulesRunLog.findMany({
+    orderBy: { ranAt: "desc" },
+    take: limit,
+  })
+  return logs.map((l: any) => ({
+    id: l.id,
+    ranAt: l.ranAt.toISOString(),
+    trigger: l.trigger,
+    mergedCount: l.mergedCount,
+    merges: Array.isArray(l.merges) ? l.merges : [],
+  }))
 }
 
 // ── Background poller config ─────────────────────────────────────────────────

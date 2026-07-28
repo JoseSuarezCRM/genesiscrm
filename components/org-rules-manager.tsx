@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { Plus, Trash2, Pencil, GripVertical, CheckCircle2, AlertCircle, ArrowRight, RefreshCw, Clock } from "lucide-react"
+import { useState, useTransition, useRef, useEffect } from "react"
+import { Plus, Trash2, Pencil, GripVertical, CheckCircle2, AlertCircle, ArrowRight, RefreshCw, Clock, History, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { createOrgRule, updateOrgRule, deleteOrgRule, reorderOrgRules, applyRulesToExistingPractices, setOrgRulesPoller, OrgRuleInput, OrgRulesPollerConfig } from "@/app/actions/org-rules"
+import { createOrgRule, updateOrgRule, deleteOrgRule, reorderOrgRules, applyRulesToExistingPractices, setOrgRulesPoller, getOrgRulesRunLogs, OrgRuleInput, OrgRulesPollerConfig, OrgRulesRunLogEntry } from "@/app/actions/org-rules"
 
 interface Rule {
   id: string
@@ -15,6 +15,98 @@ interface Rule {
 interface Props {
   initialRules: Rule[]
   initialPoller: OrgRulesPollerConfig
+  initialLogs: OrgRulesRunLogEntry[]
+  practiceNames: string[]
+}
+
+// Creatable combobox: pick an existing practice name (no typos) or type a new one.
+function CanonicalCombo({ value, onChange, practiceNames }: { value: string; onChange: (v: string) => void; practiceNames: string[] }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [open])
+
+  const q = value.trim().toLowerCase()
+  const matches = q ? practiceNames.filter((n) => n.toLowerCase().includes(q)) : practiceNames
+  const exact = practiceNames.some((n) => n.toLowerCase() === q)
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        placeholder="Pick or type a practice…"
+        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto py-1">
+          {matches.length === 0 && !value.trim() && <p className="px-3 py-2 text-xs text-slate-400">No practices yet</p>}
+          {matches.map((n) => (
+            <button key={n} type="button" onClick={() => { onChange(n); setOpen(false) }}
+              className={cn("w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 truncate", n.toLowerCase() === q && "bg-green-50 text-green-700 font-medium")}>{n}</button>
+          ))}
+          {value.trim() && !exact && (
+            <button type="button" onClick={() => setOpen(false)}
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 border-t border-slate-100 text-slate-500">
+              Create new practice “<span className="font-medium text-slate-700">{value.trim()}</span>”
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Recent runs: what got merged, most recent first, each expandable.
+function RunLogSection({ logs }: { logs: OrgRulesRunLogEntry[] }) {
+  const [openId, setOpenId] = useState<string | null>(null)
+  if (logs.length === 0) return null
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 px-5 py-4">
+      <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+        <History className="h-4 w-4 text-slate-400" /> Recent runs
+      </p>
+      <p className="text-xs text-slate-400 mt-0.5">What was merged the last times the rules ran (manually or automatically).</p>
+      <div className="mt-3 space-y-1.5">
+        {logs.map((log) => {
+          const isOpen = openId === log.id
+          return (
+            <div key={log.id} className="border border-slate-100 rounded-lg">
+              <button
+                type="button" onClick={() => setOpenId(isOpen ? null : log.id)}
+                className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 rounded-lg transition-colors"
+              >
+                <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform", isOpen && "rotate-180")} />
+                <span className={cn("text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded", log.trigger === "auto" ? "bg-violet-50 text-violet-700" : "bg-blue-50 text-blue-700")}>
+                  {log.trigger === "auto" ? "Auto" : "Manual"}
+                </span>
+                <span className="text-sm text-slate-700 font-medium">
+                  Merged {log.mergedCount} practice{log.mergedCount !== 1 ? "s" : ""}
+                </span>
+                <span className="text-xs text-slate-400 ml-auto shrink-0">{new Date(log.ranAt).toLocaleString()}</span>
+              </button>
+              {isOpen && (
+                <div className="px-3 pb-3 pt-1 space-y-1.5">
+                  {log.merges.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs pl-6">
+                      <span className="text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded truncate max-w-[45%]">{m.from}</span>
+                      <ArrowRight className="h-3 w-3 text-slate-300 shrink-0" />
+                      <span className="text-green-700 bg-green-50 px-1.5 py-0.5 rounded truncate max-w-[45%]">{m.to}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 const INTERVAL_OPTIONS = [
@@ -84,11 +176,13 @@ function RuleForm({
   onSave,
   onCancel,
   saving,
+  practiceNames,
 }: {
   initial?: Rule
   onSave: (input: OrgRuleInput) => void
   onCancel: () => void
   saving: boolean
+  practiceNames: string[]
 }) {
   const [contains,       setContains]       = useState(initial?.contains       ?? "")
   const [normalizedName, setNormalizedName] = useState(initial?.normalizedName ?? "")
@@ -115,12 +209,7 @@ function RuleForm({
           <label className="text-xs font-medium text-slate-500 block mb-1">
             → Use this <span className="text-green-600">canonical name</span>
           </label>
-          <input
-            value={normalizedName}
-            onChange={(e) => setNormalizedName(e.target.value)}
-            placeholder="e.g. PrimeCare Community Health"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <CanonicalCombo value={normalizedName} onChange={setNormalizedName} practiceNames={practiceNames} />
         </div>
       </div>
       <div className="flex justify-end gap-2">
@@ -133,8 +222,9 @@ function RuleForm({
   )
 }
 
-export default function OrgRulesManager({ initialRules, initialPoller }: Props) {
+export default function OrgRulesManager({ initialRules, initialPoller, initialLogs, practiceNames }: Props) {
   const [rules,      setRules]      = useState<Rule[]>(initialRules)
+  const [logs,       setLogs]       = useState<OrgRulesRunLogEntry[]>(initialLogs)
   const [showForm,   setShowForm]   = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
   const [success,    setSuccess]    = useState("")
@@ -218,6 +308,7 @@ export default function OrgRulesManager({ initialRules, initialPoller }: Props) 
                   const res = await applyRulesToExistingPractices()
                   if (!res.success) { flash(res.error ?? "Failed.", true); return }
                   flash(res.merged > 0 ? `Merged ${res.merged} practice${res.merged !== 1 ? "s" : ""}.` : "No practices needed merging.")
+                  if (res.merged > 0) setLogs(await getOrgRulesRunLogs())
                 })
               }}
               className="flex items-center gap-1.5 text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
@@ -248,7 +339,7 @@ export default function OrgRulesManager({ initialRules, initialPoller }: Props) 
       )}
 
       {showForm && (
-        <RuleForm onSave={handleCreate} onCancel={() => setShowForm(false)} saving={isPending} />
+        <RuleForm onSave={handleCreate} onCancel={() => setShowForm(false)} saving={isPending} practiceNames={practiceNames} />
       )}
 
       {rules.length === 0 && !showForm ? (
@@ -265,6 +356,7 @@ export default function OrgRulesManager({ initialRules, initialPoller }: Props) 
                   onSave={(input) => handleUpdate(rule.id, input)}
                   onCancel={() => setEditingId(null)}
                   saving={isPending}
+                  practiceNames={practiceNames}
                 />
               ) : (
                 <div
@@ -319,6 +411,8 @@ export default function OrgRulesManager({ initialRules, initialPoller }: Props) 
           Drag rows to reorder · first match wins · matching is case-insensitive
         </p>
       )}
+
+      <RunLogSection logs={logs} />
     </div>
   )
 }

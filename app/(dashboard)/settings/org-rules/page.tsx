@@ -1,13 +1,20 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { getOrgRules, getOrgRulesPoller } from "@/app/actions/org-rules"
+import { prisma } from "@/lib/prisma"
+import { getOrgRules, getOrgRulesPoller, getOrgRulesRunLogs } from "@/app/actions/org-rules"
 import OrgRulesManager from "@/components/org-rules-manager"
 
 export default async function OrgRulesPage() {
   const session = await auth()
   if ((session?.user as any)?.role !== "ADMIN") redirect("/")
 
-  const [rules, poller] = await Promise.all([getOrgRules(), getOrgRulesPoller()])
+  const [rules, poller, logs, practices] = await Promise.all([
+    getOrgRules(),
+    getOrgRulesPoller(),
+    getOrgRulesRunLogs(),
+    prisma.referringPractice.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
+  ])
+  const practiceNames = practices.map((p) => p.name)
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
@@ -19,7 +26,7 @@ export default async function OrgRulesPage() {
         </p>
       </div>
 
-      <OrgRulesManager initialRules={rules} initialPoller={poller} />
+      <OrgRulesManager initialRules={rules} initialPoller={poller} initialLogs={logs} practiceNames={practiceNames} />
     </div>
   )
 }
