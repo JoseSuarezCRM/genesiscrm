@@ -7,34 +7,13 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess, requireDelete, requirePermission, requireAnyAccess, requireAnyDelete } from "@/lib/auth-guard"
 import { recordMergeRedirect } from "@/lib/merge-redirect"
+import { toProperCase } from "@/lib/name-format"
 
 // A location is reachable both as a first-class Locations object and from within
 // its Practice, so writes are allowed with edit/delete on either.
 const LOCATION_OBJECTS = ["LOCATIONS", "PRACTICES"]
 
 // Words that should stay lowercase in title case (unless first word)
-const LOWER_WORDS = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "so", "the", "to", "up", "yet"])
-
-function toProperCase(str: string): string {
-  // Only reverse "Last, First" person names — not addresses (addresses have digits or multiple commas)
-  const parts = str.split(",")
-  const isPersonName = parts.length === 2 && !/\d/.test(parts[0])
-  const normalized = isPersonName
-    ? parts.map(s => s.trim()).filter(Boolean).reverse().join(" ")
-    : str
-
-  return normalized
-    .trim()
-    .replace(/\s+/g, " ")
-    .split(" ")
-    .map((word, i) => {
-      const lower = word.toLowerCase()
-      if (i !== 0 && LOWER_WORDS.has(lower)) return lower
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-    })
-    .join(" ")
-}
-
 // ─── Practices ────────────────────────────────────────────────────────────────
 
 const PracticeSchema = z.object({

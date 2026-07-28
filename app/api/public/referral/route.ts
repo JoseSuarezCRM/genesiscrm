@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { sendEmail } from "@/lib/graph-mailer"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
+import { resolveOrCreateProvider } from "@/lib/provider-resolve"
 import { runTrigger_EmbedReferralReceived } from "@/lib/automation-engine"
 
 const schema = z.object({
@@ -45,6 +46,15 @@ export async function POST(req: NextRequest) {
   // Resolve org name via rules → find or create practice
   const { practiceId, locationId } = await resolveOrCreatePractice(providerOrg)
 
+  // Find or create the referring provider by name within that practice
+  const referringDoctorId = await resolveOrCreateProvider({
+    practiceId,
+    name: providerName,
+    npi: providerNpi,
+    email: providerEmail,
+    locationId,
+  })
+
   // Build structured notes combining reason + provider details
   const notesParts = [
     `Reason for Referral: ${reason}`,
@@ -61,6 +71,7 @@ export async function POST(req: NextRequest) {
       patientDob: new Date(patientDob),
       patientPhone,
       referringDoctorName: providerName,
+      referringDoctorId: referringDoctorId,
       referringNpi: providerNpi || null,
       referringPracticeId: practiceId,
       referringLocationId: locationId,
