@@ -28,10 +28,17 @@ interface Props {
   referral: Referral
   practices: PracticeWithRelations[]
   pipelines?: Pipeline[]
+  /** Controlled open state (e.g. opened from the Actions menu). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Hide the built-in Edit trigger button (when opened externally). */
+  hideTrigger?: boolean
 }
 
-export default function EditReferralDialog({ referral, practices, pipelines = [] }: Props) {
-  const [open, setOpen] = useState(false)
+export default function EditReferralDialog({ referral, practices, pipelines = [], open: openProp, onOpenChange, hideTrigger }: Props) {
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = onOpenChange ?? setOpenState
 
   const defaultValues = {
     patientFirstName: referral.patientFirstName,
@@ -63,12 +70,14 @@ export default function EditReferralDialog({ referral, practices, pipelines = []
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Pencil className="h-4 w-4 mr-1.5" />
-          Edit
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Pencil className="h-4 w-4 mr-1.5" />
+            Edit
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Referral</DialogTitle>

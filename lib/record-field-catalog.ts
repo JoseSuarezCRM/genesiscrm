@@ -44,9 +44,11 @@ export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
     { key: "patientFirstName", label: "First Name", type: "text" },
     { key: "patientLastName", label: "Last Name", type: "text" },
     { key: "patientMrn", label: "MRN", type: "text" },
+    { key: "patientDob", label: "Date of Birth", type: "date" },
     { key: "patientPhone", label: "Phone", type: "phone" },
     { key: "patientEmail", label: "Email", type: "email" },
     { key: "insuranceProvider", label: "Insurance", type: "text" },
+    { key: "appointmentDate", label: "Appointment", type: "date" },
     // Pipeline is an editable select — its options (id→name) are injected in
     // lib/record-cards for the referral. Status/date/owner are read-only here
     // (managed by the referral's own status + assignment controls).

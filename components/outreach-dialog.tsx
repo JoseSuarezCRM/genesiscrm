@@ -65,10 +65,17 @@ interface Props {
     patientPhone: string | null
     patientEmail: string | null
   }
+  /** Controlled open state (e.g. opened from the Actions menu). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Hide the built-in Send Message trigger button (when opened externally). */
+  hideTrigger?: boolean
 }
 
-export default function OutreachDialog({ referral }: Props) {
-  const [open, setOpen] = useState(false)
+export default function OutreachDialog({ referral, open: openProp, onOpenChange, hideTrigger }: Props) {
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = (v: boolean) => { setOpenState(v); onOpenChange?.(v) }
   const [channel, setChannel] = useState<Channel>(
     referral.patientPhone ? "SMS" : "EMAIL"
   )
@@ -94,23 +101,27 @@ export default function OutreachDialog({ referral }: Props) {
   const canEmail = !!referral.patientEmail
   const showEmailFields = channel === "EMAIL" || channel === "BOTH"
 
+  // Load templates whenever the dialog opens (covers both the built-in trigger
+  // and being opened externally from the Actions menu).
+  useEffect(() => {
+    if (!open || templatesLoaded) return
+    startLoadTransition(async () => {
+      try {
+        const [emailTpls, smsTpls] = await Promise.all([
+          getEmailTemplates(),
+          getMessageTemplates("SMS"),
+        ])
+        setEmailTemplates(emailTpls)
+        setSmsTemplates(smsTpls.map((t: any) => ({ id: t.id, name: t.name, body: t.body })))
+        setTemplatesLoaded(true)
+      } catch {
+        // Non-fatal — dialog still works without templates
+      }
+    })
+  }, [open, templatesLoaded])
+
   function handleOpen(isOpen: boolean) {
     setOpen(isOpen)
-    if (isOpen && !templatesLoaded) {
-      startLoadTransition(async () => {
-        try {
-          const [emailTpls, smsTpls] = await Promise.all([
-            getEmailTemplates(),
-            getMessageTemplates("SMS"),
-          ])
-          setEmailTemplates(emailTpls)
-          setSmsTemplates(smsTpls.map((t: any) => ({ id: t.id, name: t.name, body: t.body })))
-          setTemplatesLoaded(true)
-        } catch {
-          // Non-fatal — dialog still works without templates
-        }
-      })
-    }
     if (!isOpen) {
       setStatus("idle")
       setMessage("")
@@ -165,12 +176,14 @@ export default function OutreachDialog({ referral }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Mail className="h-4 w-4 mr-1.5" />
-          Send Message
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Mail className="h-4 w-4 mr-1.5" />
+            Send Message
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>

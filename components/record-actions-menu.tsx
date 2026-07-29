@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useTransition } from "react"
+import { useState, useEffect, useRef, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronDown, List, Copy, GitMerge, Trash2, Loader2, X, Search } from "lucide-react"
 import { deleteRecord, cloneRecord, mergeRecord } from "@/app/actions/record-crud"
@@ -20,7 +20,14 @@ interface Props {
   userMap?: Record<string, string>
   canEdit: boolean
   canDelete: boolean
+  /** Whether to show the Clone item (some objects don't support cloning). */
+  cloneable?: boolean
+  /** Extra menu items rendered at the top; receives a `close` to dismiss the menu. */
+  extraItems?: (close: () => void) => ReactNode
 }
+
+// Shared menu-item classes so callers building extraItems match the native items.
+export const RECORD_ACTION_ITEM = "w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-slate-50 transition-colors"
 
 function fmt(f: RecordFieldDef, v: any, userMap: Record<string, string>): string {
   if (v === null || v === undefined || v === "") return "—"
@@ -31,7 +38,7 @@ function fmt(f: RecordFieldDef, v: any, userMap: Record<string, string>): string
   return String(v)
 }
 
-export default function RecordActionsMenu({ entityType, recordId, title, catalog, values, userMap = {}, canEdit, canDelete }: Props) {
+export default function RecordActionsMenu({ entityType, recordId, title, catalog, values, userMap = {}, canEdit, canDelete, cloneable = true, extraItems }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [panel, setPanel] = useState(false)
@@ -78,10 +85,16 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
 
       {open && (
         <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden py-1">
+          {extraItems && (
+            <>
+              {extraItems(() => setOpen(false))}
+              <div className="my-1 border-t border-slate-100" />
+            </>
+          )}
           <button className={item} onClick={() => { setOpen(false); setPanel(true) }}>
             <List className="h-4 w-4 text-slate-400" /> View all properties
           </button>
-          {canEdit && (
+          {canEdit && cloneable && (
             <button className={item} onClick={clone}>
               <Copy className="h-4 w-4 text-slate-400" /> Clone
             </button>
