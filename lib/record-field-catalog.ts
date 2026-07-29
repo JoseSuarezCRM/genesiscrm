@@ -41,18 +41,32 @@ export function isPropertyVisible(
 
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
   REFERRAL: [
+    // Patient
     { key: "patientFirstName", label: "First Name", type: "text" },
     { key: "patientLastName", label: "Last Name", type: "text" },
-    { key: "patientMrn", label: "MRN", type: "text" },
+    { key: "patientMrn", label: "Referring MRN", type: "text" },
+    { key: "genesisMrn", label: "Genesis MRN", type: "text" },
     { key: "patientDob", label: "Date of Birth", type: "date" },
     { key: "patientPhone", label: "Phone", type: "phone" },
     { key: "patientEmail", label: "Email", type: "email" },
+    // Referring source (the Practice/Location/Provider records are the association
+    // cards; these are the free-text/contact fields that live on the referral).
+    { key: "referringDoctorName", label: "Provider Name", type: "text" },
+    { key: "referringNpi", label: "Referring NPI", type: "text" },
+    { key: "referringPhone", label: "Referring Phone", type: "phone" },
+    { key: "referringAddress", label: "Referring Address", type: "text" },
+    // Insurance
     { key: "insuranceProvider", label: "Insurance", type: "text" },
+    { key: "insuranceMemberId", label: "Insurance Member ID", type: "text" },
+    { key: "insuranceGroup", label: "Insurance Group", type: "text" },
+    { key: "authStatus", label: "Auth Status", type: "text" },
+    // Scheduling / pipeline
     { key: "appointmentDate", label: "Appointment", type: "date" },
     // Pipeline is an editable select — its options (id→name) are injected in
     // lib/record-cards for the referral. Status/date/owner are read-only here
     // (managed by the referral's own status + assignment controls).
     { key: "pipelineId", label: "Pipeline", type: "select" },
+    { key: "imagingType", label: "Imaging Type", type: "text" },
     { key: "status", label: "Status", type: "text", readOnly: true },
     { key: "referralDate", label: "Referral Date", type: "date", readOnly: true },
     { key: "assignedTo", label: "Assigned To", type: "text", readOnly: true },
