@@ -66,7 +66,8 @@ function isoToLocalInput(iso: any): string {
 
 // One property row — label on top, value underneath (matching Referrals). Click
 // the value to edit it in place; the owner is a dropdown; audit fields are read-only.
-function FieldRow({ f, value, values, recordId, entityType, canEdit, users, userMap }: {
+// Exported so the "View all properties" panel edits fields the same way.
+export function FieldRow({ f, value, values, recordId, entityType, canEdit, users, userMap }: {
   f: RecordFieldDef; value: any; values: Record<string, any>; recordId: string; entityType: string; canEdit: boolean; users: UserOpt[]; userMap: Record<string, string>
 }) {
   // Dependent options: a controlling property's value narrows this select's options.

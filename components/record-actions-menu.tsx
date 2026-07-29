@@ -9,6 +9,7 @@ import { searchAssociableRecords } from "@/app/actions/associations"
 import { getRecordValues } from "@/app/actions/record-fields"
 import { listUrlFor } from "@/lib/record-urls"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
+import { FieldRow } from "@/components/record-property-cards"
 import { cn } from "@/lib/utils"
 
 interface Props {
@@ -115,7 +116,7 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
         </div>
       )}
 
-      {panel && <AllPropertiesPanel title={title} catalog={catalog} values={values} userMap={userMap} onClose={() => setPanel(false)} />}
+      {panel && <AllPropertiesPanel entityType={entityType} recordId={recordId} title={title} catalog={catalog} values={values} userMap={userMap} canEdit={canEdit} onClose={() => setPanel(false)} />}
       {merging && <MergeDialog entityType={entityType} recordId={recordId} title={title} catalog={catalog} values={values} userMap={userMap} onClose={() => setMerging(false)} />}
       {deleting && <DeleteDialog title={title} isPending={isPending} onConfirm={confirmDelete} onClose={() => setDeleting(false)} />}
     </div>
@@ -348,11 +349,18 @@ function MergeDialog({ entityType, recordId, title, catalog, values, userMap, on
   )
 }
 
-function AllPropertiesPanel({ title, catalog, values, userMap, onClose }: {
-  title: string; catalog: RecordFieldDef[]; values: Record<string, any>; userMap: Record<string, string>; onClose: () => void
+function AllPropertiesPanel({ entityType, recordId, title, catalog, values, userMap, canEdit, onClose }: {
+  entityType: string; recordId: string; title: string; catalog: RecordFieldDef[]; values: Record<string, any>; userMap: Record<string, string>; canEdit: boolean; onClose: () => void
 }) {
   const [q, setQ] = useState("")
   const [hideBlank, setHideBlank] = useState(false)
+  // Slide the panel in on mount and back out before unmounting.
+  const [shown, setShown] = useState(false)
+  useEffect(() => { const r = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(r) }, [])
+  function close() { setShown(false); setTimeout(onClose, 200) }
+
+  // Owner editing needs the user list; rebuild it from the id→label map.
+  const users = Object.entries(userMap).map(([id, label]) => ({ id, label }))
 
   const rows = catalog
     .filter((f) => f.label.toLowerCase().includes(q.trim().toLowerCase()))
@@ -360,11 +368,11 @@ function AllPropertiesPanel({ title, catalog, values, userMap, onClose }: {
 
   return (
     <div className="fixed inset-0 z-[60]">
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col">
+      <div className={cn("absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-200", shown ? "opacity-100" : "opacity-0")} onClick={close} />
+      <div className={cn("absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col transition-transform duration-200 ease-out", shown ? "translate-x-0" : "translate-x-full")}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <h2 className="text-base font-semibold text-slate-900 truncate">{title} — All Properties</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="h-5 w-5" /></button>
+          <button onClick={close} className="text-slate-400 hover:text-slate-700"><X className="h-5 w-5" /></button>
         </div>
 
         <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
@@ -381,12 +389,9 @@ function AllPropertiesPanel({ title, catalog, values, userMap, onClose }: {
 
         <div className="flex-1 overflow-y-auto px-5 py-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{rows.length} properties</p>
-          <div className="space-y-3">
+          <div className="divide-y divide-slate-100">
             {rows.map((f) => (
-              <div key={f.key}>
-                <span className="block text-xs text-slate-500">{f.label}</span>
-                <span className="block text-sm text-slate-900 break-words">{fmt(f, values[f.key], userMap)}</span>
-              </div>
+              <FieldRow key={f.key} f={f} value={values[f.key]} values={values} recordId={recordId} entityType={entityType} canEdit={canEdit} users={users} userMap={userMap} />
             ))}
             {rows.length === 0 && <p className="text-sm text-slate-400">No matching properties.</p>}
           </div>
