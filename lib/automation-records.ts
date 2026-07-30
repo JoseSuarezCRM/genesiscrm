@@ -49,6 +49,31 @@ export async function loadRecord(type: string, id: string): Promise<Record<strin
   return flat
 }
 
+// Every record of an object, shaped for condition evaluation (native fields +
+// customProperties bag for built-ins; flattened values for custom objects). Used
+// to preview/enroll existing records into a workflow.
+export async function loadAllRecords(type: string): Promise<Record<string, unknown>[]> {
+  const model = delegateFor(type)
+  if (!model) return []
+
+  if (isCustomObject(type)) {
+    const def = await (prisma as any).customObjectDef.findUnique({ where: { key: type.slice(3) } })
+    if (!def) return []
+    const props: any[] = (def.properties as any[]) ?? []
+    const rows = await model.findMany({ where: { objectDefId: def.id } })
+    return rows.map((rec: any) => {
+      const flat: Record<string, unknown> = { ...rec }
+      const values: Record<string, any> = (rec.values as any) ?? {}
+      for (const p of props) flat[p.id] = values[p.id]
+      return flat
+    })
+  }
+
+  // Referrals evaluate tag conditions, so pull their tag ids too.
+  const include = type === "REFERRAL" ? { tags: { select: { tagId: true } } } : undefined
+  return (await model.findMany(include ? { include } : {})) as Record<string, unknown>[]
+}
+
 // A human label for the record, used in run logs and notifications.
 export async function recordLabel(type: string, id: string, loaded?: Record<string, unknown> | null): Promise<string> {
   const rec = loaded ?? (await loadRecord(type, id))

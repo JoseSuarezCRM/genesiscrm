@@ -9,7 +9,7 @@ import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/automation-graph"
 import { findProcedureLocation } from "@/lib/surgery-procedures"
-import { type RecordRef, loadRecord, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner } from "@/lib/automation-records"
+import { type RecordRef, loadRecord, loadAllRecords, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner } from "@/lib/automation-records"
 import { buildRecordTokenVars } from "@/lib/record-token-vars"
 
 // Attach derived surgical provider + body part (from the stored procedure) so
@@ -660,10 +660,18 @@ async function runSingleAction(
     if (toCfg.type === "custom") {
       phone = resolveTemplate(toCfg.value ?? "", vars).trim() || null
     } else if (toCfg.type === "property" && toCfg.value) {
-      // A property holds the number — custom props live in the JSON bag, native
-      // fields on the record itself (both keyed the same as SET_PROPERTY).
+      // A property holds the number. The UI addresses a custom property as
+      // "custom:<id>" (or "cp_<id>"), but the JSON bag is keyed by the raw id —
+      // so strip the prefix before reading. Native fields sit on the record.
+      const key = toCfg.value
       const bag = ((record as any)?.customProperties ?? (record as any)?.values) as Record<string, unknown> | undefined
-      let raw: unknown = bag?.[toCfg.value] ?? (record as any)?.[toCfg.value] ?? null
+      let raw: unknown
+      if (key.startsWith("custom:") || key.startsWith("cp_")) {
+        const id = key.startsWith("cp_") ? key.slice(3) : key.slice(7)
+        raw = bag?.[id] ?? (record as any)?.[id] ?? null
+      } else {
+        raw = (record as any)?.[key] ?? bag?.[key] ?? null
+      }
       if (Array.isArray(raw)) raw = raw[0] ?? null
       phone = raw != null && String(raw).trim() ? String(raw).trim() : null
     } else {
@@ -1507,6 +1515,78 @@ export async function runTrigger_RecordPropertyChanged(
     },
     triggeredByUserId,
   )
+}
+
+// ─── Enroll existing records (HubSpot-style backfill) ─────────────────────────
+
+// Current value of a property on a loaded record (native column or custom bag,
+// addressed as "custom:<id>"/"cp_<id>").
+function currentPropValue(record: Record<string, unknown>, key: string): unknown {
+  if (!key) return undefined
+  if (key.startsWith("custom:") || key.startsWith("cp_")) {
+    const id = key.startsWith("cp_") ? key.slice(3) : key.slice(7)
+    const bag = ((record as any).customProperties ?? (record as any).values) as Record<string, unknown> | undefined
+    return bag?.[id] ?? (record as any)[id]
+  }
+  return (record as any)[key]
+}
+
+// Does an EXISTING record currently satisfy a workflow's trigger + criteria? Only
+// property-state triggers have a meaningful "already matches" notion; other
+// triggers fall back to the criteria filter alone.
+function recordMatchesConfig(record: Record<string, unknown>, triggerType: string, cfg: Record<string, unknown>): boolean {
+  if (triggerType === "RECORD_PROPERTY_CHANGED") {
+    const watched = cfg.property as string
+    if (watched) {
+      const cur = currentPropValue(record, watched)
+      const has = cur != null && String(cur).trim() !== ""
+      const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
+      if (condition === "unknown") { if (has) return false }
+      else if (condition === "equals") { if (String(cur ?? "") !== String(cfg.toValue ?? "")) return false }
+      else if (!has) return false // "known" / "changed" → must currently hold a value
+    }
+  }
+  return checkConditions(record, cfg)
+}
+
+// How many existing records currently match — for the editor's preview.
+export async function countMatchingRecords(objectType: string, triggerType: string, cfg: Record<string, unknown>): Promise<number> {
+  if (!objectType) return 0
+  const records = await loadAllRecords(objectType)
+  let n = 0
+  for (const r of records) if (recordMatchesConfig(r, triggerType, cfg)) n++
+  return n
+}
+
+const ENROLL_CAP = 2000
+
+// Run the full workflow once on every existing record that currently matches.
+export async function enrollExistingRecords(automationId: string): Promise<{ matched: number; ran: number; capped: boolean }> {
+  const auto = await prisma.automation.findUnique({ where: { id: automationId } })
+  if (!auto) return { matched: 0, ran: 0, capped: false }
+  const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
+  const objectType = (cfg.objectType as string) || "REFERRAL"
+
+  const records = await loadAllRecords(objectType)
+  const matching = records.filter((r) => recordMatchesConfig(r, auto.triggerType as string, cfg))
+  const capped = matching.length > ENROLL_CAP
+  const batch = matching.slice(0, ENROLL_CAP)
+
+  let ran = 0
+  for (const record of batch) {
+    const id = record.id as string
+    const label = await genericRecordLabel(objectType, id, record)
+    const vars: TemplateVars = { record_name: label } as TemplateVars
+    const ref: RecordRef = { type: objectType, id }
+    try {
+      const log = await executeAction(auto, null, vars, undefined, record, ref)
+      await prisma.automationRun.create({
+        data: { automationId: auto.id, ...runData(log, objectType, id, `Enrolled existing record: ${label}`) },
+      }).catch(() => {})
+      ran++
+    } catch { /* skip a single failing record, keep going */ }
+  }
+  return { matched: matching.length, ran, capped }
 }
 
 export async function runTrigger_RecordOwnerChanged(

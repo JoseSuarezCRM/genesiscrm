@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { AutomationTrigger, AutomationAction } from "@prisma/client"
-import { runScheduledTriggers } from "@/lib/automation-engine"
+import { runScheduledTriggers, countMatchingRecords, enrollExistingRecords } from "@/lib/automation-engine"
 
 export async function createAutomation(data: {
   name: string
@@ -21,7 +21,7 @@ export async function createAutomation(data: {
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
 
-  await prisma.automation.create({
+  const created = await prisma.automation.create({
     data: {
       name: data.name,
       description: data.description || null,
@@ -36,7 +36,28 @@ export async function createAutomation(data: {
   })
 
   revalidatePath("/automations")
-  return { success: true }
+  return { success: true, id: created.id }
+}
+
+// Editor preview: how many existing records currently match this trigger + criteria.
+export async function countWorkflowMatches(input: {
+  objectType: string
+  triggerType: string
+  triggerConfig: Record<string, unknown>
+}): Promise<{ count: number }> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  try {
+    const count = await countMatchingRecords(input.objectType, input.triggerType, input.triggerConfig)
+    return { count }
+  } catch {
+    return { count: 0 }
+  }
+}
+
+// Run the full workflow once on every existing record that currently matches.
+export async function enrollExistingForAutomation(automationId: string): Promise<{ matched: number; ran: number; capped: boolean }> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  return enrollExistingRecords(automationId)
 }
 
 export async function updateAutomation(id: string, data: {

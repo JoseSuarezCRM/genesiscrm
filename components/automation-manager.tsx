@@ -10,6 +10,8 @@ import {
   deleteAutomation,
   cloneAutomation,
   runScheduledAutomationsAction,
+  countWorkflowMatches,
+  enrollExistingForAutomation,
 } from "@/app/actions/automations"
 import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -2179,6 +2181,28 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [triggerOpen, setTriggerOpen] = useState(false)
   const [error, setError] = useState("")
+  // Enrollment: how many existing records currently match, + whether to run on them now.
+  const [enrollExisting, setEnrollExisting] = useState(false)
+  const [matchCount, setMatchCount] = useState<number | null>(null)
+  const [countingMatches, setCountingMatches] = useState(false)
+
+  // Live count of existing records that would match this trigger + criteria.
+  useEffect(() => {
+    let cancelled = false
+    setCountingMatches(true)
+    const cfg = { ...triggerConfig, objectType: objectKey }
+    const t = setTimeout(async () => {
+      try {
+        const { count } = await countWorkflowMatches({ objectType: objectKey, triggerType, triggerConfig: cfg })
+        if (!cancelled) setMatchCount(count)
+      } catch {
+        if (!cancelled) setMatchCount(null)
+      } finally {
+        if (!cancelled) setCountingMatches(false)
+      }
+    }, 400)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [objectKey, triggerType, triggerConfig])
 
   const allObjects = workflowObjectsWith(customObjects)
   const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
@@ -2226,24 +2250,40 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
     setError("")
     const firstNode = graph.rootId ? graph.nodes[graph.rootId] : null
     const effectiveActionType = (firstNode && firstNode.kind === "action" ? firstNode.actionType : "CREATE_TASK") as AutomationAction
+    // Confirm before backfilling existing records — it runs the whole workflow.
+    if (enrollExisting && matchCount && matchCount > 0) {
+      const ok = window.confirm(
+        `Run this workflow now on ${matchCount.toLocaleString()} existing ${objectDef.label.toLowerCase()} record${matchCount === 1 ? "" : "s"}?\n\n` +
+        `Every action runs on each — including any emails or SMS. This can’t be undone.`
+      )
+      if (!ok) return
+    }
+    const cfg = { ...triggerConfig, objectType: objectKey }
     startTransition(async () => {
+      let automationId = editing?.id
       if (editing) {
         await updateAutomation(editing.id, {
           name: name.trim(), description: description.trim() || undefined,
           triggerType: triggerType as AutomationTrigger,
-          triggerConfig: isGenericTrigger(triggerType) ? { ...triggerConfig, objectType: objectKey } : triggerConfig,
+          triggerConfig: isGenericTrigger(triggerType) ? cfg : triggerConfig,
           actionType: effectiveActionType, actionConfig: {},
           flow: null, graph: graph as unknown as Record<string, unknown>,
           isActive: editing.isActive,
         })
       } else {
-        await createAutomation({
+        const res = await createAutomation({
           name: name.trim(), description: description.trim() || undefined,
           triggerType: triggerType as AutomationTrigger,
-          triggerConfig: isGenericTrigger(triggerType) ? { ...triggerConfig, objectType: objectKey } : triggerConfig,
+          triggerConfig: isGenericTrigger(triggerType) ? cfg : triggerConfig,
           actionType: effectiveActionType, actionConfig: {},
           flow: null, graph: graph as unknown as Record<string, unknown>,
         })
+        automationId = (res as any)?.id
+      }
+      if (enrollExisting && automationId && matchCount && matchCount > 0) {
+        const r = await enrollExistingForAutomation(automationId)
+        alert(`Ran on ${r.ran.toLocaleString()} of ${r.matched.toLocaleString()} matching record${r.matched === 1 ? "" : "s"}.` +
+          (r.capped ? `\n\n(Capped at 2,000 per run — re-save to process more.)` : ""))
       }
       router.push("/automations")
       router.refresh()
@@ -2355,6 +2395,29 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
                 users={users} tags={tags} practices={practices} locations={locations} pipelines={pipelines}
                 customDefs={customDefs} propDefs={propDefs}
               />
+
+              {/* Enrollment: new records only, or also run now on existing matches. */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2.5">
+                <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Flag className="h-3.5 w-3.5 text-slate-400" /> Which records should this run on?
+                </p>
+                <p className="text-xs text-slate-500">
+                  {countingMatches ? "Counting matching records…"
+                    : matchCount == null ? "Couldn’t count matching records."
+                    : <><span className="font-semibold text-slate-800">{matchCount.toLocaleString()}</span> existing {objectDef.label.toLowerCase()} record{matchCount === 1 ? "" : "s"} currently match.</>}
+                </p>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="enroll" checked={!enrollExisting} onChange={() => setEnrollExisting(false)} className="mt-0.5" />
+                  <span className="text-xs text-slate-700"><span className="font-medium">Only new records</span> — run when a record starts matching from now on.</span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="enroll" checked={enrollExisting} onChange={() => setEnrollExisting(true)} className="mt-0.5" />
+                  <span className="text-xs text-slate-700">
+                    <span className="font-medium">New + existing</span> — also run once now on the {matchCount != null ? matchCount.toLocaleString() : ""} matching record{matchCount === 1 ? "" : "s"}.
+                    <span className="block text-[11px] text-amber-600 mt-0.5">Runs every action (including any emails/SMS) on those records.</span>
+                  </span>
+                </label>
+              </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t">
               <button onClick={() => setTriggerOpen(false)} className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700">Done</button>
