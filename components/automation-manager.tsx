@@ -117,6 +117,7 @@ const ACTION_LABELS: Record<string, string> = {
   SEND_SMS: "Send SMS",
   SEND_MEETING_INVITE: "Send meeting invite",
   SET_PROPERTY: "Set a property value",
+  COPY_PROPERTY: "Copy a property to another",
   ASSIGN_OWNER: "Assign record owner",
 }
 
@@ -450,7 +451,7 @@ function emptyTriggerConfig(type: string): Record<string, unknown> {
   if (type === "SURGERY_STATUS_CHANGED") return { fromStatus: "", toStatus: "", conditionGroups: [] }
   if (type === "SURGERY_CALL_ATTEMPTS_REACHED") return { count: 4, conditionGroups: [] }
   if (type === "RECORD_CREATED") return { objectType: "", conditionGroups: [] }
-  if (type === "RECORD_PROPERTY_CHANGED") return { objectType: "", property: "", toValue: "", conditionGroups: [] }
+  if (type === "RECORD_PROPERTY_CHANGED") return { objectType: "", property: "", condition: "changed", toValue: "", conditionGroups: [] }
   if (type === "RECORD_OWNER_CHANGED") return { objectType: "", ownerId: "", conditionGroups: [] }
   if (type === "ENGAGEMENT_LOGGED") return { objectType: "", kind: "", conditionGroups: [] }
   if (type === "SMS_RECEIVED") return { keyword: "", matchType: "contains", conditionGroups: [] }
@@ -467,6 +468,7 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "SEND_EMAIL") return { recipients: [{ type: "all_admins", value: "" }], cc: [], bcc: [], subject: "", body: "" }
   if (type === "SEND_SMS") return { body: "", to: { type: "record", value: "" } }
   if (type === "SET_PROPERTY") return { property: "", value: "" }
+  if (type === "COPY_PROPERTY") return { source: "", target: "", dateOnly: false }
   if (type === "ASSIGN_OWNER") return { ownerId: "" }
   if (type === "SEND_MEETING_INVITE") return { recipients: [{ type: "all_admins", value: "" }], sender: "referrals", title: "", location: "", description: "", eventMode: "fixed", eventDatetime: null, eventField: "", eventTime: "", durationMinutes: 30 }
   return {}
@@ -502,6 +504,7 @@ function TriggerConfigFields({
     }
 
     if (type === "RECORD_PROPERTY_CHANGED") {
+      const condition = (config.condition as string) || (config.toValue ? "equals" : "changed")
       return (
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -514,14 +517,25 @@ function TriggerConfigFields({
             </StyledSelect>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Only when the new value is (optional)</label>
-            <input
-              className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
-              value={(config.toValue as string) || ""}
-              onChange={e => set("toValue", e.target.value)}
-              placeholder="Any value"
-            />
+            <label className="block text-xs font-medium text-slate-600 mb-1">When it</label>
+            <StyledSelect className="w-full" value={condition} onChange={e => set("condition", e.target.value)}>
+              <option value="changed">Changes (any new value)</option>
+              <option value="known">Becomes known (has a value)</option>
+              <option value="unknown">Becomes empty (is cleared)</option>
+              <option value="equals">Changes to a specific value</option>
+            </StyledSelect>
           </div>
+          {condition === "equals" && (
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">New value is</label>
+              <input
+                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+                value={(config.toValue as string) || ""}
+                onChange={e => set("toValue", e.target.value)}
+                placeholder="Value"
+              />
+            </div>
+          )}
         </div>
       )
     }
@@ -935,6 +949,36 @@ function ActionConfigFields({
             />
           )}
         </div>
+      </div>
+    )
+  }
+
+  if (type === ("COPY_PROPERTY" as AutomationAction)) {
+    const src = writableProps.find(p => p.id === (config.source as string))
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Copy from</label>
+            <StyledSelect className="w-full" value={(config.source as string) || ""} onChange={e => set("source", e.target.value)}>
+              <option value="">Select a property…</option>
+              {writableProps.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </StyledSelect>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Into</label>
+            <StyledSelect className="w-full" value={(config.target as string) || ""} onChange={e => set("target", e.target.value)}>
+              <option value="">Select a property…</option>
+              {writableProps.filter(p => p.id !== (config.source as string)).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </StyledSelect>
+          </div>
+        </div>
+        {(src?.type === "date") && (
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" checked={!!config.dateOnly} onChange={e => set("dateOnly", e.target.checked)} className="rounded border-slate-300" />
+            Copy the date only (drop the time)
+          </label>
+        )}
       </div>
     )
   }

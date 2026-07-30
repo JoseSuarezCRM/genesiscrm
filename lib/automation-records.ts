@@ -81,8 +81,10 @@ export async function setRecordProperty(type: string, id: string, property: stri
     return
   }
 
-  if (property.startsWith("cp_")) {
-    const propId = property.slice(3)
+  // The UI addresses a built-in object's custom property as "custom:<id>"; the
+  // engine also uses "cp_<id>". Both mean the same JSON-bag property.
+  if (property.startsWith("cp_") || property.startsWith("custom:")) {
+    const propId = property.startsWith("cp_") ? property.slice(3) : property.slice(7)
     const rec = await model.findUnique({ where: { id }, select: { customProperties: true } })
     const bag: Record<string, any> = (rec?.customProperties as any) ?? {}
     bag[propId] = value

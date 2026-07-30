@@ -708,6 +708,39 @@ async function runSingleAction(
     }
   }
 
+  if ((automation.actionType as string) === "COPY_PROPERTY") {
+    if (!target) return "Copy property: no record in context"
+    const source = cfg.source as string
+    const dest = cfg.target as string
+    if (!source || !dest) return "Copy property: choose a source and a target property"
+    // Read the source value off the triggering record (native column or custom
+    // bag, addressed as "custom:<id>"/"cp_<id>").
+    const readProp = (rec: any, key: string): unknown => {
+      if (!rec) return null
+      if (key.startsWith("custom:") || key.startsWith("cp_")) {
+        const id = key.startsWith("cp_") ? key.slice(3) : key.slice(7)
+        const bag = (rec.customProperties ?? rec.values) as Record<string, unknown> | undefined
+        return bag?.[id] ?? rec[id] ?? null
+      }
+      return rec[key] ?? null
+    }
+    let value = readProp(record, source)
+    // "Date only": drop the time, storing the calendar date (America/Chicago) the
+    // same way the date field would — an ISO at UTC midnight.
+    if (cfg.dateOnly && value != null && value !== "") {
+      const d = new Date(value as any)
+      if (!isNaN(d.getTime())) {
+        const ymd = d.toLocaleDateString("en-CA", { timeZone: "America/Chicago" })
+        value = new Date(`${ymd}T00:00:00.000Z`).toISOString()
+      }
+    }
+    try {
+      await setRecordProperty(target.type, target.id, dest, value)
+    } catch (err: any) {
+      return `Copy property failed: ${err.message}`
+    }
+  }
+
   if ((automation.actionType as string) === "ASSIGN_OWNER") {
     if (!target) return "Assign owner: no record in context"
     // "triggering_user" assigns whoever caused the workflow to fire.
@@ -1462,8 +1495,15 @@ export async function runTrigger_RecordPropertyChanged(
       const watched = cfg.property as string
       if (!watched) return true // no property named → any change fires it
       if (!keys.includes(watched)) return false
-      if (cfg.toValue == null || cfg.toValue === "") return true
-      return String(changes[watched] ?? "") === String(cfg.toValue)
+      const newVal = changes[watched]
+      const has = newVal != null && String(newVal).trim() !== ""
+      // condition: "known" (became set) | "unknown" (cleared) | "equals" | "changed".
+      // Back-compat: no condition + a toValue means "equals"; otherwise "changed".
+      const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
+      if (condition === "known") return has
+      if (condition === "unknown") return !has
+      if (condition === "equals") return String(newVal ?? "") === String(cfg.toValue ?? "")
+      return true // "changed": any new value
     },
     triggeredByUserId,
   )

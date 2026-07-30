@@ -115,6 +115,7 @@ enum AutomationAction {
   // Generic writes against the record that triggered the workflow — these work
   // on any object, including custom properties.
   SET_PROPERTY
+  COPY_PROPERTY
   ASSIGN_OWNER
 }
 
