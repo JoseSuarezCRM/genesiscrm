@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/prisma"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 import { buildReferralVars, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
+import { optionLabelFor } from "@/lib/custom-options"
 
 // snake_case a field key so it matches the {single_brace} token resolver.
 export function snakeToken(key: string): string {
@@ -113,7 +114,10 @@ export async function buildRecordTokenVars(recordType: string, recordId: string)
     const values: Record<string, any> = (rec?.values as any) ?? {}
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { properties: true } }).catch(() => null)
     for (const p of ((def?.properties as any[]) ?? [])) {
-      const v = p.type === "DATE_TIME" ? fmtDateTimeToken(values[p.id]) : tokenValueForDisplay(values[p.id])
+      const isSelect = p.type === "DROPDOWN" || p.type === "MULTI_SELECT"
+      const v = p.type === "DATE_TIME" ? fmtDateTimeToken(values[p.id])
+        : isSelect ? optionLabelFor(values[p.id], p.optionLabels)
+        : tokenValueForDisplay(values[p.id])
       vars[`cp_${p.id}`] = v
       vars[p.internalName || snakeToken(p.name)] = v
     }
@@ -129,11 +133,16 @@ export async function buildRecordTokenVars(recordType: string, recordId: string)
     if (rec) {
       for (const f of (RECORD_FIELDS[recordType] ?? [])) {
         const raw = (rec as any)[f.key]
-        vars[snakeToken(f.key)] = f.type === "datetime" ? fmtDateTimeToken(raw) : tokenValueForDisplay(raw)
+        vars[snakeToken(f.key)] = f.type === "datetime" ? fmtDateTimeToken(raw)
+          : (f.type === "select" || f.type === "select_or_other") ? optionLabelFor(raw, (f as any).optionLabels)
+          : tokenValueForDisplay(raw)
       }
       const bag: Record<string, any> = (rec.customProperties as any) ?? {}
       for (const d of defs) {
-        const v = (d.type as any) === "DATE_TIME" ? fmtDateTimeToken(bag[d.id]) : tokenValueForDisplay(bag[d.id])
+        const isSelect = (d.type as any) === "DROPDOWN" || (d.type as any) === "MULTI_SELECT"
+        const v = (d.type as any) === "DATE_TIME" ? fmtDateTimeToken(bag[d.id])
+          : isSelect ? optionLabelFor(bag[d.id], (d as any).optionLabels)
+          : tokenValueForDisplay(bag[d.id])
         vars[`cp_${d.id}`] = v                                   // back-compat token
         vars[(d as any).internalName || snakeToken(d.name)] = v  // readable token
       }

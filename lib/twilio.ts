@@ -8,10 +8,14 @@ function getClient() {
 }
 
 export function toE164(phone: string): string {
-  const digits = phone.replace(/\D/g, "")
+  const trimmed = (phone ?? "").trim()
+  // Already international (e.g. "+52 644 102 2881"): keep the country code, just
+  // strip spaces/formatting so Twilio gets a clean E.164 number.
+  if (trimmed.startsWith("+")) return "+" + trimmed.replace(/\D/g, "")
+  const digits = trimmed.replace(/\D/g, "")
   if (digits.length === 10) return `+1${digits}`
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`
-  return phone
+  return trimmed
 }
 
 export async function sendSMS(
