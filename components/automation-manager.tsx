@@ -2479,7 +2479,7 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
     })
   }
 
-  const obj = workflowObjectFor(auto.triggerType)
+  const obj = workflowObjectFor(auto.triggerType, (auto.triggerConfig as Record<string, unknown> | null | undefined)?.objectType as string | undefined)
 
   return (
     <tr className="hover:bg-slate-50 transition-colors">

@@ -738,8 +738,11 @@ async function runSingleAction(
     if (cfg.dateOnly && value != null && value !== "") {
       const d = new Date(value as any)
       if (!isNaN(d.getTime())) {
+        // Take the calendar date in the app's timezone, then store it at NOON UTC
+        // so it renders as that same day everywhere (midnight UTC would show as the
+        // day before for viewers in negative-offset zones like America/Chicago).
         const ymd = d.toLocaleDateString("en-CA", { timeZone: "America/Chicago" })
-        value = new Date(`${ymd}T00:00:00.000Z`).toISOString()
+        value = new Date(`${ymd}T12:00:00.000Z`).toISOString()
       }
     }
     try {
