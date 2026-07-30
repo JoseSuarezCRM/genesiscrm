@@ -54,7 +54,7 @@ function ProcedureField({ value, onChange }: { value: string; onChange: (v: stri
   return (
     <div className="flex flex-col gap-1 sm:col-span-3">
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Procedure</label>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_0.8fr_2fr] gap-3">
         <StyledSelect value={provider} onChange={(e) => handleProviderChange(e.target.value)} className={fieldClass}>
           <option value="">— Select provider —</option>
           {Object.keys(PROCEDURE_DATA).map((p) => <option key={p} value={p}>{p}</option>)}
