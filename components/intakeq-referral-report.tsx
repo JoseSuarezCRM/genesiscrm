@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap, Square, CalendarRange } from "lucide-react"
 import { runIntakeBackfill, getReferralSourceReport, type ReferralSourceReport } from "@/app/actions/intakeq"
 import type { Granularity } from "@/lib/intakeq-weeks"
+import IntakeqEmailReport from "@/components/intakeq-email-report"
 import { cn } from "@/lib/utils"
 
 const GRANULARITIES: { value: Granularity; label: string }[] = [
@@ -159,6 +160,7 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
             </select>
             {loadingReport && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
           </div>
+          <IntakeqEmailReport defaultStart={start} defaultEnd={end} />
           <button onClick={exportCsv}
             className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
             <Download className="h-3.5 w-3.5" /> Export CSV
