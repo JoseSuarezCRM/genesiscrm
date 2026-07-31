@@ -1023,6 +1023,22 @@ model OrgRulesPoller {
   lastMerged      Int       @default(0)
 }
 
+// A third-party integration's UI-managed credentials + config. The API key is
+// stored encrypted at rest (see lib/crypto.ts); the webhook secret gates our
+// inbound webhook. One row per provider (e.g. "intakeq").
+model Integration {
+  id            String   @id @default(cuid())
+  provider      String   @unique // "intakeq"
+  enabled       Boolean  @default(false)
+  apiKeyEnc     String?  // AES-256-GCM ciphertext of the API key
+  apiKeyHint    String?  // last few chars, for masked display
+  webhookSecret String?  // token that must match the inbound webhook's ?token=
+  config        Json     @default("{}") // provider-specific settings
+  updatedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 // One row per submitted IntakeQ "Gosm 2026 Full Intake" form, so referral-source
 // counts can be aggregated by week (English + Spanish folded into one category).
 // intakeId is unique, so a webhook re-delivery or backfill overlap upserts rather

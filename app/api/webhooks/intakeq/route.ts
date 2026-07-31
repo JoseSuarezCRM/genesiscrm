@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { ingestIntake } from "@/lib/intakeq-ingest"
+import { getIntakeqWebhookSecret } from "@/lib/integration-store"
 
 // IntakeQ Submission Webhook. Configure the URL in IntakeQ as:
 //   https://<app>/api/webhooks/intakeq?token=<INTAKEQ_WEBHOOK_SECRET>
@@ -7,7 +8,7 @@ import { ingestIntake } from "@/lib/intakeq-ingest"
 // we fetch that one intake, categorize the referral answer, and store it.
 export async function POST(req: Request) {
   const token = new URL(req.url).searchParams.get("token")
-  const secret = process.env.INTAKEQ_WEBHOOK_SECRET
+  const secret = await getIntakeqWebhookSecret()
   if (!secret || token !== secret) return new NextResponse("Forbidden", { status: 403 })
 
   let body: any

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { getIntake, listIntakeSummaries } from "@/lib/intakeq"
+import { getIntake, listIntakeSummaries, IntakeqRateLimitError } from "@/lib/intakeq"
 import { parseIntakeReferral, isTargetQuestionnaire } from "@/lib/intakeq-referral"
 
 // Fetch one intake, categorize its referral answer, and upsert it (idempotent by
@@ -36,25 +36,29 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
   return parsed.category
 }
 
-// Rate limit is 10 req/min (free tier) — throttle detail calls and cap per run so
-// a single serverless invocation stays within the request-rate and time limits.
-const BACKFILL_MAX = 25
-const THROTTLE_MS = 6500
+// The IntakeQ client throttles every request to ~7s (10/min limit), so a run is
+// bounded by the serverless time budget. Cap the batch so we return before it.
+const BACKFILL_MAX = 20
 
 // Pull submitted target-questionnaire intakes for a date range and ingest the ones
-// we don't already have. Bounded per run; returns how many still remain so the
-// caller can run again to continue (needed for large historical backfills).
-export async function backfillRange(startDate: string, endDate: string): Promise<{ processed: number; remaining: number; candidates: number }> {
-  // Candidate ids from the cheap summary endpoint (1 request per 100), filtered to
+// we don't already have. Bounded per run; returns how many still remain (so the
+// caller can run again) plus a rateLimited flag so the caller can back off.
+export async function backfillRange(startDate: string, endDate: string): Promise<{ processed: number; remaining: number; candidates: number; rateLimited: boolean }> {
+  // Candidate ids from the summary endpoint (1 request per 100 rows), filtered to
   // submitted target-questionnaire forms.
   const candidates: string[] = []
-  for (let page = 1; page <= 50; page++) {
-    const rows = await listIntakeSummaries({ startDate, endDate, page })
-    if (!rows.length) break
-    for (const r of rows) {
-      if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName)) candidates.push(r.Id)
+  try {
+    for (let page = 1; page <= 50; page++) {
+      const rows = await listIntakeSummaries({ startDate, endDate, page })
+      if (!rows.length) break
+      for (const r of rows) {
+        if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName)) candidates.push(r.Id)
+      }
+      if (rows.length < 100) break
     }
-    if (rows.length < 100) break
+  } catch (e) {
+    if (e instanceof IntakeqRateLimitError) return { processed: 0, remaining: 1, candidates: candidates.length, rateLimited: true }
+    throw e
   }
 
   // Skip ones already stored (no detail call needed for those).
@@ -67,9 +71,16 @@ export async function backfillRange(startDate: string, endDate: string): Promise
 
   const batch = todo.slice(0, BACKFILL_MAX)
   let processed = 0
-  for (let i = 0; i < batch.length; i++) {
-    try { await ingestIntake(batch[i]); processed++ } catch { /* skip a single bad intake */ }
-    if (i < batch.length - 1) await new Promise((r) => setTimeout(r, THROTTLE_MS))
+  for (const id of batch) {
+    try {
+      await ingestIntake(id); processed++
+    } catch (e) {
+      // Rate limited → stop and let the caller back off, keeping progress so far.
+      if (e instanceof IntakeqRateLimitError) {
+        return { processed, remaining: Math.max(0, todo.length - processed), candidates: candidates.length, rateLimited: true }
+      }
+      // Any other single-intake failure → skip it and keep going.
+    }
   }
-  return { processed, remaining: Math.max(0, todo.length - processed), candidates: candidates.length }
+  return { processed, remaining: Math.max(0, todo.length - processed), candidates: candidates.length, rateLimited: false }
 }

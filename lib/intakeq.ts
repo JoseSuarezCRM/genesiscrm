@@ -2,23 +2,37 @@
 // https://support.intakeq.com/article/251-intakeq-questionnaire-api
 // The API key is a server-only secret (INTAKEQ_API_KEY) — never sent to the client.
 
+import { getIntakeqApiKey } from "@/lib/integration-store"
+
 const BASE = "https://intakeq.com/api/v1"
 
-function apiKey(): string {
-  const k = process.env.INTAKEQ_API_KEY
-  if (!k) throw new Error("INTAKEQ_API_KEY is not set")
-  return k
+// Re-exported so existing callers keep importing config state from here.
+export { isIntakeqConfigured } from "@/lib/integration-store"
+
+// Thrown on HTTP 429 so callers can back off instead of failing the whole run.
+export class IntakeqRateLimitError extends Error {
+  constructor() { super("IntakeQ rate limit (10 requests/min) reached.") }
 }
 
-export function isIntakeqConfigured(): boolean {
-  return !!process.env.INTAKEQ_API_KEY
+// Free tier = 10 requests/min. Keep ≥7s between ANY two requests within a single
+// serverless invocation so summary pages + detail calls share one budget.
+let lastRequestAt = 0
+const MIN_GAP_MS = 7000
+async function throttle() {
+  const wait = lastRequestAt + MIN_GAP_MS - Date.now()
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+  lastRequestAt = Date.now()
 }
 
 async function iq<T>(path: string): Promise<T> {
+  const key = await getIntakeqApiKey()
+  if (!key) throw new Error("IntakeQ isn't connected — add an API key in Settings → Integrations.")
+  await throttle()
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "X-Auth-Key": apiKey() },
+    headers: { "X-Auth-Key": key },
     cache: "no-store",
   })
+  if (res.status === 429) throw new IntakeqRateLimitError()
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(`IntakeQ ${path} → ${res.status} ${body.slice(0, 300)}`)

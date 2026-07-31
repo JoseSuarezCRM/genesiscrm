@@ -36,16 +36,25 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
       // IntakeQ's 10 req/min limit means each call processes a batch. With
       // "Run until complete" on, we keep going through the batches; otherwise
       // a single batch runs. Stop cancels between batches.
-      for (let i = 0; i < 1000; i++) {
+      for (let i = 0; i < 2000; i++) {
         const res = await runIntakeBackfill(start, end)
         if (res.error) { setMsg(res.error); break }
         total += res.processed ?? 0
         const remaining = res.remaining ?? 0
         router.refresh()
-        if (remaining <= 0) { setMsg(`Done — processed ${total} new submission${total === 1 ? "" : "s"}.`); break }
-        if ((res.processed ?? 0) === 0) { setMsg(`Processed ${total}. ${remaining} left but nothing new was ingested — check the date range or API limit.`); break }
-        if (!autoContinue) { setMsg(`Processed ${total}. ${remaining} remaining — click Backfill again to continue.`); break }
         if (cancelRef.current) { setMsg(`Stopped. Processed ${total}, ${remaining} remaining.`); break }
+        // Hit IntakeQ's 10/min limit — wait a minute, then keep going.
+        if (res.rateLimited) {
+          if (!autoContinue) { setMsg(`Processed ${total}. Hit IntakeQ’s rate limit — click Backfill to continue.`); break }
+          for (let s = 60; s > 0 && !cancelRef.current; s--) {
+            setMsg(`Processed ${total} so far. Waiting ${s}s for IntakeQ’s rate limit…`)
+            await new Promise((r) => setTimeout(r, 1000))
+          }
+          continue
+        }
+        if (remaining <= 0) { setMsg(`Done — processed ${total} new submission${total === 1 ? "" : "s"}.`); break }
+        if ((res.processed ?? 0) === 0) { setMsg(`Processed ${total}. ${remaining} left but nothing new was ingested — check the date range.`); break }
+        if (!autoContinue) { setMsg(`Processed ${total}. ${remaining} remaining — click Backfill again to continue.`); break }
         setMsg(`Processing… ${total} done, ${remaining} remaining. You can leave this open.`)
       }
     } finally {
