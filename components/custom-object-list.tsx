@@ -18,7 +18,7 @@ import { createCustomObjectView, deleteCustomObjectView } from "@/app/actions/cu
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields, decodeFilterParam } from "@/lib/filters"
 import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { recordName, isPersonObject } from "@/lib/record-name"
+import { recordName, isPersonObject, personPartIds } from "@/lib/record-name"
 
 interface RecordRow {
   id: string
@@ -95,7 +95,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const isPerson = isPersonObject(properties)
   const nameHeader = isPerson ? "Name" : (primary?.name ?? "Name")
   // The Name column already shows first+last for person objects — don't repeat them.
-  const otherProps = properties.filter((p) => p.id !== primary?.id && !(isPerson && p.id === "last_name"))
+  const nameParts = personPartIds(properties)
+  const otherProps = properties.filter((p) => p.id !== primary?.id && !nameParts.includes(p.id))
 
   // Columns: property columns + owner + created (recordId + primary always shown).
   const allCols = [...otherProps.map((p) => ({ key: p.id, label: p.name })), { key: "__owner", label: ownerLabel }, { key: "__created", label: "Created" }]
