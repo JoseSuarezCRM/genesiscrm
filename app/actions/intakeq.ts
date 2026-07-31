@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma"
 import { isIntakeqConfigured, listQuestionnaires } from "@/lib/intakeq"
 import { backfillRange } from "@/lib/intakeq-ingest"
 import { REFERRAL_CATEGORIES, UNMAPPED } from "@/lib/intakeq-referral"
-import { periodOf, recentPeriods, periodLabel, periodStartDate, defaultPeriodCount, chicagoYmd, type Granularity } from "@/lib/intakeq-weeks"
+import { periodOf, recentPeriods, periodLabel, periodStartDate, defaultPeriodCount, chicagoYmd, type Granularity, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { sendEmail } from "@/lib/graph-mailer"
 import { encryptSecret, maskTail, randomToken, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
@@ -147,11 +147,18 @@ export interface IntegrationSettings {
   hasWebhookSecret: boolean
   webhookSecret: string | null // returned only right after (re)generating
   encryptionReady: boolean
+  // Scheduled reconciliation pull (America/Chicago).
+  frequency: "daily" | "weekly"
+  dayOfWeek: number
+  hour: number
+  window: IntakeWindow
+  lastRunAt: string | null
 }
 
 export async function getIntegrationSettings(): Promise<IntegrationSettings> {
   await requireAccess("REPORTS", "VIEW")
   const row = await getIntegration()
+  const cfg = (row?.config ?? {}) as any
   return {
     connected: !!(row?.enabled && row?.apiKeyEnc),
     enabled: !!row?.enabled,
@@ -159,7 +166,28 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
     hasWebhookSecret: !!row?.webhookSecret,
     webhookSecret: null,
     encryptionReady: hasEncryptionKey(),
+    frequency: cfg.frequency ?? "weekly",
+    dayOfWeek: cfg.dayOfWeek ?? 1,
+    hour: cfg.hour ?? 6,
+    window: cfg.window ?? "prior_week",
+    lastRunAt: cfg.lastRunAt ?? null,
   }
+}
+
+// Save the scheduled-pull settings (when it runs + which date window to reconcile).
+export async function saveIntakeqSchedule(input: { frequency: "daily" | "weekly"; dayOfWeek: number; hour: number; window: IntakeWindow }): Promise<{ ok?: boolean; error?: string }> {
+  await requireAccess("REPORTS", "EDIT")
+  try {
+    const row = await getIntegration()
+    const cfg = (row?.config ?? {}) as any
+    await (prisma as any).integration.upsert({
+      where: { provider: "intakeq" },
+      create: { provider: "intakeq", config: { ...input } },
+      update: { config: { ...cfg, ...input } },
+    })
+    revalidatePath("/settings/integrations/intakeq")
+    return { ok: true }
+  } catch (e: any) { return { error: e?.message ?? "Couldn't save the schedule." } }
 }
 
 // Store (or rotate) the IntakeQ API key — encrypted; enables the integration.

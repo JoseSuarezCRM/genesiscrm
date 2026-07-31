@@ -2,9 +2,13 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power } from "lucide-react"
-import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, type IntegrationSettings } from "@/app/actions/intakeq"
+import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarClock } from "lucide-react"
+import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, type IntegrationSettings } from "@/app/actions/intakeq"
+import { INTAKE_WINDOWS, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { cn } from "@/lib/utils"
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}` }))
 
 export default function IntakeqIntegrationConfig({ settings }: { settings: IntegrationSettings }) {
   const router = useRouter()
@@ -15,7 +19,23 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
+  // Scheduled pull
+  const [frequency, setFrequency] = useState<"daily" | "weekly">(settings.frequency)
+  const [dayOfWeek, setDayOfWeek] = useState(settings.dayOfWeek)
+  const [hour, setHour] = useState(settings.hour)
+  const [win, setWin] = useState<IntakeWindow>(settings.window)
+  const [schedMsg, setSchedMsg] = useState<string | null>(null)
+
   const origin = typeof window !== "undefined" ? window.location.origin : ""
+
+  function saveSchedule() {
+    setSchedMsg(null)
+    startTransition(async () => {
+      const r = await saveIntakeqSchedule({ frequency, dayOfWeek, hour, window: win })
+      if (r.error) { setErr(r.error); return }
+      setSchedMsg("Schedule saved."); router.refresh()
+    })
+  }
 
   function saveKey() {
     setErr(null)
@@ -114,6 +134,48 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
             {settings.hasWebhookSecret ? "Regenerate secret & URL" : "Generate secret & URL"}
           </button>
         )}
+      </div>
+
+      {/* Scheduled pull */}
+      <div className={card}>
+        <div className="flex items-center gap-2 mb-1">
+          <CalendarClock className="h-4 w-4 text-slate-400" />
+          <h3 className="text-sm font-semibold text-slate-800">Scheduled pull</h3>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">The webhook captures submissions live; this reconciliation pass re-scans a date window to catch anything it missed. Choose when it runs and which window to re-pull.</p>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-slate-500">Pull
+            <select value={frequency} onChange={(e) => setFrequency(e.target.value as "daily" | "weekly")} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-28 focus:outline-none focus:border-zinc-400">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          {frequency === "weekly" && (
+            <label className="text-xs text-slate-500">on
+              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-36 focus:outline-none focus:border-zinc-400">
+                {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="text-xs text-slate-500">at
+            <select value={hour} onChange={(e) => setHour(Number(e.target.value))} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-28 focus:outline-none focus:border-zinc-400">
+              {HOURS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+            </select>
+          </label>
+          <label className="text-xs text-slate-500">re-pull
+            <select value={win} onChange={(e) => setWin(e.target.value as IntakeWindow)} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:border-zinc-400">
+              {INTAKE_WINDOWS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+            </select>
+          </label>
+          <span className="text-[11px] text-slate-400 pb-2.5">America/Chicago</span>
+        </div>
+        <div className="flex items-center gap-3 mt-3">
+          <button onClick={saveSchedule} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save schedule
+          </button>
+          {schedMsg && <span className="text-xs text-emerald-600">{schedMsg}</span>}
+          {settings.lastRunAt && <span className="text-[11px] text-slate-400 ml-auto">Last run {new Date(settings.lastRunAt).toLocaleString()}</span>}
+        </div>
       </div>
 
       {/* Enable */}

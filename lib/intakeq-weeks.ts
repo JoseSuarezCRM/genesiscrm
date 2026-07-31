@@ -105,3 +105,34 @@ export function priorWeekRange(): { start: string; end: string } {
   end.setUTCDate(end.getUTCDate() + 1)
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
 }
+
+// A relative date window (America/Chicago) to reconcile on each scheduled run.
+export type IntakeWindow = "today" | "yesterday" | "last_7_days" | "last_30_days" | "prior_week" | "last_month"
+
+export const INTAKE_WINDOWS: { value: IntakeWindow; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "last_7_days", label: "Last 7 days" },
+  { value: "last_30_days", label: "Last 30 days" },
+  { value: "prior_week", label: "Prior week (Mon–Sun)" },
+  { value: "last_month", label: "Last month" },
+]
+
+export function resolveIntakeWindow(w: IntakeWindow): { start: string; end: string } {
+  const today = chicagoYmd(new Date())
+  const dayAgo = (k: number) => chicagoYmd(new Date(Date.now() - k * 86400000))
+  switch (w) {
+    case "today": return { start: today, end: today }
+    case "yesterday": return { start: dayAgo(1), end: dayAgo(1) }
+    case "last_7_days": return { start: dayAgo(6), end: today }
+    case "last_30_days": return { start: dayAgo(29), end: today }
+    case "prior_week": return priorWeekRange()
+    case "last_month": {
+      const [y, m] = today.split("-").map(Number)
+      const py = m === 1 ? y - 1 : y, pm = m === 1 ? 12 : m - 1
+      const mm = String(pm).padStart(2, "0")
+      const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate()
+      return { start: `${py}-${mm}-01`, end: `${py}-${mm}-${String(lastDay).padStart(2, "0")}` }
+    }
+  }
+}
