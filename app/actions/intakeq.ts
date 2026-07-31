@@ -113,6 +113,9 @@ export async function getIntegrationsList(): Promise<IntegrationListItem[]> {
   const times = [lastEvent?.createdAt, lastSub?.submittedAt].filter(Boolean).map((d: any) => new Date(d).getTime())
   const lastActivityAt = times.length ? new Date(Math.max(...times)).toISOString() : null
 
+  const faRow = await getIntegration("filesanywhere")
+  const faCfg = (faRow?.config ?? {}) as any
+
   return [
     {
       provider: "intakeq",
@@ -122,6 +125,15 @@ export async function getIntegrationsList(): Promise<IntegrationListItem[]> {
       status: configured ? "connected" : "not_connected",
       enabled: !!row?.enabled,
       lastActivityAt,
+    },
+    {
+      provider: "filesanywhere",
+      name: "FilesAnywhere",
+      description: "Weekly EMR CSV → referring providers (by NPI) + appointment records, linked.",
+      href: "/settings/integrations/filesanywhere",
+      status: faRow?.apiKeyEnc ? "connected" : "not_connected",
+      enabled: !!faRow?.enabled,
+      lastActivityAt: faCfg.lastRunAt ?? null,
     },
   ]
 }

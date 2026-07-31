@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/intakeq",
       "schedule": "0 13 * * 1"
+    },
+    {
+      "path": "/api/cron/filesanywhere",
+      "schedule": "0 * * * *"
     }
   ]
 }
