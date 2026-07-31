@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2 } from "lucide-react"
-import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, type FaSettings } from "@/app/actions/filesanywhere"
+import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -30,8 +30,10 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [dayOfWeek, setDayOfWeek] = useState(settings.dayOfWeek ?? 1)
   const [hour, setHour] = useState(settings.hour ?? 6)
   const [columns, setColumns] = useState<string[]>([])
-  const [entries, setEntries] = useState<{ name: string; modified: string | null; dir: boolean }[] | null>(null)
+  type Entry = { name: string; modified: string | null; dir: boolean; imported: boolean; matches: boolean }
+  const [entries, setEntries] = useState<Entry[] | null>(null)
   const [matched, setMatched] = useState(0)
+  const [importing, setImporting] = useState<string | null>(null)
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
   const colOptions = <><option value="">—</option>{columns.map((c) => <option key={c} value={c}>{c}</option>)}</>
@@ -82,6 +84,18 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerMap, appointmentMap, frequency, dayOfWeek, hour })
       if (r.error) return flash(r.error)
       flash("Import settings saved.", true); router.refresh()
+    })
+  }
+  // Import a single file (historical backfill), from whatever folder is being browsed.
+  function importFile(name: string, force = false) {
+    setMsg(null); setImporting(name)
+    start(async () => {
+      const r = await importFaFile(name, folderPath, force)
+      setImporting(null)
+      if (r.error) return flash(r.error)
+      if (r.skipped) return flash(`${name} was already imported — nothing to do.`, true)
+      setEntries((prev) => prev?.map((e) => (e.name === name ? { ...e, imported: true } : e)) ?? prev)
+      flash(`Imported ${name}: ${r.appointmentsCreated} appointments, ${r.providersCreated} new providers.`, true)
     })
   }
   function toggle(enabled: boolean) { start(async () => { await setFaEnabled(enabled); router.refresh() }) }
@@ -135,13 +149,25 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
                   <span className="text-slate-400">{e.modified ? new Date(e.modified).toLocaleDateString() : ""}</span>
                 </button>
               ) : (
-                <div key={e.name} className="flex justify-between py-0.5 px-1">
-                  <span className="font-mono">📄 {e.name}</span>
-                  <span className="text-slate-400">{e.modified ? new Date(e.modified).toLocaleDateString() : ""}</span>
+                <div key={e.name} className="flex items-center gap-2 py-0.5 px-1 group">
+                  <span className="font-mono flex-1 min-w-0 truncate">📄 {e.name}</span>
+                  {e.imported && <span className="inline-flex items-center gap-0.5 text-emerald-600 shrink-0"><CheckCircle2 className="h-3 w-3" /> imported</span>}
+                  <span className="text-slate-400 shrink-0 w-16 text-right">{e.modified ? new Date(e.modified).toLocaleDateString() : ""}</span>
+                  {e.matches && (
+                    <button
+                      onClick={() => importFile(e.name, e.imported)}
+                      disabled={pending || !settings.objectSlug}
+                      title={!settings.objectSlug ? "Save your appointments object & mapping first" : e.imported ? "Re-import this file" : "Import this file"}
+                      className="shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      {importing === e.name ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlayCircle className="h-3 w-3" />}
+                      {e.imported ? "Re-import" : "Import"}
+                    </button>
+                  )}
                 </div>
               )
             ))}
-            {matched > 0 && <p className="text-emerald-600 mt-1">✓ {matched} file(s) here match the pattern — this is the folder. Save settings below.</p>}
+            {matched > 0 && <p className="text-emerald-600 mt-1">✓ {matched} file(s) here match the pattern. Use <b>Import</b> next to any file for a historical backfill, or Save settings for the scheduled pull.</p>}
             {matched === 0 && entries.some((e) => e.dir) && <p className="text-amber-600 mt-1">Click a 📁 folder to go into it.</p>}
           </div>
         )}

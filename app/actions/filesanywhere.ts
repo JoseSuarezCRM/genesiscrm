@@ -7,7 +7,7 @@ import { encryptSecret, decryptSecret, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
 import { sftpListFiles, sftpDownloadText, sftpList, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
-import { runFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
+import { runFilesanywhereImport, runFilesanywhereImportFile, type FaConfig } from "@/lib/filesanywhere-import"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 
 const PROVIDER = "filesanywhere"
@@ -127,20 +127,35 @@ export async function setFaEnabled(enabled: boolean): Promise<{ ok?: boolean; er
 
 // Connect over SFTP + list everything at the path (files AND folders, unfiltered),
 // plus how many files match the pattern — so we can find the right folder.
-export async function testFaConnection(pathOverride?: string): Promise<{ entries?: { name: string; modified: string | null; dir: boolean }[]; matched?: number; path?: string; error?: string }> {
+export async function testFaConnection(pathOverride?: string): Promise<{ entries?: { name: string; modified: string | null; dir: boolean; imported: boolean; matches: boolean }[]; matched?: number; path?: string; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const cfg = await cfgOf()
   if (!cfg.host || !cfg.passwordEnc) return { error: "Save the connection first." }
   const path = (pathOverride && pathOverride.trim()) || cfg.folderPath || "/"
+  const importedSet = new Set(cfg.importedFiles ?? [])
   try {
     const all = await sftpList(connFromCfg(cfg), path)
     const matched = all.filter((e) => e.type === "-" && matchGlob(e.name, cfg.filenamePattern ?? "*")).length
     const entries = all
       .sort((a, b) => (a.type === "d" ? -1 : 1) - (b.type === "d" ? -1 : 1) || b.modifyTime - a.modifyTime)
-      .slice(0, 40)
-      .map((e) => ({ name: e.name, modified: e.modifyTime ? new Date(e.modifyTime).toISOString() : null, dir: e.type === "d" }))
+      .slice(0, 60)
+      .map((e) => ({
+        name: e.name,
+        modified: e.modifyTime ? new Date(e.modifyTime).toISOString() : null,
+        dir: e.type === "d",
+        imported: importedSet.has(e.name),
+        matches: e.type === "-" && matchGlob(e.name, cfg.filenamePattern ?? "*"),
+      }))
     return { entries, matched, path }
   } catch (e: any) { return { error: e?.message ?? "Connection failed." } }
+}
+
+// Import one specific file (historical backfill). force re-imports even if already done.
+export async function importFaFile(fileName: string, folderPath?: string, force = false): Promise<import("@/lib/filesanywhere-import").FaImportResult> {
+  await requirePermission("MANAGE_USERS")
+  const r = await runFilesanywhereImportFile(fileName, { force, folderPath })
+  revalidate()
+  return r
 }
 
 // Download the newest matching file and return its CSV column headers, for mapping.

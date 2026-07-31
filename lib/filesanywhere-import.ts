@@ -24,6 +24,7 @@ export interface FaConfig {
   hour: number                              // 0–23
   lastRunAt: string | null
   lastImportedFile: string | null
+  importedFiles?: string[]                  // every file name imported, so we don't re-import
 }
 
 export interface FaImportResult {
@@ -123,57 +124,84 @@ function connOf(cfg: FaConfig): SftpConn {
   return { host: cfg.host, port: cfg.port || 22, username: cfg.userName, password: decryptSecret(cfg.passwordEnc) }
 }
 
-// Pull the newest matching file over SFTP and turn each row into a referring
-// provider (by NPI) + an appointment record, associated together. Imports each
-// file once.
-export async function runFilesanywhereImport(opts: { force?: boolean } = {}): Promise<FaImportResult> {
-  const integ = await getIntegration("filesanywhere")
-  if (!integ || !integ.enabled) return { skipped: true }
-  const cfg = (integ.config ?? {}) as unknown as FaConfig
-  if (!cfg.host || !cfg.passwordEnc || !cfg.objectSlug) return { error: "FilesAnywhere isn't fully configured yet." }
+function patchConfig(cfg: FaConfig, extra: Partial<FaConfig>) {
+  return (prisma as any).integration.update({ where: { provider: "filesanywhere" }, data: { config: { ...cfg, ...extra } } })
+}
 
-  const patchConfig = (extra: Partial<FaConfig>) =>
-    (prisma as any).integration.update({ where: { provider: "filesanywhere" }, data: { config: { ...cfg, ...extra } } })
+// Turn every CSV row into a referring provider (by NPI) + an appointment record,
+// associated together.
+async function processCsv(cfg: FaConfig, defId: string, practiceId: string, text: string): Promise<{ rows: number; providersCreated: number; appointmentsCreated: number }> {
+  const { rows } = parseCsv(text)
+  const counter = { created: 0 }
+  let appointmentsCreated = 0
+  for (const row of rows.slice(0, MAX_ROWS)) {
+    try {
+      const providerId = await resolveProvider(row, cfg.providerMap ?? {}, practiceId, counter)
+      const values: Record<string, any> = {}
+      for (const [propId, col] of Object.entries(cfg.appointmentMap ?? {})) if (col) values[propId] = row[col] ?? ""
+      const appt = await (prisma as any).customObjectRecord.create({ data: { objectDefId: defId, values }, select: { id: true } })
+      appointmentsCreated++
+      if (providerId) await ensureAssociation(`CO:${cfg.objectSlug}`, appt.id, "PROVIDER", providerId)
+    } catch { /* skip a bad row, keep importing */ }
+  }
+  return { rows: rows.length, providersCreated: counter.created, appointmentsCreated }
+}
+
+async function prepImport(cfg: FaConfig): Promise<{ defId: string; practiceId: string } | { error: string }> {
+  const defId = await objectDefId(cfg.objectSlug)
+  if (!defId) return { error: `Object "${cfg.objectSlug}" not found.` }
+  await ensureAssociationDef(`CO:${cfg.objectSlug}`, "PROVIDER")
+  return { defId, practiceId: await defaultImportPractice() }
+}
+
+async function loadConfig(): Promise<FaConfig | { error: string }> {
+  const integ = await getIntegration("filesanywhere")
+  const cfg = (integ?.config ?? {}) as unknown as FaConfig
+  if (!cfg.host || !cfg.passwordEnc || !cfg.objectSlug) return { error: "FilesAnywhere isn't fully configured yet." }
+  return cfg
+}
+
+// Import one named file (historical backfill). Skips files already imported unless forced.
+// `folderPath` overrides the saved folder so you can pull from wherever you're browsing.
+export async function runFilesanywhereImportFile(fileName: string, opts: { force?: boolean; folderPath?: string } = {}): Promise<FaImportResult> {
+  const cfg = await loadConfig()
+  if ("error" in cfg) return cfg
+  const dir = (opts.folderPath && opts.folderPath.trim()) || cfg.folderPath
+  const imported = cfg.importedFiles ?? []
+  if (!opts.force && imported.includes(fileName)) return { file: fileName, skipped: true }
+  const prep = await prepImport(cfg)
+  if ("error" in prep) return prep
+  try {
+    const text = await sftpDownloadText(connOf(cfg), joinRemote(dir, fileName))
+    const res = await processCsv(cfg, prep.defId, prep.practiceId, text)
+    await patchConfig(cfg, { importedFiles: [...imported.filter((f) => f !== fileName), fileName].slice(-500), lastImportedFile: fileName, lastRunAt: new Date().toISOString() })
+    logIntegrationEvent({ provider: "filesanywhere", kind: "api", method: "IMPORT", endpoint: fileName, ok: true, message: `${res.appointmentsCreated} appointments, ${res.providersCreated} new providers` }).catch(() => {})
+    return { file: fileName, ...res }
+  } catch (e: any) {
+    logIntegrationEvent({ provider: "filesanywhere", kind: "api", method: "IMPORT", endpoint: fileName, ok: false, message: e?.message ?? "import failed" }).catch(() => {})
+    return { error: e?.message ?? "Import failed." }
+  }
+}
+
+// The scheduled/manual run: import the newest matching file not yet imported.
+export async function runFilesanywhereImport(opts: { force?: boolean; scheduled?: boolean } = {}): Promise<FaImportResult> {
+  const integ = await getIntegration("filesanywhere")
+  if (opts.scheduled && !integ?.enabled) return { skipped: true }
+  const cfg = await loadConfig()
+  if ("error" in cfg) return cfg
 
   try {
-    const conn = connOf(cfg)
-    const files = (await sftpListFiles(conn, cfg.folderPath))
+    const imported = new Set(cfg.importedFiles ?? [])
+    const files = (await sftpListFiles(connOf(cfg), cfg.folderPath))
       .filter((f) => matchGlob(f.name, cfg.filenamePattern))
       .sort((a, b) => b.modifyTime - a.modifyTime)
-    const newest = files[0]
-    if (!newest) { await patchConfig({ lastRunAt: new Date().toISOString() }); return { error: `No files matching "${cfg.filenamePattern}" in ${cfg.folderPath}` } }
+    if (!files.length) { await patchConfig(cfg, { lastRunAt: new Date().toISOString() }); return { error: `No files matching "${cfg.filenamePattern}" in ${cfg.folderPath}` } }
 
-    if (!opts.force && cfg.lastImportedFile === newest.name) {
-      await patchConfig({ lastRunAt: new Date().toISOString() })
-      return { file: newest.name, skipped: true }
-    }
+    const target = opts.force ? files[0] : (files.find((f) => !imported.has(f.name)) ?? null)
+    if (!target) { await patchConfig(cfg, { lastRunAt: new Date().toISOString() }); return { file: files[0].name, skipped: true } }
 
-    const text = await sftpDownloadText(conn, joinRemote(cfg.folderPath, newest.name))
-    const { rows } = parseCsv(text)
-
-    const defId = await objectDefId(cfg.objectSlug)
-    if (!defId) return { error: `Object "${cfg.objectSlug}" not found.` }
-    await ensureAssociationDef(`CO:${cfg.objectSlug}`, "PROVIDER")
-    const practiceId = await defaultImportPractice()
-
-    const counter = { created: 0 }
-    let appointmentsCreated = 0
-    for (const row of rows.slice(0, MAX_ROWS)) {
-      try {
-        const providerId = await resolveProvider(row, cfg.providerMap ?? {}, practiceId, counter)
-        const values: Record<string, any> = {}
-        for (const [propId, col] of Object.entries(cfg.appointmentMap ?? {})) if (col) values[propId] = row[col] ?? ""
-        const appt = await (prisma as any).customObjectRecord.create({ data: { objectDefId: defId, values }, select: { id: true } })
-        appointmentsCreated++
-        if (providerId) await ensureAssociation(`CO:${cfg.objectSlug}`, appt.id, "PROVIDER", providerId)
-      } catch { /* skip a bad row, keep importing */ }
-    }
-
-    await patchConfig({ lastImportedFile: newest.name, lastRunAt: new Date().toISOString() })
-    logIntegrationEvent({ provider: "filesanywhere", kind: "api", method: "IMPORT", endpoint: newest.name, ok: true, message: `${appointmentsCreated} appointments, ${counter.created} new providers` }).catch(() => {})
-    return { file: newest.name, rows: rows.length, providersCreated: counter.created, appointmentsCreated }
+    return await runFilesanywhereImportFile(target.name, { force: true })
   } catch (e: any) {
-    logIntegrationEvent({ provider: "filesanywhere", kind: "api", method: "IMPORT", endpoint: "import", ok: false, message: e?.message ?? "import failed" }).catch(() => {})
     return { error: e?.message ?? "Import failed." }
   }
 }
