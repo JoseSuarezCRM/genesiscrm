@@ -1,3 +1,5 @@
+import Link from "next/link"
+import { ChevronLeft } from "lucide-react"
 import { requireView } from "@/lib/auth-guard"
 import { userCanLevel } from "@/lib/permissions"
 import { getReferralSourceReport, getIntegrationSettings, getIntegrationActivity } from "@/app/actions/intakeq"
@@ -10,6 +12,9 @@ export default async function IntakeqIntegrationPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      <Link href="/settings/integrations" className="inline-flex items-center text-xs text-slate-500 hover:text-slate-800 mb-3">
+        <ChevronLeft className="h-3.5 w-3.5 mr-0.5" /> Connected Apps
+      </Link>
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-slate-900">IntakeQ — Referral Sources</h1>
         <p className="text-sm text-slate-500 mt-1">

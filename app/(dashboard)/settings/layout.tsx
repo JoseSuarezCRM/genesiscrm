@@ -34,7 +34,7 @@ const settingsSections = [
   {
     title: "Integrations",
     items: [
-      { href: "/settings/integrations/intakeq", label: "IntakeQ — Referral Sources" },
+      { href: "/settings/integrations", label: "Connected Apps" },
     ],
   },
 ]
@@ -86,7 +86,7 @@ export default function SettingsLayout({
                     key={item.href}
                     href={item.href}
                     label={item.label}
-                    isActive={pathname === item.href}
+                    isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
                   />
                 ))}
               </div>

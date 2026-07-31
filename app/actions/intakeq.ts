@@ -75,6 +75,42 @@ export async function runIntakeBackfill(startDate: string, endDate: string): Pro
   }
 }
 
+// ─── Integrations index (Connected Apps table) ───────────────────────────────
+
+export interface IntegrationListItem {
+  provider: string
+  name: string
+  description: string
+  href: string
+  status: "connected" | "not_connected"
+  enabled: boolean
+  lastActivityAt: string | null
+}
+
+export async function getIntegrationsList(): Promise<IntegrationListItem[]> {
+  await requireAccess("REPORTS", "VIEW")
+  const row = await getIntegration()
+  const configured = await isIntakeqConfigured()
+  const [lastEvent, lastSub] = await Promise.all([
+    (prisma as any).integrationEvent.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }).catch(() => null),
+    (prisma as any).intakeReferralResponse.findFirst({ orderBy: { submittedAt: "desc" }, select: { submittedAt: true } }).catch(() => null),
+  ])
+  const times = [lastEvent?.createdAt, lastSub?.submittedAt].filter(Boolean).map((d: any) => new Date(d).getTime())
+  const lastActivityAt = times.length ? new Date(Math.max(...times)).toISOString() : null
+
+  return [
+    {
+      provider: "intakeq",
+      name: "IntakeQ",
+      description: "New-patient referral sources — weekly report from the Full Intake form.",
+      href: "/settings/integrations/intakeq",
+      status: configured ? "connected" : "not_connected",
+      enabled: !!row?.enabled,
+      lastActivityAt,
+    },
+  ]
+}
+
 // ─── Credential management (UI-managed, encrypted at rest) ────────────────────
 
 export interface IntegrationSettings {
