@@ -4,7 +4,8 @@ import { requirePermission } from "@/lib/auth-guard"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { generateToken, API_SCOPE_KEYS } from "@/lib/api-tokens"
+import { generateToken } from "@/lib/api-tokens"
+import { getApiScopeKeys, getApiScopes, type ApiScopeDef } from "@/lib/api-objects"
 
 export interface ApiTokenRow {
   id: string
@@ -14,6 +15,12 @@ export interface ApiTokenRow {
   lastUsedAt: string | null
   createdAt: string
   revoked: boolean
+}
+
+// The live scope catalog (built-in + custom objects) for the key-creation UI.
+export async function listApiScopes(): Promise<ApiScopeDef[]> {
+  await requirePermission("MANAGE_USERS")
+  return getApiScopes()
 }
 
 export async function listApiTokens(): Promise<ApiTokenRow[]> {
@@ -35,7 +42,8 @@ export async function createApiToken(name: string, scopes: string[]): Promise<{ 
   await requirePermission("MANAGE_USERS")
   const clean = (name ?? "").trim()
   if (!clean) return { error: "Give the key a name." }
-  const chosen = (scopes ?? []).filter((s) => API_SCOPE_KEYS.includes(s))
+  const valid = await getApiScopeKeys()
+  const chosen = (scopes ?? []).filter((s) => valid.includes(s))
   if (chosen.length === 0) return { error: "Pick at least one scope." }
 
   const uid = (await auth())?.user?.id ?? null

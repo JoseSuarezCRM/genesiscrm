@@ -3,11 +3,13 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { KeyRound, Plus, Copy, Check, Loader2, Trash2, ShieldCheck, X, TriangleAlert } from "lucide-react"
-import { API_SCOPES } from "@/lib/api-scopes"
 import { createApiToken, revokeApiToken, deleteApiToken, type ApiTokenRow } from "@/app/actions/api-tokens"
+import type { ApiScopeDef } from "@/lib/api-objects"
 import { cn } from "@/lib/utils"
 
-export default function ApiKeysManager({ initial }: { initial: ApiTokenRow[] }) {
+export default function ApiKeysManager({ initial, scopes: scopeDefs }: { initial: ApiTokenRow[]; scopes: ApiScopeDef[] }) {
+  // Group scopes by object for the create form.
+  const scopeGroups = scopeDefs.reduce<Record<string, ApiScopeDef[]>>((acc, s) => { (acc[s.group] ??= []).push(s); return acc }, {})
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [creating, setCreating] = useState(false)
@@ -73,16 +75,22 @@ export default function ApiKeysManager({ initial }: { initial: ApiTokenRow[] }) 
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1.5">Scopes</label>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {API_SCOPES.map((s) => (
-                <label key={s.key} className={cn("flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer", scopes.includes(s.key) ? "border-blue-400 bg-blue-50/50" : "border-slate-200 hover:bg-slate-50")}>
-                  <input type="checkbox" checked={scopes.includes(s.key)} onChange={() => toggleScope(s.key)} className="mt-0.5 rounded border-slate-300" />
-                  <span>
-                    <span className="block text-sm font-medium text-slate-800">{s.label}</span>
-                    <span className="block text-xs text-slate-500">{s.description}</span>
-                    <code className="text-[10px] text-slate-400">{s.key}</code>
-                  </span>
-                </label>
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              {Object.entries(scopeGroups).map(([group, items]) => (
+                <div key={group}>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{group}</p>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {items.map((s) => (
+                      <label key={s.key} className={cn("flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer", scopes.includes(s.key) ? "border-blue-400 bg-blue-50/50" : "border-slate-200 hover:bg-slate-50")}>
+                        <input type="checkbox" checked={scopes.includes(s.key)} onChange={() => toggleScope(s.key)} className="mt-0.5 rounded border-slate-300" />
+                        <span>
+                          <span className="block text-sm font-medium text-slate-800">{s.label}</span>
+                          <code className="text-[10px] text-slate-400">{s.key}</code>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

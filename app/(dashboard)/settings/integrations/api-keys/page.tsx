@@ -3,13 +3,13 @@ import { redirect } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { userCan } from "@/lib/permissions"
-import { listApiTokens } from "@/app/actions/api-tokens"
+import { listApiTokens, listApiScopes } from "@/app/actions/api-tokens"
 import ApiKeysManager from "@/components/api-keys-manager"
 
 export default async function ApiKeysPage() {
   const session = await auth()
   if (!userCan(session?.user as any, "MANAGE_USERS")) redirect("/settings/integrations")
-  const tokens = await listApiTokens()
+  const [tokens, scopes] = await Promise.all([listApiTokens(), listApiScopes()])
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -26,7 +26,7 @@ export default async function ApiKeysPage() {
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 mb-4">
         These keys grant programmatic access to PHI. Share them only with systems under a BAA, keep scopes minimal, and revoke immediately if leaked.
       </div>
-      <ApiKeysManager initial={tokens} />
+      <ApiKeysManager initial={tokens} scopes={scopes} />
     </div>
   )
 }

@@ -3,10 +3,6 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { logIntegrationEvent } from "@/lib/integration-log"
-import type { ApiScope } from "@/lib/api-scopes"
-
-export { API_SCOPES, API_SCOPE_KEYS } from "@/lib/api-scopes"
-export type { ApiScope } from "@/lib/api-scopes"
 
 export function sha256(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex")
@@ -27,7 +23,7 @@ export interface AuthedToken { id: string; name: string; scopes: string[] }
 
 // Validate the Bearer token, enforce the required scope + rate limit, and log the
 // call. Returns the token, or an error Response to return directly.
-export async function authenticateApiRequest(req: Request, scope: ApiScope): Promise<{ token: AuthedToken } | { error: NextResponse }> {
+export async function authenticateApiRequest(req: Request, scope: string): Promise<{ token: AuthedToken } | { error: NextResponse }> {
   const header = req.headers.get("authorization") ?? ""
   const m = header.match(/^Bearer\s+(.+)$/i)
   if (!m) return { error: apiError(401, "Missing bearer token. Send 'Authorization: Bearer <api key>'.", "unauthorized") }
