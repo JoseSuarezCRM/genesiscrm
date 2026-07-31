@@ -38,6 +38,61 @@ export function weekLabel(ymd: string): string {
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
 }
 
+// ─── Flexible periods (day / week / month / quarter / year) ───────────────────
+
+export type Granularity = "day" | "week" | "month" | "quarter" | "year"
+
+// The period key a submission falls in, in America/Chicago.
+export function periodOf(d: Date, g: Granularity): string {
+  const ymd = chicagoYmd(d)
+  const [y, m] = ymd.split("-").map(Number)
+  if (g === "day") return ymd
+  if (g === "week") return mondayOfYmd(ymd)
+  if (g === "month") return `${y}-${String(m).padStart(2, "0")}`
+  if (g === "quarter") return `${y}-Q${Math.floor((m - 1) / 3) + 1}`
+  return `${y}`
+}
+
+// The most recent `count` period keys, oldest first.
+export function recentPeriods(g: Granularity, count: number): string[] {
+  const out: string[] = []
+  if (g === "week") return recentMondays(count)
+  if (g === "day") {
+    for (let i = count - 1; i >= 0; i--) out.push(chicagoYmd(new Date(Date.now() - i * 86400000)))
+    return out
+  }
+  const [y, m] = chicagoYmd(new Date()).split("-").map(Number)
+  if (g === "month") {
+    let yy = y, mm = m
+    for (let i = 0; i < count; i++) { out.unshift(`${yy}-${String(mm).padStart(2, "0")}`); if (--mm < 1) { mm = 12; yy-- } }
+  } else if (g === "quarter") {
+    let yy = y, q = Math.floor((m - 1) / 3) + 1
+    for (let i = 0; i < count; i++) { out.unshift(`${yy}-Q${q}`); if (--q < 1) { q = 4; yy-- } }
+  } else { // year
+    for (let i = 0; i < count; i++) out.unshift(String(y - i))
+  }
+  return out
+}
+
+export function periodLabel(key: string, g: Granularity): string {
+  if (g === "day" || g === "week") return weekLabel(key)
+  if (g === "month") { const [y, m] = key.split("-").map(Number); return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) }
+  if (g === "quarter") { const [y, q] = key.split("-Q"); return `Q${q} ${y}` }
+  return key
+}
+
+// The UTC start date of a period key (used as a query lower bound; buffered a day).
+export function periodStartDate(key: string, g: Granularity): Date {
+  if (g === "day" || g === "week") { const [y, m, d] = key.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)) }
+  if (g === "month") { const [y, m] = key.split("-").map(Number); return new Date(Date.UTC(y, m - 1, 1)) }
+  if (g === "quarter") { const [y, q] = key.split("-Q"); return new Date(Date.UTC(Number(y), (Number(q) - 1) * 3, 1)) }
+  return new Date(Date.UTC(Number(key), 0, 1))
+}
+
+export function defaultPeriodCount(g: Granularity): number {
+  return g === "day" ? 14 : g === "week" ? 12 : g === "month" ? 12 : g === "quarter" ? 8 : 5
+}
+
 // The prior full week (Mon–Sun) as { start, end } YYYY-MM-DD, used by the cron for
 // reconciliation. Widened a couple days on each side so forms created just outside
 // the week but submitted within it aren't missed (results are deduped anyway).

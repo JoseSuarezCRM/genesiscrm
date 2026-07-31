@@ -7,27 +7,29 @@ import { prisma } from "@/lib/prisma"
 import { isIntakeqConfigured, listQuestionnaires } from "@/lib/intakeq"
 import { backfillRange } from "@/lib/intakeq-ingest"
 import { REFERRAL_CATEGORIES, UNMAPPED } from "@/lib/intakeq-referral"
-import { recentMondays, weekLabel, weekOf } from "@/lib/intakeq-weeks"
+import { periodOf, recentPeriods, periodLabel, periodStartDate, defaultPeriodCount, type Granularity } from "@/lib/intakeq-weeks"
 import { encryptSecret, maskTail, randomToken, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
 
 export interface ReferralSourceReport {
   configured: boolean
-  weeks: { start: string; label: string }[]
+  granularity: Granularity
+  weeks: { start: string; label: string }[]   // the period columns (day/week/month/…)
   categories: string[]
-  grid: Record<string, number[]>       // category → count per week
+  grid: Record<string, number[]>              // category → count per period
   hasUnmapped: boolean
   lastSubmittedAt: string | null
   totalStored: number
 }
 
-// The categories × weeks grid, English + Spanish already summed per category.
-export async function getReferralSourceReport(weeksBack = 12): Promise<ReferralSourceReport> {
+// The categories × periods grid, English + Spanish already summed per category.
+// `granularity` picks the column bucket: day / week / month / quarter / year.
+export async function getReferralSourceReport(granularity: Granularity = "week"): Promise<ReferralSourceReport> {
   await requireAccess("REPORTS", "VIEW")
 
-  const weeks = recentMondays(weeksBack)
-  const [ey, em, ed] = weeks[0].split("-").map(Number)
-  const since = new Date(Date.UTC(ey, em - 1, ed))
+  const periods = recentPeriods(granularity, defaultPeriodCount(granularity))
+  const since = periodStartDate(periods[0], granularity)
+  since.setUTCDate(since.getUTCDate() - 1) // tz buffer
 
   const [rows, latest, totalStored] = await Promise.all([
     (prisma as any).intakeReferralResponse.findMany({
@@ -38,22 +40,23 @@ export async function getReferralSourceReport(weeksBack = 12): Promise<ReferralS
     (prisma as any).intakeReferralResponse.count(),
   ])
 
-  const weekIndex = Object.fromEntries(weeks.map((w, i) => [w, i]))
+  const index = Object.fromEntries(periods.map((p, i) => [p, i]))
   const grid: Record<string, number[]> = {}
-  for (const cat of [...REFERRAL_CATEGORIES, UNMAPPED]) grid[cat] = weeks.map(() => 0)
+  for (const cat of [...REFERRAL_CATEGORIES, UNMAPPED]) grid[cat] = periods.map(() => 0)
 
   let hasUnmapped = false
   for (const r of rows as { submittedAt: Date; category: string }[]) {
-    const wi = weekIndex[weekOf(r.submittedAt)]
-    if (wi === undefined) continue
-    if (!grid[r.category]) grid[r.category] = weeks.map(() => 0)
-    grid[r.category][wi]++
+    const pi = index[periodOf(r.submittedAt, granularity)]
+    if (pi === undefined) continue
+    if (!grid[r.category]) grid[r.category] = periods.map(() => 0)
+    grid[r.category][pi]++
     if (r.category === UNMAPPED) hasUnmapped = true
   }
 
   return {
     configured: await isIntakeqConfigured(),
-    weeks: weeks.map((w) => ({ start: w, label: weekLabel(w) })),
+    granularity,
+    weeks: periods.map((p) => ({ start: p, label: periodLabel(p, granularity) })),
     categories: [...REFERRAL_CATEGORIES],
     grid,
     hasUnmapped,

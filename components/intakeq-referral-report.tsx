@@ -1,10 +1,18 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap, Square } from "lucide-react"
-import { runIntakeBackfill, type ReferralSourceReport } from "@/app/actions/intakeq"
+import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap, Square, CalendarRange } from "lucide-react"
+import { runIntakeBackfill, getReferralSourceReport, type ReferralSourceReport } from "@/app/actions/intakeq"
+import type { Granularity } from "@/lib/intakeq-weeks"
 import { cn } from "@/lib/utils"
+
+const GRANULARITIES: { value: Granularity; label: string }[] = [
+  { value: "day", label: "Daily" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+  { value: "quarter", label: "Quarterly" },
+  { value: "year", label: "Yearly" },
+]
 
 function lastWeekRange(): { start: string; end: string } {
   const now = new Date()
@@ -14,7 +22,6 @@ function lastWeekRange(): { start: string; end: string } {
 }
 
 export default function IntakeqReferralReport({ initial, canEdit }: { initial: ReferralSourceReport; canEdit: boolean }) {
-  const router = useRouter()
   const def = lastWeekRange()
   const [start, setStart] = useState(def.start)
   const [end, setEnd] = useState(def.end)
@@ -22,8 +29,17 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
   const [running, setRunning] = useState(false)
   const [autoContinue, setAutoContinue] = useState(true)
   const cancelRef = useRef(false)
+  const [report, setReport] = useState(initial)
+  const [granularity, setGranularity] = useState<Granularity>(initial.granularity)
+  const [loadingReport, setLoadingReport] = useState(false)
 
-  const { weeks, categories, grid } = initial
+  async function reloadReport(g: Granularity = granularity) {
+    setLoadingReport(true)
+    try { setReport(await getReferralSourceReport(g)) } finally { setLoadingReport(false) }
+  }
+  function changeGranularity(g: Granularity) { setGranularity(g); reloadReport(g) }
+
+  const { weeks, categories, grid } = report
   const colTotals = weeks.map((_, wi) => categories.reduce((s, c) => s + (grid[c]?.[wi] ?? 0), 0))
   const rowTotal = (c: string) => (grid[c] ?? []).reduce((s, n) => s + n, 0)
   const grandTotal = colTotals.reduce((s, n) => s + n, 0)
@@ -37,20 +53,25 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
       // "Run until complete" on, we keep going through the batches; otherwise
       // a single batch runs. Stop cancels between batches.
       for (let i = 0; i < 2000; i++) {
+        // Checked at the TOP so Stop halts before starting another batch.
+        if (cancelRef.current) { setMsg(`Stopped. Processed ${total} this run.`); break }
+
         const res = await runIntakeBackfill(start, end)
         if (res.error) { setMsg(res.error); break }
         total += res.processed ?? 0
         const remaining = res.remaining ?? 0
-        router.refresh()
-        if (cancelRef.current) { setMsg(`Stopped. Processed ${total}, ${remaining} remaining.`); break }
-        // Hit IntakeQ's 10/min limit — wait a minute, then keep going.
+        await reloadReport()
+
+        if (cancelRef.current) { setMsg(`Stopped. Processed ${total} this run.`); break }
+
+        // Hit IntakeQ's 10/min limit — wait a minute, then keep going (Stop-aware).
         if (res.rateLimited) {
           if (!autoContinue) { setMsg(`Processed ${total}. Hit IntakeQ’s rate limit — click Backfill to continue.`); break }
           for (let s = 60; s > 0 && !cancelRef.current; s--) {
             setMsg(`Processed ${total} so far. Waiting ${s}s for IntakeQ’s rate limit…`)
             await new Promise((r) => setTimeout(r, 1000))
           }
-          continue
+          continue // top-of-loop cancel check will stop if Stop was pressed
         }
         if (remaining <= 0) { setMsg(`Done — processed ${total} new submission${total === 1 ? "" : "s"}.`); break }
         if ((res.processed ?? 0) === 0) { setMsg(`Processed ${total}. ${remaining} left but nothing new was ingested — check the date range.`); break }
@@ -77,7 +98,7 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
   return (
     <div className="space-y-4">
       {/* Connection status */}
-      {!initial.configured ? (
+      {!report.configured ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
           <PlugZap className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800 space-y-1">
@@ -89,12 +110,12 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
       ) : (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex items-center gap-2 text-sm text-emerald-800">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          Connected · {initial.totalStored.toLocaleString()} submissions stored
-          {initial.lastSubmittedAt && <span className="text-emerald-700">· last submission {new Date(initial.lastSubmittedAt).toLocaleDateString()}</span>}
+          Connected · {report.totalStored.toLocaleString()} submissions stored
+          {report.lastSubmittedAt && <span className="text-emerald-700">· last submission {new Date(report.lastSubmittedAt).toLocaleDateString()}</span>}
         </div>
       )}
 
-      {initial.hasUnmapped && (
+      {report.hasUnmapped && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 flex items-center gap-2 text-sm text-orange-800">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           Some answers didn’t match a known category. Tell me the exact wording and I’ll map them.
@@ -113,7 +134,7 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
               <label className="block text-[11px] font-medium text-slate-500 mb-1">to</label>
               <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="h-8 px-2 text-sm border border-slate-200 rounded-lg bg-white" />
             </div>
-            <button onClick={runBackfill} disabled={running || !initial.configured}
+            <button onClick={runBackfill} disabled={running || !report.configured}
               className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
               {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Backfill
             </button>
@@ -129,10 +150,20 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
             </label>
           </div>
         )}
-        <button onClick={exportCsv}
-          className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 ml-auto">
-          <Download className="h-3.5 w-3.5" /> Export CSV
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 text-sm text-slate-600">
+            <CalendarRange className="h-3.5 w-3.5 text-slate-400" />
+            <select value={granularity} onChange={(e) => changeGranularity(e.target.value as Granularity)} disabled={loadingReport}
+              className="h-8 pl-2 pr-7 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-zinc-400">
+              {GRANULARITIES.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+            {loadingReport && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+          </div>
+          <button onClick={exportCsv}
+            className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </button>
+        </div>
       </div>
       {msg && <p className="text-xs text-slate-600">{msg}</p>}
 

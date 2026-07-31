@@ -37,8 +37,9 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
 }
 
 // The IntakeQ client throttles every request to ~7s (10/min limit), so a run is
-// bounded by the serverless time budget. Cap the batch so we return before it.
-const BACKFILL_MAX = 20
+// bounded by the serverless time budget. A smaller batch also lets Stop take
+// effect sooner (it's honored between batches).
+const BACKFILL_MAX = 12
 
 // Pull submitted target-questionnaire intakes for a date range and ingest the ones
 // we don't already have. Bounded per run; returns how many still remain (so the
