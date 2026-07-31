@@ -6,12 +6,8 @@ import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, Play
 import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
 
-const INTERVALS = [
-  { value: 360, label: "Every 6 hours" },
-  { value: 720, label: "Every 12 hours" },
-  { value: 1440, label: "Daily" },
-  { value: 10080, label: "Weekly" },
-]
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}` }))
 const PROVIDER_FIELDS: { key: keyof NonNullable<FaSettings["providerMap"]>; label: string }[] = [
   { key: "npi", label: "NPI (match key)" },
   { key: "name", label: "Provider name" },
@@ -36,7 +32,9 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [objectSlug, setObjectSlug] = useState(settings.objectSlug)
   const [providerMap, setProviderMap] = useState(settings.providerMap ?? {})
   const [appointmentMap, setAppointmentMap] = useState<Record<string, string>>(settings.appointmentMap ?? {})
-  const [intervalMinutes, setIntervalMinutes] = useState(settings.intervalMinutes)
+  const [frequency, setFrequency] = useState<"daily" | "weekly">(settings.frequency ?? "weekly")
+  const [dayOfWeek, setDayOfWeek] = useState(settings.dayOfWeek ?? 1)
+  const [hour, setHour] = useState(settings.hour ?? 6)
   const [columns, setColumns] = useState<string[]>([])
   const [entries, setEntries] = useState<{ name: string; modified: string | null; dir: boolean }[] | null>(null)
   const [matched, setMatched] = useState(0)
@@ -79,7 +77,7 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   function loadCols() {
     setMsg(null)
     start(async () => {
-      const r = await loadFaColumns()
+      const r = await loadFaColumns(folderPath, filenamePattern)
       if (r.error) return flash(r.error)
       setColumns(r.columns ?? []); flash(`Loaded ${r.columns?.length ?? 0} columns from ${r.file}.`, true)
     })
@@ -87,7 +85,7 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   function saveMapping() {
     setMsg(null)
     start(async () => {
-      const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerMap, appointmentMap, intervalMinutes })
+      const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerMap, appointmentMap, frequency, dayOfWeek, hour })
       if (r.error) return flash(r.error)
       flash("Import settings saved.", true); router.refresh()
     })
@@ -206,11 +204,27 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       {/* 4. Schedule */}
       <div className={card}>
         <div className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-slate-400" /><h3 className="text-sm font-semibold text-slate-800">Schedule</h3></div>
-        <label className="block text-xs text-slate-500">Pull automatically
-          <select value={intervalMinutes} onChange={(e) => setIntervalMinutes(Number(e.target.value))} className={sel + " sm:w-48"}>
-            {INTERVALS.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
-          </select>
-        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-slate-500">Pull
+            <select value={frequency} onChange={(e) => setFrequency(e.target.value as "daily" | "weekly")} className={sel + " w-28"}>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          {frequency === "weekly" && (
+            <label className="text-xs text-slate-500">on
+              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className={sel + " w-36"}>
+                {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="text-xs text-slate-500">at
+            <select value={hour} onChange={(e) => setHour(Number(e.target.value))} className={sel + " w-28"}>
+              {HOURS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+            </select>
+          </label>
+          <span className="text-[11px] text-slate-400 pb-2">America/Chicago</span>
+        </div>
         {settings.lastRunAt && <p className="text-[11px] text-slate-400">Last run {new Date(settings.lastRunAt).toLocaleString()}{settings.lastImportedFile ? ` · last file ${settings.lastImportedFile}` : ""}</p>}
       </div>
 

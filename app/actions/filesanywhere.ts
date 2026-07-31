@@ -27,7 +27,9 @@ export interface FaSettings {
   objectSlug: string
   providerMap: FaConfig["providerMap"]
   appointmentMap: Record<string, string>
-  intervalMinutes: number
+  frequency: "daily" | "weekly"
+  dayOfWeek: number
+  hour: number
   lastRunAt: string | null
   lastImportedFile: string | null
   objects: FaCustomObject[]
@@ -64,7 +66,9 @@ export async function getFaSettings(): Promise<FaSettings> {
     objectSlug: cfg.objectSlug ?? "",
     providerMap: cfg.providerMap ?? {},
     appointmentMap: cfg.appointmentMap ?? {},
-    intervalMinutes: cfg.intervalMinutes ?? 10080,
+    frequency: cfg.frequency ?? "weekly",
+    dayOfWeek: cfg.dayOfWeek ?? 1,
+    hour: cfg.hour ?? 6,
     lastRunAt: cfg.lastRunAt ?? null,
     lastImportedFile: cfg.lastImportedFile ?? null,
     objects,
@@ -91,7 +95,8 @@ export async function saveFaConnection(input: { host: string; port: number; user
 
 export async function saveFaImportConfig(input: {
   folderPath: string; filenamePattern: string; objectSlug: string
-  providerMap: FaConfig["providerMap"]; appointmentMap: Record<string, string>; intervalMinutes: number
+  providerMap: FaConfig["providerMap"]; appointmentMap: Record<string, string>
+  frequency: "daily" | "weekly"; dayOfWeek: number; hour: number
 }): Promise<{ ok?: boolean; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const cfg = await cfgOf()
@@ -128,18 +133,20 @@ export async function testFaConnection(pathOverride?: string): Promise<{ entries
 }
 
 // Download the newest matching file and return its CSV column headers, for mapping.
-export async function loadFaColumns(): Promise<{ columns?: string[]; file?: string; error?: string }> {
+export async function loadFaColumns(folderPath?: string, filenamePattern?: string): Promise<{ columns?: string[]; file?: string; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const cfg = await cfgOf()
   if (!cfg.host || !cfg.passwordEnc) return { error: "Save the connection first." }
+  const dir = (folderPath && folderPath.trim()) || cfg.folderPath || "/"
+  const pattern = (filenamePattern && filenamePattern.trim()) || cfg.filenamePattern || "*"
   try {
     const conn = connFromCfg(cfg)
-    const files = (await sftpListFiles(conn, cfg.folderPath ?? "/"))
-      .filter((f) => matchGlob(f.name, cfg.filenamePattern ?? "*"))
+    const files = (await sftpListFiles(conn, dir))
+      .filter((f) => matchGlob(f.name, pattern))
       .sort((a, b) => b.modifyTime - a.modifyTime)
     const newest = files[0]
-    if (!newest) return { error: "No matching files found." }
-    const text = await sftpDownloadText(conn, joinRemote(cfg.folderPath ?? "/", newest.name))
+    if (!newest) return { error: `No files matching "${pattern}" in ${dir}.` }
+    const text = await sftpDownloadText(conn, joinRemote(dir, newest.name))
     return { columns: parseCsv(text).headers, file: newest.name }
   } catch (e: any) { return { error: e?.message ?? "Couldn't read the file." } }
 }

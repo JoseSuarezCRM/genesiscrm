@@ -18,7 +18,10 @@ export interface FaConfig {
   objectSlug: string                        // custom object key for the visit/appointment
   providerMap: { name?: string; npi?: string; phone?: string; officePhone?: string } // provider field → CSV header
   appointmentMap: Record<string, string>    // object property id → CSV header
-  intervalMinutes: number
+  // Schedule (America/Chicago): run daily, or weekly on a chosen day, at `hour`.
+  frequency: "daily" | "weekly"
+  dayOfWeek: number                         // 0=Sun … 6=Sat (weekly only)
+  hour: number                              // 0–23
   lastRunAt: string | null
   lastImportedFile: string | null
 }
@@ -32,10 +35,25 @@ export interface FaImportResult {
   error?: string
 }
 
+// Due when the current America/Chicago hour (and weekday, if weekly) matches the
+// schedule, and it hasn't already run this period.
 export function faImportDue(cfg: Partial<FaConfig> | null | undefined): boolean {
-  if (!cfg?.intervalMinutes) return false
-  if (!cfg.lastRunAt) return true
-  return Date.now() - new Date(cfg.lastRunAt).getTime() >= cfg.intervalMinutes * 60_000
+  if (!cfg?.frequency) return false
+  const now = new Date()
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "2-digit", hourCycle: "h23" }).format(now))
+  if (Number(cfg.hour ?? -1) !== hour) return false
+  if (cfg.frequency === "weekly") {
+    const wd = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short" }).format(now)
+    const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+    if ((cfg.dayOfWeek ?? -1) !== dayMap[wd]) return false
+  }
+  // Guard against a second run in the same period (cron could fire twice/hour).
+  if (cfg.lastRunAt) {
+    const gap = Date.now() - new Date(cfg.lastRunAt).getTime()
+    const minGap = cfg.frequency === "weekly" ? 6 * 86_400_000 : 20 * 3_600_000
+    if (gap < minGap) return false
+  }
+  return true
 }
 
 async function objectDefId(slug: string): Promise<string | null> {
