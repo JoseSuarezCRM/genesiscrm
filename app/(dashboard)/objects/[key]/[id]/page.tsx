@@ -6,6 +6,7 @@ import { getCustomObject } from "@/app/actions/custom-objects"
 import { getCustomObjectRecord, recordCustomObjectView } from "@/app/actions/custom-object-records"
 import { loadAssociationCards } from "@/lib/record-associations"
 import { loadPropertyCards } from "@/lib/record-cards"
+import { recordName } from "@/lib/record-name"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import RecordDetailShell from "@/components/record-detail-shell"
 import RecordActionsMenu from "@/components/record-actions-menu"
@@ -42,8 +43,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
   ])
 
   const userOptions = users.map((u) => ({ id: u.id, label: u.name ?? u.email }))
-  const primary = def.properties.find((p) => p.primary) ?? def.properties[0]
-  const title = (primary ? record.values[primary.id] : null) || `${def.singular} #${record.recordNumber ?? ""}`
+  const title = recordName(def.properties as any[], record.values as any, `${def.singular} #${record.recordNumber ?? ""}`)
 
   return (
     <RecordDetailShell

@@ -6,6 +6,7 @@
 // whole data model instead of one per object.
 
 import { prisma } from "@/lib/prisma"
+import { recordName } from "@/lib/record-name"
 
 export interface RecordRef {
   type: string
@@ -81,10 +82,8 @@ export async function recordLabel(type: string, id: string, loaded?: Record<stri
   if (isCustomObject(type)) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: type.slice(3) } })
     const props: any[] = (def?.properties as any[]) ?? []
-    const primary = props.find((p) => p.primary) ?? props[0]
     const values: Record<string, any> = ((rec as any).values as any) ?? {}
-    const name = primary ? values[primary.id] : null
-    return String(name || `${def?.singular ?? "Record"} #${(rec as any).recordNumber ?? ""}`).trim()
+    return recordName(props, values, `${def?.singular ?? "Record"} #${(rec as any).recordNumber ?? ""}`)
   }
   const r = rec as any
   if (type === "REFERRAL") return [r.patientFirstName, r.patientLastName].filter(Boolean).join(" ") || id

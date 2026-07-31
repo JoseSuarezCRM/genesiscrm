@@ -18,6 +18,7 @@ import { createCustomObjectView, deleteCustomObjectView } from "@/app/actions/cu
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields, decodeFilterParam } from "@/lib/filters"
 import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { recordName, isPersonObject } from "@/lib/record-name"
 
 interface RecordRow {
   id: string
@@ -91,7 +92,10 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
 
   const primary = properties.find((p) => p.primary) ?? properties[0]
-  const otherProps = properties.filter((p) => p.id !== primary?.id)
+  const isPerson = isPersonObject(properties)
+  const nameHeader = isPerson ? "Name" : (primary?.name ?? "Name")
+  // The Name column already shows first+last for person objects — don't repeat them.
+  const otherProps = properties.filter((p) => p.id !== primary?.id && !(isPerson && p.id === "last_name"))
 
   // Columns: property columns + owner + created (recordId + primary always shown).
   const allCols = [...otherProps.map((p) => ({ key: p.id, label: p.name })), { key: "__owner", label: ownerLabel }, { key: "__created", label: "Created" }]
@@ -142,7 +146,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   }
   const sortVal = (r: RecordRow, key: string): string | number => {
     if (key === "__id") return r.recordNumber ?? 0
-    if (key === "__name") return (primary ? displayValue(primary, r.values[primary.id], userMap) : "").toLowerCase()
+    if (key === "__name") return (recordName(properties, r.values, "") || (primary ? displayValue(primary, r.values[primary.id], userMap) : "")).toLowerCase()
     if (key === "__owner") return (r.ownerName ?? "").toLowerCase()
     if (key === "__created") return new Date(r.createdAt).getTime()
     const p = otherProps.find((x) => x.id === key)
@@ -341,7 +345,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                     <ColResizer onMouseDown={(e) => startResize("__id", e)} />
                   </th>
                   <th className="px-4 py-3 font-semibold relative">
-                    <button onClick={() => toggleSort("__name")} className="inline-flex items-center gap-1 hover:text-slate-800">{primary?.name ?? "Name"} <SortIcon k="__name" /></button>
+                    <button onClick={() => toggleSort("__name")} className="inline-flex items-center gap-1 hover:text-slate-800">{nameHeader} <SortIcon k="__name" /></button>
                     <ColResizer onMouseDown={(e) => startResize("__name", e)} />
                   </th>
                   {cols.map((c) => (
@@ -359,7 +363,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                     <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{r.recordNumber != null ? `#${r.recordNumber}` : "—"}</td>
                     <td className="px-4 py-2.5 truncate" style={{ maxWidth: colWidth("__name") }}>
                       <Link href={`/objects/${objectKey}/${r.id}`} className="font-medium text-slate-900 hover:text-blue-600">
-                        {(primary && displayValue(primary, r.values[primary.id], userMap)) || "Untitled"}
+                        {recordName(properties, r.values, "") || (primary && displayValue(primary, r.values[primary.id], userMap)) || "Untitled"}
                       </Link>
                     </td>
                     {cols.map((c) => (

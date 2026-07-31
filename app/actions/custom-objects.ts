@@ -96,10 +96,12 @@ export async function createCustomObject(data: { singular: string; plural: strin
     data: {
       key, singular, plural, icon: data.icon || null,
       ownerLabel: `${singular} Owner`,
-      // Every object starts with a primary "Name" plus native Email and Phone —
-      // the Email and SMS engagement buttons read these when contacting a record.
+      // Every object starts with First + Last name (the record's display name is
+      // their concatenation) plus native Email and Phone — the Email and SMS
+      // engagement buttons read these when contacting a record.
       properties: [
-        { id: "name", name: "Name", type: "TEXT", primary: true, required: true },
+        { id: "first_name", name: "First Name", type: "TEXT", primary: true, required: true },
+        { id: "last_name", name: "Last Name", type: "TEXT" },
         { id: "email", name: "Email", type: "EMAIL" },
         { id: "phone", name: "Phone", type: "PHONE" },
       ],

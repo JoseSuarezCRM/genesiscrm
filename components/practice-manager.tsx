@@ -498,8 +498,24 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     { key: "referrals", label: "Referrals", type: "number", getValue: (d) => d._count.referrals },
     { key: "locations", label: "Locations (count)", type: "number", getValue: (d) => d.locations?.length ?? 0 },
     { key: "owner", label: "Provider Owner", type: "select", options: providerOwners.map((o) => ({ label: o, value: o })), getValue: ownerLabel },
+    { key: "created", label: "Created", type: "date", getValue: (d) => (d as any).createdAt },
     ...customPropertyFilterFields(providerCustomPropertyDefs),
   ]
+
+  // Column chooser: the fixed columns plus specialty, created, and every custom
+  // property — so the list can surface any property, native or custom.
+  const fmtProviderDate = (d: any) => (d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" }) : "—")
+  const extraProviderCols = [
+    { key: "specialty", label: "Specialty" },
+    { key: "created", label: "Created" },
+    ...providerCustomPropertyDefs.map((p) => ({ key: `cp:${p.id}`, label: p.name })),
+  ]
+  const providerColumns = [...PROVIDER_COLUMNS, ...extraProviderCols]
+  const cpValue = (d: any, key: string) => {
+    const id = key.slice(3)
+    const raw = (d.customProperties as Record<string, any> | undefined)?.[id]
+    return raw == null || raw === "" ? "—" : Array.isArray(raw) ? raw.join(", ") : String(raw)
+  }
 
   // Providers after search + advanced filters — used by both the table and the export.
   const filteredProviders = allProviders.filter((d) => {
@@ -622,8 +638,8 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                 <ChevronDown className="h-3 w-3 opacity-50" />
               </button>
               {colMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 z-50 w-48 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden py-1">
-                  {PROVIDER_COLUMNS.map(col => (
+                <div className="absolute right-0 top-full mt-1.5 z-50 w-56 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1">
+                  {providerColumns.map(col => (
                     <button
                       key={col.key}
                       onClick={() => toggleCol(col.key)}
@@ -780,7 +796,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                 <table className="w-full text-sm">
                   <colgroup>
                     <col style={{ width: colWidth("name") }} />
-                    {["title", "practice", "npi", "phone", "officePhone", "email", "locations", "referrals", "owner"].filter((k) => shows(k)).map((k) => (
+                    {["title", "practice", "npi", "phone", "officePhone", "email", "locations", "referrals", "owner", ...extraProviderCols.map((c) => c.key)].filter((k) => shows(k)).map((k) => (
                       <col key={k} style={{ width: colWidth(k) }} />
                     ))}
                     {isAdmin && <col style={{ width: 80 }} />}
@@ -797,6 +813,9 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                       {shows("locations") && <th className="px-4 py-2.5 font-semibold relative">Locations<ColResizer onMouseDown={(e) => startResize("locations", e)} /></th>}
                       {shows("referrals") && <th className="px-4 py-2.5 font-semibold text-right relative">Referrals<ColResizer onMouseDown={(e) => startResize("referrals", e)} /></th>}
                       {shows("owner") && <th className="px-4 py-2.5 font-semibold relative">Provider Owner<ColResizer onMouseDown={(e) => startResize("owner", e)} /></th>}
+                      {extraProviderCols.filter((c) => shows(c.key)).map((c) => (
+                        <th key={c.key} className="px-4 py-2.5 font-semibold relative">{c.label}<ColResizer onMouseDown={(e) => startResize(c.key, e)} /></th>
+                      ))}
                       {isAdmin && <th className="px-4 py-2.5 font-semibold text-right w-20"></th>}
                     </tr>
                   </thead>
@@ -825,6 +844,13 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                         )}
                         {shows("referrals") && <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">{d._count.referrals}</td>}
                         {shows("owner") && <td className="px-4 py-2.5 text-slate-500">{ownerLabel(d) || "—"}</td>}
+                        {extraProviderCols.filter((c) => shows(c.key)).map((c) => (
+                          <td key={c.key} className="px-4 py-2.5 text-slate-500 truncate">
+                            {c.key === "specialty" ? ((d as any).specialty || "—")
+                              : c.key === "created" ? fmtProviderDate((d as any).createdAt)
+                              : cpValue(d, c.key)}
+                          </td>
+                        ))}
                         {isAdmin && (
                           <td className="px-4 py-2.5">
                             <div className="flex gap-1 justify-end">

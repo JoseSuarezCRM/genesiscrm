@@ -4,6 +4,7 @@
 // and build a record URL. Server-only (Prisma).
 
 import { prisma } from "@/lib/prisma"
+import { recordName } from "@/lib/record-name"
 
 export interface RegistryRecord { id: string; name: string; url: string; sub?: string }
 export interface ObjectType { key: string; label: string }
@@ -85,9 +86,7 @@ const BUILTINS: Record<string, Omit<Resolver, "byIds" | "list"> & {
 }
 
 function customName(def: any, r: any): string {
-  const primary = (def.properties as any[]).find((p) => p.primary) ?? (def.properties as any[])[0]
-  const v = primary ? (r.values as any)?.[primary.id] : null
-  return (v && String(v)) || `${def.singular} #${r.recordNumber ?? ""}`.trim()
+  return recordName(def.properties as any[], r.values as any, `${def.singular} #${r.recordNumber ?? ""}`.trim())
 }
 
 async function customResolver(typeKey: string): Promise<Resolver | null> {
