@@ -1,15 +1,16 @@
 import { prisma } from "@/lib/prisma"
 import { decryptSecret } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
-import { faLogin, faListFolder, faDownloadText } from "@/lib/filesanywhere"
+import { sftpListFiles, sftpDownloadText, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
 import { toProperCase } from "@/lib/name-format"
 import { logIntegrationEvent } from "@/lib/integration-log"
 
-// Config stored on the Integration row (provider "filesanywhere"). apiKey lives in
-// apiKeyEnc; the account password is encrypted here in `passwordEnc`.
+// Config stored on the Integration row (provider "filesanywhere"). The SFTP
+// password is encrypted in `passwordEnc`.
 export interface FaConfig {
-  clientId: number
+  host: string
+  port: number
   userName: string
   passwordEnc: string
   folderPath: string
@@ -42,7 +43,7 @@ async function objectDefId(slug: string): Promise<string | null> {
   return d?.id ?? null
 }
 
-// A single practice that imported referring providers hang off of (they must have one).
+// A single practice imported referring providers hang off of (they must have one).
 async function defaultImportPractice(): Promise<string> {
   const name = "External Referrals (Imported)"
   const found = await prisma.referringPractice.findFirst({ where: { name }, select: { id: true } })
@@ -95,25 +96,27 @@ async function resolveProvider(row: Record<string, string>, map: FaConfig["provi
 
 const MAX_ROWS = 5000
 
-// Pull the newest matching file and turn each row into a referring provider (by
-// NPI) + an appointment record, associated together. Imports each file once.
+function connOf(cfg: FaConfig): SftpConn {
+  return { host: cfg.host, port: cfg.port || 22, username: cfg.userName, password: decryptSecret(cfg.passwordEnc) }
+}
+
+// Pull the newest matching file over SFTP and turn each row into a referring
+// provider (by NPI) + an appointment record, associated together. Imports each
+// file once.
 export async function runFilesanywhereImport(opts: { force?: boolean } = {}): Promise<FaImportResult> {
   const integ = await getIntegration("filesanywhere")
   if (!integ || !integ.enabled) return { skipped: true }
   const cfg = (integ.config ?? {}) as unknown as FaConfig
-  if (!integ.apiKeyEnc || !cfg.passwordEnc || !cfg.objectSlug) return { error: "FilesAnywhere isn't fully configured yet." }
-
-  const apiKey = decryptSecret(integ.apiKeyEnc)
-  const password = decryptSecret(cfg.passwordEnc)
+  if (!cfg.host || !cfg.passwordEnc || !cfg.objectSlug) return { error: "FilesAnywhere isn't fully configured yet." }
 
   const patchConfig = (extra: Partial<FaConfig>) =>
     (prisma as any).integration.update({ where: { provider: "filesanywhere" }, data: { config: { ...cfg, ...extra } } })
 
   try {
-    const session = await faLogin(apiKey, cfg.clientId, cfg.userName, password)
-    const files = (await faListFolder(apiKey, session, cfg.folderPath, 1))
-      .filter((f) => f.entryType === 1 && matchGlob(f.name, cfg.filenamePattern))
-      .sort((a, b) => (b.lastModified ?? "").localeCompare(a.lastModified ?? ""))
+    const conn = connOf(cfg)
+    const files = (await sftpListFiles(conn, cfg.folderPath))
+      .filter((f) => matchGlob(f.name, cfg.filenamePattern))
+      .sort((a, b) => b.modifyTime - a.modifyTime)
     const newest = files[0]
     if (!newest) { await patchConfig({ lastRunAt: new Date().toISOString() }); return { error: `No files matching "${cfg.filenamePattern}" in ${cfg.folderPath}` } }
 
@@ -122,7 +125,7 @@ export async function runFilesanywhereImport(opts: { force?: boolean } = {}): Pr
       return { file: newest.name, skipped: true }
     }
 
-    const text = await faDownloadText(apiKey, session, newest.key)
+    const text = await sftpDownloadText(conn, joinRemote(cfg.folderPath, newest.name))
     const { rows } = parseCsv(text)
 
     const defId = await objectDefId(cfg.objectSlug)

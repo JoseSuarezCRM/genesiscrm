@@ -23,7 +23,7 @@ export default async function FilesanywherePage() {
         </p>
       </div>
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 mb-4">
-        These files are PHI. Keep a BAA with FilesAnywhere and use a dedicated non-MFA service login.
+        These files are PHI. Keep a BAA with FilesAnywhere. Pulled over SFTP (connect.filesanywhere.com).
       </div>
       <FilesanywhereConfig settings={settings} />
     </div>

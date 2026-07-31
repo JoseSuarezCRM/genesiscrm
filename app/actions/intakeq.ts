@@ -131,7 +131,7 @@ export async function getIntegrationsList(): Promise<IntegrationListItem[]> {
       name: "FilesAnywhere",
       description: "Weekly EMR CSV → referring providers (by NPI) + appointment records, linked.",
       href: "/settings/integrations/filesanywhere",
-      status: faRow?.apiKeyEnc ? "connected" : "not_connected",
+      status: (faCfg.host && faCfg.passwordEnc) ? "connected" : "not_connected",
       enabled: !!faRow?.enabled,
       lastActivityAt: faCfg.lastRunAt ?? null,
     },

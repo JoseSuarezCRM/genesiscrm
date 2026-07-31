@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2 } from "lucide-react"
-import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, faDiagnostics, type FaSettings } from "@/app/actions/filesanywhere"
+import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
 
 const INTERVALS = [
@@ -24,14 +24,14 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<{ text: string; ok?: boolean } | null>(null)
 
-  // Connection
-  const [apiKey, setApiKey] = useState("")
-  const [clientId, setClientId] = useState(String(settings.clientId ?? ""))
+  // Connection (SFTP)
+  const [host, setHost] = useState(settings.host || "connect.filesanywhere.com")
+  const [port, setPort] = useState(String(settings.port || 22))
   const [userName, setUserName] = useState(settings.userName ?? "")
   const [password, setPassword] = useState("")
 
   // Source + target + mapping + schedule
-  const [folderPath, setFolderPath] = useState(settings.folderPath || "Kcloud/")
+  const [folderPath, setFolderPath] = useState(settings.folderPath || "/Kcloud/")
   const [filenamePattern, setFilenamePattern] = useState(settings.filenamePattern || "SFTPsalesforce*.csv")
   const [objectSlug, setObjectSlug] = useState(settings.objectSlug)
   const [providerMap, setProviderMap] = useState(settings.providerMap ?? {})
@@ -39,7 +39,6 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [intervalMinutes, setIntervalMinutes] = useState(settings.intervalMinutes)
   const [columns, setColumns] = useState<string[]>([])
   const [files, setFiles] = useState<{ name: string; modified: string | null }[] | null>(null)
-  const [diag, setDiag] = useState<any>(null)
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
   const colOptions = <><option value="">—</option>{columns.map((c) => <option key={c} value={c}>{c}</option>)}</>
@@ -48,9 +47,9 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   function saveConnection() {
     setMsg(null)
     start(async () => {
-      const r = await saveFaConnection({ apiKey: apiKey || undefined, clientId: Number(clientId), userName, password: password || undefined })
+      const r = await saveFaConnection({ host, port: Number(port) || 22, userName, password: password || undefined })
       if (r.error) return flash(r.error)
-      setApiKey(""); setPassword(""); flash("Connection saved.", true); router.refresh()
+      setPassword(""); flash("Connection saved.", true); router.refresh()
     })
   }
   function test() {
@@ -75,14 +74,6 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerMap, appointmentMap, intervalMinutes })
       if (r.error) return flash(r.error)
       flash("Import settings saved.", true); router.refresh()
-    })
-  }
-  function diagnose() {
-    setMsg(null); setDiag(null)
-    start(async () => {
-      const r = await faDiagnostics()
-      if (r.error) return flash(r.error)
-      setDiag(r.result)
     })
   }
   function toggle(enabled: boolean) { start(async () => { await setFaEnabled(enabled); router.refresh() }) }
@@ -111,20 +102,18 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
 
       {/* 1. Connection */}
       <div className={card}>
-        <div className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-slate-400" /><h3 className="text-sm font-semibold text-slate-800">Connection</h3>{settings.connected && <span className="ml-auto text-xs text-emerald-600 font-medium">Saved</span>}</div>
-        <p className="text-xs text-slate-500">Developer API key + a non-MFA account login. Stored encrypted.</p>
+        <div className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-slate-400" /><h3 className="text-sm font-semibold text-slate-800">SFTP connection</h3>{settings.connected && <span className="ml-auto text-xs text-emerald-600 font-medium">Saved</span>}</div>
+        <p className="text-xs text-slate-500">FilesAnywhere SFTP (connect.filesanywhere.com:22). Standard username + password, stored encrypted.</p>
         <div className="grid sm:grid-cols-2 gap-2">
-          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={settings.apiKeyHint ? `API key (${settings.apiKeyHint})` : "Developer API key"} className={input} />
-          <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID (org id)" className={input} />
+          <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="SFTP host" className={input} />
+          <input value={port} onChange={(e) => setPort(e.target.value)} placeholder="Port" className={input} />
           <input value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Username" className={input} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={settings.hasPassword ? "Password (saved)" : "Password"} className={input} />
         </div>
         <div className="flex gap-2">
           <button onClick={saveConnection} disabled={pending} className="h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">Save connection</button>
           <button onClick={test} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50">{pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSearch className="h-3.5 w-3.5" />} Test connection</button>
-          <button onClick={diagnose} disabled={pending} className="h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50">Diagnose</button>
         </div>
-        {diag && <pre className="text-[11px] bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto max-h-72">{JSON.stringify(diag, null, 2)}</pre>}
         {files && (
           <div className="text-xs text-slate-600 border-t border-slate-100 pt-2">
             {files.length === 0 ? "No matching files." : files.map((f) => <div key={f.name} className="flex justify-between"><span className="font-mono">{f.name}</span><span className="text-slate-400">{f.modified ? new Date(f.modified).toLocaleDateString() : ""}</span></div>)}
