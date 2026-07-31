@@ -112,7 +112,7 @@ async function resolveProvider(row: Record<string, string>, map: Record<string, 
   if (!data.name) data.name = "Unknown Provider"
   if (Object.keys(customBag).length) data.customProperties = customBag
 
-  const created = await prisma.referringDoctor.create({ data, select: { id: true } })
+  const created = await prisma.referringDoctor.create({ data: data as any, select: { id: true } })
   counter.created++
   return created.id
 }
