@@ -38,7 +38,8 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [appointmentMap, setAppointmentMap] = useState<Record<string, string>>(settings.appointmentMap ?? {})
   const [intervalMinutes, setIntervalMinutes] = useState(settings.intervalMinutes)
   const [columns, setColumns] = useState<string[]>([])
-  const [files, setFiles] = useState<{ name: string; modified: string | null }[] | null>(null)
+  const [entries, setEntries] = useState<{ name: string; modified: string | null; dir: boolean }[] | null>(null)
+  const [matched, setMatched] = useState(0)
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
   const colOptions = <><option value="">—</option>{columns.map((c) => <option key={c} value={c}>{c}</option>)}</>
@@ -53,11 +54,12 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
     })
   }
   function test() {
-    setMsg(null); setFiles(null)
+    setMsg(null); setEntries(null)
     start(async () => {
       const r = await testFaConnection()
       if (r.error) return flash(r.error)
-      setFiles(r.files ?? []); flash(`Connected — found ${r.files?.length ?? 0} matching file(s).`, true)
+      setEntries(r.entries ?? []); setMatched(r.matched ?? 0)
+      flash(`Connected — ${r.entries?.length ?? 0} item(s) in ${r.path}, ${r.matched ?? 0} match the pattern.`, true)
     })
   }
   function loadCols() {
@@ -114,9 +116,15 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
           <button onClick={saveConnection} disabled={pending} className="h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">Save connection</button>
           <button onClick={test} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50">{pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSearch className="h-3.5 w-3.5" />} Test connection</button>
         </div>
-        {files && (
-          <div className="text-xs text-slate-600 border-t border-slate-100 pt-2">
-            {files.length === 0 ? "No matching files." : files.map((f) => <div key={f.name} className="flex justify-between"><span className="font-mono">{f.name}</span><span className="text-slate-400">{f.modified ? new Date(f.modified).toLocaleDateString() : ""}</span></div>)}
+        {entries && (
+          <div className="text-xs text-slate-600 border-t border-slate-100 pt-2 max-h-56 overflow-y-auto">
+            {entries.length === 0 ? "This path is empty — try a different folder path." : entries.map((e) => (
+              <div key={e.name} className="flex justify-between py-0.5">
+                <span className="font-mono">{e.dir ? "📁 " : "📄 "}{e.name}</span>
+                <span className="text-slate-400">{e.modified ? new Date(e.modified).toLocaleDateString() : ""}</span>
+              </div>
+            ))}
+            {matched === 0 && entries.some((e) => e.dir) && <p className="text-amber-600 mt-1">No files match here, but there are folders — set “Folder path” to the one holding the CSVs.</p>}
           </div>
         )}
       </div>

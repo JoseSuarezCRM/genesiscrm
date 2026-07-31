@@ -34,6 +34,16 @@ export async function sftpListFiles(c: SftpConn, dir: string): Promise<SftpFile[
   })
 }
 
+export interface SftpEntry { name: string; type: string; modifyTime: number; size: number }
+
+// Everything (files + folders) at a path — used to explore the layout.
+export async function sftpList(c: SftpConn, dir: string): Promise<SftpEntry[]> {
+  return withClient(c, async (sftp) => {
+    const entries = await sftp.list(dir || "/")
+    return entries.map((e) => ({ name: e.name, type: e.type, modifyTime: e.modifyTime, size: e.size }))
+  })
+}
+
 // Download a file's text content.
 export async function sftpDownloadText(c: SftpConn, remotePath: string): Promise<string> {
   return withClient(c, async (sftp) => {

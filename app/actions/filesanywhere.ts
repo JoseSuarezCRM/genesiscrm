@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { encryptSecret, decryptSecret, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
-import { sftpListFiles, sftpDownloadText, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
+import { sftpListFiles, sftpDownloadText, sftpList, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
 import { runFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
 
@@ -109,18 +109,21 @@ export async function setFaEnabled(enabled: boolean): Promise<{ ok?: boolean; er
   } catch (e: any) { return { error: e?.message ?? "Couldn't update." } }
 }
 
-// Connect over SFTP + list matching files.
-export async function testFaConnection(): Promise<{ files?: { name: string; modified: string | null }[]; error?: string }> {
+// Connect over SFTP + list everything at the path (files AND folders, unfiltered),
+// plus how many files match the pattern — so we can find the right folder.
+export async function testFaConnection(): Promise<{ entries?: { name: string; modified: string | null; dir: boolean }[]; matched?: number; path?: string; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const cfg = await cfgOf()
   if (!cfg.host || !cfg.passwordEnc) return { error: "Save the connection first." }
+  const path = cfg.folderPath || "/"
   try {
-    const files = (await sftpListFiles(connFromCfg(cfg), cfg.folderPath ?? "/"))
-      .filter((f) => matchGlob(f.name, cfg.filenamePattern ?? "*"))
-      .sort((a, b) => b.modifyTime - a.modifyTime)
-      .slice(0, 10)
-      .map((f) => ({ name: f.name, modified: f.modifyTime ? new Date(f.modifyTime).toISOString() : null }))
-    return { files }
+    const all = await sftpList(connFromCfg(cfg), path)
+    const matched = all.filter((e) => e.type === "-" && matchGlob(e.name, cfg.filenamePattern ?? "*")).length
+    const entries = all
+      .sort((a, b) => (a.type === "d" ? -1 : 1) - (b.type === "d" ? -1 : 1) || b.modifyTime - a.modifyTime)
+      .slice(0, 40)
+      .map((e) => ({ name: e.name, modified: e.modifyTime ? new Date(e.modifyTime).toISOString() : null, dir: e.type === "d" }))
+    return { entries, matched, path }
   } catch (e: any) { return { error: e?.message ?? "Connection failed." } }
 }
 
