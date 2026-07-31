@@ -1023,6 +1023,27 @@ model OrgRulesPoller {
   lastMerged      Int       @default(0)
 }
 
+// One row per submitted IntakeQ "Gosm 2026 Full Intake" form, so referral-source
+// counts can be aggregated by week (English + Spanish folded into one category).
+// intakeId is unique, so a webhook re-delivery or backfill overlap upserts rather
+// than double-counts.
+model IntakeReferralResponse {
+  id                String   @id @default(cuid())
+  intakeId          String   @unique
+  clientId          String?
+  questionnaireId   String?
+  questionnaireName String?
+  language          String?  // "EN" | "ES" | null
+  submittedAt       DateTime
+  rawAnswer         String?  // the raw "how were you referred?" answer
+  category          String   // mapped category, or "Unmapped" / "Unanswered"
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([submittedAt])
+  @@index([category])
+}
+
 // Maps a merged-away record id to its surviving record, so open URLs/bookmarks
 // for the deleted record redirect to the survivor instead of 404ing.
 model MergeRedirect {

@@ -31,6 +31,12 @@ const settingsSections = [
       { href: "/settings/marketing", label: "Marketing Materials" },
     ],
   },
+  {
+    title: "Integrations",
+    items: [
+      { href: "/settings/integrations/intakeq", label: "IntakeQ — Referral Sources" },
+    ],
+  },
 ]
 
 function SettingLink({

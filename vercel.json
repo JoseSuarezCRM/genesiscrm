@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/org-rules",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/intakeq",
+      "schedule": "0 13 * * 1"
     }
   ]
 }
