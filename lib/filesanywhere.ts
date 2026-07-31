@@ -55,9 +55,12 @@ export async function faLogin(apiKey: string, clientId: number, userName: string
   }
   if (d.isPasswordExpired) throw new Error("The FilesAnywhere account password is expired.")
   if (!d.token) throw new Error("Login returned no token.")
-  // X-Uid is the user's identity GUID, carried in the token; fall back to the id.
-  const uid = jwtClaim(d.token, "userIdentity") ?? String(d.userId ?? "")
-  return { token: d.token, userId: d.userId, uid }
+  // The regular /auth/login response may omit userId; the token always carries
+  // both userId and userIdentity claims — use those so X-UserId/X-Uid match.
+  const claimUserId = jwtClaim(d.token, "userId")
+  const userId = claimUserId != null ? Number(claimUserId) : (d.userId ?? 0)
+  const uid = jwtClaim(d.token, "userIdentity") ?? String(userId)
+  return { token: d.token, userId, uid }
 }
 
 // List files (entryType 1) or folders (0) at a path, newest first.
