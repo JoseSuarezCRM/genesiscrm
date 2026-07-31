@@ -3,7 +3,6 @@ import { decryptSecret } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
 import { sftpListFiles, sftpDownloadText, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
-import { toProperCase } from "@/lib/name-format"
 import { logIntegrationEvent } from "@/lib/integration-log"
 
 // Config stored on the Integration row (provider "filesanywhere"). The SFTP
@@ -16,8 +15,10 @@ export interface FaConfig {
   folderPath: string
   filenamePattern: string
   objectSlug: string                        // custom object key for the visit/appointment
-  providerMap: Record<string, string>       // provider field key (native or cp_<id>) → CSV header; matched on "npi"
-  appointmentMap: Record<string, string>    // object property id → CSV header
+  providerObjectSlug: string                // custom object key for the referring provider
+  providerMatchProp: string                 // provider property id used to de-dupe (e.g. the NPI property)
+  providerMap: Record<string, string>       // provider property id → CSV header
+  appointmentMap: Record<string, string>    // appointment property id → CSV header
   // Schedule (America/Chicago): run daily, or weekly on a chosen day, at `hour`.
   frequency: "daily" | "weekly"
   dayOfWeek: number                         // 0=Sun … 6=Sat (weekly only)
@@ -62,13 +63,10 @@ async function objectDefId(slug: string): Promise<string | null> {
   return d?.id ?? null
 }
 
-// A single practice imported referring providers hang off of (they must have one).
-async function defaultImportPractice(): Promise<string> {
-  const name = "External Referrals (Imported)"
-  const found = await prisma.referringPractice.findFirst({ where: { name }, select: { id: true } })
-  if (found) return found.id
-  const created = await prisma.referringPractice.create({ data: { name } })
-  return created.id
+// Highest Record ID currently used for an object, so we can keep numbering sequentially.
+async function maxRecordNumber(objectDefId: string): Promise<number> {
+  const last = await (prisma as any).customObjectRecord.findFirst({ where: { objectDefId }, orderBy: { recordNumber: "desc" }, select: { recordNumber: true } })
+  return last?.recordNumber ?? 0
 }
 
 async function ensureAssociationDef(a: string, b: string) {
@@ -83,37 +81,41 @@ async function ensureAssociation(fromType: string, fromId: string, toType: strin
   if (!dup) await (prisma as any).objectAssociation.create({ data: { fromType, fromId, toType, toId } })
 }
 
-// Find a referring provider by NPI (then by name), or create one from the mapped
-// fields (native columns + custom properties). Returns its id, or null when the
-// row has no provider info.
-async function resolveProvider(row: Record<string, string>, map: Record<string, string>, practiceId: string, counter: { created: number }): Promise<string | null> {
-  const npi = map.npi ? (row[map.npi] ?? "").trim() : ""
-  const name = map.name ? toProperCase((row[map.name] ?? "").trim()) : ""
+// Map the provider columns for a row into a { propertyId: value } bag.
+function providerValues(row: Record<string, string>, map: Record<string, string>): Record<string, string> {
+  const values: Record<string, string> = {}
+  for (const [propId, col] of Object.entries(map)) if (col) { const v = (row[col] ?? "").trim(); if (v) values[propId] = v }
+  return values
+}
 
-  if (npi) {
-    const byNpi = await prisma.referringDoctor.findFirst({ where: { npi }, select: { id: true } })
-    if (byNpi) return byNpi.id
-  } else if (name) {
-    const byName = await prisma.referringDoctor.findFirst({ where: { practiceId, name: { equals: name, mode: "insensitive" } }, select: { id: true } })
-    if (byName) return byName.id
-  } else {
-    return null
+// Find the referring provider record by its match property (e.g. NPI), or create
+// one in the provider custom object. Returns its id, or null when the row has no
+// provider info. `counter.provNum` is the running Record ID for new providers.
+async function resolveProvider(
+  row: Record<string, string>,
+  cfg: FaConfig,
+  provDefId: string,
+  counter: { created: number; provNum: number },
+): Promise<string | null> {
+  const map = cfg.providerMap ?? {}
+  const values = providerValues(row, map)
+  if (!Object.keys(values).length) return null // nothing to create/match on
+
+  // De-dupe on the chosen match property (typically NPI) when it has a value.
+  const matchProp = cfg.providerMatchProp
+  const matchVal = matchProp ? values[matchProp] : ""
+  if (matchProp && matchVal) {
+    const existing = await (prisma as any).customObjectRecord.findFirst({
+      where: { objectDefId: provDefId, values: { path: [matchProp], equals: matchVal } },
+      select: { id: true },
+    })
+    if (existing) return existing.id
   }
 
-  // Build create data from the mapping — native columns direct, custom props in the bag.
-  const data: Record<string, any> = { practiceId }
-  const customBag: Record<string, any> = {}
-  for (const [key, col] of Object.entries(map)) {
-    if (!col) continue
-    const val = (row[col] ?? "").trim()
-    if (key.startsWith("cp_")) customBag[key.slice(3)] = val
-    else if (key === "name") data.name = toProperCase(val) || null
-    else data[key] = val || null
-  }
-  if (!data.name) data.name = "Unknown Provider"
-  if (Object.keys(customBag).length) data.customProperties = customBag
-
-  const created = await prisma.referringDoctor.create({ data: data as any, select: { id: true } })
+  const created = await (prisma as any).customObjectRecord.create({
+    data: { objectDefId: provDefId, recordNumber: ++counter.provNum, values },
+    select: { id: true },
+  })
   counter.created++
   return created.id
 }
@@ -128,36 +130,44 @@ function patchConfig(cfg: FaConfig, extra: Partial<FaConfig>) {
   return (prisma as any).integration.update({ where: { provider: "filesanywhere" }, data: { config: { ...cfg, ...extra } } })
 }
 
-// Turn every CSV row into a referring provider (by NPI) + an appointment record,
-// associated together.
-async function processCsv(cfg: FaConfig, defId: string, practiceId: string, text: string): Promise<{ rows: number; providersCreated: number; appointmentsCreated: number }> {
+interface Prep { apptDefId: string; provDefId: string }
+
+// Turn every CSV row into a referring provider (matched by NPI) + an appointment
+// record, associated via the two custom objects. Both get sequential Record IDs.
+async function processCsv(cfg: FaConfig, prep: Prep, text: string): Promise<{ rows: number; providersCreated: number; appointmentsCreated: number }> {
   const { rows } = parseCsv(text)
-  const counter = { created: 0 }
+  const counter = { created: 0, provNum: await maxRecordNumber(prep.provDefId) }
+  let apptNum = await maxRecordNumber(prep.apptDefId)
   let appointmentsCreated = 0
+  const provType = `CO:${cfg.providerObjectSlug}`
+  const apptType = `CO:${cfg.objectSlug}`
   for (const row of rows.slice(0, MAX_ROWS)) {
     try {
-      const providerId = await resolveProvider(row, cfg.providerMap ?? {}, practiceId, counter)
+      const providerId = await resolveProvider(row, cfg, prep.provDefId, counter)
       const values: Record<string, any> = {}
       for (const [propId, col] of Object.entries(cfg.appointmentMap ?? {})) if (col) values[propId] = row[col] ?? ""
-      const appt = await (prisma as any).customObjectRecord.create({ data: { objectDefId: defId, values }, select: { id: true } })
+      const appt = await (prisma as any).customObjectRecord.create({ data: { objectDefId: prep.apptDefId, recordNumber: ++apptNum, values }, select: { id: true } })
       appointmentsCreated++
-      if (providerId) await ensureAssociation(`CO:${cfg.objectSlug}`, appt.id, "PROVIDER", providerId)
+      if (providerId) await ensureAssociation(apptType, appt.id, provType, providerId)
     } catch { /* skip a bad row, keep importing */ }
   }
   return { rows: rows.length, providersCreated: counter.created, appointmentsCreated }
 }
 
-async function prepImport(cfg: FaConfig): Promise<{ defId: string; practiceId: string } | { error: string }> {
-  const defId = await objectDefId(cfg.objectSlug)
-  if (!defId) return { error: `Object "${cfg.objectSlug}" not found.` }
-  await ensureAssociationDef(`CO:${cfg.objectSlug}`, "PROVIDER")
-  return { defId, practiceId: await defaultImportPractice() }
+async function prepImport(cfg: FaConfig): Promise<Prep | { error: string }> {
+  const apptDefId = await objectDefId(cfg.objectSlug)
+  if (!apptDefId) return { error: `Appointments object "${cfg.objectSlug}" not found.` }
+  const provDefId = await objectDefId(cfg.providerObjectSlug)
+  if (!provDefId) return { error: `Referring providers object "${cfg.providerObjectSlug}" not found.` }
+  await ensureAssociationDef(`CO:${cfg.objectSlug}`, `CO:${cfg.providerObjectSlug}`)
+  return { apptDefId, provDefId }
 }
 
 async function loadConfig(): Promise<FaConfig | { error: string }> {
   const integ = await getIntegration("filesanywhere")
   const cfg = (integ?.config ?? {}) as unknown as FaConfig
-  if (!cfg.host || !cfg.passwordEnc || !cfg.objectSlug) return { error: "FilesAnywhere isn't fully configured yet." }
+  if (!cfg.host || !cfg.passwordEnc) return { error: "Connect FilesAnywhere first." }
+  if (!cfg.objectSlug || !cfg.providerObjectSlug) return { error: "Pick both the appointments and referring-providers objects first." }
   return cfg
 }
 
@@ -173,7 +183,7 @@ export async function runFilesanywhereImportFile(fileName: string, opts: { force
   if ("error" in prep) return prep
   try {
     const text = await sftpDownloadText(connOf(cfg), joinRemote(dir, fileName))
-    const res = await processCsv(cfg, prep.defId, prep.practiceId, text)
+    const res = await processCsv(cfg, prep, text)
     await patchConfig(cfg, { importedFiles: [...imported.filter((f) => f !== fileName), fileName].slice(-500), lastImportedFile: fileName, lastRunAt: new Date().toISOString() })
     logIntegrationEvent({ provider: "filesanywhere", kind: "api", method: "IMPORT", endpoint: fileName, ok: true, message: `${res.appointmentsCreated} appointments, ${res.providersCreated} new providers` }).catch(() => {})
     return { file: fileName, ...res }
@@ -204,4 +214,43 @@ export async function runFilesanywhereImport(opts: { force?: boolean; scheduled?
   } catch (e: any) {
     return { error: e?.message ?? "Import failed." }
   }
+}
+
+// Undo an import run: delete every record in the appointments + referring-providers
+// objects (and their associations), and clear the imported-files history so the
+// next run starts clean. Used after a mis-mapped import.
+export async function resetFilesanywhereImport(): Promise<{ appointmentsDeleted: number; providersDeleted: number; error?: string }> {
+  const integ = await getIntegration("filesanywhere")
+  const cfg = (integ?.config ?? {}) as unknown as FaConfig
+  let appointmentsDeleted = 0, providersDeleted = 0
+  const slugs = [cfg.objectSlug, cfg.providerObjectSlug].filter(Boolean)
+  for (const slug of slugs) {
+    const defId = await objectDefId(slug)
+    if (!defId) continue
+    const recs = await (prisma as any).customObjectRecord.findMany({ where: { objectDefId: defId }, select: { id: true } })
+    const ids = recs.map((r: any) => r.id)
+    if (ids.length) {
+      const type = `CO:${slug}`
+      await (prisma as any).objectAssociation.deleteMany({ where: { OR: [{ fromType: type, fromId: { in: ids } }, { toType: type, toId: { in: ids } }] } })
+      const del = await (prisma as any).customObjectRecord.deleteMany({ where: { id: { in: ids } } })
+      if (slug === cfg.providerObjectSlug) providersDeleted += del.count ?? ids.length
+      else appointmentsDeleted += del.count ?? ids.length
+    }
+  }
+  // Legacy cleanup: the earlier import created providers in the built-in object
+  // under a synthetic practice. Remove those + any associations to them.
+  const legacyPractice = await prisma.referringPractice.findFirst({ where: { name: "External Referrals (Imported)" }, select: { id: true } })
+  if (legacyPractice) {
+    const docs = await prisma.referringDoctor.findMany({ where: { practiceId: legacyPractice.id }, select: { id: true } })
+    const docIds = docs.map((d) => d.id)
+    if (docIds.length) {
+      await (prisma as any).objectAssociation.deleteMany({ where: { OR: [{ fromType: "PROVIDER", fromId: { in: docIds } }, { toType: "PROVIDER", toId: { in: docIds } }] } })
+      const del = await prisma.referringDoctor.deleteMany({ where: { id: { in: docIds } } })
+      providersDeleted += del.count ?? docIds.length
+    }
+    await prisma.referringPractice.delete({ where: { id: legacyPractice.id } }).catch(() => {})
+  }
+
+  await patchConfig(cfg, { importedFiles: [], lastImportedFile: null })
+  return { appointmentsDeleted, providersDeleted }
 }

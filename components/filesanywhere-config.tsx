@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2 } from "lucide-react"
-import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, type FaSettings } from "@/app/actions/filesanywhere"
+import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2, Trash2 } from "lucide-react"
+import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, resetFaImport, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -24,7 +24,9 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [folderPath, setFolderPath] = useState(settings.folderPath || "/Kcloud/")
   const [filenamePattern, setFilenamePattern] = useState(settings.filenamePattern || "SFTPsalesforce*.csv")
   const [objectSlug, setObjectSlug] = useState(settings.objectSlug)
-  const [providerMap, setProviderMap] = useState(settings.providerMap ?? {})
+  const [providerObjectSlug, setProviderObjectSlug] = useState(settings.providerObjectSlug)
+  const [providerMatchProp, setProviderMatchProp] = useState(settings.providerMatchProp)
+  const [providerMap, setProviderMap] = useState<Record<string, string>>(settings.providerMap ?? {})
   const [appointmentMap, setAppointmentMap] = useState<Record<string, string>>(settings.appointmentMap ?? {})
   const [frequency, setFrequency] = useState<"daily" | "weekly">(settings.frequency ?? "weekly")
   const [dayOfWeek, setDayOfWeek] = useState(settings.dayOfWeek ?? 1)
@@ -36,6 +38,7 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [importing, setImporting] = useState<string | null>(null)
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
+  const selectedProviderObject = settings.objects.find((o) => o.slug === providerObjectSlug)
   const colOptions = <><option value="">—</option>{columns.map((c) => <option key={c} value={c}>{c}</option>)}</>
   const flash = (text: string, ok = false) => setMsg({ text, ok })
 
@@ -81,9 +84,18 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   function saveMapping() {
     setMsg(null)
     start(async () => {
-      const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerMap, appointmentMap, frequency, dayOfWeek, hour })
+      const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerObjectSlug, providerMatchProp, providerMap, appointmentMap, frequency, dayOfWeek, hour })
       if (r.error) return flash(r.error)
       flash("Import settings saved.", true); router.refresh()
+    })
+  }
+  function reset() {
+    if (!confirm("Delete every record created by the import (all records in the referring-providers and appointments objects, plus any legacy imported providers)? This can't be undone.")) return
+    setMsg(null)
+    start(async () => {
+      const r = await resetFaImport()
+      if (r.error) return flash(r.error)
+      flash(r.message ?? "Reset done.", true); router.refresh()
     })
   }
   // Import a single file (historical backfill), from whatever folder is being browsed.
@@ -156,8 +168,8 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
                   {e.matches && (
                     <button
                       onClick={() => importFile(e.name, e.imported)}
-                      disabled={pending || !settings.objectSlug}
-                      title={!settings.objectSlug ? "Save your appointments object & mapping first" : e.imported ? "Re-import this file" : "Import this file"}
+                      disabled={pending || !settings.objectSlug || !settings.providerObjectSlug}
+                      title={!settings.objectSlug || !settings.providerObjectSlug ? "Save both objects & mapping first" : e.imported ? "Re-import this file" : "Import this file"}
                       className="shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                     >
                       {importing === e.name ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlayCircle className="h-3 w-3" />}
@@ -180,12 +192,21 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
           <label className="text-xs text-slate-500">Folder path<input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} className={input} /></label>
           <label className="text-xs text-slate-500">Filename pattern<input value={filenamePattern} onChange={(e) => setFilenamePattern(e.target.value)} className={input} /></label>
         </div>
-        <label className="block text-xs text-slate-500">Create appointments in
-          <select value={objectSlug} onChange={(e) => setObjectSlug(e.target.value)} className={sel}>
-            <option value="">Select a custom object…</option>
-            {settings.objects.map((o) => <option key={o.slug} value={o.slug}>{o.label}</option>)}
-          </select>
-        </label>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <label className="block text-xs text-slate-500">Create appointments in
+            <select value={objectSlug} onChange={(e) => setObjectSlug(e.target.value)} className={sel}>
+              <option value="">Select a custom object…</option>
+              {settings.objects.map((o) => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="block text-xs text-slate-500">Create referring providers in
+            <select value={providerObjectSlug} onChange={(e) => { setProviderObjectSlug(e.target.value); setProviderMatchProp(""); setProviderMap({}) }} className={sel}>
+              <option value="">Select a custom object…</option>
+              {settings.objects.map((o) => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+            </select>
+          </label>
+        </div>
+        <p className="text-[11px] text-slate-400">Appointments are associated to the matching referring provider automatically (using the association you defined in the data model).</p>
       </div>
 
       {/* 3. Mapping */}
@@ -197,14 +218,31 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
           <p className="text-xs text-slate-400">Click “Load columns” to pull the header row, then map fields below.</p>
         ) : (
           <>
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Referring providers (matched by NPI)</p>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {settings.providerFields.map((f) => (
-                <label key={f.key} className="text-xs text-slate-500">{f.name}{f.key === "npi" ? " (match key)" : ""}
-                  <select value={providerMap[f.key] ?? ""} onChange={(e) => setProviderMap({ ...providerMap, [f.key]: e.target.value })} className={sel}>{colOptions}</select>
-                </label>
-              ))}
-            </div>
+            {/* Referring providers */}
+            {selectedProviderObject ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{selectedProviderObject.label} fields</p>
+                  <label className="ml-auto text-[11px] text-slate-500 inline-flex items-center gap-1">De-dupe on
+                    <select value={providerMatchProp} onChange={(e) => setProviderMatchProp(e.target.value)} className="h-6 px-1 text-xs border border-slate-200 rounded-md bg-white">
+                      <option value="">(no de-dupe)</option>
+                      {selectedProviderObject.properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {selectedProviderObject.properties.map((p) => (
+                    <label key={p.id} className="text-xs text-slate-500">{p.name}{p.id === providerMatchProp ? " (match key)" : ""}
+                      <select value={providerMap[p.id] ?? ""} onChange={(e) => setProviderMap({ ...providerMap, [p.id]: e.target.value })} className={sel}>{colOptions}</select>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-400">Map your NPI column to a property and pick it as the de-dupe key so an existing provider is reused instead of duplicated.</p>
+              </>
+            ) : (
+              <p className="text-xs text-amber-600">Pick your referring-providers object in “Create referring providers in” above to map its fields here.</p>
+            )}
+            {/* Appointments */}
             {selectedObject ? (
               <>
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-2">{selectedObject.label} fields</p>
@@ -253,6 +291,7 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       <div className="flex items-center gap-2">
         <button onClick={saveMapping} disabled={pending} className="h-9 px-4 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Save settings</button>
         <button onClick={importNow} disabled={pending || !settings.connected} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"><PlayCircle className="h-4 w-4" /> Import now</button>
+        <button onClick={reset} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50" title="Delete all imported records so you can re-import cleanly"><Trash2 className="h-4 w-4" /> Reset imported data</button>
         <label className="ml-auto inline-flex items-center gap-2 text-sm text-slate-700">
           <Power className="h-4 w-4 text-slate-400" /> Enabled
           <button onClick={() => toggle(!settings.enabled)} disabled={pending || !settings.connected} className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40", settings.enabled ? "bg-emerald-500" : "bg-slate-300")}>

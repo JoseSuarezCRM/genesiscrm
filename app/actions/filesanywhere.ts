@@ -7,14 +7,12 @@ import { encryptSecret, decryptSecret, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
 import { sftpListFiles, sftpDownloadText, sftpList, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
-import { runFilesanywhereImport, runFilesanywhereImportFile, type FaConfig } from "@/lib/filesanywhere-import"
-import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { runFilesanywhereImport, runFilesanywhereImportFile, resetFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
 
 const PROVIDER = "filesanywhere"
 const revalidate = () => revalidatePath("/settings/integrations/filesanywhere")
 
 export interface FaCustomObject { slug: string; label: string; properties: { id: string; name: string; type: string }[] }
-export interface FaField { key: string; name: string; isCustom: boolean }
 
 export interface FaSettings {
   connected: boolean
@@ -27,6 +25,8 @@ export interface FaSettings {
   folderPath: string
   filenamePattern: string
   objectSlug: string
+  providerObjectSlug: string
+  providerMatchProp: string
   providerMap: Record<string, string>
   appointmentMap: Record<string, string>
   frequency: "daily" | "weekly"
@@ -35,7 +35,6 @@ export interface FaSettings {
   lastRunAt: string | null
   lastImportedFile: string | null
   objects: FaCustomObject[]
-  providerFields: FaField[]
 }
 
 async function cfgOf(): Promise<Partial<FaConfig>> {
@@ -57,12 +56,6 @@ export async function getFaSettings(): Promise<FaSettings> {
     properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, type: p.type })),
   }))
 
-  // The Referring Providers object's mappable fields: native columns + custom properties.
-  const provCustom = await (prisma as any).customProperty.findMany({ where: { entityType: "PROVIDER" }, orderBy: { createdAt: "asc" } }).catch(() => [])
-  const providerFields: FaField[] = [
-    ...((RECORD_FIELDS as any).PROVIDER ?? []).filter((f: any) => !f.readOnly).map((f: any) => ({ key: f.key, name: f.label, isCustom: false })),
-    ...(provCustom as any[]).map((c) => ({ key: `cp_${c.id}`, name: c.name, isCustom: true })),
-  ]
   return {
     connected: !!(cfg.host && cfg.userName && cfg.passwordEnc),
     enabled: !!row?.enabled,
@@ -74,6 +67,8 @@ export async function getFaSettings(): Promise<FaSettings> {
     folderPath: cfg.folderPath ?? "",
     filenamePattern: cfg.filenamePattern ?? "",
     objectSlug: cfg.objectSlug ?? "",
+    providerObjectSlug: cfg.providerObjectSlug ?? "",
+    providerMatchProp: cfg.providerMatchProp ?? "",
     providerMap: cfg.providerMap ?? {},
     appointmentMap: cfg.appointmentMap ?? {},
     frequency: cfg.frequency ?? "weekly",
@@ -82,7 +77,6 @@ export async function getFaSettings(): Promise<FaSettings> {
     lastRunAt: cfg.lastRunAt ?? null,
     lastImportedFile: cfg.lastImportedFile ?? null,
     objects,
-    providerFields,
   }
 }
 
@@ -106,6 +100,7 @@ export async function saveFaConnection(input: { host: string; port: number; user
 
 export async function saveFaImportConfig(input: {
   folderPath: string; filenamePattern: string; objectSlug: string
+  providerObjectSlug: string; providerMatchProp: string
   providerMap: Record<string, string>; appointmentMap: Record<string, string>
   frequency: "daily" | "weekly"; dayOfWeek: number; hour: number
 }): Promise<{ ok?: boolean; error?: string }> {
@@ -114,6 +109,16 @@ export async function saveFaImportConfig(input: {
   await (prisma as any).integration.update({ where: { provider: PROVIDER }, data: { config: { ...cfg, ...input } } })
   revalidate()
   return { ok: true }
+}
+
+// Delete everything a prior import created (both objects + legacy built-in providers).
+export async function resetFaImport(): Promise<{ ok?: boolean; message?: string; error?: string }> {
+  await requirePermission("MANAGE_USERS")
+  try {
+    const r = await resetFilesanywhereImport()
+    revalidate()
+    return { ok: true, message: `Deleted ${r.appointmentsDeleted} appointments and ${r.providersDeleted} providers. You can re-import now.` }
+  } catch (e: any) { return { error: e?.message ?? "Couldn't reset." } }
 }
 
 export async function setFaEnabled(enabled: boolean): Promise<{ ok?: boolean; error?: string }> {
