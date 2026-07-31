@@ -81,11 +81,32 @@ export async function faDiagnose(apiKey: string, clientId: number, userName: str
     regionURL: d.regionURL ?? null, regionName: d.regionName ?? null, isPasswordExpired: d.isPasswordExpired ?? null,
   }
   if (!d.token) return out
-  out.token = { userId: jwtClaim(d.token, "userId"), userIdentity: jwtClaim(d.token, "userIdentity"), clientId: jwtClaim(d.token, "clientId"), role: jwtClaim(d.token, "role"), iss: jwtClaim(d.token, "iss") }
-  const s: FaSession = { token: d.token, userId: Number(jwtClaim(d.token, "userId") ?? d.userId ?? 0), uid: jwtClaim(d.token, "userIdentity") ?? "" }
-  const q = new URLSearchParams({ path: "/", page: "1", entryType: "0" })
-  const peRes = await fetch(`${BASE}/providerentries?${q.toString()}`, { headers: authHeaders(apiKey, s), cache: "no-store" })
-  out.providerentriesRoot = { status: peRes.status, body: (await peRes.text()).slice(0, 400) }
+  const token = d.token
+  const uid = jwtClaim(token, "userIdentity") ?? ""
+  const userId = Number(jwtClaim(token, "userId") ?? d.userId ?? 0)
+  out.token = { userId: jwtClaim(token, "userId"), userIdentity: uid, clientId: jwtClaim(token, "clientId"), role: jwtClaim(token, "role"), iss: jwtClaim(token, "iss") }
+
+  const A = "application/json"
+  const url = `${BASE}/providerentries?path=/&page=1&entryType=0`
+  // Try header combinations to find which one FilesAnywhere accepts.
+  const variants: { name: string; headers: Record<string, string> }[] = [
+    { name: "apikey+bearer+ids", headers: { Accept: A, "Content-Type": A, "X-ApiKey": apiKey, Authorization: `bearer ${token}`, "X-UserId": String(userId), "X-Uid": uid } },
+    { name: "Bearer(cap)+ids", headers: { Accept: A, "Content-Type": A, "X-ApiKey": apiKey, Authorization: `Bearer ${token}`, "X-UserId": String(userId), "X-Uid": uid } },
+    { name: "bearer+ids+uid=apikey", headers: { Accept: A, "Content-Type": A, "X-ApiKey": apiKey, Authorization: `bearer ${token}`, "X-UserId": String(userId), "X-Uid": apiKey } },
+    { name: "no-apikey bearer+ids", headers: { Accept: A, "Content-Type": A, Authorization: `bearer ${token}`, "X-UserId": String(userId), "X-Uid": uid } },
+    { name: "apikey+bearer only", headers: { Accept: A, "Content-Type": A, "X-ApiKey": apiKey, Authorization: `bearer ${token}` } },
+    { name: "apikey only", headers: { Accept: A, "Content-Type": A, "X-ApiKey": apiKey } },
+    { name: "token(no bearer)+ids", headers: { Accept: A, "Content-Type": A, "X-ApiKey": apiKey, Authorization: token, "X-UserId": String(userId), "X-Uid": uid } },
+  ]
+  out.attempts = []
+  for (const v of variants) {
+    try {
+      const r = await fetch(url, { headers: v.headers, cache: "no-store" })
+      out.attempts.push({ variant: v.name, status: r.status, body: (await r.text()).slice(0, 120) })
+    } catch (e: any) {
+      out.attempts.push({ variant: v.name, error: e?.message ?? "fetch failed" })
+    }
+  }
   return out
 }
 
