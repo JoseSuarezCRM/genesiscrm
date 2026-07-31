@@ -41,7 +41,10 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
   function changeGranularity(g: Granularity) { setGranularity(g); reloadReport(g) }
 
   const { weeks, categories, grid } = report
-  const colTotals = weeks.map((_, wi) => categories.reduce((s, c) => s + (grid[c]?.[wi] ?? 0), 0))
+  // Show an Unmapped row when there are uncategorized answers, so the totals match
+  // the raw IntakeQ count instead of silently dropping them.
+  const rowKeys = report.hasUnmapped ? [...categories, "Unmapped"] : categories
+  const colTotals = weeks.map((_, wi) => rowKeys.reduce((s, c) => s + (grid[c]?.[wi] ?? 0), 0))
   const rowTotal = (c: string) => (grid[c] ?? []).reduce((s, n) => s + n, 0)
   const grandTotal = colTotals.reduce((s, n) => s + n, 0)
 
@@ -86,7 +89,7 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
 
   function exportCsv() {
     const header = ["Referral Source", ...weeks.map((w) => w.label), "Total"]
-    const lines = categories.map((c) => [c, ...weeks.map((_, wi) => grid[c]?.[wi] ?? 0), rowTotal(c)])
+    const lines = rowKeys.map((c) => [c, ...weeks.map((_, wi) => grid[c]?.[wi] ?? 0), rowTotal(c)])
     const totals = ["Total", ...colTotals, grandTotal]
     const esc = (v: string | number) => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
     const csv = [header, ...lines, totals].map((r) => r.map(esc).join(",")).join("\n")
@@ -117,9 +120,14 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
       )}
 
       {report.hasUnmapped && (
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 flex items-center gap-2 text-sm text-orange-800">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          Some answers didn’t match a known category. Tell me the exact wording and I’ll map them.
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
+          <p className="flex items-center gap-2 font-medium"><AlertTriangle className="h-4 w-4 shrink-0" /> Some answers didn’t match a category (they’re in the “Unmapped” row):</p>
+          <ul className="mt-1.5 space-y-0.5 pl-6">
+            {report.unmappedAnswers.map((u, i) => (
+              <li key={i} className="text-xs"><span className="font-mono bg-orange-100 px-1.5 py-0.5 rounded">{u.answer}</span> <span className="text-orange-600">× {u.count}</span></li>
+            ))}
+          </ul>
+          <p className="text-xs text-orange-600 mt-1.5 pl-6">These are likely older/renamed option wordings. Tell me to map them and I’ll fold each into the right category.</p>
         </div>
       )}
 
@@ -180,8 +188,8 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
             </tr>
           </thead>
           <tbody>
-            {categories.map((c) => (
-              <tr key={c} className="border-b border-slate-100 hover:bg-slate-50/60">
+            {rowKeys.map((c) => (
+              <tr key={c} className={cn("border-b border-slate-100 hover:bg-slate-50/60", c === "Unmapped" && "bg-orange-50/40")}>
                 <td className="text-left text-slate-800 px-3 py-1.5 font-medium sticky left-0 bg-white z-10 whitespace-nowrap">{c}</td>
                 {weeks.map((w, wi) => {
                   const n = grid[c]?.[wi] ?? 0

@@ -19,6 +19,7 @@ export interface ReferralSourceReport {
   categories: string[]
   grid: Record<string, number[]>              // category → count per period
   hasUnmapped: boolean
+  unmappedAnswers: { answer: string; count: number }[]
   lastSubmittedAt: string | null
   totalStored: number
 }
@@ -54,6 +55,15 @@ export async function getReferralSourceReport(granularity: Granularity = "week")
     if (r.category === UNMAPPED) hasUnmapped = true
   }
 
+  // Distinct raw answers that didn't match a category (across all time), so we can
+  // see what needs mapping.
+  const unmappedGroups = await (prisma as any).intakeReferralResponse.groupBy({
+    by: ["rawAnswer"], where: { category: "Unmapped" }, _count: { _all: true },
+  }).catch(() => [])
+  const unmappedAnswers = (unmappedGroups as any[])
+    .map((g) => ({ answer: g.rawAnswer ?? "(blank)", count: g._count?._all ?? 0 }))
+    .sort((a, b) => b.count - a.count)
+
   return {
     configured: await isIntakeqConfigured(),
     granularity,
@@ -61,6 +71,7 @@ export async function getReferralSourceReport(granularity: Granularity = "week")
     categories: [...REFERRAL_CATEGORIES],
     grid,
     hasUnmapped,
+    unmappedAnswers,
     lastSubmittedAt: latest?.submittedAt ? new Date(latest.submittedAt).toISOString() : null,
     totalStored,
   }
