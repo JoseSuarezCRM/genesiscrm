@@ -111,11 +111,11 @@ export async function setFaEnabled(enabled: boolean): Promise<{ ok?: boolean; er
 
 // Connect over SFTP + list everything at the path (files AND folders, unfiltered),
 // plus how many files match the pattern — so we can find the right folder.
-export async function testFaConnection(): Promise<{ entries?: { name: string; modified: string | null; dir: boolean }[]; matched?: number; path?: string; error?: string }> {
+export async function testFaConnection(pathOverride?: string): Promise<{ entries?: { name: string; modified: string | null; dir: boolean }[]; matched?: number; path?: string; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const cfg = await cfgOf()
   if (!cfg.host || !cfg.passwordEnc) return { error: "Save the connection first." }
-  const path = cfg.folderPath || "/"
+  const path = (pathOverride && pathOverride.trim()) || cfg.folderPath || "/"
   try {
     const all = await sftpList(connFromCfg(cfg), path)
     const matched = all.filter((e) => e.type === "-" && matchGlob(e.name, cfg.filenamePattern ?? "*")).length

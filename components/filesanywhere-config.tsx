@@ -53,14 +53,28 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       setPassword(""); flash("Connection saved.", true); router.refresh()
     })
   }
-  function test() {
+  function test(pathOverride?: string) {
+    const p = pathOverride ?? folderPath
     setMsg(null); setEntries(null)
     start(async () => {
-      const r = await testFaConnection()
+      const r = await testFaConnection(p)
       if (r.error) return flash(r.error)
       setEntries(r.entries ?? []); setMatched(r.matched ?? 0)
-      flash(`Connected — ${r.entries?.length ?? 0} item(s) in ${r.path}, ${r.matched ?? 0} match the pattern.`, true)
+      flash(`${r.entries?.length ?? 0} item(s) in ${r.path} · ${r.matched ?? 0} match the pattern.`, true)
     })
+  }
+  // Drill into a folder from the listing (builds an absolute path from root).
+  function openFolder(name: string) {
+    const base = folderPath.replace(/\/+$/, "")
+    const child = base === "" || base === "/" ? `/${name}` : `${base}/${name}`
+    setFolderPath(child)
+    test(child)
+  }
+  function goUp() {
+    const base = folderPath.replace(/\/+$/, "")
+    const parent = base.includes("/") ? base.slice(0, base.lastIndexOf("/")) || "/" : "/"
+    setFolderPath(parent)
+    test(parent)
   }
   function loadCols() {
     setMsg(null)
@@ -114,17 +128,29 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
         </div>
         <div className="flex gap-2">
           <button onClick={saveConnection} disabled={pending} className="h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">Save connection</button>
-          <button onClick={test} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50">{pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSearch className="h-3.5 w-3.5" />} Test connection</button>
+          <button onClick={() => test()} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50">{pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSearch className="h-3.5 w-3.5" />} Test / browse</button>
         </div>
         {entries && (
           <div className="text-xs text-slate-600 border-t border-slate-100 pt-2 max-h-56 overflow-y-auto">
-            {entries.length === 0 ? "This path is empty — try a different folder path." : entries.map((e) => (
-              <div key={e.name} className="flex justify-between py-0.5">
-                <span className="font-mono">{e.dir ? "📁 " : "📄 "}{e.name}</span>
-                <span className="text-slate-400">{e.modified ? new Date(e.modified).toLocaleDateString() : ""}</span>
-              </div>
+            <div className="flex items-center justify-between pb-1 mb-1 border-b border-slate-100">
+              <span className="font-mono text-slate-400">{folderPath || "/"}</span>
+              <button onClick={goUp} className="text-blue-600 hover:underline">↑ up</button>
+            </div>
+            {entries.length === 0 ? "This folder is empty." : entries.map((e) => (
+              e.dir ? (
+                <button key={e.name} onClick={() => openFolder(e.name)} className="w-full flex justify-between py-0.5 hover:bg-slate-50 rounded px-1 text-left">
+                  <span className="font-mono text-blue-700">📁 {e.name}</span>
+                  <span className="text-slate-400">{e.modified ? new Date(e.modified).toLocaleDateString() : ""}</span>
+                </button>
+              ) : (
+                <div key={e.name} className="flex justify-between py-0.5 px-1">
+                  <span className="font-mono">📄 {e.name}</span>
+                  <span className="text-slate-400">{e.modified ? new Date(e.modified).toLocaleDateString() : ""}</span>
+                </div>
+              )
             ))}
-            {matched === 0 && entries.some((e) => e.dir) && <p className="text-amber-600 mt-1">No files match here, but there are folders — set “Folder path” to the one holding the CSVs.</p>}
+            {matched > 0 && <p className="text-emerald-600 mt-1">✓ {matched} file(s) here match the pattern — this is the folder. Save settings below.</p>}
+            {matched === 0 && entries.some((e) => e.dir) && <p className="text-amber-600 mt-1">Click a 📁 folder to go into it.</p>}
           </div>
         )}
       </div>
