@@ -15,8 +15,17 @@ function authHeaders(apiKey: string, s: FaSession): Record<string, string> {
     "X-ApiKey": apiKey,
     Authorization: `bearer ${s.token}`,
     "X-UserId": String(s.userId),
-    "X-Uid": apiKey, // docs' examples pass the API key as the "unique GUID"
+    "X-Uid": s.uid,
   }
+}
+
+// Pull a claim out of the JWT payload (unverified — just to read userIdentity).
+function jwtClaim(token: string, claim: string): string | null {
+  try {
+    const part = token.split(".")[1]
+    const json = Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
+    return JSON.parse(json)?.[claim] ?? null
+  } catch { return null }
 }
 
 async function unwrap(res: Response, what: string): Promise<any> {
@@ -46,7 +55,9 @@ export async function faLogin(apiKey: string, clientId: number, userName: string
   }
   if (d.isPasswordExpired) throw new Error("The FilesAnywhere account password is expired.")
   if (!d.token) throw new Error("Login returned no token.")
-  return { token: d.token, userId: d.userId, uid: apiKey }
+  // X-Uid is the user's identity GUID, carried in the token; fall back to the id.
+  const uid = jwtClaim(d.token, "userIdentity") ?? String(d.userId ?? "")
+  return { token: d.token, userId: d.userId, uid }
 }
 
 // List files (entryType 1) or folders (0) at a path, newest first.
