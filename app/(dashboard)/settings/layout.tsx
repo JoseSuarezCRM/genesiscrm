@@ -35,6 +35,7 @@ const settingsSections = [
     title: "Integrations",
     items: [
       { href: "/settings/integrations", label: "Connected Apps" },
+      { href: "/settings/integrations/api-keys", label: "API Keys" },
     ],
   },
 ]
@@ -69,6 +70,12 @@ export default function SettingsLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  // Highlight the most specific matching item (longest href that's a prefix),
+  // so e.g. /settings/integrations/api-keys lights up "API Keys", not "Connected Apps".
+  const activeHref = settingsSections
+    .flatMap((s) => s.items)
+    .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href
 
   return (
     <div className="flex h-full">
@@ -86,7 +93,7 @@ export default function SettingsLayout({
                     key={item.href}
                     href={item.href}
                     label={item.label}
-                    isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
+                    isActive={item.href === activeHref}
                   />
                 ))}
               </div>

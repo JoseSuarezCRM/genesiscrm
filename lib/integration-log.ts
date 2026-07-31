@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 // Best-effort activity logging — never let a logging failure break the real call.
 export async function logIntegrationEvent(e: {
   provider?: string
-  kind: "api" | "webhook"
+  kind: "api" | "webhook" | "inbound"
   endpoint?: string | null
   method?: string | null
   status?: number | null

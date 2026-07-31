@@ -1023,6 +1023,24 @@ model OrgRulesPoller {
   lastMerged      Int       @default(0)
 }
 
+// An API key for OUR public API (/api/v1). Only the SHA-256 hash is stored; the
+// full token is shown once on creation. `scopes` limits what the key can do
+// (e.g. ["referrals:read","referrals:write"]).
+model ApiToken {
+  id          String    @id @default(cuid())
+  name        String
+  tokenHash   String    @unique
+  prefix      String    // non-secret display prefix, e.g. "gosm_1a2b3c"
+  scopes      Json      @default("[]")
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([tokenHash])
+}
+
 // A third-party integration's UI-managed credentials + config. The API key is
 // stored encrypted at rest (see lib/crypto.ts); the webhook secret gates our
 // inbound webhook. One row per provider (e.g. "intakeq").

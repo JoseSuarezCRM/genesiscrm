@@ -221,8 +221,8 @@ export async function getIntegrationActivity(): Promise<IntegrationActivity> {
 
   const since = new Date(Date.now() - 7 * 86400000)
   const [events, recent] = await Promise.all([
-    (prisma as any).integrationEvent.findMany({ where: { createdAt: { gte: since } }, select: { ok: true, createdAt: true } }),
-    (prisma as any).integrationEvent.findMany({ orderBy: { createdAt: "desc" }, take: 60 }),
+    (prisma as any).integrationEvent.findMany({ where: { provider: "intakeq", createdAt: { gte: since } }, select: { ok: true, createdAt: true } }),
+    (prisma as any).integrationEvent.findMany({ where: { provider: "intakeq" }, orderBy: { createdAt: "desc" }, take: 60 }),
   ])
 
   // Last 7 calendar days (America/Chicago), oldest first.
