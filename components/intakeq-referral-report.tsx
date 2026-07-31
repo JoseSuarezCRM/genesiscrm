@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap } from "lucide-react"
+import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap, Square } from "lucide-react"
 import { runIntakeBackfill, type ReferralSourceReport } from "@/app/actions/intakeq"
 import { cn } from "@/lib/utils"
 
@@ -15,28 +15,42 @@ function lastWeekRange(): { start: string; end: string } {
 
 export default function IntakeqReferralReport({ initial, canEdit }: { initial: ReferralSourceReport; canEdit: boolean }) {
   const router = useRouter()
-  const [isPending, startTransition] = useTransition()
   const def = lastWeekRange()
   const [start, setStart] = useState(def.start)
   const [end, setEnd] = useState(def.end)
   const [msg, setMsg] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [autoContinue, setAutoContinue] = useState(true)
+  const cancelRef = useRef(false)
 
   const { weeks, categories, grid } = initial
   const colTotals = weeks.map((_, wi) => categories.reduce((s, c) => s + (grid[c]?.[wi] ?? 0), 0))
   const rowTotal = (c: string) => (grid[c] ?? []).reduce((s, n) => s + n, 0)
   const grandTotal = colTotals.reduce((s, n) => s + n, 0)
 
-  function runBackfill() {
-    setMsg(null)
-    startTransition(async () => {
-      const res = await runIntakeBackfill(start, end)
-      if (res.error) { setMsg(res.error); return }
-      setMsg(
-        `Processed ${res.processed ?? 0} new submission${res.processed === 1 ? "" : "s"}` +
-        ((res.remaining ?? 0) > 0 ? ` — ${res.remaining} still remaining, click again to continue.` : ` — all caught up.`)
-      )
-      router.refresh()
-    })
+  async function runBackfill() {
+    if (running) return
+    setMsg(null); setRunning(true); cancelRef.current = false
+    let total = 0
+    try {
+      // IntakeQ's 10 req/min limit means each call processes a batch. With
+      // "Run until complete" on, we keep going through the batches; otherwise
+      // a single batch runs. Stop cancels between batches.
+      for (let i = 0; i < 1000; i++) {
+        const res = await runIntakeBackfill(start, end)
+        if (res.error) { setMsg(res.error); break }
+        total += res.processed ?? 0
+        const remaining = res.remaining ?? 0
+        router.refresh()
+        if (remaining <= 0) { setMsg(`Done — processed ${total} new submission${total === 1 ? "" : "s"}.`); break }
+        if ((res.processed ?? 0) === 0) { setMsg(`Processed ${total}. ${remaining} left but nothing new was ingested — check the date range or API limit.`); break }
+        if (!autoContinue) { setMsg(`Processed ${total}. ${remaining} remaining — click Backfill again to continue.`); break }
+        if (cancelRef.current) { setMsg(`Stopped. Processed ${total}, ${remaining} remaining.`); break }
+        setMsg(`Processing… ${total} done, ${remaining} remaining. You can leave this open.`)
+      }
+    } finally {
+      setRunning(false)
+    }
   }
 
   function exportCsv() {
@@ -90,10 +104,20 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
               <label className="block text-[11px] font-medium text-slate-500 mb-1">to</label>
               <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="h-8 px-2 text-sm border border-slate-200 rounded-lg bg-white" />
             </div>
-            <button onClick={runBackfill} disabled={isPending || !initial.configured}
+            <button onClick={runBackfill} disabled={running || !initial.configured}
               className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
-              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Backfill
+              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Backfill
             </button>
+            {running && autoContinue && (
+              <button onClick={() => { cancelRef.current = true }}
+                className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100">
+                <Square className="h-3 w-3" /> Stop
+              </button>
+            )}
+            <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 pb-1.5 ml-1" title="Keep going through IntakeQ's rate-limited batches until the whole range is done">
+              <input type="checkbox" checked={autoContinue} onChange={(e) => setAutoContinue(e.target.checked)} disabled={running} className="rounded border-slate-300" />
+              Run until complete
+            </label>
           </div>
         )}
         <button onClick={exportCsv}
