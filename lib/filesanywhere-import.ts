@@ -16,7 +16,7 @@ export interface FaConfig {
   folderPath: string
   filenamePattern: string
   objectSlug: string                        // custom object key for the visit/appointment
-  providerMap: { name?: string; npi?: string; phone?: string; officePhone?: string } // provider field → CSV header
+  providerMap: Record<string, string>       // provider field key (native or cp_<id>) → CSV header; matched on "npi"
   appointmentMap: Record<string, string>    // object property id → CSV header
   // Schedule (America/Chicago): run daily, or weekly on a chosen day, at `hour`.
   frequency: "daily" | "weekly"
@@ -82,9 +82,10 @@ async function ensureAssociation(fromType: string, fromId: string, toType: strin
   if (!dup) await (prisma as any).objectAssociation.create({ data: { fromType, fromId, toType, toId } })
 }
 
-// Find a referring provider by NPI (then by name), or create one. Returns its id,
-// or null when the row has no provider info.
-async function resolveProvider(row: Record<string, string>, map: FaConfig["providerMap"], practiceId: string, counter: { created: number }): Promise<string | null> {
+// Find a referring provider by NPI (then by name), or create one from the mapped
+// fields (native columns + custom properties). Returns its id, or null when the
+// row has no provider info.
+async function resolveProvider(row: Record<string, string>, map: Record<string, string>, practiceId: string, counter: { created: number }): Promise<string | null> {
   const npi = map.npi ? (row[map.npi] ?? "").trim() : ""
   const name = map.name ? toProperCase((row[map.name] ?? "").trim()) : ""
 
@@ -98,16 +99,20 @@ async function resolveProvider(row: Record<string, string>, map: FaConfig["provi
     return null
   }
 
-  const created = await prisma.referringDoctor.create({
-    data: {
-      name: name || "Unknown Provider",
-      npi: npi || null,
-      phone: map.phone ? (row[map.phone] || null) : null,
-      officePhone: map.officePhone ? (row[map.officePhone] || null) : null,
-      practiceId,
-    },
-    select: { id: true },
-  })
+  // Build create data from the mapping — native columns direct, custom props in the bag.
+  const data: Record<string, any> = { practiceId }
+  const customBag: Record<string, any> = {}
+  for (const [key, col] of Object.entries(map)) {
+    if (!col) continue
+    const val = (row[col] ?? "").trim()
+    if (key.startsWith("cp_")) customBag[key.slice(3)] = val
+    else if (key === "name") data.name = toProperCase(val) || null
+    else data[key] = val || null
+  }
+  if (!data.name) data.name = "Unknown Provider"
+  if (Object.keys(customBag).length) data.customProperties = customBag
+
+  const created = await prisma.referringDoctor.create({ data, select: { id: true } })
   counter.created++
   return created.id
 }
@@ -154,12 +159,14 @@ export async function runFilesanywhereImport(opts: { force?: boolean } = {}): Pr
     const counter = { created: 0 }
     let appointmentsCreated = 0
     for (const row of rows.slice(0, MAX_ROWS)) {
-      const providerId = await resolveProvider(row, cfg.providerMap ?? {}, practiceId, counter)
-      const values: Record<string, any> = {}
-      for (const [propId, col] of Object.entries(cfg.appointmentMap ?? {})) if (col) values[propId] = row[col] ?? ""
-      const appt = await (prisma as any).customObjectRecord.create({ data: { objectDefId: defId, values }, select: { id: true } })
-      appointmentsCreated++
-      if (providerId) await ensureAssociation(`CO:${cfg.objectSlug}`, appt.id, "PROVIDER", providerId)
+      try {
+        const providerId = await resolveProvider(row, cfg.providerMap ?? {}, practiceId, counter)
+        const values: Record<string, any> = {}
+        for (const [propId, col] of Object.entries(cfg.appointmentMap ?? {})) if (col) values[propId] = row[col] ?? ""
+        const appt = await (prisma as any).customObjectRecord.create({ data: { objectDefId: defId, values }, select: { id: true } })
+        appointmentsCreated++
+        if (providerId) await ensureAssociation(`CO:${cfg.objectSlug}`, appt.id, "PROVIDER", providerId)
+      } catch { /* skip a bad row, keep importing */ }
     }
 
     await patchConfig({ lastImportedFile: newest.name, lastRunAt: new Date().toISOString() })

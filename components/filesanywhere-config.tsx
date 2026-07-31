@@ -8,12 +8,6 @@ import { cn } from "@/lib/utils"
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}` }))
-const PROVIDER_FIELDS: { key: keyof NonNullable<FaSettings["providerMap"]>; label: string }[] = [
-  { key: "npi", label: "NPI (match key)" },
-  { key: "name", label: "Provider name" },
-  { key: "phone", label: "Provider phone" },
-  { key: "officePhone", label: "Referring phone / fax" },
-]
 
 export default function FilesanywhereConfig({ settings }: { settings: FaSettings }) {
   const router = useRouter()
@@ -177,15 +171,15 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
           <p className="text-xs text-slate-400">Click “Load columns” to pull the header row, then map fields below.</p>
         ) : (
           <>
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Referring provider (matched by NPI)</p>
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Referring providers (matched by NPI)</p>
             <div className="grid sm:grid-cols-2 gap-2">
-              {PROVIDER_FIELDS.map((f) => (
-                <label key={f.key} className="text-xs text-slate-500">{f.label}
-                  <select value={(providerMap as any)[f.key] ?? ""} onChange={(e) => setProviderMap({ ...providerMap, [f.key]: e.target.value })} className={sel}>{colOptions}</select>
+              {settings.providerFields.map((f) => (
+                <label key={f.key} className="text-xs text-slate-500">{f.name}{f.key === "npi" ? " (match key)" : ""}
+                  <select value={providerMap[f.key] ?? ""} onChange={(e) => setProviderMap({ ...providerMap, [f.key]: e.target.value })} className={sel}>{colOptions}</select>
                 </label>
               ))}
             </div>
-            {selectedObject && (
+            {selectedObject ? (
               <>
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-2">{selectedObject.label} fields</p>
                 <div className="grid sm:grid-cols-2 gap-2">
@@ -196,6 +190,8 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
                   ))}
                 </div>
               </>
+            ) : (
+              <p className="text-xs text-amber-600 mt-2">Pick your appointments object in “Create appointments in” above to map its fields here.</p>
             )}
           </>
         )}

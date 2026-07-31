@@ -8,11 +8,13 @@ import { getIntegration } from "@/lib/integration-store"
 import { sftpListFiles, sftpDownloadText, sftpList, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
 import { runFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
+import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 
 const PROVIDER = "filesanywhere"
 const revalidate = () => revalidatePath("/settings/integrations/filesanywhere")
 
 export interface FaCustomObject { slug: string; label: string; properties: { id: string; name: string; type: string }[] }
+export interface FaField { key: string; name: string; isCustom: boolean }
 
 export interface FaSettings {
   connected: boolean
@@ -25,7 +27,7 @@ export interface FaSettings {
   folderPath: string
   filenamePattern: string
   objectSlug: string
-  providerMap: FaConfig["providerMap"]
+  providerMap: Record<string, string>
   appointmentMap: Record<string, string>
   frequency: "daily" | "weekly"
   dayOfWeek: number
@@ -33,6 +35,7 @@ export interface FaSettings {
   lastRunAt: string | null
   lastImportedFile: string | null
   objects: FaCustomObject[]
+  providerFields: FaField[]
 }
 
 async function cfgOf(): Promise<Partial<FaConfig>> {
@@ -53,6 +56,13 @@ export async function getFaSettings(): Promise<FaSettings> {
     slug: d.key, label: d.plural || d.singular || d.key,
     properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, type: p.type })),
   }))
+
+  // The Referring Providers object's mappable fields: native columns + custom properties.
+  const provCustom = await (prisma as any).customProperty.findMany({ where: { entityType: "PROVIDER" }, orderBy: { createdAt: "asc" } }).catch(() => [])
+  const providerFields: FaField[] = [
+    ...((RECORD_FIELDS as any).PROVIDER ?? []).filter((f: any) => !f.readOnly).map((f: any) => ({ key: f.key, name: f.label, isCustom: false })),
+    ...(provCustom as any[]).map((c) => ({ key: `cp_${c.id}`, name: c.name, isCustom: true })),
+  ]
   return {
     connected: !!(cfg.host && cfg.userName && cfg.passwordEnc),
     enabled: !!row?.enabled,
@@ -72,6 +82,7 @@ export async function getFaSettings(): Promise<FaSettings> {
     lastRunAt: cfg.lastRunAt ?? null,
     lastImportedFile: cfg.lastImportedFile ?? null,
     objects,
+    providerFields,
   }
 }
 
@@ -95,7 +106,7 @@ export async function saveFaConnection(input: { host: string; port: number; user
 
 export async function saveFaImportConfig(input: {
   folderPath: string; filenamePattern: string; objectSlug: string
-  providerMap: FaConfig["providerMap"]; appointmentMap: Record<string, string>
+  providerMap: Record<string, string>; appointmentMap: Record<string, string>
   frequency: "daily" | "weekly"; dayOfWeek: number; hour: number
 }): Promise<{ ok?: boolean; error?: string }> {
   await requirePermission("MANAGE_USERS")
