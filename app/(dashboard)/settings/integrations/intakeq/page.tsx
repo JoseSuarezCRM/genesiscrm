@@ -1,12 +1,12 @@
 import { requireView } from "@/lib/auth-guard"
 import { userCanLevel } from "@/lib/permissions"
-import { getReferralSourceReport, getIntegrationSettings } from "@/app/actions/intakeq"
+import { getReferralSourceReport, getIntegrationSettings, getIntegrationActivity } from "@/app/actions/intakeq"
 import IntakeqIntegrationClient from "@/components/intakeq-integration-client"
 
 export default async function IntakeqIntegrationPage() {
   const session = await requireView("REPORTS")
   const canEdit = userCanLevel(session?.user as any, "REPORTS", "EDIT")
-  const [report, settings] = await Promise.all([getReferralSourceReport(12), getIntegrationSettings()])
+  const [report, settings, activity] = await Promise.all([getReferralSourceReport(12), getIntegrationSettings(), getIntegrationActivity()])
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -16,7 +16,7 @@ export default async function IntakeqIntegrationPage() {
           New-patient referral sources from the “Gosm 2026 Full Intake” form, summed across English and Spanish, by week.
         </p>
       </div>
-      <IntakeqIntegrationClient settings={settings} report={report} canEdit={canEdit} />
+      <IntakeqIntegrationClient settings={settings} report={report} activity={activity} canEdit={canEdit} />
     </div>
   )
 }

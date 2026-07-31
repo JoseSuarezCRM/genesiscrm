@@ -1039,6 +1039,24 @@ model Integration {
   updatedAt     DateTime @updatedAt
 }
 
+// Activity log for an integration — one row per outbound API call and inbound
+// webhook, powering the Activity tab (calls/day, recent errors, request log).
+// Pruned to ~30 days on read.
+model IntegrationEvent {
+  id         String   @id @default(cuid())
+  provider   String   // "intakeq"
+  kind       String   // "api" | "webhook"
+  endpoint   String?
+  method     String?
+  status     Int?
+  ok         Boolean  @default(true)
+  message    String?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+
+  @@index([provider, createdAt])
+}
+
 // One row per submitted IntakeQ "Gosm 2026 Full Intake" form, so referral-source
 // counts can be aggregated by week (English + Spanish folded into one category).
 // intakeId is unique, so a webhook re-delivery or backfill overlap upserts rather

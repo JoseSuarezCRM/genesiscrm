@@ -3,17 +3,22 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import IntakeqIntegrationConfig from "@/components/intakeq-integration-config"
+import IntakeqIntegrationActivity from "@/components/intakeq-integration-activity"
 import IntakeqReferralReport from "@/components/intakeq-referral-report"
-import type { IntegrationSettings, ReferralSourceReport } from "@/app/actions/intakeq"
+import type { IntegrationSettings, ReferralSourceReport, IntegrationActivity } from "@/app/actions/intakeq"
 
-export default function IntakeqIntegrationClient({ settings, report, canEdit }: {
+type TabId = "report" | "activity" | "config"
+
+export default function IntakeqIntegrationClient({ settings, report, activity, canEdit }: {
   settings: IntegrationSettings
   report: ReferralSourceReport
+  activity: IntegrationActivity
   canEdit: boolean
 }) {
-  const [tab, setTab] = useState<"report" | "config">(settings.connected ? "report" : "config")
-  const tabs: { id: "report" | "config"; label: string }[] = [
+  const [tab, setTab] = useState<TabId>(settings.connected ? "report" : "config")
+  const tabs: { id: TabId; label: string }[] = [
     { id: "report", label: "Report" },
+    { id: "activity", label: "Activity" },
     { id: "config", label: "Configuration" },
   ]
 
@@ -28,7 +33,9 @@ export default function IntakeqIntegrationClient({ settings, report, canEdit }: 
           </button>
         ))}
       </div>
-      {tab === "report" ? <IntakeqReferralReport initial={report} canEdit={canEdit} /> : <IntakeqIntegrationConfig settings={settings} />}
+      {tab === "report" && <IntakeqReferralReport initial={report} canEdit={canEdit} />}
+      {tab === "activity" && <IntakeqIntegrationActivity activity={activity} />}
+      {tab === "config" && <IntakeqIntegrationConfig settings={settings} />}
     </div>
   )
 }

@@ -165,6 +165,53 @@ export async function disconnectIntakeq(): Promise<{ ok?: boolean; error?: strin
   }
 }
 
+// ─── Activity (API calls + webhook deliveries) ────────────────────────────────
+
+export interface IntegrationActivity {
+  totalCalls7d: number
+  errors7d: number
+  perDay: { day: string; calls: number; errors: number }[]
+  recent: { id: string; kind: string; endpoint: string | null; method: string | null; status: number | null; ok: boolean; message: string | null; durationMs: number | null; at: string }[]
+}
+
+export async function getIntegrationActivity(): Promise<IntegrationActivity> {
+  await requireAccess("REPORTS", "VIEW")
+
+  // Keep the log bounded — drop events older than 30 days.
+  await (prisma as any).integrationEvent.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 30 * 86400000) } } }).catch(() => {})
+
+  const since = new Date(Date.now() - 7 * 86400000)
+  const [events, recent] = await Promise.all([
+    (prisma as any).integrationEvent.findMany({ where: { createdAt: { gte: since } }, select: { ok: true, createdAt: true } }),
+    (prisma as any).integrationEvent.findMany({ orderBy: { createdAt: "desc" }, take: 60 }),
+  ])
+
+  // Last 7 calendar days (America/Chicago), oldest first.
+  const days: string[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000)
+    days.push(d.toLocaleDateString("en-CA", { timeZone: "America/Chicago" }))
+  }
+  const byDay: Record<string, { calls: number; errors: number }> = {}
+  for (const d of days) byDay[d] = { calls: 0, errors: 0 }
+  let errors7d = 0
+  for (const e of events as { ok: boolean; createdAt: Date }[]) {
+    const d = new Date(e.createdAt).toLocaleDateString("en-CA", { timeZone: "America/Chicago" })
+    if (byDay[d]) { byDay[d].calls++; if (!e.ok) byDay[d].errors++ }
+    if (!e.ok) errors7d++
+  }
+
+  return {
+    totalCalls7d: events.length,
+    errors7d,
+    perDay: days.map((d) => ({ day: d, calls: byDay[d].calls, errors: byDay[d].errors })),
+    recent: (recent as any[]).map((r) => ({
+      id: r.id, kind: r.kind, endpoint: r.endpoint, method: r.method, status: r.status, ok: r.ok, message: r.message, durationMs: r.durationMs,
+      at: new Date(r.createdAt).toISOString(),
+    })),
+  }
+}
+
 // Diagnostics: list questionnaire templates so we can confirm the exact form name.
 export async function listIntakeQuestionnaires(): Promise<{ items?: { Id: string; Name: string; Archived: boolean }[]; error?: string }> {
   await requireAccess("REPORTS", "EDIT")

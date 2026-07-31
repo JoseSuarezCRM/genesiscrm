@@ -3,6 +3,7 @@
 // The API key is a server-only secret (INTAKEQ_API_KEY) — never sent to the client.
 
 import { getIntakeqApiKey } from "@/lib/integration-store"
+import { logIntegrationEvent } from "@/lib/integration-log"
 
 const BASE = "https://intakeq.com/api/v1"
 
@@ -24,14 +25,26 @@ async function throttle() {
   lastRequestAt = Date.now()
 }
 
+// Endpoint for logging, without the query string or a specific intake id (so we
+// don't store tokens or patient-identifying ids in the activity log).
+function logEndpoint(path: string): string {
+  return path.split("?")[0].replace(/\/intakes\/[0-9a-fA-F-]{8,}/, "/intakes/:id")
+}
+
 async function iq<T>(path: string): Promise<T> {
   const key = await getIntakeqApiKey()
   if (!key) throw new Error("IntakeQ isn't connected — add an API key in Settings → Integrations.")
   await throttle()
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "X-Auth-Key": key },
-    cache: "no-store",
-  })
+  const started = Date.now()
+  const endpoint = logEndpoint(path)
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, { headers: { "X-Auth-Key": key }, cache: "no-store" })
+  } catch (netErr: any) {
+    await logIntegrationEvent({ kind: "api", method: "GET", endpoint, ok: false, message: netErr?.message ?? "network error", durationMs: Date.now() - started })
+    throw netErr
+  }
+  await logIntegrationEvent({ kind: "api", method: "GET", endpoint, status: res.status, ok: res.ok, durationMs: Date.now() - started, message: res.ok ? null : `HTTP ${res.status}` })
   if (res.status === 429) throw new IntakeqRateLimitError()
   if (!res.ok) {
     const body = await res.text().catch(() => "")
