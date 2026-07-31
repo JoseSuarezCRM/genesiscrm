@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createAuditLog } from "@/lib/audit"
 import { STATUS_LABELS } from "@/lib/utils"
+import { userCan } from "@/lib/permissions"
 import { ReferralStatus, AuditAction } from "@prisma/client"
 
 export async function GET(req: NextRequest) {
@@ -11,9 +12,8 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 })
   }
 
-  // HIPAA: bulk PHI export is admin-only
-  const isAdmin = (session.user as { role?: string }).role === "ADMIN"
-  if (!isAdmin) {
+  // Bulk PHI export requires the Export Data permission (admins always pass).
+  if (!userCan(session.user as any, "EXPORT_DATA")) {
     return new NextResponse("Forbidden", { status: 403 })
   }
 

@@ -7,6 +7,7 @@ import { surgeryServerFilterFields } from "@/lib/surgery-server-fields"
 import { decodeFilterParam } from "@/lib/filters"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
+import { userCan } from "@/lib/permissions"
 import { AuditAction } from "@prisma/client"
 
 const LANGUAGE_LABELS: Record<string, string> = Object.fromEntries(LANGUAGE_OPTIONS.map((o) => [o.value, o.label]))
@@ -15,9 +16,8 @@ export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return new NextResponse("Unauthorized", { status: 401 })
 
-  // HIPAA: bulk PHI export is admin-only
-  const isAdmin = (session.user as { role?: string }).role === "ADMIN"
-  if (!isAdmin) return new NextResponse("Forbidden", { status: 403 })
+  // Bulk PHI export requires the Export Data permission (admins always pass).
+  if (!userCan(session.user as any, "EXPORT_DATA")) return new NextResponse("Forbidden", { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const statuses = searchParams.getAll("status")
