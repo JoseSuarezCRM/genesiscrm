@@ -63,6 +63,32 @@ export async function faLogin(apiKey: string, clientId: number, userName: string
   return { token: d.token, userId, uid }
 }
 
+// One-shot diagnostic: what does login return, and what happens on a root listing?
+// Returns only non-secret metadata + the raw providerentries status/body.
+export async function faDiagnose(apiKey: string, clientId: number, userName: string, password: string): Promise<any> {
+  const out: any = { base: BASE }
+  const loginRes = await fetch(`${BASE}/auth/login`, {
+    method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", "X-ApiKey": apiKey },
+    body: JSON.stringify({ clientId, userName, password }), cache: "no-store",
+  })
+  const loginText = await loginRes.text()
+  let lj: any = {}
+  try { lj = JSON.parse(loginText) } catch { out.login = { status: loginRes.status, parseError: true, body: loginText.slice(0, 300) }; return out }
+  const d = lj.data ?? {}
+  out.login = {
+    status: loginRes.status, success: lj.success, errorCode: lj.errorCode ?? null, message: lj.message ?? null,
+    hasToken: !!d.token, userIdField: d.userId ?? null, mfaApplied: d.mfaApplied ?? null,
+    regionURL: d.regionURL ?? null, regionName: d.regionName ?? null, isPasswordExpired: d.isPasswordExpired ?? null,
+  }
+  if (!d.token) return out
+  out.token = { userId: jwtClaim(d.token, "userId"), userIdentity: jwtClaim(d.token, "userIdentity"), clientId: jwtClaim(d.token, "clientId"), role: jwtClaim(d.token, "role"), iss: jwtClaim(d.token, "iss") }
+  const s: FaSession = { token: d.token, userId: Number(jwtClaim(d.token, "userId") ?? d.userId ?? 0), uid: jwtClaim(d.token, "userIdentity") ?? "" }
+  const q = new URLSearchParams({ path: "/", page: "1", entryType: "0" })
+  const peRes = await fetch(`${BASE}/providerentries?${q.toString()}`, { headers: authHeaders(apiKey, s), cache: "no-store" })
+  out.providerentriesRoot = { status: peRes.status, body: (await peRes.text()).slice(0, 400) }
+  return out
+}
+
 // List files (entryType 1) or folders (0) at a path, newest first.
 export async function faListFolder(apiKey: string, s: FaSession, path: string, entryType = 1): Promise<FaEntry[]> {
   const q = new URLSearchParams({ path: path || "/", page: "1", entryType: String(entryType), sortColumn: "Date", sortOrder: "desc" })

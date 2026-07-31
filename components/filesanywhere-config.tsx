@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2 } from "lucide-react"
-import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, type FaSettings } from "@/app/actions/filesanywhere"
+import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, faDiagnostics, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
 
 const INTERVALS = [
@@ -39,6 +39,7 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [intervalMinutes, setIntervalMinutes] = useState(settings.intervalMinutes)
   const [columns, setColumns] = useState<string[]>([])
   const [files, setFiles] = useState<{ name: string; modified: string | null }[] | null>(null)
+  const [diag, setDiag] = useState<any>(null)
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
   const colOptions = <><option value="">—</option>{columns.map((c) => <option key={c} value={c}>{c}</option>)}</>
@@ -74,6 +75,14 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerMap, appointmentMap, intervalMinutes })
       if (r.error) return flash(r.error)
       flash("Import settings saved.", true); router.refresh()
+    })
+  }
+  function diagnose() {
+    setMsg(null); setDiag(null)
+    start(async () => {
+      const r = await faDiagnostics()
+      if (r.error) return flash(r.error)
+      setDiag(r.result)
     })
   }
   function toggle(enabled: boolean) { start(async () => { await setFaEnabled(enabled); router.refresh() }) }
@@ -113,7 +122,9 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
         <div className="flex gap-2">
           <button onClick={saveConnection} disabled={pending} className="h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">Save connection</button>
           <button onClick={test} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50">{pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSearch className="h-3.5 w-3.5" />} Test connection</button>
+          <button onClick={diagnose} disabled={pending} className="h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50">Diagnose</button>
         </div>
+        {diag && <pre className="text-[11px] bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto max-h-72">{JSON.stringify(diag, null, 2)}</pre>}
         {files && (
           <div className="text-xs text-slate-600 border-t border-slate-100 pt-2">
             {files.length === 0 ? "No matching files." : files.map((f) => <div key={f.name} className="flex justify-between"><span className="font-mono">{f.name}</span><span className="text-slate-400">{f.modified ? new Date(f.modified).toLocaleDateString() : ""}</span></div>)}

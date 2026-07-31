@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { encryptSecret, decryptSecret, maskTail, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
-import { faLogin, faListFolder, faDownloadText } from "@/lib/filesanywhere"
+import { faLogin, faListFolder, faDownloadText, faDiagnose } from "@/lib/filesanywhere"
 import { parseCsv, matchGlob } from "@/lib/csv"
 import { runFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
 
@@ -146,4 +146,17 @@ export async function loadFaColumns(): Promise<{ columns?: string[]; file?: stri
 export async function runFaImportNow(): Promise<import("@/lib/filesanywhere-import").FaImportResult> {
   await requirePermission("MANAGE_USERS")
   return runFilesanywhereImport({ force: true })
+}
+
+// Non-secret diagnostic: what login returns (region URL, ids) + a raw root listing.
+export async function faDiagnostics(): Promise<{ result?: any; error?: string }> {
+  await requirePermission("MANAGE_USERS")
+  const row = await getIntegration(PROVIDER)
+  const cfg = (row?.config ?? {}) as Partial<FaConfig>
+  if (!row?.apiKeyEnc || !cfg.passwordEnc) return { error: "Save the connection first." }
+  try {
+    return { result: await faDiagnose(decryptSecret(row.apiKeyEnc), cfg.clientId ?? 0, cfg.userName ?? "", decryptSecret(cfg.passwordEnc)) }
+  } catch (e: any) {
+    return { error: e?.message ?? "Diagnostics failed." }
+  }
 }
