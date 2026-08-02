@@ -924,7 +924,7 @@ function ActionConfigFields({
   // Properties of the workflow's object that SET_PROPERTY can write to.
   writableProps?: PropertyDef[]
   // Custom objects (with their properties) a CREATE_RECORD action can target.
-  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[] }[] }[]
+  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
 
@@ -1004,8 +1004,9 @@ function ActionConfigFields({
 
   if (type === ("CREATE_RECORD" as AutomationAction)) {
     const targetObj = objectCatalog.find(o => `CO:${o.key}` === (config.objectKey as string))
-    const fields = Array.isArray(config.fields) ? (config.fields as { property: string; value: string }[]) : []
-    const setFields = (next: { property: string; value: string }[]) => set("fields", next)
+    const fields = Array.isArray(config.fields) ? (config.fields as { property: string; value: unknown }[]) : []
+    const setFields = (next: { property: string; value: unknown }[]) => set("fields", next)
+    const patchField = (i: number, value: unknown) => setFields(fields.map((x, j) => j === i ? { ...x, value } : x))
     return (
       <div className="space-y-3">
         <div>
@@ -1024,19 +1025,42 @@ function ActionConfigFields({
                 className="text-xs text-blue-600 hover:text-blue-700 font-medium">+ Add field</button>
             </div>
             {fields.length === 0 && <p className="text-xs text-slate-400">No fields — the record is created blank (just its Record ID).</p>}
-            {fields.map((f, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <StyledSelect className="flex-1" value={f.property} onChange={e => setFields(fields.map((x, j) => j === i ? { ...x, property: e.target.value } : x))}>
-                  <option value="">Select a property…</option>
-                  {targetObj.properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </StyledSelect>
-                <input className="flex-1 h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
-                  value={f.value} onChange={e => setFields(fields.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
-                  placeholder="Value (tokens like {patient_name} work)" />
-                <button type="button" onClick={() => setFields(fields.filter((_, j) => j !== i))}
-                  className="text-slate-400 hover:text-red-500 shrink-0"><X className="h-4 w-4" /></button>
-              </div>
-            ))}
+            {fields.map((f, i) => {
+              const prop = targetObj.properties.find(p => p.id === f.property)
+              const opts = (prop?.options ?? []).map(o => ({ value: o, label: prop?.optionLabels?.[o] ?? o }))
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <StyledSelect className="flex-1" value={f.property} onChange={e => setFields(fields.map((x, j) => j === i ? { property: e.target.value, value: "" } : x))}>
+                    <option value="">Select a property…</option>
+                    {targetObj.properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </StyledSelect>
+                  {/* Value control matches the property's type: options for dropdown/
+                      multi-select, Yes/No for checkbox, free text (+tokens) otherwise. */}
+                  {prop?.type === "DROPDOWN" ? (
+                    <StyledSelect className="flex-1" value={(f.value as string) || ""} onChange={e => patchField(i, e.target.value)}>
+                      <option value="">Select a value…</option>
+                      {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </StyledSelect>
+                  ) : prop?.type === "MULTI_SELECT" ? (
+                    <MultiSelectValue options={opts}
+                      value={Array.isArray(f.value) ? (f.value as string[]).join(MULTI_SEP) : ""}
+                      onChange={v => patchField(i, v ? v.split(MULTI_SEP).filter(Boolean) : [])} />
+                  ) : prop?.type === "CHECKBOX" ? (
+                    <StyledSelect className="flex-1" value={f.value === true ? "true" : f.value === false ? "false" : ""} onChange={e => patchField(i, e.target.value === "" ? "" : e.target.value === "true")}>
+                      <option value="">Select…</option>
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </StyledSelect>
+                  ) : (
+                    <input className="flex-1 h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+                      value={(f.value as string) ?? ""} onChange={e => patchField(i, e.target.value)}
+                      placeholder="Value (tokens like {patient_name} work)" />
+                  )}
+                  <button type="button" onClick={() => setFields(fields.filter((_, j) => j !== i))}
+                    className="text-slate-400 hover:text-red-500 shrink-0"><X className="h-4 w-4" /></button>
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -2003,7 +2027,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]; tokens: string[]
   fieldTokens?: PersonalizationToken[]
   templates?: MessageTemplateOption[]
-  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[] }[] }[]
+  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }

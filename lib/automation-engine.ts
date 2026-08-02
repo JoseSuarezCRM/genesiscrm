@@ -784,7 +784,8 @@ async function runSingleAction(
     for (const f of fields) {
       if (!f?.property) continue
       const resolved = typeof f.value === "string" ? resolveTemplate(f.value, vars) : f.value
-      if (resolved !== undefined && resolved !== "") values[f.property] = resolved
+      const empty = resolved === undefined || resolved === "" || (Array.isArray(resolved) && resolved.length === 0)
+      if (!empty) values[f.property] = resolved
     }
     // Owner of the new record: "triggering_user" | a user id | unassigned.
     const ownerRaw = (cfg.ownerId as string) || ""
