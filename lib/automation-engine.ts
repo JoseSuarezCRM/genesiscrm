@@ -15,6 +15,19 @@ import { ensureAssociationDef, ensureAssociation } from "@/lib/object-associatio
 // A record created by a workflow can fire its own "record created" workflows; cap
 // the chain so a misconfigured loop stops instead of running away.
 const MAX_CHAIN_DEPTH = 5
+
+// Read a property off a triggering record — native column, or a custom-property
+// bag addressed as "custom:<id>"/"cp_<id>" (built-ins use `customProperties`,
+// custom objects use `values`). Shared by COPY_PROPERTY and CREATE_RECORD.
+function readRecordProp(rec: any, key: string): unknown {
+  if (!rec || !key) return null
+  if (key.startsWith("custom:") || key.startsWith("cp_")) {
+    const id = key.startsWith("cp_") ? key.slice(3) : key.slice(7)
+    const bag = (rec.customProperties ?? rec.values) as Record<string, unknown> | undefined
+    return bag?.[id] ?? rec[id] ?? null
+  }
+  return rec[key] ?? null
+}
 import { buildRecordTokenVars } from "@/lib/record-token-vars"
 
 // Attach derived surgical provider + body part (from the stored procedure) so
@@ -732,18 +745,7 @@ async function runSingleAction(
     const source = cfg.source as string
     const dest = cfg.target as string
     if (!source || !dest) return "Copy property: choose a source and a target property"
-    // Read the source value off the triggering record (native column or custom
-    // bag, addressed as "custom:<id>"/"cp_<id>").
-    const readProp = (rec: any, key: string): unknown => {
-      if (!rec) return null
-      if (key.startsWith("custom:") || key.startsWith("cp_")) {
-        const id = key.startsWith("cp_") ? key.slice(3) : key.slice(7)
-        const bag = (rec.customProperties ?? rec.values) as Record<string, unknown> | undefined
-        return bag?.[id] ?? rec[id] ?? null
-      }
-      return rec[key] ?? null
-    }
-    let value = readProp(record, source)
+    let value = readRecordProp(record, source)
     // "Date only": drop the time, storing the calendar date (America/Chicago) the
     // same way the date field would — an ISO at UTC midnight.
     if (cfg.dateOnly && value != null && value !== "") {
@@ -778,13 +780,19 @@ async function runSingleAction(
   if ((automation.actionType as string) === "CREATE_RECORD") {
     const objectKey = (cfg.objectKey as string) || ""
     if (!objectKey.startsWith("CO:")) return "Create record: choose a custom object to create in"
-    // Prefill fields from the mapping (values may contain tokens like {patient_name}).
-    const fields = Array.isArray(cfg.fields) ? (cfg.fields as { property?: string; value?: unknown }[]) : []
+    // Prefill fields. Each field is either copied from a property on the triggering
+    // record (source "field") or a custom value/token (source "value", the default).
+    const fields = Array.isArray(cfg.fields) ? (cfg.fields as { property?: string; source?: string; field?: string; value?: unknown }[]) : []
     const values: Record<string, unknown> = {}
     for (const f of fields) {
       if (!f?.property) continue
-      const resolved = typeof f.value === "string" ? resolveTemplate(f.value, vars) : f.value
-      const empty = resolved === undefined || resolved === "" || (Array.isArray(resolved) && resolved.length === 0)
+      let resolved: unknown
+      if (f.source === "field" && f.field) {
+        resolved = readRecordProp(record, f.field)
+      } else {
+        resolved = typeof f.value === "string" ? resolveTemplate(f.value, vars) : f.value
+      }
+      const empty = resolved === undefined || resolved === null || resolved === "" || (Array.isArray(resolved) && resolved.length === 0)
       if (!empty) values[f.property] = resolved
     }
     // Owner of the new record: "triggering_user" | a user id | unassigned.

@@ -1004,9 +1004,10 @@ function ActionConfigFields({
 
   if (type === ("CREATE_RECORD" as AutomationAction)) {
     const targetObj = objectCatalog.find(o => `CO:${o.key}` === (config.objectKey as string))
-    const fields = Array.isArray(config.fields) ? (config.fields as { property: string; value: unknown }[]) : []
-    const setFields = (next: { property: string; value: unknown }[]) => set("fields", next)
-    const patchField = (i: number, value: unknown) => setFields(fields.map((x, j) => j === i ? { ...x, value } : x))
+    type FieldRow = { property: string; source?: "value" | "field"; field?: string; value?: unknown }
+    const fields = Array.isArray(config.fields) ? (config.fields as FieldRow[]) : []
+    const setFields = (next: FieldRow[]) => set("fields", next)
+    const patchRow = (i: number, patch: Partial<FieldRow>) => setFields(fields.map((x, j) => j === i ? { ...x, ...patch } : x))
     return (
       <div className="space-y-3">
         <div>
@@ -1028,36 +1029,53 @@ function ActionConfigFields({
             {fields.map((f, i) => {
               const prop = targetObj.properties.find(p => p.id === f.property)
               const opts = (prop?.options ?? []).map(o => ({ value: o, label: prop?.optionLabels?.[o] ?? o }))
+              const isField = f.source === "field"
               return (
-                <div key={i} className="flex items-center gap-2">
-                  <StyledSelect className="flex-1" value={f.property} onChange={e => setFields(fields.map((x, j) => j === i ? { property: e.target.value, value: "" } : x))}>
-                    <option value="">Select a property…</option>
-                    {targetObj.properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </StyledSelect>
-                  {/* Value control matches the property's type: options for dropdown/
-                      multi-select, Yes/No for checkbox, free text (+tokens) otherwise. */}
-                  {prop?.type === "DROPDOWN" ? (
-                    <StyledSelect className="flex-1" value={(f.value as string) || ""} onChange={e => patchField(i, e.target.value)}>
-                      <option value="">Select a value…</option>
-                      {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <div key={i} className="space-y-1.5 rounded-lg border border-slate-100 p-2">
+                  <div className="flex items-center gap-2">
+                    <StyledSelect className="flex-1" value={f.property} onChange={e => patchRow(i, { property: e.target.value, value: "" })}>
+                      <option value="">Select a property…</option>
+                      {targetObj.properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </StyledSelect>
-                  ) : prop?.type === "MULTI_SELECT" ? (
-                    <MultiSelectValue options={opts}
-                      value={Array.isArray(f.value) ? (f.value as string[]).join(MULTI_SEP) : ""}
-                      onChange={v => patchField(i, v ? v.split(MULTI_SEP).filter(Boolean) : [])} />
-                  ) : prop?.type === "CHECKBOX" ? (
-                    <StyledSelect className="flex-1" value={f.value === true ? "true" : f.value === false ? "false" : ""} onChange={e => patchField(i, e.target.value === "" ? "" : e.target.value === "true")}>
-                      <option value="">Select…</option>
-                      <option value="true">Yes</option>
-                      <option value="false">No</option>
+                    <button type="button" onClick={() => setFields(fields.filter((_, j) => j !== i))}
+                      className="text-slate-400 hover:text-red-500 shrink-0"><X className="h-4 w-4" /></button>
+                  </div>
+                  <div className="flex items-center gap-2 pl-1">
+                    <span className="text-xs text-slate-400 shrink-0">set to</span>
+                    {/* Source: a custom value, or copy a property off the triggering record. */}
+                    <StyledSelect className="flex-1" value={isField ? (f.field || "") : "__value"}
+                      onChange={e => e.target.value === "__value" ? patchRow(i, { source: "value", field: undefined }) : patchRow(i, { source: "field", field: e.target.value })}>
+                      <option value="__value">A custom value</option>
+                      {writableProps.length > 0 && (
+                        <optgroup label="Copy from the triggering record">
+                          {writableProps.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </optgroup>
+                      )}
                     </StyledSelect>
-                  ) : (
-                    <input className="flex-1 h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
-                      value={(f.value as string) ?? ""} onChange={e => patchField(i, e.target.value)}
-                      placeholder="Value (tokens like {patient_name} work)" />
-                  )}
-                  <button type="button" onClick={() => setFields(fields.filter((_, j) => j !== i))}
-                    className="text-slate-400 hover:text-red-500 shrink-0"><X className="h-4 w-4" /></button>
+                    {/* When it's a custom value, the input matches the property's type. */}
+                    {!isField && (
+                      prop?.type === "DROPDOWN" ? (
+                        <StyledSelect className="flex-1" value={(f.value as string) || ""} onChange={e => patchRow(i, { value: e.target.value })}>
+                          <option value="">Select a value…</option>
+                          {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </StyledSelect>
+                      ) : prop?.type === "MULTI_SELECT" ? (
+                        <MultiSelectValue options={opts}
+                          value={Array.isArray(f.value) ? (f.value as string[]).join(MULTI_SEP) : ""}
+                          onChange={v => patchRow(i, { value: v ? v.split(MULTI_SEP).filter(Boolean) : [] })} />
+                      ) : prop?.type === "CHECKBOX" ? (
+                        <StyledSelect className="flex-1" value={f.value === true ? "true" : f.value === false ? "false" : ""} onChange={e => patchRow(i, { value: e.target.value === "" ? "" : e.target.value === "true" })}>
+                          <option value="">Select…</option>
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </StyledSelect>
+                      ) : (
+                        <input className="flex-1 h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+                          value={(f.value as string) ?? ""} onChange={e => patchRow(i, { value: e.target.value })}
+                          placeholder="Value (tokens like {patient_name} work)" />
+                      )
+                    )}
+                  </div>
                 </div>
               )
             })}
