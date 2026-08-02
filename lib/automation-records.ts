@@ -119,6 +119,28 @@ export async function setRecordProperty(type: string, id: string, property: stri
   await model.update({ where: { id }, data: { [property]: value } })
 }
 
+// Create a record in an object (v1: custom objects only). Assigns the next
+// sequential Record ID and returns the new record's id. Un-gated — callers (the
+// automation engine) enforce their own access.
+export async function createRecordFor(type: string, values: Record<string, unknown>, opts: { ownerId?: string | null; createdById?: string | null } = {}): Promise<string> {
+  if (!isCustomObject(type)) throw new Error(`Create record isn't supported for "${type}" yet — pick a custom object.`)
+  const key = type.slice(3)
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { key }, select: { id: true } })
+  if (!def) throw new Error(`Object "${key}" not found`)
+  const last = await (prisma as any).customObjectRecord.findFirst({ where: { objectDefId: def.id }, orderBy: { recordNumber: "desc" }, select: { recordNumber: true } })
+  const rec = await (prisma as any).customObjectRecord.create({
+    data: {
+      objectDefId: def.id,
+      recordNumber: (last?.recordNumber ?? 0) + 1,
+      values: values ?? {},
+      ownerId: opts.ownerId ?? null,
+      createdById: opts.createdById ?? null,
+    },
+    select: { id: true },
+  })
+  return rec.id
+}
+
 export async function setRecordOwner(type: string, id: string, ownerId: string | null) {
   const model = delegateFor(type)
   if (!model) throw new Error(`Unknown object type "${type}"`)

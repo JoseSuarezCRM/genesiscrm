@@ -4,6 +4,7 @@ import { getIntegration } from "@/lib/integration-store"
 import { sftpListFiles, sftpDownloadText, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
 import { logIntegrationEvent } from "@/lib/integration-log"
+import { ensureAssociationDef, ensureAssociation } from "@/lib/object-associations"
 
 // Config stored on the Integration row (provider "filesanywhere"). The SFTP
 // password is encrypted in `passwordEnc`.
@@ -67,18 +68,6 @@ async function objectDefId(slug: string): Promise<string | null> {
 async function maxRecordNumber(objectDefId: string): Promise<number> {
   const last = await (prisma as any).customObjectRecord.findFirst({ where: { objectDefId }, orderBy: { recordNumber: "desc" }, select: { recordNumber: true } })
   return last?.recordNumber ?? 0
-}
-
-async function ensureAssociationDef(a: string, b: string) {
-  const existing = await (prisma as any).objectAssociationDef.findFirst({ where: { OR: [{ typeA: a, typeB: b }, { typeA: b, typeB: a }] } })
-  if (!existing) await (prisma as any).objectAssociationDef.create({ data: { typeA: a, typeB: b, label: null } })
-}
-
-async function ensureAssociation(fromType: string, fromId: string, toType: string, toId: string) {
-  const dup = await (prisma as any).objectAssociation.findFirst({
-    where: { OR: [{ fromType, fromId, toType, toId }, { fromType: toType, fromId: toId, toType: fromType, toId: fromId }] },
-  })
-  if (!dup) await (prisma as any).objectAssociation.create({ data: { fromType, fromId, toType, toId } })
 }
 
 // Map the provider columns for a row into a { propertyId: value } bag.

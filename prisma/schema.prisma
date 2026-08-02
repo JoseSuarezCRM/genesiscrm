@@ -117,6 +117,9 @@ enum AutomationAction {
   SET_PROPERTY
   COPY_PROPERTY
   ASSIGN_OWNER
+  // Create a new record in another object (custom objects), optionally associating
+  // it with the triggering record.
+  CREATE_RECORD
 }
 
 enum TaskPriority {

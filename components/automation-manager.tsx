@@ -121,6 +121,7 @@ const ACTION_LABELS: Record<string, string> = {
   SET_PROPERTY: "Set a property value",
   COPY_PROPERTY: "Copy a property to another",
   ASSIGN_OWNER: "Assign record owner",
+  CREATE_RECORD: "Create a record",
 }
 
 // Every action is offered for every object type. Actions that resolve a
@@ -472,6 +473,7 @@ function emptyActionConfig(type: AutomationAction): Record<string, unknown> {
   if (type === "SET_PROPERTY") return { property: "", value: "" }
   if (type === "COPY_PROPERTY") return { source: "", target: "", dateOnly: false }
   if (type === "ASSIGN_OWNER") return { ownerId: "" }
+  if (type === "CREATE_RECORD") return { objectKey: "", fields: [], associate: true, ownerId: "triggering_user" }
   if (type === "SEND_MEETING_INVITE") return { recipients: [{ type: "all_admins", value: "" }], sender: "referrals", title: "", location: "", description: "", eventMode: "fixed", eventDatetime: null, eventField: "", eventTime: "", durationMinutes: 30 }
   return {}
 }
@@ -907,7 +909,7 @@ function RecipientRows({
 interface MessageTemplateOption { id: string; name: string; channel: string }
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -921,6 +923,8 @@ function ActionConfigFields({
   templates?: MessageTemplateOption[]
   // Properties of the workflow's object that SET_PROPERTY can write to.
   writableProps?: PropertyDef[]
+  // Custom objects (with their properties) a CREATE_RECORD action can target.
+  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[] }[] }[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
 
@@ -994,6 +998,61 @@ function ActionConfigFields({
           <option value="triggering_user">The user who triggered this</option>
           {users.map(u => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
         </StyledSelect>
+      </div>
+    )
+  }
+
+  if (type === ("CREATE_RECORD" as AutomationAction)) {
+    const targetObj = objectCatalog.find(o => `CO:${o.key}` === (config.objectKey as string))
+    const fields = Array.isArray(config.fields) ? (config.fields as { property: string; value: string }[]) : []
+    const setFields = (next: { property: string; value: string }[]) => set("fields", next)
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Create a record in</label>
+          <StyledSelect className="w-full" value={(config.objectKey as string) || ""} onChange={e => onChange({ ...config, objectKey: e.target.value, fields: [] })}>
+            <option value="">Select a custom object…</option>
+            {objectCatalog.map(o => <option key={o.key} value={`CO:${o.key}`}>{o.label}</option>)}
+          </StyledSelect>
+        </div>
+
+        {targetObj && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-slate-600">Set fields (optional)</label>
+              <button type="button" onClick={() => setFields([...fields, { property: "", value: "" }])}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium">+ Add field</button>
+            </div>
+            {fields.length === 0 && <p className="text-xs text-slate-400">No fields — the record is created blank (just its Record ID).</p>}
+            {fields.map((f, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <StyledSelect className="flex-1" value={f.property} onChange={e => setFields(fields.map((x, j) => j === i ? { ...x, property: e.target.value } : x))}>
+                  <option value="">Select a property…</option>
+                  {targetObj.properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </StyledSelect>
+                <input className="flex-1 h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+                  value={f.value} onChange={e => setFields(fields.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                  placeholder="Value (tokens like {patient_name} work)" />
+                <button type="button" onClick={() => setFields(fields.filter((_, j) => j !== i))}
+                  className="text-slate-400 hover:text-red-500 shrink-0"><X className="h-4 w-4" /></button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={config.associate !== false} onChange={e => set("associate", e.target.checked)} className="rounded border-slate-300" />
+          Associate the new record with the triggering record
+        </label>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Owner of the new record</label>
+          <StyledSelect className="w-full" value={(config.ownerId as string) ?? "triggering_user"} onChange={e => set("ownerId", e.target.value)}>
+            <option value="">— Unassigned —</option>
+            <option value="triggering_user">The user who triggered this</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+          </StyledSelect>
+        </div>
       </div>
     )
   }
@@ -1936,7 +1995,7 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [] }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
@@ -1944,6 +2003,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]; tokens: string[]
   fieldTokens?: PersonalizationToken[]
   templates?: MessageTemplateOption[]
+  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[] }[] }[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
@@ -1973,7 +2033,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -2434,6 +2494,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           users={users} tags={tags} practices={practices} locations={locations}
           pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions} tokens={objectTokens}
           fieldTokens={objectFieldTokens} templates={templates}
+          objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [] }))}
         />
       )}
     </div>

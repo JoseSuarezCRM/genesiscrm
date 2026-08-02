@@ -9,7 +9,12 @@ import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/automation-graph"
 import { findProcedureLocation } from "@/lib/surgery-procedures"
-import { type RecordRef, loadRecord, loadAllRecords, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner } from "@/lib/automation-records"
+import { type RecordRef, loadRecord, loadAllRecords, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner, createRecordFor } from "@/lib/automation-records"
+import { ensureAssociationDef, ensureAssociation } from "@/lib/object-associations"
+
+// A record created by a workflow can fire its own "record created" workflows; cap
+// the chain so a misconfigured loop stops instead of running away.
+const MAX_CHAIN_DEPTH = 5
 import { buildRecordTokenVars } from "@/lib/record-token-vars"
 
 // Attach derived surgical provider + body part (from the stored procedure) so
@@ -202,6 +207,10 @@ const ACTION_STEP_LABELS: Record<string, string> = {
   SEND_EMAIL: "Send email",
   SEND_SMS: "Send SMS",
   SEND_MEETING_INVITE: "Send meeting invite",
+  SET_PROPERTY: "Set property",
+  COPY_PROPERTY: "Copy property",
+  ASSIGN_OWNER: "Assign owner",
+  CREATE_RECORD: "Create record",
 }
 
 function stepLabel(type: string, cfg: Record<string, unknown>): string {
@@ -234,6 +243,7 @@ async function executeAction(
   triggeredByUserId?: string,
   conditionRecord?: Record<string, unknown> | null,
   recordRef?: RecordRef | null,
+  depth = 0,
 ): Promise<RunLog> {
   // For referral workflows that didn't pass a record, fall back to fetching it.
   const record = conditionRecord !== undefined
@@ -243,7 +253,7 @@ async function executeAction(
 
   const steps: RunStep[] = []
   const run = async (type: AutomationAction, cfg: Record<string, unknown>) => {
-    const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record, recordRef)
+    const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record, recordRef, depth)
     steps.push({ label: stepLabel(type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
   }
 
@@ -425,6 +435,7 @@ async function runSingleAction(
   triggeredByUserId?: string,
   record?: Record<string, unknown> | null,
   recordRef?: RecordRef | null,
+  depth = 0,
 ): Promise<string | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
   // Resolve every native + custom token for the triggering record via the shared
@@ -761,6 +772,45 @@ async function runSingleAction(
       await setGenericOwner(target.type, target.id, ownerId)
     } catch (err: any) {
       return `Assign owner failed: ${err.message}`
+    }
+  }
+
+  if ((automation.actionType as string) === "CREATE_RECORD") {
+    const objectKey = (cfg.objectKey as string) || ""
+    if (!objectKey.startsWith("CO:")) return "Create record: choose a custom object to create in"
+    // Prefill fields from the mapping (values may contain tokens like {patient_name}).
+    const fields = Array.isArray(cfg.fields) ? (cfg.fields as { property?: string; value?: unknown }[]) : []
+    const values: Record<string, unknown> = {}
+    for (const f of fields) {
+      if (!f?.property) continue
+      const resolved = typeof f.value === "string" ? resolveTemplate(f.value, vars) : f.value
+      if (resolved !== undefined && resolved !== "") values[f.property] = resolved
+    }
+    // Owner of the new record: "triggering_user" | a user id | unassigned.
+    const ownerRaw = (cfg.ownerId as string) || ""
+    const ownerId = ownerRaw === "triggering_user" ? (triggeredByUserId ?? null) : (ownerRaw || null)
+
+    let newId: string
+    try {
+      newId = await createRecordFor(objectKey, values, { ownerId, createdById: triggeredByUserId ?? null })
+    } catch (err: any) {
+      return `Create record failed: ${err.message}`
+    }
+
+    // Associate the new record with the triggering record (when asked, and one exists).
+    if (cfg.associate !== false && target) {
+      try {
+        await ensureAssociationDef(objectKey, target.type)
+        await ensureAssociation(objectKey, newId, target.type, target.id)
+      } catch (err: any) {
+        return `Create record: associate failed: ${err.message}`
+      }
+    }
+
+    // Let the new record fire its own "record created" workflows (chaining),
+    // bounded so a create-loop can't run away.
+    if (depth < MAX_CHAIN_DEPTH) {
+      await runTrigger_RecordCreated(objectKey, newId, triggeredByUserId, depth + 1).catch(() => {})
     }
   }
 
@@ -1446,6 +1496,7 @@ async function runRecordTrigger(
   extraVars: Partial<TemplateVars>,
   match: (cfg: Record<string, unknown>) => boolean,
   triggeredByUserId?: string,
+  depth = 0,
 ) {
   const automations = await prisma.automation.findMany({ where: { triggerType, isActive: true } })
   const forThisObject = automations.filter((a) => {
@@ -1467,19 +1518,20 @@ async function runRecordTrigger(
     const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
     if (!checkConditions(record, cfg)) continue
 
-    const log = await executeAction(auto, null, vars, triggeredByUserId, record, ref)
+    const log = await executeAction(auto, null, vars, triggeredByUserId, record, ref, depth)
     await prisma.automationRun.create({
       data: { automationId: auto.id, ...runData(log, recordType, recordId, detail) },
     }).catch(() => {})
   }
 }
 
-export async function runTrigger_RecordCreated(recordType: string, recordId: string, triggeredByUserId?: string) {
+export async function runTrigger_RecordCreated(recordType: string, recordId: string, triggeredByUserId?: string, depth = 0) {
   await runRecordTrigger(
     "RECORD_CREATED" as AutomationTrigger,
     recordType, recordId, "Record created", {},
     () => true,
     triggeredByUserId,
+    depth,
   )
 }
 
