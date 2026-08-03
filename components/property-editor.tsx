@@ -18,12 +18,14 @@ export interface PropertyDraft {
   name: string; internalName: string; type: string; description?: string
   required: boolean; unique: boolean; defaultValue?: string; options: string[]
   optionLabels?: Record<string, string>; conditional: Conditional; visibilityRule: VisibilityRule
+  numberFormat?: string   // NUMBER only: "currency" or undefined (plain)
 }
 
 export interface EditingProperty {
   id: string; name: string; internalName?: string | null; type: string
   required?: boolean; unique?: boolean; description?: string | null; defaultValue?: string | null
   options?: string[]; optionLabels?: Record<string, string> | null; conditional?: Conditional; visibilityRule?: VisibilityRule
+  numberFormat?: string | null
 }
 
 // A sibling single-select property that can control this one's options.
@@ -82,6 +84,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [required, setRequired] = useState(editing?.required ?? false)
   const [unique, setUnique] = useState(editing?.unique ?? false)
   const [defaultValue, setDefaultValue] = useState(editing?.defaultValue ?? "")
+  const [numberFormat, setNumberFormat] = useState(editing?.numberFormat ?? "")
   // Each option carries a display label + a stable internal value (what records
   // store). `locked` = existed when the editor opened → its value is immutable.
   const [optRows, setOptRows] = useState<{ label: string; value: string; locked: boolean; touched: boolean }[]>(() => {
@@ -155,6 +158,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
       description: description.trim() || undefined, required, unique,
       defaultValue: defaultValue || undefined, options: cleanOptions,
       optionLabels: Object.keys(labelMap).length ? labelMap : undefined, conditional, visibilityRule,
+      numberFormat: type === "NUMBER" ? (numberFormat || undefined) : undefined,
     }
     startTransition(async () => {
       const res = await onSave(draft)
@@ -303,6 +307,17 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {type === "NUMBER" && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Format</label>
+                    <p className="text-xs text-slate-400 mb-1.5">How this number is displayed on records and lists.</p>
+                    <StyledSelect value={numberFormat} onChange={(e) => setNumberFormat(e.target.value)} className={INPUT}>
+                      <option value="">Plain number (1,234)</option>
+                      <option value="currency">Currency ($1,234.00)</option>
+                    </StyledSelect>
                   </div>
                 )}
 

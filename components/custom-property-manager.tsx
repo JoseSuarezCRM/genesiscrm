@@ -139,8 +139,8 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
           visibilityControllers={visibilityControllers}
           onSave={async (d: PropertyDraft) => {
             return dialog.editing
-              ? await updateCustomProperty({ id: dialog.editing.id, name: d.name, internalName: d.internalName, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional, visibilityRule: d.visibilityRule })
-              : await createCustomProperty({ name: d.name, internalName: d.internalName, type: d.type as any, entityType: entity as any, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional, visibilityRule: d.visibilityRule })
+              ? await updateCustomProperty({ id: dialog.editing.id, name: d.name, internalName: d.internalName, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional, visibilityRule: d.visibilityRule, numberFormat: d.numberFormat })
+              : await createCustomProperty({ name: d.name, internalName: d.internalName, type: d.type as any, entityType: entity as any, required: d.required, unique: d.unique, description: d.description, defaultValue: d.defaultValue, options: d.options, optionLabels: d.optionLabels, conditional: d.conditional, visibilityRule: d.visibilityRule, numberFormat: d.numberFormat })
           }}
           onClose={() => setDialog(null)}
         />

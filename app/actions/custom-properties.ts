@@ -34,6 +34,7 @@ interface CreateCustomPropertyInput {
   internalName?: string
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
   visibilityRule?: { controllingKey: string; equals: string[] } | null
+  numberFormat?: string | null   // NUMBER only: "currency" or null (plain)
 }
 
 // Native (non-custom) fields that can control a property's conditional
@@ -127,6 +128,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
         optionLabels: (data.optionLabels ?? undefined) as any,
         conditional: (data.conditional ?? undefined) as any,
         visibilityRule: (data.visibilityRule ?? undefined) as any,
+        numberFormat: data.numberFormat || null,
       },
     })
     revalidatePath("/settings/custom-properties")
@@ -158,6 +160,7 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
         ...(rest.conditional !== undefined ? { conditional: (rest.conditional ?? null) as any } : {}),
         ...(rest.visibilityRule !== undefined ? { visibilityRule: (rest.visibilityRule ?? null) as any } : {}),
         ...(rest.optionLabels !== undefined ? { optionLabels: (rest.optionLabels ?? null) as any } : {}),
+        ...(rest.numberFormat !== undefined ? { numberFormat: rest.numberFormat || null } : {}),
         options: rest.options,
       },
     })

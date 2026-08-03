@@ -43,7 +43,7 @@ async function loadCustomObjectCards(objectType: string, record: Record<string, 
   const props: any[] = (def?.properties as any[]) ?? []
 
   const catalog: RecordFieldDef[] = [
-    ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined, visibilityRule: (p as any).visibilityRule ?? undefined })),
+    ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined, visibilityRule: (p as any).visibilityRule ?? undefined, numberFormat: (p as any).numberFormat ?? undefined })),
     ...metaCatalog(ownerLabel || `${def?.singular ?? "Record"} Owner`, true),
   ]
 
@@ -96,7 +96,7 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
     ...(RECORD_FIELDS[entityType] ?? []).map((f) =>
       f.key === "pipelineId" && pipelineField ? { ...f, options: pipelineField, optionLabels: pipelineLabels } : f
     ),
-    ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options, default: (c as any).defaultValue ?? undefined, conditional: (c as any).conditional ?? undefined, optionLabels: (c as any).optionLabels ?? undefined, visibilityRule: (c as any).visibilityRule ?? undefined })),
+    ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", options: c.options, default: (c as any).defaultValue ?? undefined, conditional: (c as any).conditional ?? undefined, optionLabels: (c as any).optionLabels ?? undefined, visibilityRule: (c as any).visibilityRule ?? undefined, numberFormat: (c as any).numberFormat ?? undefined })),
     ...(hasMeta ? metaCatalog(ownerLabel!, false) : []),
   ]
 

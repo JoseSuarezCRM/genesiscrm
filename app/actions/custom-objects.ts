@@ -22,6 +22,7 @@ export interface CustomObjectProperty {
   defaultValue?: string
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
   visibilityRule?: { controllingKey: string; equals: string[] } | null
+  numberFormat?: string   // NUMBER only: "currency" or undefined (plain)
 }
 
 export interface CustomObjectCard {

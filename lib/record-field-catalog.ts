@@ -26,6 +26,8 @@ export interface RecordFieldDef {
   optionLabels?: Record<string, string>
   // Show this field on the record only when the controlling field's value matches.
   visibilityRule?: { controllingKey: string; equals: string[] } | null
+  // NUMBER only: "currency" renders the value as USD currency; otherwise plain.
+  numberFormat?: string | null
 }
 
 // Whether a property with a visibility rule should show, given the record's values.

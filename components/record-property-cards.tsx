@@ -13,6 +13,7 @@ import CallLogCard from "@/components/call-log-card"
 import PhoneInput from "@/components/phone-input"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
+import { formatNumber } from "@/lib/number-format"
 import { cn } from "@/lib/utils"
 
 export interface PropertyCard {
@@ -50,6 +51,7 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): st
   if (f.type === "user") return userMap[v] ?? String(v)
   if (f.type === "datetime") return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
   if (f.type === "date") return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  if (f.type === "number") return formatNumber(v, f.numberFormat as any)
   const lbl = f.optionLabels
   if (Array.isArray(v)) return v.map((x) => lbl?.[String(x)] ?? String(x)).join(", ")
   if (f.type === "select" && lbl) return lbl[String(v)] ?? String(v)

@@ -19,6 +19,7 @@ import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeC
 import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { recordName, isPersonObject, personPartIds } from "@/lib/record-name"
+import { formatNumber } from "@/lib/number-format"
 
 interface RecordRow {
   id: string
@@ -68,6 +69,7 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
   if (v === null || v === undefined || v === "") return "—"
   switch (p.type) {
     case "CHECKBOX": return v ? "Yes" : "No"
+    case "NUMBER": return formatNumber(v, (p as any).numberFormat)
     case "DATE": return fmtDate(v)
     case "DATE_TIME": return v ? new Date(v).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
     case "DROPDOWN": { const l = (p as any).optionLabels as Record<string, string> | undefined; return l?.[String(v)] ?? String(v) }

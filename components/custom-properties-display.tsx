@@ -6,6 +6,7 @@ import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Edit2, Check, X } from "lucide-react"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
+import { formatNumber } from "@/lib/number-format"
 import { cn } from "@/lib/utils"
 
 interface CustomProperty {
@@ -14,6 +15,7 @@ interface CustomProperty {
   type: string
   required: boolean
   options: string[]
+  numberFormat?: string | null
 }
 
 interface PropertyDisplay {
@@ -77,6 +79,8 @@ export default function CustomPropertiesDisplay({
         return prop.value ? new Date(prop.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
       case "MULTI_SELECT":
         return Array.isArray(prop.value) ? prop.value.join(", ") : "—"
+      case "NUMBER":
+        return prop.value === "" || prop.value == null ? "—" : formatNumber(prop.value, prop.numberFormat as any)
       default:
         return prop.value || "—"
     }

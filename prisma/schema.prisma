@@ -183,6 +183,7 @@ model CustomProperty {
   optionLabels Json?                                       // { [value]: displayLabel } — rename labels without breaking records
   conditional  Json?                                       // { controllingPropertyId, rules: { value: [opts] } }
   visibilityRule Json?                                      // { controllingKey, equals: [values] } — show only when the controlling field's value is one of these
+  numberFormat String?                                      // NUMBER only: "currency" or null (plain)
   createdAt    DateTime                   @default(now())
   updatedAt    DateTime                   @updatedAt
 

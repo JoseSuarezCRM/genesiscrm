@@ -125,7 +125,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
       options: draft.options, optionLabels: draft.optionLabels, required: draft.required, primary: existing?.primary,
       internalName: draft.internalName, description: draft.description,
       unique: draft.unique, defaultValue: draft.defaultValue, conditional: draft.conditional,
-      visibilityRule: draft.visibilityRule,
+      visibilityRule: draft.visibilityRule, numberFormat: draft.numberFormat,
     }
     const next = existing ? props.map((p) => (p.id === existing.id ? prop : p)) : [...props, prop]
     setProps(next)
@@ -196,6 +196,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
             id: editingProp.id, name: editingProp.name, internalName: editingProp.internalName, type: editingProp.type,
             required: editingProp.required, unique: editingProp.unique, description: editingProp.description,
             defaultValue: editingProp.defaultValue, options: editingProp.options, optionLabels: editingProp.optionLabels, conditional: editingProp.conditional, visibilityRule: editingProp.visibilityRule,
+            numberFormat: (editingProp as any).numberFormat,
           }}
           controllingProps={props.filter((p) => p.type === "DROPDOWN" && (editingProp === "new" || p.id !== editingProp.id)).map((p) => ({ id: p.id, name: p.name, options: p.options ?? [] }))}
           visibilityControllers={props.filter((p) => editingProp === "new" || p.id !== editingProp.id).map((p) => ({ key: p.id, name: p.name, options: (p.type === "DROPDOWN" || p.type === "MULTI_SELECT") ? (p.options ?? []) : [], optionLabels: p.optionLabels }))}
