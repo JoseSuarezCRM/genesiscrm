@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2, Trash2, Mail } from "lucide-react"
-import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, resetFaImport, saveFaReportConfig, sendFaReportNow, type FaSettings } from "@/app/actions/filesanywhere"
+import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, importAllFaFiles, resetFaImport, saveFaReportConfig, sendFaReportNow, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -106,9 +106,12 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   function sendReport() {
     setMsg(null)
     start(async () => {
+      // Save the current form first so "Send now" uses the recipients you just typed.
+      const saved = await saveFaReportConfig({ enabled: reportEnabled, recipients: reportRecipients.split(",").map((s) => s.trim()).filter(Boolean), dayOfWeek: reportDay, hour: reportHour })
+      if (saved.error) return flash(saved.error)
       const r = await sendFaReportNow()
       if (r.error) return flash(r.error)
-      flash(r.message ?? "Sent.", true)
+      flash(r.message ?? "Sent.", true); router.refresh()
     })
   }
   function reset() {
@@ -130,6 +133,17 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       if (r.skipped) return flash(`${name} was already imported — nothing to do.`, true)
       setEntries((prev) => prev?.map((e) => (e.name === name ? { ...e, imported: true } : e)) ?? prev)
       flash(`Imported ${name}: ${r.appointmentsCreated} appointments, ${r.providersCreated} new providers.`, true)
+    })
+  }
+  // Import every matching file in the browsed folder that isn't imported yet.
+  function importAll() {
+    setMsg(null); setImporting("__all__")
+    start(async () => {
+      const r = await importAllFaFiles(folderPath)
+      setImporting(null)
+      if (r.error) return flash(r.error)
+      setEntries((prev) => prev?.map((e) => (e.matches ? { ...e, imported: true } : e)) ?? prev)
+      flash(r.message ?? "Done.", true)
     })
   }
   function toggle(enabled: boolean) { start(async () => { await setFaEnabled(enabled); router.refresh() }) }
@@ -201,7 +215,19 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
                 </div>
               )
             ))}
-            {matched > 0 && <p className="text-emerald-600 mt-1">✓ {matched} file(s) here match the pattern. Use <b>Import</b> next to any file for a historical backfill, or Save settings for the scheduled pull.</p>}
+            {matched > 0 && (
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={importAll}
+                  disabled={pending || !settings.objectSlug || !settings.providerObjectSlug}
+                  title={!settings.objectSlug || !settings.providerObjectSlug ? "Save both objects & mapping first" : "Import every matching file not yet imported (oldest first)"}
+                  className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40"
+                >
+                  {importing === "__all__" ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlayCircle className="h-3 w-3" />} Import all matching
+                </button>
+                <span className="text-emerald-600">✓ {matched} file(s) here match the pattern.</span>
+              </div>
+            )}
             {matched === 0 && entries.some((e) => e.dir) && <p className="text-amber-600 mt-1">Click a 📁 folder to go into it.</p>}
           </div>
         )}

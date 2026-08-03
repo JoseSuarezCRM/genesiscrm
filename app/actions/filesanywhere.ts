@@ -7,7 +7,7 @@ import { encryptSecret, decryptSecret, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
 import { sftpListFiles, sftpDownloadText, sftpList, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
-import { runFilesanywhereImport, runFilesanywhereImportFile, resetFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
+import { runFilesanywhereImport, runFilesanywhereImportFile, runFilesanywhereImportAll, resetFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
 import { sendFilesanywhereReport } from "@/lib/filesanywhere-report"
 
 const PROVIDER = "filesanywhere"
@@ -190,6 +190,16 @@ export async function importFaFile(fileName: string, folderPath?: string, force 
   const r = await runFilesanywhereImportFile(fileName, { force, folderPath })
   revalidate()
   return r
+}
+
+// Import every matching file in the browsed folder that hasn't been imported yet.
+export async function importAllFaFiles(folderPath?: string): Promise<{ ok?: boolean; message?: string; error?: string }> {
+  await requirePermission("MANAGE_USERS")
+  const r = await runFilesanywhereImportAll({ folderPath })
+  revalidate()
+  if (r.error) return { error: r.error }
+  if (r.imported === 0) return { ok: true, message: "No new files to import — everything matching is already imported." }
+  return { ok: true, message: `Imported ${r.imported} file(s): ${r.appointmentsCreated} appointments, ${r.providersCreated} new providers.` }
 }
 
 // Download the newest matching file and return its CSV column headers, for mapping.

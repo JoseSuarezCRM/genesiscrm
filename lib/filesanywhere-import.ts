@@ -208,6 +208,36 @@ export async function runFilesanywhereImport(opts: { force?: boolean; scheduled?
   }
 }
 
+// Import every matching file in a folder that hasn't been imported yet (oldest
+// first, so historical data lands in order). `force` re-imports even done ones.
+export async function runFilesanywhereImportAll(opts: { folderPath?: string; force?: boolean } = {}): Promise<{ imported: number; appointmentsCreated: number; providersCreated: number; files: string[]; error?: string }> {
+  const cfg = await loadConfig()
+  if ("error" in cfg) return { imported: 0, appointmentsCreated: 0, providersCreated: 0, files: [], error: cfg.error }
+  const dir = (opts.folderPath && opts.folderPath.trim()) || cfg.folderPath
+  try {
+    const importedSet = new Set(cfg.importedFiles ?? [])
+    const files = (await sftpListFiles(connOf(cfg), dir))
+      .filter((f) => matchGlob(f.name, cfg.filenamePattern))
+      .sort((a, b) => a.modifyTime - b.modifyTime) // oldest first
+    const todo = opts.force ? files : files.filter((f) => !importedSet.has(f.name))
+    if (!todo.length) return { imported: 0, appointmentsCreated: 0, providersCreated: 0, files: [] }
+
+    let appointmentsCreated = 0, providersCreated = 0
+    const done: string[] = []
+    for (const f of todo) {
+      const r = await runFilesanywhereImportFile(f.name, { folderPath: dir, force: true })
+      if (!r.error && !r.skipped) {
+        appointmentsCreated += r.appointmentsCreated ?? 0
+        providersCreated += r.providersCreated ?? 0
+        done.push(f.name)
+      }
+    }
+    return { imported: done.length, appointmentsCreated, providersCreated, files: done }
+  } catch (e: any) {
+    return { imported: 0, appointmentsCreated: 0, providersCreated: 0, files: [], error: e?.message ?? "Import failed." }
+  }
+}
+
 // Undo an import run: delete every record in the appointments + referring-providers
 // objects (and their associations), and clear the imported-files history so the
 // next run starts clean. Used after a mis-mapped import.
