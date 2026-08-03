@@ -326,6 +326,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                     <p className="text-xs text-slate-400 mb-1.5">How this number is displayed on records and lists.</p>
                     <StyledSelect value={numberFormat} onChange={(e) => setNumberFormat(e.target.value)} className={INPUT}>
                       <option value="">Plain number (1,234)</option>
+                      <option value="unformatted">No separators — for IDs (1234)</option>
                       <option value="currency">Currency ($1,234.00)</option>
                     </StyledSelect>
                   </div>

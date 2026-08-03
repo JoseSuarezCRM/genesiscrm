@@ -1,7 +1,7 @@
 // Formatting for NUMBER properties. A property can opt into currency display
 // (numberFormat === "currency"); otherwise numbers render as grouped decimals.
 
-export type NumberFormat = "currency" | undefined | null
+export type NumberFormat = "currency" | "unformatted" | undefined | null
 
 export function formatCurrency(v: number | string): string {
   const n = typeof v === "number" ? v : Number(String(v).replace(/[^0-9.\-]/g, ""))
@@ -10,9 +10,11 @@ export function formatCurrency(v: number | string): string {
 }
 
 // Render a numeric value for display, honoring the property's chosen format.
+// "unformatted" keeps the raw digits (no thousands separators) — for IDs like NPI.
 export function formatNumber(v: number | string, format?: NumberFormat): string {
   if (v === null || v === undefined || v === "") return String(v ?? "")
   if (format === "currency") return formatCurrency(v)
+  if (format === "unformatted") return String(v)
   const n = typeof v === "number" ? v : Number(v)
   return isFinite(n) ? n.toLocaleString("en-US") : String(v)
 }
