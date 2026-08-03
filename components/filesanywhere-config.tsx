@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2, Trash2 } from "lucide-react"
-import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, resetFaImport, type FaSettings } from "@/app/actions/filesanywhere"
+import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2, Trash2, Mail } from "lucide-react"
+import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, resetFaImport, saveFaReportConfig, sendFaReportNow, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -36,6 +36,12 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [matched, setMatched] = useState(0)
   const [importing, setImporting] = useState<string | null>(null)
+
+  // Weekly report
+  const [reportEnabled, setReportEnabled] = useState(settings.report.enabled)
+  const [reportRecipients, setReportRecipients] = useState((settings.report.recipients ?? []).join(", "))
+  const [reportDay, setReportDay] = useState(settings.report.dayOfWeek ?? 1)
+  const [reportHour, setReportHour] = useState(settings.report.hour ?? 8)
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
   const selectedProviderObject = settings.objects.find((o) => o.slug === providerObjectSlug)
@@ -87,6 +93,22 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       const r = await saveFaImportConfig({ folderPath, filenamePattern, objectSlug, providerObjectSlug, providerMatchProp, providerMap, appointmentMap, frequency, dayOfWeek, hour })
       if (r.error) return flash(r.error)
       flash("Import settings saved.", true); router.refresh()
+    })
+  }
+  function saveReport() {
+    setMsg(null)
+    start(async () => {
+      const r = await saveFaReportConfig({ enabled: reportEnabled, recipients: reportRecipients.split(",").map((s) => s.trim()).filter(Boolean), dayOfWeek: reportDay, hour: reportHour })
+      if (r.error) return flash(r.error)
+      flash("Report settings saved.", true); router.refresh()
+    })
+  }
+  function sendReport() {
+    setMsg(null)
+    start(async () => {
+      const r = await sendFaReportNow()
+      if (r.error) return flash(r.error)
+      flash(r.message ?? "Sent.", true)
     })
   }
   function reset() {
@@ -286,6 +308,39 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
           <span className="text-[11px] text-slate-400 pb-2">America/Chicago</span>
         </div>
         {settings.lastRunAt && <p className="text-[11px] text-slate-400">Last run {new Date(settings.lastRunAt).toLocaleString()}{settings.lastImportedFile ? ` · last file ${settings.lastImportedFile}` : ""}</p>}
+      </div>
+
+      {/* 5. Weekly report */}
+      <div className={card}>
+        <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-slate-400" /><h3 className="text-sm font-semibold text-slate-800">Weekly report</h3>
+          <label className="ml-auto inline-flex items-center gap-2 text-xs text-slate-700">Enabled
+            <button onClick={() => setReportEnabled((v) => !v)} className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors", reportEnabled ? "bg-emerald-500" : "bg-slate-300")}>
+              <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform", reportEnabled ? "translate-x-4" : "translate-x-0.5")} />
+            </button>
+          </label>
+        </div>
+        <p className="text-xs text-slate-500">Emails a table of referring providers created in the last 7 days, each with their appointment info.</p>
+        <label className="block text-xs text-slate-500">Recipients (comma-separated)
+          <input value={reportRecipients} onChange={(e) => setReportRecipients(e.target.value)} placeholder="name@genesisortho.com, other@…" className={input} />
+        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-slate-500">Send weekly on
+            <select value={reportDay} onChange={(e) => setReportDay(Number(e.target.value))} className={sel + " w-36"}>
+              {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+            </select>
+          </label>
+          <label className="text-xs text-slate-500">at
+            <select value={reportHour} onChange={(e) => setReportHour(Number(e.target.value))} className={sel + " w-28"}>
+              {HOURS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+            </select>
+          </label>
+          <span className="text-[11px] text-slate-400 pb-2">America/Chicago</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={saveReport} disabled={pending} className="h-8 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">Save report settings</button>
+          <button onClick={sendReport} disabled={pending} className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Mail className="h-4 w-4" /> Send report now</button>
+          {settings.report.lastSentAt && <span className="text-[11px] text-slate-400 ml-auto">Last sent {new Date(settings.report.lastSentAt).toLocaleString()}</span>}
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

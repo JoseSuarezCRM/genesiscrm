@@ -8,6 +8,7 @@ import { getIntegration } from "@/lib/integration-store"
 import { sftpListFiles, sftpDownloadText, sftpList, joinRemote, type SftpConn } from "@/lib/filesanywhere-sftp"
 import { parseCsv, matchGlob } from "@/lib/csv"
 import { runFilesanywhereImport, runFilesanywhereImportFile, resetFilesanywhereImport, type FaConfig } from "@/lib/filesanywhere-import"
+import { sendFilesanywhereReport } from "@/lib/filesanywhere-report"
 
 const PROVIDER = "filesanywhere"
 const revalidate = () => revalidatePath("/settings/integrations/filesanywhere")
@@ -35,6 +36,7 @@ export interface FaSettings {
   lastRunAt: string | null
   lastImportedFile: string | null
   objects: FaCustomObject[]
+  report: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null }
 }
 
 async function cfgOf(): Promise<Partial<FaConfig>> {
@@ -77,7 +79,34 @@ export async function getFaSettings(): Promise<FaSettings> {
     lastRunAt: cfg.lastRunAt ?? null,
     lastImportedFile: cfg.lastImportedFile ?? null,
     objects,
+    report: {
+      enabled: cfg.report?.enabled ?? false,
+      recipients: cfg.report?.recipients ?? [],
+      dayOfWeek: cfg.report?.dayOfWeek ?? 1,
+      hour: cfg.report?.hour ?? 8,
+      lastSentAt: cfg.report?.lastSentAt ?? null,
+    },
   }
+}
+
+// Save the weekly report settings (recipients + schedule + enabled).
+export async function saveFaReportConfig(input: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number }): Promise<{ ok?: boolean; error?: string }> {
+  await requirePermission("MANAGE_USERS")
+  const cfg = await cfgOf()
+  const recipients = (input.recipients ?? []).map((r) => r.trim()).filter(Boolean)
+  const report = { enabled: !!input.enabled, recipients, dayOfWeek: input.dayOfWeek, hour: input.hour, lastSentAt: cfg.report?.lastSentAt ?? null }
+  await (prisma as any).integration.update({ where: { provider: PROVIDER }, data: { config: { ...cfg, report } } })
+  revalidate()
+  return { ok: true }
+}
+
+// Build + email the report now (manual test — doesn't touch the schedule guard).
+export async function sendFaReportNow(): Promise<{ ok?: boolean; message?: string; error?: string }> {
+  await requirePermission("MANAGE_USERS")
+  const r = await sendFilesanywhereReport({ manual: true })
+  if (r.error) return { error: r.error }
+  if (r.skipped) return { ok: true, message: r.message ?? "Nothing to send." }
+  return { ok: true, message: `Sent to ${r.sent} recipient(s) — ${r.providerCount} new provider(s), ${r.rowCount} row(s).` }
 }
 
 // Store the SFTP connection (host/port/user + encrypted password). Empty password keeps the existing.

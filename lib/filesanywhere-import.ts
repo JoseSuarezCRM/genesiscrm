@@ -27,6 +27,8 @@ export interface FaConfig {
   lastRunAt: string | null
   lastImportedFile: string | null
   importedFiles?: string[]                  // every file name imported, so we don't re-import
+  // Weekly email report of newly-created referring providers + their appointments.
+  report?: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null }
 }
 
 export interface FaImportResult {
@@ -50,11 +52,12 @@ export function faImportDue(cfg: Partial<FaConfig> | null | undefined): boolean 
     const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
     if ((cfg.dayOfWeek ?? -1) !== dayMap[wd]) return false
   }
-  // Guard against a second run in the same period (cron could fire twice/hour).
+  // Guard against a second run in the same scheduled period (the hourly cron could
+  // fire twice, or a same-day retry). ~20h covers that without blocking the next
+  // weekly run after a mid-week manual "Import now" (which also sets lastRunAt).
   if (cfg.lastRunAt) {
     const gap = Date.now() - new Date(cfg.lastRunAt).getTime()
-    const minGap = cfg.frequency === "weekly" ? 6 * 86_400_000 : 20 * 3_600_000
-    if (gap < minGap) return false
+    if (gap < 20 * 3_600_000) return false
   }
   return true
 }

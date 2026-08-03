@@ -20,11 +20,12 @@ export function scheduleDue(s: Schedule | null | undefined, now: Date = new Date
     const wd = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short" }).format(now)
     if ((s.dayOfWeek ?? -1) !== DAY_MAP[wd]) return false
   }
-  // Guard against a second run in the same period (a cron can fire twice/hour).
+  // Guard against a second run in the same scheduled period (~20h) — the day+hour
+  // gate already limits it to the intended slot; this only stops a same-day double
+  // fire, without blocking the next weekly run after an off-schedule manual run.
   if (s.lastRunAt) {
     const gap = now.getTime() - new Date(s.lastRunAt).getTime()
-    const minGap = s.frequency === "weekly" ? 6 * 86_400_000 : 20 * 3_600_000
-    if (gap < minGap) return false
+    if (gap < 20 * 3_600_000) return false
   }
   return true
 }
