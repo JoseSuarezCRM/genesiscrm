@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import {
   X, Code2, GripVertical, Plus, Trash2, Search, ChevronLeft, ChevronRight,
@@ -95,6 +95,12 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [optPage, setOptPage] = useState(0)
   const OPT_PAGE = 10
+  // Focus the label of a just-added option (so Enter-to-add keeps you typing).
+  const lastLabelRef = useRef<HTMLInputElement | null>(null)
+  const [focusNew, setFocusNew] = useState(false)
+  useEffect(() => {
+    if (focusNew) { lastLabelRef.current?.focus(); setFocusNew(false) }
+  }, [focusNew, optRows.length])
 
   // Conditional options
   const [controlId, setControlId] = useState(editing?.conditional?.controllingPropertyId ?? "")
@@ -117,7 +123,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
 
   const setRowLabel = (i: number, label: string) => setOptRows((rs) => rs.map((r, idx) => idx === i ? { ...r, label, value: r.locked || r.touched ? r.value : slugify(label) } : r))
   const setRowValue = (i: number, value: string) => setOptRows((rs) => rs.map((r, idx) => idx === i ? { ...r, value: slugify(value), touched: true } : r))
-  const addOpt = () => { setOptRows((rs) => [...rs, { label: "", value: "", locked: false, touched: false }]); setOptPage(Math.floor(optRows.length / OPT_PAGE)) }
+  const addOpt = () => { setOptQuery(""); setOptRows((rs) => [...rs, { label: "", value: "", locked: false, touched: false }]); setOptPage(Math.floor(optRows.length / OPT_PAGE)); setFocusNew(true) }
   const removeOpt = (i: number) => setOptRows((rs) => rs.filter((_, idx) => idx !== i))
 
   // Options are paginated (10/page). Search filters across all, then paginates.
@@ -288,8 +294,12 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                           onDragEnd={() => setDragIdx(null)}
                           className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 items-center px-3 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                           <GripVertical className="h-4 w-4 text-slate-300 cursor-grab" />
-                          <input value={row.label} onChange={(e) => setRowLabel(i, e.target.value)} placeholder="Option label" className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400" />
+                          <input ref={i === optRows.length - 1 ? lastLabelRef : undefined}
+                            value={row.label} onChange={(e) => setRowLabel(i, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOpt() } }}
+                            placeholder="Option label" className="text-sm border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400" />
                           <input value={row.value} onChange={(e) => setRowValue(i, e.target.value)} disabled={row.locked}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOpt() } }}
                             title={row.locked ? "Internal value is fixed once saved (records reference it)" : "Internal value"}
                             placeholder="internal_value" className="text-xs font-mono border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400 disabled:bg-slate-50 disabled:text-slate-400" />
                           <button onClick={() => removeOpt(i)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
