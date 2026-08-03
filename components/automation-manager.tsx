@@ -454,7 +454,7 @@ function emptyTriggerConfig(type: string): Record<string, unknown> {
   if (type === "SURGERY_STATUS_CHANGED") return { fromStatus: "", toStatus: "", conditionGroups: [] }
   if (type === "SURGERY_CALL_ATTEMPTS_REACHED") return { count: 4, conditionGroups: [] }
   if (type === "RECORD_CREATED") return { objectType: "", conditionGroups: [] }
-  if (type === "RECORD_PROPERTY_CHANGED") return { objectType: "", property: "", condition: "changed", toValue: "", conditionGroups: [] }
+  if (type === "RECORD_PROPERTY_CHANGED") return { objectType: "", properties: [], condition: "changed", toValue: "", conditionGroups: [] }
   if (type === "RECORD_OWNER_CHANGED") return { objectType: "", ownerId: "", conditionGroups: [] }
   if (type === "ENGAGEMENT_LOGGED") return { objectType: "", kind: "", conditionGroups: [] }
   if (type === "SMS_RECEIVED") return { keyword: "", matchType: "contains", conditionGroups: [] }
@@ -509,16 +509,18 @@ function TriggerConfigFields({
 
     if (type === "RECORD_PROPERTY_CHANGED") {
       const condition = (config.condition as string) || (config.toValue ? "equals" : "changed")
+      // Multi-property: watch several properties; fires when ALL of them meet the
+      // condition. Back-compat with the legacy single `property`.
+      const watched: string[] = (config.properties as string[]) ?? (config.property ? [config.property as string] : [])
+      const propOptions = [...propDefs, ...customDefs].map(p => ({ value: p.id, label: p.label }))
       return (
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Property to watch</label>
-            <StyledSelect className="w-full" value={(config.property as string) || ""} onChange={e => set("property", e.target.value)}>
-              <option value="">Any property</option>
-              {propDefs.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-              {customDefs.length > 0 && <option disabled>──────────</option>}
-              {customDefs.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </StyledSelect>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Properties to watch <span className="text-slate-400 font-normal">(all must match)</span></label>
+            <MultiSelectValue options={propOptions}
+              value={watched.join(MULTI_SEP)}
+              onChange={v => onChange({ ...config, property: undefined, properties: v ? v.split(MULTI_SEP).filter(Boolean) : [] })} />
+            <p className="text-[11px] text-slate-400 mt-1">Leave empty to watch any property.</p>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">When it</label>

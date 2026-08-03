@@ -1503,19 +1503,21 @@ async function runRecordTrigger(
   recordId: string,
   detail: string,
   extraVars: Partial<TemplateVars>,
-  match: (cfg: Record<string, unknown>) => boolean,
+  match: (cfg: Record<string, unknown>, record: Record<string, unknown>) => boolean,
   triggeredByUserId?: string,
   depth = 0,
 ) {
   const automations = await prisma.automation.findMany({ where: { triggerType, isActive: true } })
-  const forThisObject = automations.filter((a) => {
-    const cfg = (a.triggerConfig ?? {}) as Record<string, unknown>
-    return cfg.objectType === recordType && match(cfg)
-  })
+  const forThisObject = automations.filter((a) => ((a.triggerConfig ?? {}) as Record<string, unknown>).objectType === recordType)
   if (!forThisObject.length) return
 
+  // Load the record once, then match — some matchers (e.g. multi-property "all")
+  // need the record's current values, not just the change delta.
   const record = await loadRecord(recordType, recordId)
   if (!record) return
+
+  const matched = forThisObject.filter((a) => match((a.triggerConfig ?? {}) as Record<string, unknown>, record))
+  if (!matched.length) return
 
   const label = await genericRecordLabel(recordType, recordId, record)
   // Native + custom tokens for this record are filled in by runSingleAction via
@@ -1523,7 +1525,7 @@ async function runRecordTrigger(
   const vars: TemplateVars = { ...extraVars, record_name: label } as TemplateVars
   const ref: RecordRef = { type: recordType, id: recordId }
 
-  for (const auto of forThisObject) {
+  for (const auto of matched) {
     const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
     if (!checkConditions(record, cfg)) continue
 
@@ -1544,8 +1546,25 @@ export async function runTrigger_RecordCreated(recordType: string, recordId: str
   )
 }
 
+// The property-changed trigger can watch several properties (stored as
+// `properties: string[]`; legacy configs use a single `property`). Semantics are
+// ALL — it fires only when every watched property meets the condition.
+function watchedProps(cfg: Record<string, unknown>): string[] {
+  const list = cfg.properties as string[] | undefined
+  if (Array.isArray(list) && list.length) return list.filter(Boolean)
+  return cfg.property ? [cfg.property as string] : []
+}
+
+// Does a value satisfy the "when it" condition?
+function propSatisfies(cur: unknown, condition: string, toValue: unknown): boolean {
+  const has = cur != null && String(cur).trim() !== ""
+  if (condition === "unknown") return !has
+  if (condition === "equals") return String(cur ?? "") === String(toValue ?? "")
+  return has // "known" / "changed" → currently holds a value
+}
+
 // `changes` is the set of properties the update touched, so a workflow can watch
-// one property (and optionally require a specific new value).
+// one or more properties (and optionally require a specific new value).
 export async function runTrigger_RecordPropertyChanged(
   recordType: string,
   recordId: string,
@@ -1563,19 +1582,14 @@ export async function runTrigger_RecordPropertyChanged(
   await runRecordTrigger(
     "RECORD_PROPERTY_CHANGED" as AutomationTrigger,
     recordType, recordId, `Property changed: ${labels.join(", ")}`, {},
-    (cfg) => {
-      const watched = cfg.property as string
-      if (!watched) return true // no property named → any change fires it
-      if (!keys.includes(watched)) return false
-      const newVal = changes[watched]
-      const has = newVal != null && String(newVal).trim() !== ""
-      // condition: "known" (became set) | "unknown" (cleared) | "equals" | "changed".
-      // Back-compat: no condition + a toValue means "equals"; otherwise "changed".
+    (cfg, record) => {
+      const watched = watchedProps(cfg)
+      if (!watched.length) return true // no property named → any change fires it
+      // The change must touch at least one watched property (so unrelated edits
+      // don't re-fire), AND every watched property must currently satisfy it.
+      if (!watched.some((w) => keys.includes(w))) return false
       const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
-      if (condition === "known") return has
-      if (condition === "unknown") return !has
-      if (condition === "equals") return String(newVal ?? "") === String(cfg.toValue ?? "")
-      return true // "changed": any new value
+      return watched.every((w) => propSatisfies(currentPropValue(record, w), condition, cfg.toValue))
     },
     triggeredByUserId,
   )
@@ -1600,14 +1614,11 @@ function currentPropValue(record: Record<string, unknown>, key: string): unknown
 // triggers fall back to the criteria filter alone.
 function recordMatchesConfig(record: Record<string, unknown>, triggerType: string, cfg: Record<string, unknown>): boolean {
   if (triggerType === "RECORD_PROPERTY_CHANGED") {
-    const watched = cfg.property as string
-    if (watched) {
-      const cur = currentPropValue(record, watched)
-      const has = cur != null && String(cur).trim() !== ""
+    const watched = watchedProps(cfg)
+    if (watched.length) {
       const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
-      if (condition === "unknown") { if (has) return false }
-      else if (condition === "equals") { if (String(cur ?? "") !== String(cfg.toValue ?? "")) return false }
-      else if (!has) return false // "known" / "changed" → must currently hold a value
+      // ALL watched properties must currently satisfy the condition.
+      if (!watched.every((w) => propSatisfies(currentPropValue(record, w), condition, cfg.toValue))) return false
     }
   }
   return checkConditions(record, cfg)
