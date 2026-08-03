@@ -605,6 +605,26 @@ async function runSingleAction(
     if (!result.success) {
       return `Email failed to ${toEmails.join(", ")} from ${from.fromEmail ?? from.senderKey}: ${result.error ?? "unknown error"}`
     }
+
+    // Track the send on the enrolled record's timeline (mirrors sendEmailFromRecord).
+    const emailRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
+    if (emailRef) {
+      const fromAddr = from.fromEmail ?? senderEmail(from.senderKey)
+      try {
+        const logged = await prisma.directEmail.create({
+          data: {
+            to: toEmails, cc: ccEmails, bcc: bccEmails,
+            subject, body: bodyText, success: true,
+            direction: "OUTBOUND", fromEmail: fromAddr, mailbox: fromAddr,
+            sentById: triggeredByUserId ?? null, // null on cron/delayed resume — column is nullable
+          },
+          select: { id: true },
+        })
+        await (prisma as any).objectAssociation.create({
+          data: { fromType: "EMAIL", fromId: logged.id, toType: emailRef.type, toId: emailRef.id },
+        })
+      } catch { /* logging must never fail the send */ }
+    }
   }
 
   if ((automation.actionType as string) === "SEND_MEETING_INVITE") {
