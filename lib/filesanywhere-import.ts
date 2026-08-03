@@ -209,23 +209,26 @@ export async function runFilesanywhereImport(opts: { force?: boolean; scheduled?
   }
 }
 
-// Import every matching file in a folder that hasn't been imported yet (oldest
-// first, so historical data lands in order). `force` re-imports even done ones.
-export async function runFilesanywhereImportAll(opts: { folderPath?: string; force?: boolean } = {}): Promise<{ imported: number; appointmentsCreated: number; providersCreated: number; files: string[]; error?: string }> {
+// Import a bounded batch of not-yet-imported matching files (oldest first), so a
+// large backfill never exceeds the serverless time limit. Returns how many were
+// imported and how many still remain — the caller loops until remaining = 0.
+const IMPORT_ALL_BATCH = 3
+
+export async function runFilesanywhereImportAll(opts: { folderPath?: string } = {}): Promise<{ imported: number; remaining: number; appointmentsCreated: number; providersCreated: number; files: string[]; error?: string }> {
   const cfg = await loadConfig()
-  if ("error" in cfg) return { imported: 0, appointmentsCreated: 0, providersCreated: 0, files: [], error: cfg.error }
+  if ("error" in cfg) return { imported: 0, remaining: 0, appointmentsCreated: 0, providersCreated: 0, files: [], error: cfg.error }
   const dir = (opts.folderPath && opts.folderPath.trim()) || cfg.folderPath
   try {
     const importedSet = new Set(cfg.importedFiles ?? [])
-    const files = (await sftpListFiles(connOf(cfg), dir))
-      .filter((f) => matchGlob(f.name, cfg.filenamePattern))
+    const todo = (await sftpListFiles(connOf(cfg), dir))
+      .filter((f) => matchGlob(f.name, cfg.filenamePattern) && !importedSet.has(f.name))
       .sort((a, b) => a.modifyTime - b.modifyTime) // oldest first
-    const todo = opts.force ? files : files.filter((f) => !importedSet.has(f.name))
-    if (!todo.length) return { imported: 0, appointmentsCreated: 0, providersCreated: 0, files: [] }
+    if (!todo.length) return { imported: 0, remaining: 0, appointmentsCreated: 0, providersCreated: 0, files: [] }
 
+    const batch = todo.slice(0, IMPORT_ALL_BATCH)
     let appointmentsCreated = 0, providersCreated = 0
     const done: string[] = []
-    for (const f of todo) {
+    for (const f of batch) {
       const r = await runFilesanywhereImportFile(f.name, { folderPath: dir, force: true })
       if (!r.error && !r.skipped) {
         appointmentsCreated += r.appointmentsCreated ?? 0
@@ -233,9 +236,9 @@ export async function runFilesanywhereImportAll(opts: { folderPath?: string; for
         done.push(f.name)
       }
     }
-    return { imported: done.length, appointmentsCreated, providersCreated, files: done }
+    return { imported: done.length, remaining: Math.max(0, todo.length - done.length), appointmentsCreated, providersCreated, files: done }
   } catch (e: any) {
-    return { imported: 0, appointmentsCreated: 0, providersCreated: 0, files: [], error: e?.message ?? "Import failed." }
+    return { imported: 0, remaining: 0, appointmentsCreated: 0, providersCreated: 0, files: [], error: e?.message ?? "Import failed." }
   }
 }
 

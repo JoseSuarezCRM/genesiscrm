@@ -199,14 +199,12 @@ export async function importFaFile(fileName: string, folderPath?: string, force 
   return r
 }
 
-// Import every matching file in the browsed folder that hasn't been imported yet.
-export async function importAllFaFiles(folderPath?: string): Promise<{ ok?: boolean; message?: string; error?: string }> {
+// Import a bounded batch of matching files (the client loops until remaining=0).
+export async function importAllFaFiles(folderPath?: string): Promise<{ imported: number; remaining: number; appointmentsCreated: number; providersCreated: number; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const r = await runFilesanywhereImportAll({ folderPath })
   revalidate()
-  if (r.error) return { error: r.error }
-  if (r.imported === 0) return { ok: true, message: "No new files to import — everything matching is already imported." }
-  return { ok: true, message: `Imported ${r.imported} file(s): ${r.appointmentsCreated} appointments, ${r.providersCreated} new providers.` }
+  return { imported: r.imported, remaining: r.remaining, appointmentsCreated: r.appointmentsCreated, providersCreated: r.providersCreated, ...(r.error ? { error: r.error } : {}) }
 }
 
 // Download the newest matching file and return its CSV column headers, for mapping.

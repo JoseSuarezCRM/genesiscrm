@@ -6,6 +6,10 @@ import { userCan } from "@/lib/permissions"
 import { getFaSettings } from "@/app/actions/filesanywhere"
 import FilesanywhereConfig from "@/components/filesanywhere-config"
 
+// Server actions on this page (import batches) may need more than the default
+// serverless budget; give them headroom.
+export const maxDuration = 60
+
 export default async function FilesanywherePage() {
   const session = await auth()
   if (!userCan(session?.user as any, "MANAGE_USERS")) redirect("/settings/integrations")

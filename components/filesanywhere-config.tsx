@@ -150,14 +150,30 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
     })
   }
   // Import every matching file in the browsed folder that isn't imported yet.
+  // Runs in small server-side batches (looped here) so a big backfill can't time
+  // out; a failed batch stops gracefully and can be resumed by clicking again.
   function importAll() {
     setMsg(null); setImporting("__all__")
     start(async () => {
-      const r = await importAllFaFiles(folderPath)
-      setImporting(null)
-      if (r.error) return flash(r.error)
-      setEntries((prev) => prev?.map((e) => (e.matches ? { ...e, imported: true } : e)) ?? prev)
-      flash(r.message ?? "Done.", true)
+      let files = 0, appts = 0, provs = 0
+      try {
+        // Safety cap on loop iterations (batch of 3 → up to ~150 files).
+        for (let i = 0; i < 50; i++) {
+          const r = await importAllFaFiles(folderPath)
+          if (r.error) { flash(`${r.error}${files ? ` (imported ${files} file(s) first)` : ""}`); break }
+          files += r.imported; appts += r.appointmentsCreated; provs += r.providersCreated
+          if (r.remaining > 0) flash(`Importing… ${files} file(s) done, ${r.remaining} to go`, true)
+          else { flash(`Imported ${files} file(s): ${appts} appointments, ${provs} new providers.`, true); break }
+        }
+      } catch {
+        flash(`Import interrupted after ${files} file(s) — click “Import all matching” again to resume.`)
+      } finally {
+        setImporting(null)
+        // Reload the folder listing from the server so the "imported" badges are accurate.
+        const rb = await testFaConnection(folderPath).catch(() => null)
+        if (rb?.entries) setEntries(rb.entries)
+        router.refresh()
+      }
     })
   }
   function toggle(enabled: boolean) { start(async () => { await setFaEnabled(enabled); router.refresh() }) }
