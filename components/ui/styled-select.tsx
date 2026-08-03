@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
-import { ChevronDown, Check } from "lucide-react"
+import { ChevronDown, Check, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // Drop-in replacement for native <select> with the app's dropdown panel design.
@@ -18,6 +18,8 @@ interface Props {
   disabled?: boolean
   /** Open the menu as soon as it mounts (for click-to-edit inline fields). */
   autoOpen?: boolean
+  /** Show a filter box in the panel. `true`/`false` force it; omitted = auto (when long). */
+  searchable?: boolean
 }
 
 type Option = { value: string; label: string }
@@ -38,10 +40,12 @@ function collectOptions(children: React.ReactNode, out: Option[]) {
   })
 }
 
-export default function StyledSelect({ value, onChange, children, className, disabled, autoOpen }: Props) {
+export default function StyledSelect({ value, onChange, children, className, disabled, autoOpen, searchable }: Props) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, width: 0, maxHeight: 288 })
 
   // Open on mount when requested (one-click inline editing).
@@ -60,6 +64,16 @@ export default function StyledSelect({ value, onChange, children, className, dis
   const current = options.find((o) => o.value === String(value ?? ""))
   // Native selects display the first option when the value doesn't match any
   const display = current ?? options[0]
+
+  // Show a filter box when forced, or (auto) once the list is long enough to warrant it.
+  const showSearch = searchable === true || (searchable !== false && options.length > 8)
+  const q = query.trim().toLowerCase()
+  const filtered = showSearch && q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options
+
+  // Reset the query each time the menu opens, and focus the filter box.
+  useEffect(() => {
+    if (open) { setQuery(""); if (showSearch) requestAnimationFrame(() => searchRef.current?.focus()) }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function place() {
     const r = ref.current?.getBoundingClientRect()
@@ -128,8 +142,26 @@ export default function StyledSelect({ value, onChange, children, className, dis
           className="fixed z-[999] bg-white border border-slate-200 rounded-md shadow-lg overflow-y-auto py-1"
           style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight, pointerEvents: "auto" }}
         >
-          {options.map((o, i) => {
-            const isSelected = current ? o.value === current.value : i === 0
+          {showSearch && (
+            <div className="sticky top-0 bg-white px-2 pt-1 pb-1.5 border-b border-slate-100">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && filtered.length) { e.preventDefault(); onChange({ target: { value: filtered[0].value } }); setOpen(false) }
+                  }}
+                  placeholder="Search…"
+                  className="w-full h-8 pl-7 pr-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-zinc-400"
+                />
+              </div>
+            </div>
+          )}
+          {filtered.length === 0 && <div className="px-3 py-2 text-sm text-slate-400">No matches</div>}
+          {filtered.map((o, i) => {
+            const isSelected = current ? o.value === current.value : false
             return (
               <button
                 key={`${o.value}-${i}`}

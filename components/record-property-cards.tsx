@@ -169,13 +169,13 @@ export function FieldRow({ f, value, values, recordId, entityType, canEdit, user
     <div className="py-2 space-y-1.5">
       {Label}
       {f.type === "select" ? (
-        <StyledSelect autoOpen value={String(draft ?? "")} onChange={(e) => commit(e.target.value)} className={input}>
+        <StyledSelect autoOpen searchable value={String(draft ?? "")} onChange={(e) => commit(e.target.value)} className={input}>
           <option value="">—</option>
           {effectiveOptions.map((o) => <option key={o} value={o}>{f.optionLabels?.[o] ?? o}</option>)}
         </StyledSelect>
       ) : f.type === "select_or_other" ? (
         <>
-          <StyledSelect autoOpen={sel === ""} value={sel}
+          <StyledSelect autoOpen={sel === ""} searchable value={sel}
             onChange={(e) => { const v = e.target.value; setSel(v); if (v !== otherLabel) commit(v) }} className={input}>
             <option value="">—</option>
             {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
