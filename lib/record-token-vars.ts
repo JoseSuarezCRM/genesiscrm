@@ -33,6 +33,18 @@ function fmtDateTimeToken(v: any): string {
   return d.toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
 }
 
+// Format a property value for a token, honoring its type. Handles both custom-prop
+// UPPER types (DATE/DATE_TIME/DROPDOWN/MULTI_SELECT) and native lower types
+// (date/datetime/select/select_or_other). DATE renders date-only so a stored ISO
+// (e.g. "2026-08-19T12:00:00.000Z") shows as "Aug 19, 2026", not the raw timestamp.
+function tokenValueForProp(type: string | undefined, raw: any, optionLabels?: any): string {
+  const t = (type ?? "").toUpperCase()
+  if (t === "DATE") return fmtDate(raw)
+  if (t === "DATE_TIME" || t === "DATETIME") return fmtDateTimeToken(raw)
+  if (t === "DROPDOWN" || t === "MULTI_SELECT" || t === "SELECT" || t === "SELECT_OR_OTHER") return optionLabelFor(raw, optionLabels)
+  return tokenValueForDisplay(raw)
+}
+
 // Built-in objects that carry a customProperties JSON bag, mapped to their
 // CustomProperty entityType.
 export const CP_CONTACT: Record<string, { entity: string; delegate: () => any }> = {
@@ -114,10 +126,7 @@ export async function buildRecordTokenVars(recordType: string, recordId: string)
     const values: Record<string, any> = (rec?.values as any) ?? {}
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { properties: true } }).catch(() => null)
     for (const p of ((def?.properties as any[]) ?? [])) {
-      const isSelect = p.type === "DROPDOWN" || p.type === "MULTI_SELECT"
-      const v = p.type === "DATE_TIME" ? fmtDateTimeToken(values[p.id])
-        : isSelect ? optionLabelFor(values[p.id], p.optionLabels)
-        : tokenValueForDisplay(values[p.id])
+      const v = tokenValueForProp(p.type, values[p.id], p.optionLabels)
       vars[`cp_${p.id}`] = v
       vars[p.internalName || snakeToken(p.name)] = v
     }
@@ -132,17 +141,11 @@ export async function buildRecordTokenVars(recordType: string, recordId: string)
     ])
     if (rec) {
       for (const f of (RECORD_FIELDS[recordType] ?? [])) {
-        const raw = (rec as any)[f.key]
-        vars[snakeToken(f.key)] = f.type === "datetime" ? fmtDateTimeToken(raw)
-          : (f.type === "select" || f.type === "select_or_other") ? optionLabelFor(raw, (f as any).optionLabels)
-          : tokenValueForDisplay(raw)
+        vars[snakeToken(f.key)] = tokenValueForProp(f.type, (rec as any)[f.key], (f as any).optionLabels)
       }
       const bag: Record<string, any> = (rec.customProperties as any) ?? {}
       for (const d of defs) {
-        const isSelect = (d.type as any) === "DROPDOWN" || (d.type as any) === "MULTI_SELECT"
-        const v = (d.type as any) === "DATE_TIME" ? fmtDateTimeToken(bag[d.id])
-          : isSelect ? optionLabelFor(bag[d.id], (d as any).optionLabels)
-          : tokenValueForDisplay(bag[d.id])
+        const v = tokenValueForProp(d.type as any, bag[d.id], (d as any).optionLabels)
         vars[`cp_${d.id}`] = v                                   // back-compat token
         vars[(d as any).internalName || snakeToken(d.name)] = v  // readable token
       }
