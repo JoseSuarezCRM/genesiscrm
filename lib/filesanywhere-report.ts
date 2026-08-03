@@ -42,8 +42,11 @@ export async function buildProviderReport(cfg: FaConfig): Promise<FaReport> {
     (prisma as any).customObjectDef.findUnique({ where: { key: cfg.providerObjectSlug } }),
     (prisma as any).customObjectDef.findUnique({ where: { key: cfg.objectSlug } }),
   ])
-  const provProps: any[] = (provDef?.properties as any[]) ?? []
-  const apptProps: any[] = (apptDef?.properties as any[]) ?? []
+  // Columns: all object properties, or just the selected subset (in def order).
+  const provSel = cfg.report?.providerFields
+  const apptSel = cfg.report?.appointmentFields
+  const provProps: any[] = ((provDef?.properties as any[]) ?? []).filter((p) => !provSel?.length || provSel.includes(p.id))
+  const apptProps: any[] = ((apptDef?.properties as any[]) ?? []).filter((p) => !apptSel?.length || apptSel.includes(p.id))
 
   const providers = await (prisma as any).customObjectRecord.findMany({
     where: { objectDefId: provDef?.id, createdAt: { gte: since } },

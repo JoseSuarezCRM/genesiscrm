@@ -36,7 +36,7 @@ export interface FaSettings {
   lastRunAt: string | null
   lastImportedFile: string | null
   objects: FaCustomObject[]
-  report: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null }
+  report: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null; providerFields: string[]; appointmentFields: string[] }
 }
 
 async function cfgOf(): Promise<Partial<FaConfig>> {
@@ -85,16 +85,23 @@ export async function getFaSettings(): Promise<FaSettings> {
       dayOfWeek: cfg.report?.dayOfWeek ?? 1,
       hour: cfg.report?.hour ?? 8,
       lastSentAt: cfg.report?.lastSentAt ?? null,
+      providerFields: cfg.report?.providerFields ?? [],
+      appointmentFields: cfg.report?.appointmentFields ?? [],
     },
   }
 }
 
 // Save the weekly report settings (recipients + schedule + enabled).
-export async function saveFaReportConfig(input: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number }): Promise<{ ok?: boolean; error?: string }> {
+export async function saveFaReportConfig(input: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; providerFields?: string[]; appointmentFields?: string[] }): Promise<{ ok?: boolean; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const cfg = await cfgOf()
   const recipients = (input.recipients ?? []).map((r) => r.trim()).filter(Boolean)
-  const report = { enabled: !!input.enabled, recipients, dayOfWeek: input.dayOfWeek, hour: input.hour, lastSentAt: cfg.report?.lastSentAt ?? null }
+  const report = {
+    enabled: !!input.enabled, recipients, dayOfWeek: input.dayOfWeek, hour: input.hour,
+    lastSentAt: cfg.report?.lastSentAt ?? null,
+    providerFields: input.providerFields ?? [],
+    appointmentFields: input.appointmentFields ?? [],
+  }
   await (prisma as any).integration.update({ where: { provider: PROVIDER }, data: { config: { ...cfg, report } } })
   revalidate()
   return { ok: true }

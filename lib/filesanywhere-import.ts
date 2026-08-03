@@ -28,7 +28,8 @@ export interface FaConfig {
   lastImportedFile: string | null
   importedFiles?: string[]                  // every file name imported, so we don't re-import
   // Weekly email report of newly-created referring providers + their appointments.
-  report?: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null }
+  // providerFields/appointmentFields limit which columns show (empty = all).
+  report?: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null; providerFields?: string[]; appointmentFields?: string[] }
 }
 
 export interface FaImportResult {

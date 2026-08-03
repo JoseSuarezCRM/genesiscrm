@@ -42,6 +42,8 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [reportRecipients, setReportRecipients] = useState((settings.report.recipients ?? []).join(", "))
   const [reportDay, setReportDay] = useState(settings.report.dayOfWeek ?? 1)
   const [reportHour, setReportHour] = useState(settings.report.hour ?? 8)
+  const [reportProvFields, setReportProvFields] = useState<string[]>(settings.report.providerFields ?? [])
+  const [reportApptFields, setReportApptFields] = useState<string[]>(settings.report.appointmentFields ?? [])
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
   const selectedProviderObject = settings.objects.find((o) => o.slug === providerObjectSlug)
@@ -95,10 +97,16 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
       flash("Import settings saved.", true); router.refresh()
     })
   }
+  const reportConfig = () => ({
+    enabled: reportEnabled,
+    recipients: reportRecipients.split(",").map((s) => s.trim()).filter(Boolean),
+    dayOfWeek: reportDay, hour: reportHour,
+    providerFields: reportProvFields, appointmentFields: reportApptFields,
+  })
   function saveReport() {
     setMsg(null)
     start(async () => {
-      const r = await saveFaReportConfig({ enabled: reportEnabled, recipients: reportRecipients.split(",").map((s) => s.trim()).filter(Boolean), dayOfWeek: reportDay, hour: reportHour })
+      const r = await saveFaReportConfig(reportConfig())
       if (r.error) return flash(r.error)
       flash("Report settings saved.", true); router.refresh()
     })
@@ -106,13 +114,19 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   function sendReport() {
     setMsg(null)
     start(async () => {
-      // Save the current form first so "Send now" uses the recipients you just typed.
-      const saved = await saveFaReportConfig({ enabled: reportEnabled, recipients: reportRecipients.split(",").map((s) => s.trim()).filter(Boolean), dayOfWeek: reportDay, hour: reportHour })
+      // Save the current form first so "Send now" uses what you just entered.
+      const saved = await saveFaReportConfig(reportConfig())
       if (saved.error) return flash(saved.error)
       const r = await sendFaReportNow()
       if (r.error) return flash(r.error)
       flash(r.message ?? "Sent.", true); router.refresh()
     })
+  }
+  // Column pickers: empty selection = all columns (default). First uncheck
+  // materializes the full list minus that one.
+  const toggleField = (id: string, allIds: string[], list: string[], setList: (v: string[]) => void) => {
+    const base = list.length === 0 ? allIds : list
+    setList(base.includes(id) ? base.filter((x) => x !== id) : [...base, id])
   }
   function reset() {
     if (!confirm("Delete every record created by the import (all records in the referring-providers and appointments objects, plus any legacy imported providers)? This can't be undone.")) return
@@ -362,6 +376,49 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
           </label>
           <span className="text-[11px] text-slate-400 pb-2">America/Chicago</span>
         </div>
+
+        {/* Which columns to include (empty = all). */}
+        {(selectedProviderObject || selectedObject) && (
+          <div className="grid sm:grid-cols-2 gap-3 border-t border-slate-100 pt-2">
+            {selectedProviderObject && (() => {
+              const allIds = selectedProviderObject.properties.map((p) => p.id)
+              return (
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Referring provider columns</p>
+                  <div className="space-y-0.5">
+                    {selectedProviderObject.properties.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-xs text-slate-600">
+                        <input type="checkbox" className="rounded border-slate-300"
+                          checked={reportProvFields.length === 0 || reportProvFields.includes(p.id)}
+                          onChange={() => toggleField(p.id, allIds, reportProvFields, setReportProvFields)} />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+            {selectedObject && (() => {
+              const allIds = selectedObject.properties.map((p) => p.id)
+              return (
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Appointment columns</p>
+                  <div className="space-y-0.5 max-h-48 overflow-y-auto pr-1">
+                    {selectedObject.properties.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-xs text-slate-600">
+                        <input type="checkbox" className="rounded border-slate-300"
+                          checked={reportApptFields.length === 0 || reportApptFields.includes(p.id)}
+                          onChange={() => toggleField(p.id, allIds, reportApptFields, setReportApptFields)} />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <button onClick={saveReport} disabled={pending} className="h-8 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">Save report settings</button>
           <button onClick={sendReport} disabled={pending} className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Mail className="h-4 w-4" /> Send report now</button>
