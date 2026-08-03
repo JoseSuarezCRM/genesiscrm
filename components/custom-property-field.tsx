@@ -5,6 +5,7 @@ import { useState, useTransition, useEffect } from "react"
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
+import { formatNumber } from "@/lib/number-format"
 
 interface CustomProperty {
   id: string
@@ -13,6 +14,7 @@ interface CustomProperty {
   required: boolean
   options: string[]
   optionLabels?: Record<string, string> | null
+  numberFormat?: string | null
   value?: any
 }
 
@@ -54,6 +56,8 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
         return Array.isArray(property.value) ? property.value.map((x) => property.optionLabels?.[String(x)] ?? String(x)).join(", ") : "—"
       case "DROPDOWN":
         return property.optionLabels?.[String(property.value)] ?? String(property.value)
+      case "NUMBER":
+        return formatNumber(property.value, (property as any).numberFormat)
       default:
         return String(property.value)
     }

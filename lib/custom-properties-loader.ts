@@ -43,6 +43,7 @@ export async function loadCustomPropertiesForDetail(
         optionLabels: (prop as any).optionLabels ?? undefined,
         conditional: (prop as any).conditional ?? undefined,
         visibilityRule: (prop as any).visibilityRule ?? undefined,
+        numberFormat: (prop as any).numberFormat ?? undefined,
         display: {
           visible: true,
           order: 0,

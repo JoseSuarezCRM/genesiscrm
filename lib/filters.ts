@@ -241,7 +241,7 @@ export function matchesFilter(row: any, state: FilterState, fields: FilterField[
 // property automatically becomes a filter criterion (per the standard-list rule).
 // Values are read from a JSON bag on the row (default `customProperties`), keyed
 // by the property id.
-export interface CustomPropDef { id: string; name: string; type: string; options?: string[] }
+export interface CustomPropDef { id: string; name: string; type: string; options?: string[]; numberFormat?: string | null }
 
 const CP_TYPE_TO_FIELD: Record<string, FieldType> = {
   TEXT: "text", LONG_TEXT: "text", EMAIL: "text", PHONE: "text", URL: "text",

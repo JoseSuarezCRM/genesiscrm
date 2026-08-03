@@ -83,7 +83,7 @@ export default async function ReferringDoctorsPage() {
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}
-        providerCustomPropertyDefs={customPropertyDefs.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options }))}
+        providerCustomPropertyDefs={customPropertyDefs.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options, numberFormat: (p as any).numberFormat ?? null }))}
         view="providers"
       />
     </div>

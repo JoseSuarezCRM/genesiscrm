@@ -4,6 +4,7 @@ import ProviderTitleField from "@/components/provider-title-field"
 import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
+import { formatNumber } from "@/lib/number-format"
 import { useState, useTransition, useRef, useEffect } from "react"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
@@ -511,10 +512,15 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     ...providerCustomPropertyDefs.map((p) => ({ key: `cp:${p.id}`, label: p.name })),
   ]
   const providerColumns = [...PROVIDER_COLUMNS, ...extraProviderCols]
+  const cpDefById = Object.fromEntries(providerCustomPropertyDefs.map((p) => [p.id, p]))
   const cpValue = (d: any, key: string) => {
     const id = key.slice(3)
     const raw = (d.customProperties as Record<string, any> | undefined)?.[id]
-    return raw == null || raw === "" ? "—" : Array.isArray(raw) ? raw.join(", ") : String(raw)
+    if (raw == null || raw === "") return "—"
+    if (Array.isArray(raw)) return raw.join(", ")
+    const def = cpDefById[id]
+    if (def?.type === "NUMBER") return formatNumber(raw, (def as any).numberFormat)
+    return String(raw)
   }
 
   // Providers after search + advanced filters — used by both the table and the export.
