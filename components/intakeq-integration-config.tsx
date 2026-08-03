@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarClock } from "lucide-react"
-import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, type IntegrationSettings } from "@/app/actions/intakeq"
+import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarClock, Mail } from "lucide-react"
+import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, saveIntakeqReportSchedule, sendIntakeReportNow, type IntegrationSettings } from "@/app/actions/intakeq"
 import { INTAKE_WINDOWS, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +25,35 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
   const [hour, setHour] = useState(settings.hour)
   const [win, setWin] = useState<IntakeWindow>(settings.window)
   const [schedMsg, setSchedMsg] = useState<string | null>(null)
+
+  // Scheduled email report
+  const [repEnabled, setRepEnabled] = useState(settings.emailReport.enabled)
+  const [repRecipients, setRepRecipients] = useState((settings.emailReport.recipients ?? []).join(", "))
+  const [repFreq, setRepFreq] = useState<"daily" | "weekly">(settings.emailReport.frequency)
+  const [repDay, setRepDay] = useState(settings.emailReport.dayOfWeek)
+  const [repHour, setRepHour] = useState(settings.emailReport.hour)
+  const [repWin, setRepWin] = useState<IntakeWindow>(settings.emailReport.window)
+  const [repMsg, setRepMsg] = useState<{ text: string; ok?: boolean } | null>(null)
+
+  const reportInput = () => ({ enabled: repEnabled, recipients: repRecipients.split(",").map((s) => s.trim()).filter(Boolean), frequency: repFreq, dayOfWeek: repDay, hour: repHour, window: repWin })
+  function saveReportSchedule() {
+    setRepMsg(null)
+    startTransition(async () => {
+      const r = await saveIntakeqReportSchedule(reportInput())
+      if (r.error) return setRepMsg({ text: r.error })
+      setRepMsg({ text: "Report schedule saved.", ok: true }); router.refresh()
+    })
+  }
+  function sendReportNow() {
+    setRepMsg(null)
+    startTransition(async () => {
+      const saved = await saveIntakeqReportSchedule(reportInput())
+      if (saved.error) return setRepMsg({ text: saved.error })
+      const r = await sendIntakeReportNow()
+      if (r.error) return setRepMsg({ text: r.error })
+      setRepMsg({ text: r.message ?? "Sent.", ok: true }); router.refresh()
+    })
+  }
 
   const origin = typeof window !== "undefined" ? window.location.origin : ""
 
@@ -175,6 +204,58 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
           </button>
           {schedMsg && <span className="text-xs text-emerald-600">{schedMsg}</span>}
           {settings.lastRunAt && <span className="text-[11px] text-slate-400 ml-auto">Last run {new Date(settings.lastRunAt).toLocaleString()}</span>}
+        </div>
+      </div>
+
+      {/* Scheduled email report */}
+      <div className={card}>
+        <div className="flex items-center gap-2 mb-1">
+          <Mail className="h-4 w-4 text-slate-400" />
+          <h3 className="text-sm font-semibold text-slate-800">Email report schedule</h3>
+          <label className="ml-auto inline-flex items-center gap-2 text-xs text-slate-700">Enabled
+            <button onClick={() => setRepEnabled((v) => !v)} className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors", repEnabled ? "bg-emerald-500" : "bg-slate-300")}>
+              <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform", repEnabled ? "translate-x-4" : "translate-x-0.5")} />
+            </button>
+          </label>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">Emails the referral-source table (categories × days) on a schedule.</p>
+        <label className="block text-xs text-slate-500 mb-2">Recipients (comma-separated)
+          <input value={repRecipients} onChange={(e) => setRepRecipients(e.target.value)} placeholder="name@genesisortho.com, other@…"
+            className="mt-1 w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
+        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-slate-500">Send
+            <select value={repFreq} onChange={(e) => setRepFreq(e.target.value as "daily" | "weekly")} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-28 focus:outline-none focus:border-zinc-400">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          {repFreq === "weekly" && (
+            <label className="text-xs text-slate-500">on
+              <select value={repDay} onChange={(e) => setRepDay(Number(e.target.value))} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-36 focus:outline-none focus:border-zinc-400">
+                {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="text-xs text-slate-500">at
+            <select value={repHour} onChange={(e) => setRepHour(Number(e.target.value))} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-28 focus:outline-none focus:border-zinc-400">
+              {HOURS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+            </select>
+          </label>
+          <label className="text-xs text-slate-500">covering
+            <select value={repWin} onChange={(e) => setRepWin(e.target.value as IntakeWindow)} className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:border-zinc-400">
+              {INTAKE_WINDOWS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+            </select>
+          </label>
+          <span className="text-[11px] text-slate-400 pb-2.5">America/Chicago</span>
+        </div>
+        <div className="flex items-center gap-3 mt-3">
+          <button onClick={saveReportSchedule} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save report schedule
+          </button>
+          <button onClick={sendReportNow} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Mail className="h-4 w-4" /> Send now</button>
+          {repMsg && <span className={cn("text-xs", repMsg.ok ? "text-emerald-600" : "text-red-600")}>{repMsg.text}</span>}
+          {settings.emailReport.lastSentAt && <span className="text-[11px] text-slate-400 ml-auto">Last sent {new Date(settings.emailReport.lastSentAt).toLocaleString()}</span>}
         </div>
       </div>
 
