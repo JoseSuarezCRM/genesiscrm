@@ -48,6 +48,7 @@ interface Props {
   facilitiesData: { name: string; count: number }[]
   providersData: { name: string; count: number }[]
   diagnosisData: { name: string; count: number }[]
+  referralSourceData: { name: string; count: number }[]
   callOutcomes: { outcome: string; count: number }[]
   currentRange: string
   currentFrom?: string
@@ -180,7 +181,7 @@ function MultiSelectDropdown({
 }
 
 export default function SurgeryReportsClient({
-  kpis, monthlyData, statusMap, facilitiesData, providersData, diagnosisData, callOutcomes,
+  kpis, monthlyData, statusMap, facilitiesData, providersData, diagnosisData, referralSourceData, callOutcomes,
   currentRange, currentFrom, currentTo,
   facilityFilter, providerFilter, allFacilities, allProviders,
 }: Props) {
@@ -241,6 +242,7 @@ export default function SurgeryReportsClient({
   const maxFacility = Math.max(...facilitiesData.map((f) => f.count), 1)
   const maxProvider = Math.max(...providersData.map((p) => p.count), 1)
   const maxDiagnosis = Math.max(...diagnosisData.map((d) => d.count), 1)
+  const maxReferral = Math.max(...referralSourceData.map((r) => r.count), 1)
   const totalCalls = callOutcomes.reduce((s, o) => s + o.count, 0)
 
   const allStatuses = ["NEW", "PENDING_CLEARANCE", "PENDING_CONFIRMATION", "SCHEDULED", "CANCELED", "COMPLETED"]
@@ -416,6 +418,22 @@ export default function SurgeryReportsClient({
             <div className="space-y-0.5">
               {providersData.map((p) => (
                 <BarRow key={p.name} label={p.name} count={p.count} max={maxProvider} color="bg-violet-400" />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Referral Source */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white border rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-slate-700 mb-4">Cases by Referral Source</h2>
+          {referralSourceData.length === 0 ? (
+            <p className="text-sm text-slate-400">No referral source data yet.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {referralSourceData.map((r) => (
+                <BarRow key={r.name} label={r.name} count={r.count} max={maxReferral} color="bg-amber-400" />
               ))}
             </div>
           )}

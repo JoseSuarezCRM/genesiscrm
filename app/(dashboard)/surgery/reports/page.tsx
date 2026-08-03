@@ -58,6 +58,7 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
     facilityCounts,
     providerCounts,
     diagnosisCounts,
+    referralCounts,
     callOutcomes,
     expiringSoon,
     totalEver,
@@ -93,6 +94,13 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
       _count: { _all: true },
       orderBy: { _count: { diagnosis: "desc" } },
       take: 10,
+    }),
+    (prisma as any).surgeryCase.groupBy({
+      by: ["referral"],
+      where: { ...where, referral: { not: null } },
+      _count: { _all: true },
+      orderBy: { _count: { referral: "desc" } },
+      take: 15,
     }),
     (prisma as any).surgeryCallAttempt.groupBy({
       by: ["outcome"],
@@ -155,6 +163,7 @@ export default async function SurgeryReportsPage({ searchParams }: PageProps) {
       facilitiesData={(facilityCounts as any[]).map((f) => ({ name: f.facility, count: f._count._all }))}
       providersData={(providerCounts as any[]).map((p) => ({ name: p.orderingProvider, count: p._count._all }))}
       diagnosisData={(diagnosisCounts as any[]).map((d) => ({ name: d.diagnosis, count: d._count._all }))}
+      referralSourceData={(referralCounts as any[]).map((r) => ({ name: r.referral, count: r._count._all })).filter((r) => r.name)}
       callOutcomes={(callOutcomes as any[]).map((o) => ({ outcome: o.outcome, count: o._count._all }))}
       currentRange={searchParams.range ?? "last_6m"}
       currentFrom={searchParams.from}
