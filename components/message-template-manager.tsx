@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect, type ReactNode } from "reac
 import { useRouter } from "next/navigation"
 import {
   Plus, Loader2, X, Pencil, Trash2, MessageSquare, Mail,
-  Table2, LayoutList, Columns3, Download, Check, ChevronUp, ChevronDown,
+  Table2, LayoutList, Columns3, Download, Check, ChevronUp, ChevronDown, LayoutTemplate,
 } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
@@ -24,6 +24,7 @@ interface Template {
   channel: "SMS" | "EMAIL"
   subject: string | null
   body: string
+  blocks?: unknown
   isActive: boolean
   createdAt: string | Date
   updatedAt: string | Date
@@ -96,12 +97,38 @@ export default function MessageTemplateManager({ channel, templates, canManage =
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h)
   }, [])
 
+  const hasBlocks = (t: Template) => Array.isArray((t as any).blocks) && (t as any).blocks.length > 0
   function openNew() { setEditId(null); setForm({ name: "", subject: "", body: "" }); setError(""); setOpen(true) }
   function openEdit(t: Template) {
     recordTemplateView(t.id)
+    // Block-built email templates open in the full-page block builder.
+    if (isEmail && hasBlocks(t)) { router.push(`/communications/email/${t.id}`); return }
     setEditId(t.id); setForm({ name: t.name, subject: t.subject ?? "", body: t.body }); setError(""); setOpen(true)
   }
   function close() { setOpen(false); setEditId(null); setError("") }
+
+  // Create a blank block template and jump into the builder.
+  function newWithBlocks() {
+    startTransition(async () => {
+      const r = await createMessageTemplate({ name: "Untitled email", channel: "EMAIL", subject: "", body: "", blocks: [] })
+      if ((r as any).id) router.push(`/communications/email/${(r as any).id}`)
+    })
+  }
+  // Convert the template currently open in the rich-text modal to blocks.
+  function buildWithBlocks() {
+    if (!form.name.trim()) { setError("Template name is required"); return }
+    startTransition(async () => {
+      let id = editId
+      if (!id) {
+        const r = await createMessageTemplate({ name: form.name, channel, subject: form.subject, body: form.body })
+        if ((r as any)?.error) { setError((r as any).error); return }
+        id = (r as any).id
+      } else {
+        await updateMessageTemplate(id, { name: form.name, subject: form.subject, body: form.body })
+      }
+      router.push(`/communications/email/${id}`)
+    })
+  }
 
   function save() {
     if (!form.name.trim()) { setError("Template name is required"); return }
@@ -156,7 +183,12 @@ export default function MessageTemplateManager({ channel, templates, canManage =
   function renderCell(t: Template, key: string): ReactNode {
     switch (key) {
       case "name":
-        return <button onClick={() => openEdit(t)} className="font-medium text-slate-900 hover:text-blue-600 text-left">{t.name}</button>
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <button onClick={() => openEdit(t)} className="font-medium text-slate-900 hover:text-blue-600 text-left">{t.name}</button>
+            {isEmail && hasBlocks(t) && <span className="text-[10px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Blocks</span>}
+          </span>
+        )
       case "status":
         return (
           <button onClick={() => toggle(t)} disabled={pending || !canManage} className="flex items-center gap-1.5 text-[11px] font-medium">
@@ -210,6 +242,7 @@ export default function MessageTemplateManager({ channel, templates, canManage =
           )}
           <button onClick={() => setExportOpen(true)} disabled={templates.length === 0} title="Export to CSV"
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50 transition-colors"><Download className="h-3.5 w-3.5" /> Export</button>
+          {canManage && isEmail && <Button variant="outline" onClick={newWithBlocks}><LayoutTemplate className="h-4 w-4 mr-2" /> New with blocks</Button>}
           {canManage && <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> New template</Button>}
         </div>
       </div>
@@ -333,11 +366,14 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                 )}
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0">
-              <Button variant="outline" onClick={close} disabled={pending}>Cancel</Button>
-              <Button onClick={save} disabled={pending}>
-                {pending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}{editId ? "Save" : "Create"}
-              </Button>
+            <div className="flex items-center gap-2 px-6 py-4 border-t shrink-0">
+              {isEmail && <Button variant="outline" onClick={buildWithBlocks} disabled={pending} title="Convert this template to the block builder"><LayoutTemplate className="h-4 w-4 mr-1.5" /> Build with blocks</Button>}
+              <div className="ml-auto flex gap-2">
+                <Button variant="outline" onClick={close} disabled={pending}>Cancel</Button>
+                <Button onClick={save} disabled={pending}>
+                  {pending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}{editId ? "Save" : "Create"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -1367,7 +1367,8 @@ model MessageTemplate {
   name           String
   channel        OutreachChannel
   subject        String?         // email subject (email only)
-  body           String
+  body           String          // rendered HTML (rich text, or generated from blocks)
+  blocks         Json?           // email block builder: ordered blocks; null = rich-text mode
   isActive       Boolean         @default(true)
   createdById    String?
   updatedById    String?
