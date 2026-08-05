@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, List, Copy, GitMerge, Trash2, Loader2, X, Search } from "lucide-react"
+import { ChevronDown, List, Copy, GitMerge, Trash2, Loader2, X, Search, FileDown } from "lucide-react"
 import { deleteRecord, cloneRecord, mergeRecord } from "@/app/actions/record-crud"
+import { listActiveDocumentTemplates } from "@/app/actions/document-templates"
 import { isMergeable } from "@/lib/record-urls"
 import { searchAssociableRecords } from "@/app/actions/associations"
 import { getRecordValues } from "@/app/actions/record-fields"
@@ -48,12 +49,19 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   const mergeable = isMergeable(entityType)
+  const [docs, setDocs] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
     document.addEventListener("mousedown", onDoc)
     return () => document.removeEventListener("mousedown", onDoc)
   }, [])
+
+  // Load document templates for this object when the menu opens.
+  useEffect(() => {
+    if (!open) return
+    listActiveDocumentTemplates(entityType).then(setDocs).catch(() => {})
+  }, [open, entityType])
 
   function clone() {
     setOpen(false)
@@ -89,6 +97,17 @@ export default function RecordActionsMenu({ entityType, recordId, title, catalog
           {extraItems && (
             <>
               {extraItems(() => setOpen(false))}
+              <div className="my-1 border-t border-slate-100" />
+            </>
+          )}
+          {docs.length > 0 && (
+            <>
+              <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Generate document</div>
+              {docs.map((d) => (
+                <button key={d.id} className={item} onClick={() => { setOpen(false); window.open(`/api/documents/generate?template=${d.id}&type=${encodeURIComponent(entityType)}&id=${recordId}`, "_blank") }}>
+                  <FileDown className="h-4 w-4 text-slate-400" /> {d.name}
+                </button>
+              ))}
               <div className="my-1 border-t border-slate-100" />
             </>
           )}

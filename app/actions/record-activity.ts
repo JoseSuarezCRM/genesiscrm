@@ -259,6 +259,12 @@ export async function createTaskForRecord(recordType: string, recordId: string, 
 // + custom), plus the curated cross-object catalog for referrals. Built live from
 // the schema, so newly-created custom properties appear automatically.
 export async function getRecordTokenGroups(recordType: string, recordId: string): Promise<MessageTokenGroup[]> {
+  return getObjectTokenGroups(recordType)
+}
+
+// Same catalog, keyed only by object type (no specific record) — used by the
+// document-template builder's Fields menu.
+export async function getObjectTokenGroups(recordType: string): Promise<MessageTokenGroup[]> {
   const session = await auth()
   if (!session?.user) return []
 

@@ -47,7 +47,7 @@ const nextConfig = {
   experimental: {
     // ssh2 (under ssh2-sftp-client) uses native/dynamic requires — don't bundle it,
     // require it at runtime on the server instead.
-    serverComponentsExternalPackages: ["ssh2", "ssh2-sftp-client"],
+    serverComponentsExternalPackages: ["ssh2", "ssh2-sftp-client", "@react-pdf/renderer"],
     serverActions: {
       allowedOrigins: [
         "localhost:3000",

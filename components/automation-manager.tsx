@@ -22,6 +22,7 @@ import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings, type PersonalizationToken } from "@/components/rich-text-editor"
 import TokenTextarea from "@/components/ui/token-textarea"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
+import { listActiveDocumentTemplates } from "@/app/actions/document-templates"
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel, WEEKDAY_NAMES,
@@ -911,7 +912,7 @@ function RecipientRows({
 interface MessageTemplateOption { id: string; name: string; channel: string }
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [], documentTemplates = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -927,6 +928,8 @@ function ActionConfigFields({
   writableProps?: PropertyDef[]
   // Custom objects (with their properties) a CREATE_RECORD action can target.
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
+  // Document templates (for this workflow's object) the email can attach.
+  documentTemplates?: { id: string; name: string }[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
 
@@ -1468,6 +1471,18 @@ function ActionConfigFields({
             compact
           />
         </div>
+
+        {/* Generated document templates (filled per record at send time) */}
+        {documentTemplates.length > 0 && (
+          <div>
+            <label className="text-xs font-medium text-slate-600 block mb-1.5">Attach documents <span className="font-normal text-slate-400">(generated per record)</span></label>
+            <MultiSelectValue
+              options={documentTemplates.map(d => ({ value: d.id, label: d.name }))}
+              value={((config.documentTemplateIds as string[]) ?? []).join(MULTI_SEP)}
+              onChange={v => set("documentTemplateIds", v ? v.split(MULTI_SEP).filter(Boolean) : [])}
+            />
+          </div>
+        )}
       </div>
     )
   }
@@ -2039,7 +2054,7 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [] }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
@@ -2048,6 +2063,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   fieldTokens?: PersonalizationToken[]
   templates?: MessageTemplateOption[]
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
+  documentTemplates?: { id: string; name: string }[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
@@ -2077,7 +2093,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} documentTemplates={documentTemplates} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -2307,6 +2323,14 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
     }, 400)
     return () => { cancelled = true; clearTimeout(t) }
   }, [objectKey, triggerType, triggerConfig])
+
+  // Document templates for this workflow's object (for the email "attach documents" picker).
+  const [docTemplates, setDocTemplates] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    let cancel = false
+    listActiveDocumentTemplates(objectKey).then((t) => { if (!cancel) setDocTemplates(t) }).catch(() => {})
+    return () => { cancel = true }
+  }, [objectKey])
 
   const allObjects = workflowObjectsWith(customObjects)
   const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
@@ -2539,6 +2563,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions} tokens={objectTokens}
           fieldTokens={objectFieldTokens} templates={templates}
           objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [] }))}
+          documentTemplates={docTemplates}
         />
       )}
     </div>

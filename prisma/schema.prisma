@@ -1530,3 +1530,20 @@ model MarketingConfig {
   notifyEmail String @default("")
 }
 
+
+// A block-based PDF letter/document template (letterhead + tokenized body).
+// `blocks` is an ordered array of typed blocks (see lib/document-blocks.ts);
+// tokens inside text blocks resolve per record at generation time.
+model DocumentTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  objectType  String   // registry key: REFERRAL | PROVIDER | PRACTICE | LOCATION | SURGERY | CO:<key>
+  blocks      Json     @default("[]")
+  pageSize    String   @default("LETTER")
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([objectType])
+}

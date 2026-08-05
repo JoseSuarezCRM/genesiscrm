@@ -596,6 +596,20 @@ async function runSingleAction(
     if (!toEmails.length) {
       return "Email not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
     }
+
+    // Generate + attach document templates for the enrolled record.
+    const docIds = Array.isArray(cfg.documentTemplateIds) ? (cfg.documentTemplateIds as string[]) : []
+    const docRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
+    if (docIds.length && docRef) {
+      const { generateDocumentPdf } = await import("@/lib/document-pdf")
+      for (const tid of docIds) {
+        try {
+          const doc = await generateDocumentPdf(tid, docRef.type, docRef.id)
+          if (!("error" in doc)) emailAttachments.push({ name: doc.filename, contentType: "application/pdf", contentBase64: doc.buffer.toString("base64") })
+        } catch { /* skip a failing document, still send the email */ }
+      }
+    }
+
     const from = await resolveWorkflowSender(cfg.sender, record, referralId)
     const result = await sendEmail(toEmails, subject, html, {
       cc: ccEmails, bcc: bccEmails,
