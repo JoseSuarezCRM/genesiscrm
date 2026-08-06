@@ -410,6 +410,7 @@ async function resolveRecipients(
   list: unknown,
   record: Record<string, unknown> | null | undefined,
   referralId: string | null,
+  vars?: TemplateVars,
 ): Promise<string[]> {
   const emailSet = new Set<string>()
   if (Array.isArray(list)) {
@@ -417,6 +418,12 @@ async function resolveRecipients(
       if (r.type === "record_email") {
         const e = recordEmail(record)
         if (e) emailSet.add(e)
+      } else if (r.type === "record_property") {
+        // Send to an address held in a property of the enrolled record. The value
+        // is a "{token}"; its resolved value may contain one or more addresses.
+        const key = String(r.value ?? "").replace(/^\{|\}$/g, "").trim()
+        const raw = key && vars ? (vars as Record<string, unknown>)[key] : undefined
+        String(raw ?? "").split(/[,;\s]+/).forEach((e) => { if (e.includes("@")) emailSet.add(e.trim()) })
       } else if (r.type === "all_admins") {
         const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
         admins.forEach((a) => emailSet.add(a.email))
@@ -570,7 +577,7 @@ async function runSingleAction(
 
     let toEmails: string[]
     if (Array.isArray(cfg.recipients)) {
-      toEmails = await resolveRecipients(cfg.recipients, record, referralId)
+      toEmails = await resolveRecipients(cfg.recipients, record, referralId, vars)
     } else {
       // Legacy single-recipient format (backward compat)
       const toType = cfg.toType as string
@@ -590,8 +597,8 @@ async function runSingleAction(
       toEmails = Array.from(legacySet)
     }
 
-    const ccEmails = await resolveRecipients(cfg.cc, record, referralId)
-    const bccEmails = await resolveRecipients(cfg.bcc, record, referralId)
+    const ccEmails = await resolveRecipients(cfg.cc, record, referralId, vars)
+    const bccEmails = await resolveRecipients(cfg.bcc, record, referralId, vars)
 
     if (!toEmails.length) {
       return "Email not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
@@ -642,7 +649,7 @@ async function runSingleAction(
   }
 
   if ((automation.actionType as string) === "SEND_MEETING_INVITE") {
-    const inviteTo = await resolveRecipients(cfg.recipients, record, referralId)
+    const inviteTo = await resolveRecipients(cfg.recipients, record, referralId, vars)
     if (!inviteTo.length) {
       return "Meeting invite not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
     }

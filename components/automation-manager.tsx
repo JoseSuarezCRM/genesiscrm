@@ -853,12 +853,15 @@ function TriggerConfigFields({
 type Recipient = { type: string; value: string | string[] }
 
 function RecipientRows({
-  rows, users, onChange, allowEmpty = false,
+  rows, users, onChange, allowEmpty = false, recordProps = [],
 }: {
   rows: Recipient[]
   users: User[]
   onChange: (next: Recipient[]) => void
   allowEmpty?: boolean
+  // The workflow object's property tokens (value = "{token}"), for sending to an
+  // address held in a property. Works for any object, built-in or custom.
+  recordProps?: { value: string; label: string }[]
 }) {
   return (
     <div className="space-y-2">
@@ -873,11 +876,19 @@ function RecipientRows({
             <StyledSelect className="shrink-0" value={r.type}
               onChange={e => onChange(rows.map((x, j) => j === i ? { type: e.target.value, value: [] } : x))}>
               <option value="record_email">Enrolled record's email</option>
+              {recordProps.length > 0 && <option value="record_property">From a property…</option>}
               <option value="all_admins">All admins</option>
               <option value="assigned_to">Referral assignee</option>
               <option value="user">Specific users</option>
               <option value="email">Custom email</option>
             </StyledSelect>
+            {r.type === "record_property" && (
+              <StyledSelect className="flex-1 min-w-[180px]" value={typeof r.value === "string" ? r.value : ""}
+                onChange={e => onChange(rows.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}>
+                <option value="">Choose a property…</option>
+                {recordProps.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </StyledSelect>
+            )}
             {r.type === "user" && (
               <div className="flex-1 border rounded-md overflow-y-auto max-h-36">
                 {users.map(u => (
@@ -1380,7 +1391,7 @@ function ActionConfigFields({
               </button>
             </div>
           </div>
-          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} />
+          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} recordProps={fieldTokens ?? []} />
         </div>
 
         {/* CC */}
@@ -1395,7 +1406,7 @@ function ActionConfigFields({
                 <button type="button" onClick={() => { setShowCc(false); set("cc", []) }} className="text-xs text-slate-400 hover:text-red-500">Remove CC</button>
               </div>
             </div>
-            <RecipientRows rows={ccRows} users={users} onChange={next => set("cc", next)} allowEmpty />
+            <RecipientRows rows={ccRows} users={users} onChange={next => set("cc", next)} allowEmpty recordProps={fieldTokens ?? []} />
           </div>
         )}
 
@@ -1411,7 +1422,7 @@ function ActionConfigFields({
                 <button type="button" onClick={() => { setShowBcc(false); set("bcc", []) }} className="text-xs text-slate-400 hover:text-red-500">Remove BCC</button>
               </div>
             </div>
-            <RecipientRows rows={bccRows} users={users} onChange={next => set("bcc", next)} allowEmpty />
+            <RecipientRows rows={bccRows} users={users} onChange={next => set("bcc", next)} allowEmpty recordProps={fieldTokens ?? []} />
           </div>
         )}
 
@@ -1509,7 +1520,7 @@ function ActionConfigFields({
               <Plus className="h-3 w-3" /> Add
             </button>
           </div>
-          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} />
+          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} recordProps={fieldTokens ?? []} />
           {hasExternal && (
             <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
               ⚠️ An external recipient is selected. Don&apos;t include patient PHI (name, diagnosis, etc.) in invites sent outside the organization.
