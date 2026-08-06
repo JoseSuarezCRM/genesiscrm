@@ -359,9 +359,23 @@ export async function runDueWorkflowResumes() {
       continue
     }
 
-    const record = (r.record ?? null) as Record<string, unknown> | null
+    // Reload the record fresh so branch conditions AND action tokens reflect the
+    // CURRENT state after the wait — e.g. "is the property STILL that value?"
+    // 30 days later — not the snapshot captured when the workflow paused. Fall
+    // back to that snapshot if the record can't be reloaded (e.g. deleted).
+    let record = (r.record ?? null) as Record<string, unknown> | null
+    let vars = (r.vars ?? {}) as TemplateVars
+    if (r.recordType && r.recordId) {
+      const fresh = await loadRecord(r.recordType, r.recordId).catch(() => null)
+      if (fresh) {
+        record = fresh
+        try { vars = { ...vars, ...(await buildRecordTokenVars(r.recordType, r.recordId)) } } catch { /* keep snapshot vars */ }
+      }
+    } else if (r.referralId) {
+      const fresh = await fetchReferralForEngine(r.referralId).catch(() => null)
+      if (fresh) record = fresh as unknown as Record<string, unknown>
+    }
     const condRef = record ? (record as unknown as Parameters<typeof walkGraph>[2]) : null
-    const vars = (r.vars ?? {}) as TemplateVars
 
     const { actions, resumeNodeId, resumeAt, waitLabel } = walkGraph(graph, r.resumeNodeId, condRef)
     const steps: RunStep[] = []
