@@ -9,6 +9,7 @@ import { updateMessageTemplate } from "@/app/actions/message-templates"
 import { makeEmailBlock, type EmailBlock, type EmailBlockType, type Align, type ColumnChild } from "@/lib/email-blocks"
 import { renderEmailBlock } from "@/lib/email-html"
 import BlockCanvasBuilder, { type PaletteItem } from "@/components/block-canvas-builder"
+import { MediaPicker } from "@/components/media-picker"
 import { cn } from "@/lib/utils"
 
 const PALETTE: PaletteItem[] = [
@@ -31,17 +32,10 @@ export default function EmailTemplateBuilder({ template }: Props) {
   const [blocks, setBlocks] = useState<EmailBlock[]>(template.blocks)
   const [msg, setMsg] = useState<{ text: string; ok?: boolean } | null>(null)
 
-  // image upload
-  const fileRef = useRef<HTMLInputElement>(null)
+  // image: pick from / upload to the shared media library
+  const [pickerOpen, setPickerOpen] = useState(false)
   const uploadTarget = useRef<(url: string) => void>(() => {})
-  const pickImage = (onUrl: (url: string) => void) => { uploadTarget.current = onUrl; fileRef.current?.click() }
-  async function uploadAsset(file: File): Promise<string | null> {
-    const fd = new FormData(); fd.append("file", file)
-    const res = await fetch("/api/documents/asset-upload", { method: "POST", body: fd })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) { setMsg({ text: data.error ?? "Upload failed." }); return null }
-    return data.url as string
-  }
+  const pickImage = (onUrl: (url: string) => void) => { uploadTarget.current = onUrl; setPickerOpen(true) }
 
   function save(afterMode?: "richtext") {
     setMsg(null); setSaving(true)
@@ -84,7 +78,7 @@ export default function EmailTemplateBuilder({ template }: Props) {
     if (b.type === "image") return (
       <div className="space-y-2">
         {b.url && <img src={b.url} alt="" className="max-h-24 max-w-full object-contain border border-slate-100 rounded" />}
-        <button onClick={() => pickImage((url) => patch({ url }))} className="h-8 px-2 text-xs border border-slate-200 rounded-md hover:bg-slate-50 w-full">{b.url ? "Replace image" : "Upload image"}</button>
+        <button onClick={() => pickImage((url) => patch({ url }))} className="h-8 px-2 text-xs border border-slate-200 rounded-md hover:bg-slate-50 w-full">{b.url ? "Replace image" : "Choose image"}</button>
         <label className={lbl}>Width (px)<input type="number" value={b.width ?? 560} onChange={(e) => patch({ width: Number(e.target.value) || 560 })} className={field} /></label>
         <label className={lbl}>Link URL (optional)<input value={b.href ?? ""} onChange={(e) => patch({ href: e.target.value })} placeholder="https://…" className={field} /></label>
         {alignSel(b.align, (a) => patch({ align: a }))}
@@ -131,10 +125,7 @@ export default function EmailTemplateBuilder({ template }: Props) {
 
   return (
     <div className="fixed inset-0 z-[60] bg-white flex flex-col">
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
-        const f = e.target.files?.[0]; e.target.value = ""
-        if (!f) return; const url = await uploadAsset(f); if (url) uploadTarget.current(url)
-      }} />
+      <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={(url) => uploadTarget.current(url)} />
 
       <div className="flex flex-wrap items-end gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0">
         <button onClick={() => router.push("/communications/email")} className="inline-flex items-center gap-1 h-9 px-2 text-sm text-slate-500 hover:text-slate-800 pb-2"><ArrowLeft className="h-4 w-4" /> Close</button>

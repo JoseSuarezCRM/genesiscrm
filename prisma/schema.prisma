@@ -1548,3 +1548,18 @@ model DocumentTemplate {
 
   @@index([objectType])
 }
+
+// An uploaded image/media asset, reusable across the app (email + document
+// builders, etc.). Bytes live in the private Blob store; served publicly (bytes
+// only, unguessable id) via /api/media/[id] so emails/PDFs can load them.
+model MediaAsset {
+  id          String   @id @default(cuid())
+  name        String
+  blobUrl     String   // private Blob url (fetched server-side with the token)
+  contentType String
+  size        Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

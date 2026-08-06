@@ -8,6 +8,7 @@ import {
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { GripVertical, Copy, Trash2 } from "lucide-react"
+import { proxyImageSrc } from "@/lib/blob-display"
 import { cn } from "@/lib/utils"
 
 // Generic HubSpot-style visual builder: a left module palette, a center WYSIWYG
@@ -146,7 +147,7 @@ export default function BlockCanvasBuilder<B extends { id: string; type: string;
 
   const renderBody = (b: B): React.ReactNode => {
     const cols = childrenOf(b)
-    if (!cols) return <div className="p-1" dangerouslySetInnerHTML={{ __html: preview(b) }} />
+    if (!cols) return <div className="p-1" dangerouslySetInnerHTML={{ __html: proxyImageSrc(preview(b)) }} />
     return (
       <div className="flex gap-2 p-1">
         {cols.map((col, ci) => (
