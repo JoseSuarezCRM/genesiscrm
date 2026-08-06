@@ -13,7 +13,7 @@ import {
   countWorkflowMatches,
   enrollExistingForAutomation,
 } from "@/app/actions/automations"
-import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal, CornerUpLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
@@ -1694,14 +1694,24 @@ function actionSummary(type: AutomationAction, config: Record<string, unknown>):
   return ACTION_LABELS[type] ?? type
 }
 
+// Short label for any node — used by "Go to step" (the target dropdown + the
+// node's subtitle). Skips goto nodes as jump targets.
+function nodeSummary(node: GraphNode): string {
+  if (node.kind === "action") return actionSummary(node.actionType as AutomationAction, node.config)
+  if (node.kind === "delay" || node.kind === "waitUntil") return waitLabel(node)
+  if (node.kind === "branch") return "If / Else branch"
+  if (node.kind === "multi") return "Branches"
+  return "Go to step"
+}
+
 // vertical connector line
 function VLine({ h = 22 }: { h?: number }) {
   return <div className="w-px bg-zinc-300" style={{ height: h }} />
 }
 
 // "+" insert control with a small action/branch menu
-function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti, pasteMode, onPaste, onCancelPaste }: {
-  onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void
+function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti, onAddGoto, pasteMode, onPaste, onCancelPaste }: {
+  onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void; onAddGoto?: () => void
   pasteMode?: "copy" | "move" | null; onPaste?: () => void; onCancelPaste?: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -1752,6 +1762,12 @@ function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti, pasteM
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
               <span className="w-6 h-6 rounded-lg bg-fuchsia-50 text-fuchsia-600 flex items-center justify-center"><GitBranch className="h-3.5 w-3.5 rotate-90" /></span> Branches
             </button>
+            {onAddGoto && (
+              <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddGoto() }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+                <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center"><CornerUpLeft className="h-3.5 w-3.5" /></span> Go to step
+              </button>
+            )}
           </div>
         </>
       )}
@@ -1838,6 +1854,11 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
     onChange(insertAt(graph, slot, { id, kind: "branch", match: "all", rules: [], thenNext: null, elseNext: null }))
     onEditNode(id)
   }
+  function addGoto(slot: Slot) {
+    const id = newNodeId()
+    onChange(insertAt(graph, slot, { id, kind: "goto", target: null }))
+    onEditNode(id)
+  }
   function addMulti(slot: Slot) {
     const id = newNodeId()
     onChange(insertAt(graph, slot, {
@@ -1861,7 +1882,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
       : slot.kind === "arm" ? (slotNode as any)?.arms?.find((a: any) => a.id === slot.armId)?.next
       : (slotNode as any)?.elseNext
 
-    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)}
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} onAddGoto={() => addGoto(slot)}
       pasteMode={clip?.mode ?? null} onPaste={() => handlePaste(slot)} onCancelPaste={() => setClip(null)} />
 
     if (!startId || !graph.nodes[startId]) {
@@ -1939,6 +1960,14 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
               { key: "else", label: "Else", tone: "else" as const, body: renderSlot({ kind: "else", nodeId: node.id }, depth + 1) },
             ]} />
           </>
+        ) : node.kind === "goto" ? (
+          // A jump — it has no continuation of its own; the path ends here and
+          // resumes at the target step.
+          <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+            dimmed={moveSourceId === node.id}
+            tone="delay" icon={<CornerUpLeft className="h-4 w-4" />}
+            title="Go to step"
+            subtitle={node.target && graph.nodes[node.target] ? `→ ${nodeSummary(graph.nodes[node.target])}` : "Pick a step"} />
         ) : null}
       </div>
     )
@@ -2085,7 +2114,7 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [] }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [], gotoTargets = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
@@ -2095,6 +2124,8 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   templates?: MessageTemplateOption[]
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
   documentTemplates?: { id: string; name: string }[]
+  // Candidate jump targets for a "Go to step" node (every other step).
+  gotoTargets?: { id: string; label: string }[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
@@ -2111,7 +2142,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto animate-modal-in" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-sm font-semibold text-slate-800">
-            {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : draft.kind === "delay" ? "Edit delay" : "Edit action"}
+            {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : draft.kind === "delay" ? "Edit delay" : draft.kind === "goto" ? "Go to step" : "Edit action"}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
         </div>
@@ -2277,6 +2308,16 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 className="flex items-center gap-1.5 text-sm text-fuchsia-600 hover:text-fuchsia-700 font-medium">
                 <Plus className="h-3.5 w-3.5" /> Add branch
               </button>
+            </>
+          ) : draft.kind === "goto" ? (
+            <>
+              <p className="text-xs text-slate-500">Jump to another step in this workflow. The record continues from there. Use a Delay before a backward jump to avoid an instant loop.</p>
+              <label className="block text-xs font-medium text-slate-600">Go to</label>
+              <StyledSelect className="w-full" value={draft.target ?? ""} onChange={e => setDraft({ ...draft, target: e.target.value || null })}>
+                <option value="">— End the workflow —</option>
+                {gotoTargets.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </StyledSelect>
+              {gotoTargets.length === 0 && <p className="text-[11px] text-slate-400">Add more steps first — there's nowhere to jump to yet.</p>}
             </>
           ) : null}
         </div>
@@ -2595,6 +2636,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           fieldTokens={objectFieldTokens} templates={templates}
           objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [] }))}
           documentTemplates={docTemplates}
+          gotoTargets={Object.values(graph.nodes).filter(n => n.kind !== "goto" && n.id !== editingNode.id).map(n => ({ id: n.id, label: nodeSummary(n) }))}
         />
       )}
     </div>
