@@ -5,7 +5,9 @@
 import React from "react"
 import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer"
 import { parse, type HTMLElement as ParsedEl, type Node as ParsedNode } from "node-html-parser"
+import { get } from "@vercel/blob"
 import { prisma } from "@/lib/prisma"
+import { mediaIdFromUrl } from "@/lib/media-url"
 import { buildRecordTokenVars } from "@/lib/record-token-vars"
 import { resolveMessageTokens } from "@/lib/message-tokens"
 import { asBlocks, type DocBlock, type ColumnChild, type Align } from "@/lib/document-blocks"
@@ -199,11 +201,22 @@ export async function fetchImagesFor(blocks: DocBlock[]): Promise<ImageMap> {
   return images
 }
 
-// Fetch an image URL (incl. private Blob) into bytes for react-pdf.
+// Fetch an image URL into bytes for react-pdf. Media-library images (relative or
+// absolute /api/media/<id>) are read straight from the private Blob store by id —
+// no HTTP round-trip, no base-URL dependency. Other urls are fetched directly.
 async function fetchImage(url: string): Promise<{ data: Buffer; format: "png" | "jpg" } | null> {
   try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN
-    const res = await fetch(url, token && url.includes("blob.vercel-storage") ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+    const mediaId = mediaIdFromUrl(url)
+    if (mediaId) {
+      const asset = await prisma.mediaAsset.findUnique({ where: { id: mediaId } })
+      if (!asset) return null
+      const r = await get(asset.blobUrl, { access: "private" }).catch(() => null)
+      if (!r || !r.stream) return null
+      const data = Buffer.from(await new Response(r.stream as any).arrayBuffer())
+      const format: "png" | "jpg" = (asset.contentType || "").includes("jpeg") ? "jpg" : "png"
+      return { data, format }
+    }
+    const res = await fetch(url)
     if (!res.ok) return null
     const data = Buffer.from(await res.arrayBuffer())
     const format: "png" | "jpg" = /\.jpe?g($|\?)/i.test(url) || res.headers.get("content-type")?.includes("jpeg") ? "jpg" : "png"
