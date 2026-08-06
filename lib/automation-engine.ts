@@ -6,7 +6,7 @@ import { resolveWorkflowSender } from "@/lib/sender-resolve"
 import { zonedParts, zonedWallToUtc } from "@/lib/tz"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
-import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
+import { evaluateRule as evalRule, evaluateGroups, selectBranch, MULTI_SEP, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/automation-graph"
 import { findProcedureLocation } from "@/lib/surgery-procedures"
 import { type RecordRef, loadRecord, loadAllRecords, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner, createRecordFor } from "@/lib/automation-records"
@@ -1587,20 +1587,33 @@ export async function runTrigger_RecordCreated(recordType: string, recordId: str
   )
 }
 
-// The property-changed trigger can watch several properties (stored as
-// `properties: string[]`; legacy configs use a single `property`). Semantics are
-// ALL — it fires only when every watched property meets the condition.
-function watchedProps(cfg: Record<string, unknown>): string[] {
+// A single watched property with its own condition + value. Semantics are ALL —
+// the trigger fires only when every watcher is satisfied.
+type PropWatcher = { property: string; condition: string; value?: string }
+
+// Normalize a property-changed config into watchers. New configs store
+// `watchers: PropWatcher[]`; legacy ones use `properties[]`/`property` with a
+// single shared `condition`/`toValue`.
+function watchersOf(cfg: Record<string, unknown>): PropWatcher[] {
+  const w = cfg.watchers as PropWatcher[] | undefined
+  if (Array.isArray(w) && w.length) return w.filter((x) => x && typeof x === "object")
+  const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
   const list = cfg.properties as string[] | undefined
-  if (Array.isArray(list) && list.length) return list.filter(Boolean)
-  return cfg.property ? [cfg.property as string] : []
+  const legacy = Array.isArray(list) && list.length ? list.filter(Boolean) : cfg.property ? [cfg.property as string] : []
+  return legacy.map((p) => ({ property: p, condition, value: cfg.toValue as string | undefined }))
 }
 
-// Does a value satisfy the "when it" condition?
+// Does a value satisfy the "when it" condition? `toValue` may be a MULTI_SEP list
+// (is any of), and `cur` may be an array (multi-select property).
 function propSatisfies(cur: unknown, condition: string, toValue: unknown): boolean {
-  const has = cur != null && String(cur).trim() !== ""
+  const has = cur != null && String(cur).trim() !== "" && !(Array.isArray(cur) && cur.length === 0)
   if (condition === "unknown") return !has
-  if (condition === "equals") return String(cur ?? "") === String(toValue ?? "")
+  if (condition === "equals") {
+    const vals = String(toValue ?? "").split(MULTI_SEP).map((s) => s.trim()).filter(Boolean)
+    if (!vals.length) return has // "equals" with no value chosen → treat as "known"
+    const curArr = Array.isArray(cur) ? cur.map((x) => String(x)) : [String(cur ?? "")]
+    return vals.some((v) => curArr.includes(v))
+  }
   return has // "known" / "changed" → currently holds a value
 }
 
@@ -1624,13 +1637,12 @@ export async function runTrigger_RecordPropertyChanged(
     "RECORD_PROPERTY_CHANGED" as AutomationTrigger,
     recordType, recordId, `Property changed: ${labels.join(", ")}`, {},
     (cfg, record) => {
-      const watched = watchedProps(cfg)
-      if (!watched.length) return true // no property named → any change fires it
+      const watchers = watchersOf(cfg).filter((w) => w.property)
+      if (!watchers.length) return true // no property named → any change fires it
       // The change must touch at least one watched property (so unrelated edits
-      // don't re-fire), AND every watched property must currently satisfy it.
-      if (!watched.some((w) => keys.includes(w))) return false
-      const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
-      return watched.every((w) => propSatisfies(currentPropValue(record, w), condition, cfg.toValue))
+      // don't re-fire), AND every watcher must currently satisfy its condition.
+      if (!watchers.some((w) => keys.includes(w.property))) return false
+      return watchers.every((w) => propSatisfies(currentPropValue(record, w.property), w.condition, w.value))
     },
     triggeredByUserId,
   )
@@ -1655,12 +1667,9 @@ function currentPropValue(record: Record<string, unknown>, key: string): unknown
 // triggers fall back to the criteria filter alone.
 function recordMatchesConfig(record: Record<string, unknown>, triggerType: string, cfg: Record<string, unknown>): boolean {
   if (triggerType === "RECORD_PROPERTY_CHANGED") {
-    const watched = watchedProps(cfg)
-    if (watched.length) {
-      const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
-      // ALL watched properties must currently satisfy the condition.
-      if (!watched.every((w) => propSatisfies(currentPropValue(record, w), condition, cfg.toValue))) return false
-    }
+    const watchers = watchersOf(cfg).filter((w) => w.property)
+    // ALL watched properties must currently satisfy their own condition.
+    if (watchers.length && !watchers.every((w) => propSatisfies(currentPropValue(record, w.property), w.condition, w.value))) return false
   }
   return checkConditions(record, cfg)
 }

@@ -509,40 +509,60 @@ function TriggerConfigFields({
     }
 
     if (type === "RECORD_PROPERTY_CHANGED") {
-      const condition = (config.condition as string) || (config.toValue ? "equals" : "changed")
-      // Multi-property: watch several properties; fires when ALL of them meet the
-      // condition. Back-compat with the legacy single `property`.
-      const watched: string[] = (config.properties as string[]) ?? (config.property ? [config.property as string] : [])
-      const propOptions = [...propDefs, ...customDefs].map(p => ({ value: p.id, label: p.label }))
+      // Each watched property is its own row with its own condition + (type-aware)
+      // value; ALL rows must match for the workflow to fire (HubSpot-style).
+      const allW = [...propDefs, ...customDefs]
+      const propOptions = allW.map(p => ({ value: p.id, label: p.label }))
+      const defById = (id: string) => allW.find(p => p.id === id)
+      type Watcher = { property: string; condition: string; value?: string }
+      // Read new `watchers`; else migrate legacy properties/condition/toValue.
+      const watchers: Watcher[] = Array.isArray(config.watchers) && (config.watchers as Watcher[]).length
+        ? (config.watchers as Watcher[])
+        : (() => {
+            const cond = (config.condition as string) || (config.toValue ? "equals" : "changed")
+            const legacy: string[] = (config.properties as string[]) ?? (config.property ? [config.property as string] : [])
+            if (!legacy.length) return [{ property: "", condition: cond, value: (config.toValue as string) || "" }]
+            return legacy.map((p, i) => ({ property: p, condition: cond, value: i === 0 ? ((config.toValue as string) || "") : "" }))
+          })()
+      const commit = (next: Watcher[]) => onChange({ ...config, watchers: next, property: undefined, properties: undefined, condition: undefined, toValue: undefined })
+      const setW = (i: number, patch: Partial<Watcher>) => commit(watchers.map((w, j) => (j === i ? { ...w, ...patch } : w)))
+
       return (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Properties to watch <span className="text-slate-400 font-normal">(all must match)</span></label>
-            <MultiSelectValue options={propOptions}
-              value={watched.join(MULTI_SEP)}
-              onChange={v => onChange({ ...config, property: undefined, properties: v ? v.split(MULTI_SEP).filter(Boolean) : [] })} />
-            <p className="text-[11px] text-slate-400 mt-1">Leave empty to watch any property.</p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">When it</label>
-            <StyledSelect className="w-full" value={condition} onChange={e => set("condition", e.target.value)}>
-              <option value="changed">Changes (any new value)</option>
-              <option value="known">Becomes known (has a value)</option>
-              <option value="unknown">Becomes empty (is cleared)</option>
-              <option value="equals">Changes to a specific value</option>
-            </StyledSelect>
-          </div>
-          {condition === "equals" && (
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">New value is</label>
-              <input
-                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
-                value={(config.toValue as string) || ""}
-                onChange={e => set("toValue", e.target.value)}
-                placeholder="Value"
-              />
-            </div>
-          )}
+        <div className="space-y-2">
+          <label className="block text-xs font-medium text-slate-600">Properties to watch <span className="text-slate-400 font-normal">(all must match)</span></label>
+          {watchers.map((w, i) => {
+            const def = defById(w.property)
+            return (
+              <div key={i} className="flex items-start gap-2 flex-wrap">
+                <StyledSelect className="shrink-0 min-w-[150px]" value={w.property} onChange={e => setW(i, { property: e.target.value, value: "" })}>
+                  <option value="">Any property</option>
+                  {propOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </StyledSelect>
+                <StyledSelect className="shrink-0 min-w-[150px]" value={w.condition} onChange={e => setW(i, { condition: e.target.value, value: "" })}>
+                  <option value="changed">Changes (any new value)</option>
+                  <option value="known">Becomes known (has a value)</option>
+                  <option value="unknown">Becomes empty (is cleared)</option>
+                  <option value="equals">Changes to…</option>
+                </StyledSelect>
+                {w.condition === "equals" && (
+                  def && (def.type === "select" || def.type === "tag")
+                    ? <MultiSelectValue options={optionsForProp(def, criteriaData)} value={w.value || ""} onChange={v => setW(i, { value: v })} />
+                    : def && def.type === "number"
+                      ? <input type="number" className="flex-1 min-w-[120px] border border-slate-200 rounded-md px-2 py-1.5 text-sm" placeholder="Value" value={w.value || ""} onChange={e => setW(i, { value: e.target.value })} />
+                      : def && def.type === "date"
+                        ? <input type="date" className="flex-1 min-w-[140px] border border-slate-200 rounded-md px-2 py-1.5 text-sm" value={(w.value || "").slice(0, 10)} onChange={e => setW(i, { value: e.target.value })} />
+                        : <input className="flex-1 min-w-[140px] border border-slate-200 rounded-md px-2 py-1.5 text-sm" placeholder="Value…" value={w.value || ""} onChange={e => setW(i, { value: e.target.value })} />
+                )}
+                {watchers.length > 1 && (
+                  <button type="button" onClick={() => commit(watchers.filter((_, j) => j !== i))} className="text-slate-400 hover:text-red-500 mt-1.5"><X className="h-3.5 w-3.5" /></button>
+                )}
+              </div>
+            )
+          })}
+          <button type="button" onClick={() => commit([...watchers, { property: "", condition: "changed", value: "" }])} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+            <Plus className="h-3 w-3" /> Add property
+          </button>
+          <p className="text-[11px] text-slate-400">Each property must meet its condition. Leave a row on “Any property” to watch every property.</p>
         </div>
       )
     }
