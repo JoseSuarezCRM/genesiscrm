@@ -20,6 +20,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     headers: {
       "Content-Type": asset.contentType || result.blob?.contentType || "image/png",
       "Cache-Control": "public, max-age=31536000, immutable",
+      // Defense-in-depth: don't let the browser sniff a different type, and neuter
+      // any script in an uploaded SVG on direct navigation (sandbox = no scripts).
+      // <img> embedding is unaffected (images never execute SVG scripts).
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
     },
   })
 }
