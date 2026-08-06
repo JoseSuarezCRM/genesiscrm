@@ -29,11 +29,12 @@ function leaf(b: ColumnChild): string {
   }
 }
 
-function block(b: EmailBlock): string {
+// Render a single block to HTML (used by the send-time render and the builder canvas).
+export function renderEmailBlock(b: EmailBlock): string {
   if (b.type === "columns") {
     const cols = b.columns.length || 1
     const cells = b.columns.map((col, i) =>
-      `<td valign="top" width="${Math.floor(100 / cols)}%" style="padding:0 ${i < cols - 1 ? "10" : "0"}px 0 ${i > 0 ? "10" : "0"}px;vertical-align:top;">${col.map(leaf).join("")}</td>`
+      `<td valign="top" width="${Math.floor(100 / cols)}%" style="padding:0 ${i < cols - 1 ? "10" : "0"}px 0 ${i > 0 ? "10" : "0"}px;vertical-align:top;">${col.map(leaf).join("") || '<div style="color:#cbd5e1;font-size:12px;font-family:Arial,sans-serif;">Empty column</div>'}</td>`
     ).join("")
     return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 8px;"><tr>${cells}</tr></table>`
   }
@@ -42,7 +43,7 @@ function block(b: EmailBlock): string {
 
 // The inner HTML for a template body (no outer container — send paths wrap it).
 export function renderEmailHtml(blocks: EmailBlock[]): string {
-  return (blocks ?? []).map(block).join("\n")
+  return (blocks ?? []).map(renderEmailBlock).join("\n")
 }
 
 // A 600px centered shell — used for the builder preview only.
