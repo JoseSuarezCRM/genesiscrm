@@ -6,6 +6,7 @@ import { createActivityView, updateActivityView, deleteActivityView } from "@/ap
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
+import { ACTIVITY_RATINGS, ratingLabel } from "@/lib/activity-ratings"
 import { showToast } from "@/components/toast"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import SelectedProvidersCard from "@/components/selected-providers-card"
@@ -111,6 +112,7 @@ interface ActivityRow {
   location: { id: string; name: string; address: string | null } | null
   providers: { doctor: { id: string; name: string; title: string | null } }[]
   nextStep: string | null; frontDesk: string | null; flyer: string | null; notes: string | null
+  rating: number | null
   createdBy: { name: string | null; email: string }
 }
 
@@ -746,7 +748,7 @@ function emptyForm() {
     practiceId: "", locationId: "", providerIds: [] as string[],
     tagIds: [] as string[], selectedTags: [] as TagObj[],
     nextStep: "", date: format(new Date(), "yyyy-MM-dd"),
-    frontDesk: "", flyer: "", notes: "",
+    frontDesk: "", flyer: "", notes: "", rating: "",
   }
 }
 
@@ -771,13 +773,14 @@ const ACTIVITY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "location",  label: "Location" },
   { key: "providers", label: "Providers" },
   { key: "type",      label: "Type" },
+  { key: "rating",    label: "Rating", sortable: true },
   { key: "nextStep",  label: "Next Step" },
   { key: "frontDesk", label: "Front Desk" },
   { key: "tags",      label: "Tags" },
   { key: "notes",     label: "Notes" },
   { key: "loggedBy",  label: "Logged By" },
 ]
-const DEFAULT_ACTIVITY_COLS = ["date", "account", "location", "providers", "type", "nextStep", "tags", "loggedBy"]
+const DEFAULT_ACTIVITY_COLS = ["date", "account", "location", "providers", "type", "rating", "nextStep", "tags", "loggedBy"]
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -948,6 +951,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       tagIds: a.tags.map(t => t.id), selectedTags: a.tags,
       nextStep: a.nextStep ?? "", date: format(activityDay(a.date), "yyyy-MM-dd"),
       frontDesk: a.frontDesk ?? "", flyer: a.flyer ?? "", notes: a.notes ?? "",
+      rating: a.rating != null ? String(a.rating) : "",
     })
     setEditId(a.id); setError(null); setOpen(true)
   }
@@ -983,6 +987,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         frontDesk: form.frontDesk || undefined,
         flyer: form.flyer || undefined,
         notes: form.notes || undefined,
+        rating: form.rating ? Number(form.rating) : null,
       }
       const result = editId ? await updateActivity(editId, payload) : await createActivity(payload)
       if (result.error) {
@@ -1166,13 +1171,14 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   // Build CSV data (headers + rows) for the currently filtered activities.
   function buildExportData() {
-    const headers = ["Date", "Account", "Location", "Providers", "Activity Type", "Next Step", "Front Desk", "Tags", "Notes", "Logged By"]
+    const headers = ["Date", "Account", "Location", "Providers", "Activity Type", "Rating", "Next Step", "Front Desk", "Tags", "Notes", "Logged By"]
     const rows = filtered.map(a => [
       format(activityDay(a.date), "yyyy-MM-dd"),
       a.practice?.name ?? "",
       a.location?.name ?? "",
       a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join("; "),
       a.flyer ?? "",
+      a.rating ? `${a.rating} - ${ratingLabel(a.rating)}` : "",
       a.nextStep ?? "",
       a.frontDesk ?? "",
       a.tags.map(t => t.name).join("; "),
@@ -1191,6 +1197,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       case "location": return a.location?.name?.toLowerCase() ?? ""
       case "providers": return a.providers.map(p => p.doctor.name).join(", ").toLowerCase()
       case "type": return (a.flyer ?? "").toLowerCase()
+      case "rating": return a.rating ?? 0
       case "nextStep": return (a.nextStep ?? "").toLowerCase()
       case "frontDesk": return (a.frontDesk ?? "").toLowerCase()
       case "tags": return a.tags.map(t => t.name).join(", ").toLowerCase()
@@ -1265,6 +1272,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t ? `${t.bg} ${t.color} ${t.border}` : "bg-zinc-100 text-zinc-600 border-zinc-200"}`}>{a.flyer}</span>
           : <span className="text-zinc-400">—</span>
       }
+      case "rating": return a.rating
+        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200 whitespace-nowrap">{a.rating} · {ratingLabel(a.rating)}</span>
+        : <span className="text-zinc-400">—</span>
       case "nextStep": return <span className="text-zinc-500">{a.nextStep || "—"}</span>
       case "frontDesk": return <span className="text-zinc-500">{a.frontDesk || "—"}</span>
       case "tags": return <span className="text-zinc-500">{a.tags.length ? a.tags.map(tg => tg.name).join(", ") : "—"}</span>
@@ -1640,7 +1650,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                  {a.rating != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.rating} · {ratingLabel(a.rating)}</span>}
                   {a.nextStep && <span><span className="font-medium text-slate-600">Next:</span> {a.nextStep}</span>}
                   {a.frontDesk && <span><span className="font-medium text-slate-600">Front desk:</span> {a.frontDesk}</span>}
                   {a.flyer && (() => {
@@ -1778,6 +1789,25 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                     }`}
                   >
                     {t.value}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Rating</label>
+              <div className="flex flex-wrap gap-2">
+                {ACTIVITY_RATINGS.map(r => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => set("rating", form.rating === String(r.value) ? "" : String(r.value))}
+                    className={`h-9 px-3.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-all ${
+                      form.rating === String(r.value)
+                        ? "bg-zinc-900 text-white border-zinc-900"
+                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    {r.value} - {r.label}
                   </button>
                 ))}
               </div>

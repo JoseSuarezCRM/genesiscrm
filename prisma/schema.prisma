@@ -843,6 +843,7 @@ model Activity {
   frontDesk   String?
   flyer       String?
   notes       String?
+  rating      Int?               // value rating: 1 Low / 2 Mid / 3 High
   customProperties Json          @default("{}") // custom property values
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])
