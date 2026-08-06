@@ -130,14 +130,14 @@ export default function EmailTemplateBuilder({ template }: Props) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="fixed inset-0 z-[60] bg-white flex flex-col">
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
         const f = e.target.files?.[0]; e.target.value = ""
         if (!f) return; const url = await uploadAsset(f); if (url) uploadTarget.current(url)
       }} />
 
-      <div className="flex flex-wrap items-end gap-2">
-        <button onClick={() => router.push("/communications/email")} className="inline-flex items-center gap-1 h-9 px-2 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" /> Back</button>
+      <div className="flex flex-wrap items-end gap-2 border-b border-slate-200 px-4 py-2.5 shrink-0">
+        <button onClick={() => router.push("/communications/email")} className="inline-flex items-center gap-1 h-9 px-2 text-sm text-slate-500 hover:text-slate-800 pb-2"><ArrowLeft className="h-4 w-4" /> Close</button>
         <label className="text-xs text-slate-500">Name<input value={name} onChange={(e) => setName(e.target.value)} className="block w-52 mt-1 h-9 px-3 text-sm border border-slate-200 rounded-lg" /></label>
         <label className="text-xs text-slate-500">Subject<input value={subject} onChange={(e) => setSubject(e.target.value)} className="block w-72 mt-1 h-9 px-3 text-sm border border-slate-200 rounded-lg" placeholder="Subject line (tokens ok)" /></label>
         <div className="ml-auto flex items-center gap-2">
@@ -145,17 +145,19 @@ export default function EmailTemplateBuilder({ template }: Props) {
           <button onClick={() => save()} disabled={saving} className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save</button>
         </div>
       </div>
-      {msg && <div className={cn("rounded-lg border px-3 py-2 text-sm", msg.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>{msg.text}</div>}
+      {msg && <div className={cn("mx-4 mt-2 rounded-lg border px-3 py-2 text-sm shrink-0", msg.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>{msg.text}</div>}
 
-      <BlockCanvasBuilder<EmailBlock>
-        blocks={blocks} onChange={setBlocks}
-        palette={PALETTE}
-        makeBlock={(type) => makeEmailBlock(type as EmailBlockType)}
-        preview={(b) => renderEmailBlock(b)}
-        renderSettings={renderSettings}
-        pageWidth={640}
-        pageStyle={{ padding: 24 }}
-      />
+      <div className="flex-1 min-h-0 p-4">
+        <BlockCanvasBuilder<EmailBlock>
+          blocks={blocks} onChange={setBlocks}
+          palette={PALETTE}
+          makeBlock={(type) => makeEmailBlock(type as EmailBlockType)}
+          preview={(b) => renderEmailBlock(b)}
+          renderSettings={renderSettings}
+          pageWidth={640}
+          pageStyle={{ padding: 24 }}
+        />
+      </div>
     </div>
   )
 }

@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
-import { userCan } from "@/lib/permissions"
+import { userCanLevel } from "@/lib/permissions"
 import { listDocumentTemplates } from "@/app/actions/document-templates"
 import { listObjectTypes } from "@/lib/object-registry"
 import DocumentTemplatesList from "@/components/document-templates-list"
 
 export default async function DocumentTemplatesPage() {
   const session = await auth()
-  if (!userCan(session?.user as any, "MANAGE_USERS")) redirect("/settings")
+  if (!userCanLevel(session?.user as any, "TEMPLATES", "EDIT")) redirect("/communications/email")
   const [templates, objectTypes] = await Promise.all([listDocumentTemplates(), listObjectTypes()])
 
   return (

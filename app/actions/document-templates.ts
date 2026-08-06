@@ -1,12 +1,12 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireAccess } from "@/lib/auth-guard"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import type { DocBlock } from "@/lib/document-blocks"
 
-const revalidate = () => revalidatePath("/settings/documents")
+const revalidate = () => revalidatePath("/communications/documents")
 
 export interface DocTemplate {
   id: string
@@ -20,7 +20,7 @@ export interface DocTemplate {
 
 // Admin-managed CRUD.
 export async function listDocumentTemplates(objectType?: string): Promise<DocTemplate[]> {
-  await requirePermission("MANAGE_USERS")
+  await requireAccess("TEMPLATES", "EDIT")
   const rows = await (prisma as any).documentTemplate.findMany({
     where: objectType ? { objectType } : {},
     orderBy: { updatedAt: "desc" },
@@ -29,12 +29,12 @@ export async function listDocumentTemplates(objectType?: string): Promise<DocTem
 }
 
 export async function getDocumentTemplate(id: string): Promise<DocTemplate | null> {
-  await requirePermission("MANAGE_USERS")
+  await requireAccess("TEMPLATES", "EDIT")
   return (await (prisma as any).documentTemplate.findUnique({ where: { id } })) as DocTemplate | null
 }
 
 export async function createDocumentTemplate(input: { name: string; objectType: string }): Promise<{ id?: string; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireAccess("TEMPLATES", "EDIT")
   const name = input.name?.trim()
   if (!name) return { error: "Name is required." }
   if (!input.objectType) return { error: "Pick an object type." }
@@ -45,7 +45,7 @@ export async function createDocumentTemplate(input: { name: string; objectType: 
 }
 
 export async function updateDocumentTemplate(id: string, patch: { name?: string; objectType?: string; blocks?: DocBlock[]; pageSize?: string; isActive?: boolean }): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireAccess("TEMPLATES", "EDIT")
   const data: Record<string, unknown> = {}
   if (patch.name !== undefined) data.name = patch.name.trim()
   if (patch.objectType !== undefined) data.objectType = patch.objectType
@@ -58,7 +58,7 @@ export async function updateDocumentTemplate(id: string, patch: { name?: string;
 }
 
 export async function deleteDocumentTemplate(id: string): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireAccess("TEMPLATES", "EDIT")
   await (prisma as any).documentTemplate.delete({ where: { id } }).catch(() => {})
   revalidate()
   return { ok: true }

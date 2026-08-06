@@ -22,7 +22,7 @@ export default function DocumentTemplatesList({ templates, objectTypes }: { temp
     start(async () => {
       const r = await createDocumentTemplate({ name, objectType })
       if (r.error) return setErr(r.error)
-      router.push(`/settings/documents/${r.id}`)
+      router.push(`/communications/documents/${r.id}`)
     })
   }
   function remove(id: string) {
@@ -57,11 +57,11 @@ export default function DocumentTemplatesList({ templates, objectTypes }: { temp
         ) : templates.map((t) => (
           <div key={t.id} className="flex items-center gap-3 px-4 py-3">
             <FileText className="h-4 w-4 text-slate-400 shrink-0" />
-            <Link href={`/settings/documents/${t.id}`} className="font-medium text-slate-800 hover:text-blue-600">{t.name}</Link>
+            <Link href={`/communications/documents/${t.id}`} className="font-medium text-slate-800 hover:text-blue-600">{t.name}</Link>
             <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{labelOf(t.objectType)}</span>
             {!t.isActive && <span className="text-xs text-amber-600">inactive</span>}
             <span className="ml-auto text-[11px] text-slate-400">Updated {new Date(t.updatedAt).toLocaleDateString()}</span>
-            <Link href={`/settings/documents/${t.id}`} className="text-slate-400 hover:text-slate-700"><Pencil className="h-4 w-4" /></Link>
+            <Link href={`/communications/documents/${t.id}`} className="text-slate-400 hover:text-slate-700"><Pencil className="h-4 w-4" /></Link>
             <button onClick={() => remove(t.id)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
