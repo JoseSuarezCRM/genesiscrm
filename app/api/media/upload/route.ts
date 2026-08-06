@@ -3,7 +3,7 @@ import { put } from "@vercel/blob"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { userCanLevel } from "@/lib/permissions"
-import { mediaUrl } from "@/app/actions/media"
+import { mediaUrl } from "@/lib/media-url"
 
 // Uploads a reusable media asset (logo, banner, photo). Bytes go to the private
 // Blob store; a MediaAsset row is created and the caller gets back a stable

@@ -3,20 +3,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { userCanLevel } from "@/lib/permissions"
-
-// Absolute base URL for building public asset links usable in emails/PDFs.
-export function appBaseUrl(): string {
-  return (
-    process.env.NEXTAUTH_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")
-  ).replace(/\/$/, "")
-}
-
-// Public URL for a media asset — served (bytes only) via our own route so it
-// works in the builder, in recipients' inboxes, and in generated PDFs.
-export function mediaUrl(id: string): string {
-  return `${appBaseUrl()}/api/media/${id}`
-}
+import { mediaUrl } from "@/lib/media-url"
 
 export type MediaAssetDTO = {
   id: string

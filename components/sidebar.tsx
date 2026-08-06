@@ -56,6 +56,7 @@ const communicationsItems: NavItem[] = [
   { href: "/communications/sms",   label: "SMS",   object: "TEMPLATES" },
   { href: "/communications/email", label: "Email", object: "TEMPLATES" },
   { href: "/communications/documents", label: "Documents", object: "TEMPLATES" },
+  { href: "/communications/media", label: "Media", object: "TEMPLATES" },
 ]
 
 const automationItems: NavItem[] = [
