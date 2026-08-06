@@ -38,3 +38,12 @@ export async function deleteMediaAsset(id: string): Promise<{ ok: boolean; error
   await prisma.mediaAsset.delete({ where: { id } }).catch(() => {})
   return { ok: true }
 }
+
+export async function renameMediaAsset(id: string, name: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user || !canManage(session.user)) return { ok: false, error: "Unauthorized" }
+  const clean = name.trim()
+  if (!clean) return { ok: false, error: "Name can't be empty." }
+  await prisma.mediaAsset.update({ where: { id }, data: { name: clean.slice(0, 200) } }).catch(() => {})
+  return { ok: true }
+}
