@@ -78,11 +78,32 @@ export default function DocumentTemplateBuilder({ template, objectTypes }: Props
   const field = "w-full h-8 px-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-zinc-400"
   const lbl = "block text-[11px] text-slate-500"
 
+  const numOpt = (v: number | undefined, on: (n: number | undefined) => void, ph: string, step?: string) => (
+    <input type="number" step={step} value={v ?? ""} placeholder={ph} onChange={(e) => on(e.target.value === "" ? undefined : Number(e.target.value))} className={field} />
+  )
+  // HubSpot-style spacing controls (line height, gap below, inner padding).
+  function Spacing(b: ColumnChild, patch: (p: Partial<ColumnChild>) => void) {
+    return (
+      <div className="space-y-2 pt-2 mt-1 border-t border-slate-100">
+        <p className="text-[11px] font-semibold text-slate-500">Spacing</p>
+        {b.type === "text" && <label className={lbl}>Line height{numOpt(b.lineHeight, (n) => patch({ lineHeight: n } as any), "1.4", "0.1")}</label>}
+        <label className={lbl}>Space after (px){numOpt(b.spaceAfter, (n) => patch({ spaceAfter: n } as any), b.type === "image" ? "6" : "0")}</label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className={lbl}>Pad top{numOpt(b.padTop, (n) => patch({ padTop: n } as any), "0")}</label>
+          <label className={lbl}>Pad bottom{numOpt(b.padBottom, (n) => patch({ padBottom: n } as any), "0")}</label>
+          <label className={lbl}>Pad left{numOpt(b.padLeft, (n) => patch({ padLeft: n } as any), "0")}</label>
+          <label className={lbl}>Pad right{numOpt(b.padRight, (n) => patch({ padRight: n } as any), "0")}</label>
+        </div>
+      </div>
+    )
+  }
+
   function LeafSettings(b: ColumnChild, patch: (p: Partial<ColumnChild>) => void) {
     if (b.type === "text") return (
       <div className="space-y-2">
         <RichTextEditor value={b.html} onChange={(html) => patch({ html })} tokenGroups={tokenGroups} minHeight={120} placeholder="Write text… use Fields for tokens" />
         {alignSel(b.align, (a) => patch({ align: a }))}
+        {Spacing(b, patch)}
       </div>
     )
     if (b.type === "image") return (
@@ -91,6 +112,7 @@ export default function DocumentTemplateBuilder({ template, objectTypes }: Props
         <button onClick={() => pickImage((url) => patch({ url }))} className="h-8 px-2 text-xs border border-slate-200 rounded-md hover:bg-slate-50 w-full">{b.url ? "Replace image" : "Choose image"}</button>
         <label className={lbl}>Width (px)<input type="number" value={b.width ?? 160} onChange={(e) => patch({ width: Number(e.target.value) || 160 })} className={field} /></label>
         {alignSel(b.align, (a) => patch({ align: a }))}
+        {Spacing(b, patch)}
       </div>
     )
     if (b.type === "divider") return <label className={lbl}>Thickness (px)<input type="number" value={b.thickness ?? 1} onChange={(e) => patch({ thickness: Number(e.target.value) || 1 })} className={field} /></label>

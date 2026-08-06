@@ -5,10 +5,15 @@
 export type BlockRegion = "header" | "body" | "footer"
 export type Align = "left" | "center" | "right"
 
-export interface TextBlock { id: string; type: "text"; region: BlockRegion; html: string; align?: Align; fontSize?: number }
-export interface ImageBlock { id: string; type: "image"; region: BlockRegion; url?: string; width?: number; align?: Align }
-export interface DividerBlock { id: string; type: "divider"; region: BlockRegion; thickness?: number }
-export interface SpacerBlock { id: string; type: "spacer"; region: BlockRegion; height?: number }
+// Optional per-block spacing controls (HubSpot-style). All in pt/px; omitted =
+// sensible defaults. `lineHeight` is a multiplier (e.g. 1.4). `spaceAfter` is the
+// gap below the block. pad* are inner padding on each side.
+export interface BlockSpacing { lineHeight?: number; spaceAfter?: number; padTop?: number; padBottom?: number; padLeft?: number; padRight?: number }
+
+export interface TextBlock extends BlockSpacing { id: string; type: "text"; region: BlockRegion; html: string; align?: Align; fontSize?: number }
+export interface ImageBlock extends BlockSpacing { id: string; type: "image"; region: BlockRegion; url?: string; width?: number; align?: Align }
+export interface DividerBlock extends BlockSpacing { id: string; type: "divider"; region: BlockRegion; thickness?: number }
+export interface SpacerBlock extends BlockSpacing { id: string; type: "spacer"; region: BlockRegion; height?: number }
 // A column's contents are a small stack of leaf blocks (text/image/divider/spacer).
 export type ColumnChild = TextBlock | ImageBlock | DividerBlock | SpacerBlock
 export interface ColumnsBlock { id: string; type: "columns"; region: BlockRegion; columns: ColumnChild[][]; widths?: number[] }

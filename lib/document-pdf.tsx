@@ -56,19 +56,49 @@ function decode(s: string): string {
 
 function blockAlign(a?: Align): any { return a && a !== "left" ? { textAlign: a } : {} }
 
-// Convert a text block's HTML into an array of react-pdf elements.
-function htmlToNodes(html: string, align: Align | undefined, fontSize: number | undefined, keyBase: string): React.ReactNode[] {
+// Tags that flow inline within a paragraph. Everything else is block-level and
+// starts its own paragraph. `<br>` is inline (a soft line break), NOT a block —
+// so "A<br>B<br>C" is one tight paragraph, not three margin'd ones.
+const BLOCK_TAGS = new Set(["p", "div", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "table", "tr", "td"])
+
+// True when grouped inline content is only whitespace/newlines (an empty line).
+function isBlankContent(content: React.ReactNode[]): boolean {
+  return content.every((c) => typeof c === "string" && !c.replace(/[\s\n]/g, ""))
+}
+
+// Convert a text block's HTML into an array of react-pdf elements. Consecutive
+// inline siblings (text, <b>, <a>, <br>, …) are grouped into one paragraph so
+// line breaks stay tight; block elements each become their own paragraph.
+function htmlToNodes(html: string, align: Align | undefined, fontSize: number | undefined, keyBase: string, lineHeight?: number): React.ReactNode[] {
   const root = parse(html || "", { lowerCaseTagName: true })
   const nodes: React.ReactNode[] = []
-  const base: any = { ...styles.para, ...blockAlign(align), ...(fontSize ? { fontSize } : {}) }
+  const fs = fontSize ?? 11
+  // No default paragraph margin — spacing comes from the content itself, matching
+  // the browser (and the canvas preview): <div>s stack tight with blank-line divs
+  // for gaps; <p>s carry ~1em. This is what keeps the PDF aligned to the WYSIWYG.
+  const base: any = { ...blockAlign(align), ...(fontSize ? { fontSize } : {}), ...(lineHeight ? { lineHeight } : {}), marginBottom: 0 }
+  // Browser-like bottom margin per block tag.
+  const tagMargin = (tag: string): number => (tag === "p" || tag === "blockquote" ? fs : /^h[1-6]$/.test(tag) ? 4 : 0)
+
+  let buf: ParsedNode[] = []
+  let pk = 0
+  const flush = () => {
+    if (!buf.length) return
+    const key = `${keyBase}.p${pk++}`
+    const content = inlineChildren({ childNodes: buf } as any, {}, key)
+    // Drop leading/trailing pure-whitespace-only groups (editor artifacts).
+    if (!isBlankContent(content)) nodes.push(<Text key={key} style={base}>{content}</Text>)
+    buf = []
+  }
 
   const walk = (parent: ParsedEl) => {
-    const children = parent.childNodes ?? []
-    children.forEach((child, i) => {
-      const key = `${keyBase}.${i}`
-      if (child.nodeType === 3) { const t = (child as any).text?.trim(); if (t) nodes.push(<Text key={key} style={base}>{decode((child as any).text)}</Text>); return }
+    ;(parent.childNodes ?? []).forEach((child) => {
+      if (child.nodeType === 3) { buf.push(child); return }
       const el = child as ParsedEl
       const tag = (el.tagName || "").toLowerCase()
+      if (!BLOCK_TAGS.has(tag)) { buf.push(child); return } // inline → keep buffering
+      flush()
+      const key = `${keyBase}.b${pk++}`
       if (tag === "ul" || tag === "ol") {
         ;(el.childNodes ?? []).forEach((li, j) => {
           if ((li as ParsedEl).tagName?.toLowerCase() !== "li") return
@@ -76,22 +106,26 @@ function htmlToNodes(html: string, align: Align | undefined, fontSize: number | 
           nodes.push(
             <View key={`${key}.${j}`} style={styles.li}>
               <Text style={styles.bullet}>{bullet}</Text>
-              <Text style={{ flex: 1, ...blockAlign(align), ...(fontSize ? { fontSize } : {}) }}>{inlineChildren(li as ParsedEl, {}, `${key}.${j}`)}</Text>
+              <Text style={{ flex: 1, ...blockAlign(align), ...(fontSize ? { fontSize } : {}), ...(lineHeight ? { lineHeight } : {}) }}>{inlineChildren(li as ParsedEl, {}, `${key}.${j}`)}</Text>
             </View>
           )
         })
-      } else if (tag === "p" || tag === "div" || /^h[1-6]$/.test(tag)) {
-        const hStyle = /^h[1-6]$/.test(tag) ? { fontFamily: "Times-Bold", fontSize: (fontSize ?? 11) + (tag === "h1" ? 7 : tag === "h2" ? 4 : 2) } : {}
-        nodes.push(<Text key={key} style={{ ...base, ...hStyle }}>{inlineChildren(el, {}, key)}</Text>)
-      } else if (tag === "br") {
-        nodes.push(<Text key={key} style={base}> </Text>)
-      } else {
-        // stray inline at top level → wrap in a paragraph
-        nodes.push(<Text key={key} style={base}>{inlineChildren({ childNodes: [el] } as any, {}, key)}</Text>)
+        return
       }
+      // p / div / blockquote / heading: if it nests block children, recurse;
+      // otherwise render its inline content as a single paragraph.
+      const hasBlockChild = (el.childNodes ?? []).some((c) => c.nodeType === 1 && BLOCK_TAGS.has(((c as ParsedEl).tagName || "").toLowerCase()))
+      if (hasBlockChild) { walk(el); return }
+      const isH = /^h[1-6]$/.test(tag)
+      const hStyle = isH ? { fontFamily: "Times-Bold", fontSize: fs + (tag === "h1" ? 7 : tag === "h2" ? 4 : 2) } : {}
+      const content = inlineChildren(el, {}, key)
+      // An empty <p></p>/<div></div> is an intentional blank line (margin 0 — the
+      // blank line itself is the gap); a filled block gets its browser-like margin.
+      nodes.push(<Text key={key} style={{ ...base, ...hStyle, marginBottom: isBlankContent(content) ? 0 : tagMargin(tag) }}>{isBlankContent(content) ? " " : content}</Text>)
     })
   }
   walk(root)
+  flush()
   if (!nodes.length && html) nodes.push(<Text key={keyBase} style={base}>{decode(html.replace(/<[^>]+>/g, ""))}</Text>)
   return nodes
 }
@@ -99,9 +133,20 @@ function htmlToNodes(html: string, align: Align | undefined, fontSize: number | 
 // ── Blocks → react-pdf ──────────────────────────────────────────────────────
 type ImageMap = Record<string, { data: Buffer; format: "png" | "jpg" }>
 
+// Per-block inner padding + gap below (HubSpot-style spacing controls).
+function spacingStyle(b: { spaceAfter?: number; padTop?: number; padBottom?: number; padLeft?: number; padRight?: number }, defaultAfter = 0): any {
+  const s: any = {}
+  if (b.padTop) s.paddingTop = b.padTop
+  if (b.padBottom) s.paddingBottom = b.padBottom
+  if (b.padLeft) s.paddingLeft = b.padLeft
+  if (b.padRight) s.paddingRight = b.padRight
+  s.marginBottom = b.spaceAfter ?? defaultAfter
+  return s
+}
+
 function renderLeaf(b: ColumnChild, images: ImageMap, key: string): React.ReactNode {
-  if (b.type === "text") return <View key={key}>{htmlToNodes(b.html, b.align, b.fontSize, key)}</View>
-  if (b.type === "image") { const img = b.url ? images[b.url] : undefined; return img ? <Image key={key} src={img} style={{ width: b.width ?? 160, alignSelf: b.align === "center" ? "center" : b.align === "right" ? "flex-end" : "flex-start", marginBottom: 6 }} /> : null }
+  if (b.type === "text") return <View key={key} style={spacingStyle(b)}>{htmlToNodes(b.html, b.align, b.fontSize, key, b.lineHeight)}</View>
+  if (b.type === "image") { const img = b.url ? images[b.url] : undefined; return img ? <View key={key} style={{ ...spacingStyle(b, 6), alignItems: b.align === "center" ? "center" : b.align === "right" ? "flex-end" : "flex-start" }}><Image src={img} style={{ width: b.width ?? 160 }} /></View> : null }
   if (b.type === "divider") return <View key={key} style={{ borderBottomWidth: b.thickness ?? 1, borderBottomColor: "#cbd5e1", marginVertical: 8 }} />
   if (b.type === "spacer") return <View key={key} style={{ height: b.height ?? 16 }} />
   return null
