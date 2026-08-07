@@ -843,6 +843,7 @@ model Activity {
   frontDesk   String?
   flyer       String?
   notes       String?
+  rating      Int?               // value rating: 1 Low / 2 Mid / 3 High
   customProperties Json          @default("{}") // custom property values
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])
@@ -1367,7 +1368,8 @@ model MessageTemplate {
   name           String
   channel        OutreachChannel
   subject        String?         // email subject (email only)
-  body           String
+  body           String          // rendered HTML (rich text, or generated from blocks)
+  blocks         Json?           // email block builder: ordered blocks; null = rich-text mode
   isActive       Boolean         @default(true)
   createdById    String?
   updatedById    String?
@@ -1530,3 +1532,35 @@ model MarketingConfig {
   notifyEmail String @default("")
 }
 
+
+// A block-based PDF letter/document template (letterhead + tokenized body).
+// `blocks` is an ordered array of typed blocks (see lib/document-blocks.ts);
+// tokens inside text blocks resolve per record at generation time.
+model DocumentTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  objectType  String   // registry key: REFERRAL | PROVIDER | PRACTICE | LOCATION | SURGERY | CO:<key>
+  blocks      Json     @default("[]")
+  pageSize    String   @default("LETTER")
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([objectType])
+}
+
+// An uploaded image/media asset, reusable across the app (email + document
+// builders, etc.). Bytes live in the private Blob store; served publicly (bytes
+// only, unguessable id) via /api/media/[id] so emails/PDFs can load them.
+model MediaAsset {
+  id          String   @id @default(cuid())
+  name        String
+  blobUrl     String   // private Blob url (fetched server-side with the token)
+  contentType String
+  size        Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -7,6 +7,8 @@
  *           MS_TPL_FROM_EMAIL      (TPL sender)
  */
 
+import { absolutizeMediaUrls } from "@/lib/media-url"
+
 export type EmailSender = "referrals" | "surgery" | "tpl"
 
 export const EMAIL_SENDER_OPTIONS: { value: EmailSender; label: string }[] = [
@@ -118,6 +120,8 @@ export async function sendEmail(
   options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender; fromEmail?: string; attachments?: EmailAttachment[] }
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Recipients can't resolve relative /api/media/<id> image srcs — make absolute.
+    html = absolutizeMediaUrls(html)
     // An explicit fromEmail (e.g. a user's own mailbox) overrides the sender key.
     const fromEmail = options?.fromEmail || SENDER_EMAILS[options?.sender ?? "referrals"]
     const token = await getAccessToken()
@@ -289,6 +293,7 @@ export async function sendEmailTracked(fromEmail: string, to: string, subject: s
   success: boolean; error?: string; conversationId?: string; internetMessageId?: string; graphMessageId?: string
 }> {
   try {
+    html = absolutizeMediaUrls(html)
     const token = await getAccessToken()
     const base = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}`
     const ccRecipients = (options?.cc ?? []).map((a) => ({ emailAddress: { address: a } }))

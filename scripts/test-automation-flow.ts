@@ -116,5 +116,31 @@ g2 = deleteNode(g2, "a")
 assert("delete A → [C,B]", resolveGraphActions(g2, base).map(a => a.type), ["ASSIGN_REFERRAL", "SEND_SMS"])
 assert("graph still valid after edits", isValidGraph(g2), true)
 
+console.log("\ngoto (jump) node:")
+// A → B → goto(A). The visited guard stops the loop after one pass.
+const gotoLoop: AutomationGraph = {
+  rootId: "1",
+  nodes: {
+    "1": { id: "1", kind: "action", actionType: "ADD_TAG", config: {}, next: "2" },
+    "2": { id: "2", kind: "action", actionType: "SEND_SMS", config: {}, next: "g" },
+    g: { id: "g", kind: "goto", target: "1" },
+  },
+}
+assert("goto loops once then stops", resolveGraphActions(gotoLoop, base).map(a => a.type), ["ADD_TAG", "SEND_SMS"])
+// goto forward: A → goto(C); C is the end action, B is skipped.
+const gotoFwd: AutomationGraph = {
+  rootId: "1",
+  nodes: {
+    "1": { id: "1", kind: "action", actionType: "ADD_TAG", config: {}, next: "g" },
+    g: { id: "g", kind: "goto", target: "3" },
+    "2": { id: "2", kind: "action", actionType: "SEND_SMS", config: {}, next: null },
+    "3": { id: "3", kind: "action", actionType: "CREATE_TASK", config: {}, next: null },
+  },
+}
+assert("goto jumps forward, skipping B", resolveGraphActions(gotoFwd, base).map(a => a.type), ["ADD_TAG", "CREATE_TASK"])
+// deleting the goto's target clears the dangling jump (graph stays valid).
+const delTarget = deleteNode(gotoFwd, "3")
+assert("delete goto target → still valid", isValidGraph(delTarget), true)
+
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)

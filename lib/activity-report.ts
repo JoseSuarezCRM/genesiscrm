@@ -24,9 +24,18 @@ function esc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
 
+// Activity dates are date-only, stored at UTC midnight (new Date("yyyy-MM-dd")),
+// so format them in UTC to show the calendar day the user picked — the same day
+// the Activities list shows (activityDay reads the UTC Y/M/D). Formatting in a
+// negative-offset zone (America/Chicago) would shift them back a day.
 function fmtDate(d: string | Date): string {
   const x = new Date(d)
-  return isNaN(x.getTime()) ? "" : x.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
+  return isNaN(x.getTime()) ? "" : x.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+}
+
+// A real timestamp (e.g. "generated at") formatted in the clinic's timezone.
+function fmtNow(): string {
+  return new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
 }
 
 function providerNames(a: ReportActivity): string {
@@ -114,7 +123,7 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
           </td></tr>
 
           <tr><td style="padding:8px 32px 28px 32px;text-align:center;">
-            <p style="margin:0;color:${MUTED};font-size:11px;">Generated ${esc(fmtDate(new Date()))}${opts.generatedBy ? ` by ${esc(opts.generatedBy)}` : ""} · ${esc(org)}</p>
+            <p style="margin:0;color:${MUTED};font-size:11px;">Generated ${esc(fmtNow())}${opts.generatedBy ? ` by ${esc(opts.generatedBy)}` : ""} · ${esc(org)}</p>
           </td></tr>
         </table>
       </td></tr>

@@ -1,0 +1,49 @@
+"use server"
+
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { userCanLevel } from "@/lib/permissions"
+import { mediaUrl } from "@/lib/media-url"
+
+export type MediaAssetDTO = {
+  id: string
+  name: string
+  url: string
+  contentType: string
+  size: number
+  createdAt: string
+}
+
+function canManage(user: any): boolean {
+  return userCanLevel(user, "TEMPLATES", "EDIT")
+}
+
+export async function listMediaAssets(): Promise<MediaAssetDTO[]> {
+  const session = await auth()
+  if (!session?.user || !canManage(session.user)) return []
+  const rows = await prisma.mediaAsset.findMany({ orderBy: { createdAt: "desc" }, take: 200 })
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    url: mediaUrl(r.id),
+    contentType: r.contentType,
+    size: r.size,
+    createdAt: r.createdAt.toISOString(),
+  }))
+}
+
+export async function deleteMediaAsset(id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user || !canManage(session.user)) return { ok: false, error: "Unauthorized" }
+  await prisma.mediaAsset.delete({ where: { id } }).catch(() => {})
+  return { ok: true }
+}
+
+export async function renameMediaAsset(id: string, name: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user || !canManage(session.user)) return { ok: false, error: "Unauthorized" }
+  const clean = name.trim()
+  if (!clean) return { ok: false, error: "Name can't be empty." }
+  await prisma.mediaAsset.update({ where: { id }, data: { name: clean.slice(0, 200) } }).catch(() => {})
+  return { ok: true }
+}

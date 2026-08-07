@@ -6,7 +6,7 @@ import { resolveWorkflowSender } from "@/lib/sender-resolve"
 import { zonedParts, zonedWallToUtc } from "@/lib/tz"
 import { sendSMS } from "@/lib/twilio"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
-import { evaluateRule as evalRule, evaluateGroups, selectBranch, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
+import { evaluateRule as evalRule, evaluateGroups, selectBranch, MULTI_SEP, type AutomationFlow as PureFlow, type Condition as PureCondition, type ConditionGroup } from "@/lib/automation-conditions"
 import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/automation-graph"
 import { findProcedureLocation } from "@/lib/surgery-procedures"
 import { type RecordRef, loadRecord, loadAllRecords, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner, createRecordFor } from "@/lib/automation-records"
@@ -359,9 +359,23 @@ export async function runDueWorkflowResumes() {
       continue
     }
 
-    const record = (r.record ?? null) as Record<string, unknown> | null
+    // Reload the record fresh so branch conditions AND action tokens reflect the
+    // CURRENT state after the wait — e.g. "is the property STILL that value?"
+    // 30 days later — not the snapshot captured when the workflow paused. Fall
+    // back to that snapshot if the record can't be reloaded (e.g. deleted).
+    let record = (r.record ?? null) as Record<string, unknown> | null
+    let vars = (r.vars ?? {}) as TemplateVars
+    if (r.recordType && r.recordId) {
+      const fresh = await loadRecord(r.recordType, r.recordId).catch(() => null)
+      if (fresh) {
+        record = fresh
+        try { vars = { ...vars, ...(await buildRecordTokenVars(r.recordType, r.recordId)) } } catch { /* keep snapshot vars */ }
+      }
+    } else if (r.referralId) {
+      const fresh = await fetchReferralForEngine(r.referralId).catch(() => null)
+      if (fresh) record = fresh as unknown as Record<string, unknown>
+    }
     const condRef = record ? (record as unknown as Parameters<typeof walkGraph>[2]) : null
-    const vars = (r.vars ?? {}) as TemplateVars
 
     const { actions, resumeNodeId, resumeAt, waitLabel } = walkGraph(graph, r.resumeNodeId, condRef)
     const steps: RunStep[] = []
@@ -410,6 +424,7 @@ async function resolveRecipients(
   list: unknown,
   record: Record<string, unknown> | null | undefined,
   referralId: string | null,
+  vars?: TemplateVars,
 ): Promise<string[]> {
   const emailSet = new Set<string>()
   if (Array.isArray(list)) {
@@ -417,6 +432,12 @@ async function resolveRecipients(
       if (r.type === "record_email") {
         const e = recordEmail(record)
         if (e) emailSet.add(e)
+      } else if (r.type === "record_property") {
+        // Send to an address held in a property of the enrolled record. The value
+        // is a "{token}"; its resolved value may contain one or more addresses.
+        const key = String(r.value ?? "").replace(/^\{|\}$/g, "").trim()
+        const raw = key && vars ? (vars as Record<string, unknown>)[key] : undefined
+        String(raw ?? "").split(/[,;\s]+/).forEach((e) => { if (e.includes("@")) emailSet.add(e.trim()) })
       } else if (r.type === "all_admins") {
         const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
         admins.forEach((a) => emailSet.add(a.email))
@@ -570,7 +591,7 @@ async function runSingleAction(
 
     let toEmails: string[]
     if (Array.isArray(cfg.recipients)) {
-      toEmails = await resolveRecipients(cfg.recipients, record, referralId)
+      toEmails = await resolveRecipients(cfg.recipients, record, referralId, vars)
     } else {
       // Legacy single-recipient format (backward compat)
       const toType = cfg.toType as string
@@ -590,12 +611,26 @@ async function runSingleAction(
       toEmails = Array.from(legacySet)
     }
 
-    const ccEmails = await resolveRecipients(cfg.cc, record, referralId)
-    const bccEmails = await resolveRecipients(cfg.bcc, record, referralId)
+    const ccEmails = await resolveRecipients(cfg.cc, record, referralId, vars)
+    const bccEmails = await resolveRecipients(cfg.bcc, record, referralId, vars)
 
     if (!toEmails.length) {
       return "Email not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
     }
+
+    // Generate + attach document templates for the enrolled record.
+    const docIds = Array.isArray(cfg.documentTemplateIds) ? (cfg.documentTemplateIds as string[]) : []
+    const docRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
+    if (docIds.length && docRef) {
+      const { generateDocumentPdf } = await import("@/lib/document-pdf")
+      for (const tid of docIds) {
+        try {
+          const doc = await generateDocumentPdf(tid, docRef.type, docRef.id)
+          if (!("error" in doc)) emailAttachments.push({ name: doc.filename, contentType: "application/pdf", contentBase64: doc.buffer.toString("base64") })
+        } catch { /* skip a failing document, still send the email */ }
+      }
+    }
+
     const from = await resolveWorkflowSender(cfg.sender, record, referralId)
     const result = await sendEmail(toEmails, subject, html, {
       cc: ccEmails, bcc: bccEmails,
@@ -628,7 +663,7 @@ async function runSingleAction(
   }
 
   if ((automation.actionType as string) === "SEND_MEETING_INVITE") {
-    const inviteTo = await resolveRecipients(cfg.recipients, record, referralId)
+    const inviteTo = await resolveRecipients(cfg.recipients, record, referralId, vars)
     if (!inviteTo.length) {
       return "Meeting invite not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
     }
@@ -1566,20 +1601,33 @@ export async function runTrigger_RecordCreated(recordType: string, recordId: str
   )
 }
 
-// The property-changed trigger can watch several properties (stored as
-// `properties: string[]`; legacy configs use a single `property`). Semantics are
-// ALL — it fires only when every watched property meets the condition.
-function watchedProps(cfg: Record<string, unknown>): string[] {
+// A single watched property with its own condition + value. Semantics are ALL —
+// the trigger fires only when every watcher is satisfied.
+type PropWatcher = { property: string; condition: string; value?: string }
+
+// Normalize a property-changed config into watchers. New configs store
+// `watchers: PropWatcher[]`; legacy ones use `properties[]`/`property` with a
+// single shared `condition`/`toValue`.
+function watchersOf(cfg: Record<string, unknown>): PropWatcher[] {
+  const w = cfg.watchers as PropWatcher[] | undefined
+  if (Array.isArray(w) && w.length) return w.filter((x) => x && typeof x === "object")
+  const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
   const list = cfg.properties as string[] | undefined
-  if (Array.isArray(list) && list.length) return list.filter(Boolean)
-  return cfg.property ? [cfg.property as string] : []
+  const legacy = Array.isArray(list) && list.length ? list.filter(Boolean) : cfg.property ? [cfg.property as string] : []
+  return legacy.map((p) => ({ property: p, condition, value: cfg.toValue as string | undefined }))
 }
 
-// Does a value satisfy the "when it" condition?
+// Does a value satisfy the "when it" condition? `toValue` may be a MULTI_SEP list
+// (is any of), and `cur` may be an array (multi-select property).
 function propSatisfies(cur: unknown, condition: string, toValue: unknown): boolean {
-  const has = cur != null && String(cur).trim() !== ""
+  const has = cur != null && String(cur).trim() !== "" && !(Array.isArray(cur) && cur.length === 0)
   if (condition === "unknown") return !has
-  if (condition === "equals") return String(cur ?? "") === String(toValue ?? "")
+  if (condition === "equals") {
+    const vals = String(toValue ?? "").split(MULTI_SEP).map((s) => s.trim()).filter(Boolean)
+    if (!vals.length) return has // "equals" with no value chosen → treat as "known"
+    const curArr = Array.isArray(cur) ? cur.map((x) => String(x)) : [String(cur ?? "")]
+    return vals.some((v) => curArr.includes(v))
+  }
   return has // "known" / "changed" → currently holds a value
 }
 
@@ -1603,13 +1651,12 @@ export async function runTrigger_RecordPropertyChanged(
     "RECORD_PROPERTY_CHANGED" as AutomationTrigger,
     recordType, recordId, `Property changed: ${labels.join(", ")}`, {},
     (cfg, record) => {
-      const watched = watchedProps(cfg)
-      if (!watched.length) return true // no property named → any change fires it
+      const watchers = watchersOf(cfg).filter((w) => w.property)
+      if (!watchers.length) return true // no property named → any change fires it
       // The change must touch at least one watched property (so unrelated edits
-      // don't re-fire), AND every watched property must currently satisfy it.
-      if (!watched.some((w) => keys.includes(w))) return false
-      const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
-      return watched.every((w) => propSatisfies(currentPropValue(record, w), condition, cfg.toValue))
+      // don't re-fire), AND every watcher must currently satisfy its condition.
+      if (!watchers.some((w) => keys.includes(w.property))) return false
+      return watchers.every((w) => propSatisfies(currentPropValue(record, w.property), w.condition, w.value))
     },
     triggeredByUserId,
   )
@@ -1634,12 +1681,9 @@ function currentPropValue(record: Record<string, unknown>, key: string): unknown
 // triggers fall back to the criteria filter alone.
 function recordMatchesConfig(record: Record<string, unknown>, triggerType: string, cfg: Record<string, unknown>): boolean {
   if (triggerType === "RECORD_PROPERTY_CHANGED") {
-    const watched = watchedProps(cfg)
-    if (watched.length) {
-      const condition = (cfg.condition as string) || (cfg.toValue ? "equals" : "changed")
-      // ALL watched properties must currently satisfy the condition.
-      if (!watched.every((w) => propSatisfies(currentPropValue(record, w), condition, cfg.toValue))) return false
-    }
+    const watchers = watchersOf(cfg).filter((w) => w.property)
+    // ALL watched properties must currently satisfy their own condition.
+    if (watchers.length && !watchers.every((w) => propSatisfies(currentPropValue(record, w.property), w.condition, w.value))) return false
   }
   return checkConditions(record, cfg)
 }

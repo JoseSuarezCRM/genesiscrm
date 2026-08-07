@@ -13,7 +13,7 @@ import {
   countWorkflowMatches,
   enrollExistingForAutomation,
 } from "@/app/actions/automations"
-import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal, CornerUpLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
@@ -22,6 +22,7 @@ import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings, type PersonalizationToken } from "@/components/rich-text-editor"
 import TokenTextarea from "@/components/ui/token-textarea"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
+import { listActiveDocumentTemplates } from "@/app/actions/document-templates"
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel, WEEKDAY_NAMES,
@@ -508,40 +509,60 @@ function TriggerConfigFields({
     }
 
     if (type === "RECORD_PROPERTY_CHANGED") {
-      const condition = (config.condition as string) || (config.toValue ? "equals" : "changed")
-      // Multi-property: watch several properties; fires when ALL of them meet the
-      // condition. Back-compat with the legacy single `property`.
-      const watched: string[] = (config.properties as string[]) ?? (config.property ? [config.property as string] : [])
-      const propOptions = [...propDefs, ...customDefs].map(p => ({ value: p.id, label: p.label }))
+      // Each watched property is its own row with its own condition + (type-aware)
+      // value; ALL rows must match for the workflow to fire (HubSpot-style).
+      const allW = [...propDefs, ...customDefs]
+      const propOptions = allW.map(p => ({ value: p.id, label: p.label }))
+      const defById = (id: string) => allW.find(p => p.id === id)
+      type Watcher = { property: string; condition: string; value?: string }
+      // Read new `watchers`; else migrate legacy properties/condition/toValue.
+      const watchers: Watcher[] = Array.isArray(config.watchers) && (config.watchers as Watcher[]).length
+        ? (config.watchers as Watcher[])
+        : (() => {
+            const cond = (config.condition as string) || (config.toValue ? "equals" : "changed")
+            const legacy: string[] = (config.properties as string[]) ?? (config.property ? [config.property as string] : [])
+            if (!legacy.length) return [{ property: "", condition: cond, value: (config.toValue as string) || "" }]
+            return legacy.map((p, i) => ({ property: p, condition: cond, value: i === 0 ? ((config.toValue as string) || "") : "" }))
+          })()
+      const commit = (next: Watcher[]) => onChange({ ...config, watchers: next, property: undefined, properties: undefined, condition: undefined, toValue: undefined })
+      const setW = (i: number, patch: Partial<Watcher>) => commit(watchers.map((w, j) => (j === i ? { ...w, ...patch } : w)))
+
       return (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Properties to watch <span className="text-slate-400 font-normal">(all must match)</span></label>
-            <MultiSelectValue options={propOptions}
-              value={watched.join(MULTI_SEP)}
-              onChange={v => onChange({ ...config, property: undefined, properties: v ? v.split(MULTI_SEP).filter(Boolean) : [] })} />
-            <p className="text-[11px] text-slate-400 mt-1">Leave empty to watch any property.</p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">When it</label>
-            <StyledSelect className="w-full" value={condition} onChange={e => set("condition", e.target.value)}>
-              <option value="changed">Changes (any new value)</option>
-              <option value="known">Becomes known (has a value)</option>
-              <option value="unknown">Becomes empty (is cleared)</option>
-              <option value="equals">Changes to a specific value</option>
-            </StyledSelect>
-          </div>
-          {condition === "equals" && (
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">New value is</label>
-              <input
-                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
-                value={(config.toValue as string) || ""}
-                onChange={e => set("toValue", e.target.value)}
-                placeholder="Value"
-              />
-            </div>
-          )}
+        <div className="space-y-2">
+          <label className="block text-xs font-medium text-slate-600">Properties to watch <span className="text-slate-400 font-normal">(all must match)</span></label>
+          {watchers.map((w, i) => {
+            const def = defById(w.property)
+            return (
+              <div key={i} className="flex items-start gap-2 flex-wrap">
+                <StyledSelect className="shrink-0 min-w-[150px]" value={w.property} onChange={e => setW(i, { property: e.target.value, value: "" })}>
+                  <option value="">Any property</option>
+                  {propOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </StyledSelect>
+                <StyledSelect className="shrink-0 min-w-[150px]" value={w.condition} onChange={e => setW(i, { condition: e.target.value, value: "" })}>
+                  <option value="changed">Changes (any new value)</option>
+                  <option value="known">Becomes known (has a value)</option>
+                  <option value="unknown">Becomes empty (is cleared)</option>
+                  <option value="equals">Changes to…</option>
+                </StyledSelect>
+                {w.condition === "equals" && (
+                  def && (def.type === "select" || def.type === "tag")
+                    ? <MultiSelectValue options={optionsForProp(def, criteriaData)} value={w.value || ""} onChange={v => setW(i, { value: v })} />
+                    : def && def.type === "number"
+                      ? <input type="number" className="flex-1 min-w-[120px] border border-slate-200 rounded-md px-2 py-1.5 text-sm" placeholder="Value" value={w.value || ""} onChange={e => setW(i, { value: e.target.value })} />
+                      : def && def.type === "date"
+                        ? <input type="date" className="flex-1 min-w-[140px] border border-slate-200 rounded-md px-2 py-1.5 text-sm" value={(w.value || "").slice(0, 10)} onChange={e => setW(i, { value: e.target.value })} />
+                        : <input className="flex-1 min-w-[140px] border border-slate-200 rounded-md px-2 py-1.5 text-sm" placeholder="Value…" value={w.value || ""} onChange={e => setW(i, { value: e.target.value })} />
+                )}
+                {watchers.length > 1 && (
+                  <button type="button" onClick={() => commit(watchers.filter((_, j) => j !== i))} className="text-slate-400 hover:text-red-500 mt-1.5"><X className="h-3.5 w-3.5" /></button>
+                )}
+              </div>
+            )
+          })}
+          <button type="button" onClick={() => commit([...watchers, { property: "", condition: "changed", value: "" }])} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+            <Plus className="h-3 w-3" /> Add property
+          </button>
+          <p className="text-[11px] text-slate-400">Each property must meet its condition. Leave a row on “Any property” to watch every property.</p>
         </div>
       )
     }
@@ -852,12 +873,15 @@ function TriggerConfigFields({
 type Recipient = { type: string; value: string | string[] }
 
 function RecipientRows({
-  rows, users, onChange, allowEmpty = false,
+  rows, users, onChange, allowEmpty = false, recordProps = [],
 }: {
   rows: Recipient[]
   users: User[]
   onChange: (next: Recipient[]) => void
   allowEmpty?: boolean
+  // The workflow object's property tokens (value = "{token}"), for sending to an
+  // address held in a property. Works for any object, built-in or custom.
+  recordProps?: { value: string; label: string }[]
 }) {
   return (
     <div className="space-y-2">
@@ -872,11 +896,19 @@ function RecipientRows({
             <StyledSelect className="shrink-0" value={r.type}
               onChange={e => onChange(rows.map((x, j) => j === i ? { type: e.target.value, value: [] } : x))}>
               <option value="record_email">Enrolled record's email</option>
+              {recordProps.length > 0 && <option value="record_property">From a property…</option>}
               <option value="all_admins">All admins</option>
               <option value="assigned_to">Referral assignee</option>
               <option value="user">Specific users</option>
               <option value="email">Custom email</option>
             </StyledSelect>
+            {r.type === "record_property" && (
+              <StyledSelect className="flex-1 min-w-[180px]" value={typeof r.value === "string" ? r.value : ""}
+                onChange={e => onChange(rows.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}>
+                <option value="">Choose a property…</option>
+                {recordProps.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </StyledSelect>
+            )}
             {r.type === "user" && (
               <div className="flex-1 border rounded-md overflow-y-auto max-h-36">
                 {users.map(u => (
@@ -911,7 +943,7 @@ function RecipientRows({
 interface MessageTemplateOption { id: string; name: string; channel: string }
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [], documentTemplates = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -927,6 +959,8 @@ function ActionConfigFields({
   writableProps?: PropertyDef[]
   // Custom objects (with their properties) a CREATE_RECORD action can target.
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
+  // Document templates (for this workflow's object) the email can attach.
+  documentTemplates?: { id: string; name: string }[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
 
@@ -1377,7 +1411,7 @@ function ActionConfigFields({
               </button>
             </div>
           </div>
-          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} />
+          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} recordProps={fieldTokens ?? []} />
         </div>
 
         {/* CC */}
@@ -1392,7 +1426,7 @@ function ActionConfigFields({
                 <button type="button" onClick={() => { setShowCc(false); set("cc", []) }} className="text-xs text-slate-400 hover:text-red-500">Remove CC</button>
               </div>
             </div>
-            <RecipientRows rows={ccRows} users={users} onChange={next => set("cc", next)} allowEmpty />
+            <RecipientRows rows={ccRows} users={users} onChange={next => set("cc", next)} allowEmpty recordProps={fieldTokens ?? []} />
           </div>
         )}
 
@@ -1408,7 +1442,7 @@ function ActionConfigFields({
                 <button type="button" onClick={() => { setShowBcc(false); set("bcc", []) }} className="text-xs text-slate-400 hover:text-red-500">Remove BCC</button>
               </div>
             </div>
-            <RecipientRows rows={bccRows} users={users} onChange={next => set("bcc", next)} allowEmpty />
+            <RecipientRows rows={bccRows} users={users} onChange={next => set("bcc", next)} allowEmpty recordProps={fieldTokens ?? []} />
           </div>
         )}
 
@@ -1468,6 +1502,18 @@ function ActionConfigFields({
             compact
           />
         </div>
+
+        {/* Generated document templates (filled per record at send time) */}
+        {documentTemplates.length > 0 && (
+          <div>
+            <label className="text-xs font-medium text-slate-600 block mb-1.5">Attach documents <span className="font-normal text-slate-400">(generated per record)</span></label>
+            <MultiSelectValue
+              options={documentTemplates.map(d => ({ value: d.id, label: d.name }))}
+              value={((config.documentTemplateIds as string[]) ?? []).join(MULTI_SEP)}
+              onChange={v => set("documentTemplateIds", v ? v.split(MULTI_SEP).filter(Boolean) : [])}
+            />
+          </div>
+        )}
       </div>
     )
   }
@@ -1494,7 +1540,7 @@ function ActionConfigFields({
               <Plus className="h-3 w-3" /> Add
             </button>
           </div>
-          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} />
+          <RecipientRows rows={toRows} users={users} onChange={next => set("recipients", next)} recordProps={fieldTokens ?? []} />
           {hasExternal && (
             <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
               ⚠️ An external recipient is selected. Don&apos;t include patient PHI (name, diagnosis, etc.) in invites sent outside the organization.
@@ -1648,14 +1694,24 @@ function actionSummary(type: AutomationAction, config: Record<string, unknown>):
   return ACTION_LABELS[type] ?? type
 }
 
+// Short label for any node — used by "Go to step" (the target dropdown + the
+// node's subtitle). Skips goto nodes as jump targets.
+function nodeSummary(node: GraphNode): string {
+  if (node.kind === "action") return actionSummary(node.actionType as AutomationAction, node.config)
+  if (node.kind === "delay" || node.kind === "waitUntil") return waitLabel(node)
+  if (node.kind === "branch") return "If / Else branch"
+  if (node.kind === "multi") return "Branches"
+  return "Go to step"
+}
+
 // vertical connector line
 function VLine({ h = 22 }: { h?: number }) {
   return <div className="w-px bg-zinc-300" style={{ height: h }} />
 }
 
 // "+" insert control with a small action/branch menu
-function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti, pasteMode, onPaste, onCancelPaste }: {
-  onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void
+function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti, onAddGoto, pasteMode, onPaste, onCancelPaste }: {
+  onAddAction: () => void; onAddDelay: () => void; onAddBranch: () => void; onAddMulti: () => void; onAddGoto?: () => void
   pasteMode?: "copy" | "move" | null; onPaste?: () => void; onCancelPaste?: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -1706,6 +1762,12 @@ function InsertButton({ onAddAction, onAddDelay, onAddBranch, onAddMulti, pasteM
               className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
               <span className="w-6 h-6 rounded-lg bg-fuchsia-50 text-fuchsia-600 flex items-center justify-center"><GitBranch className="h-3.5 w-3.5 rotate-90" /></span> Branches
             </button>
+            {onAddGoto && (
+              <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(false); onAddGoto() }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2.5 text-zinc-700">
+                <span className="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center"><CornerUpLeft className="h-3.5 w-3.5" /></span> Go to step
+              </button>
+            )}
           </div>
         </>
       )}
@@ -1792,6 +1854,11 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
     onChange(insertAt(graph, slot, { id, kind: "branch", match: "all", rules: [], thenNext: null, elseNext: null }))
     onEditNode(id)
   }
+  function addGoto(slot: Slot) {
+    const id = newNodeId()
+    onChange(insertAt(graph, slot, { id, kind: "goto", target: null }))
+    onEditNode(id)
+  }
   function addMulti(slot: Slot) {
     const id = newNodeId()
     onChange(insertAt(graph, slot, {
@@ -1815,7 +1882,7 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
       : slot.kind === "arm" ? (slotNode as any)?.arms?.find((a: any) => a.id === slot.armId)?.next
       : (slotNode as any)?.elseNext
 
-    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)}
+    const insert = <InsertButton onAddAction={() => addAction(slot)} onAddDelay={() => addDelay(slot)} onAddBranch={() => addBranch(slot)} onAddMulti={() => addMulti(slot)} onAddGoto={() => addGoto(slot)}
       pasteMode={clip?.mode ?? null} onPaste={() => handlePaste(slot)} onCancelPaste={() => setClip(null)} />
 
     if (!startId || !graph.nodes[startId]) {
@@ -1893,6 +1960,14 @@ function FlowCanvas({ graph, onChange, onEditNode, header, propDefs = [] }: {
               { key: "else", label: "Else", tone: "else" as const, body: renderSlot({ kind: "else", nodeId: node.id }, depth + 1) },
             ]} />
           </>
+        ) : node.kind === "goto" ? (
+          // A jump — it has no continuation of its own; the path ends here and
+          // resumes at the target step.
+          <NodeChip onClick={() => onEditNode(node.id)} onDelete={() => onChange(deleteNode(graph, node.id))}
+            dimmed={moveSourceId === node.id}
+            tone="delay" icon={<CornerUpLeft className="h-4 w-4" />}
+            title="Go to step"
+            subtitle={node.target && graph.nodes[node.target] ? `→ ${nodeSummary(graph.nodes[node.target])}` : "Pick a step"} />
         ) : null}
       </div>
     )
@@ -2039,7 +2114,7 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [] }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [], gotoTargets = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
@@ -2048,6 +2123,9 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   fieldTokens?: PersonalizationToken[]
   templates?: MessageTemplateOption[]
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
+  documentTemplates?: { id: string; name: string }[]
+  // Candidate jump targets for a "Go to step" node (every other step).
+  gotoTargets?: { id: string; label: string }[]
 }) {
   const [draft, setDraft] = useState<GraphNode>(node)
   const criteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
@@ -2064,7 +2142,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto animate-modal-in" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-sm font-semibold text-slate-800">
-            {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : draft.kind === "delay" ? "Edit delay" : "Edit action"}
+            {draft.kind === "branch" ? "Edit branch (if/else)" : draft.kind === "multi" ? "Edit branches" : draft.kind === "delay" ? "Edit delay" : draft.kind === "goto" ? "Go to step" : "Edit action"}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
         </div>
@@ -2077,7 +2155,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} documentTemplates={documentTemplates} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -2231,6 +2309,16 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 <Plus className="h-3.5 w-3.5" /> Add branch
               </button>
             </>
+          ) : draft.kind === "goto" ? (
+            <>
+              <p className="text-xs text-slate-500">Jump to another step in this workflow. The record continues from there. Use a Delay before a backward jump to avoid an instant loop.</p>
+              <label className="block text-xs font-medium text-slate-600">Go to</label>
+              <StyledSelect className="w-full" value={draft.target ?? ""} onChange={e => setDraft({ ...draft, target: e.target.value || null })}>
+                <option value="">— End the workflow —</option>
+                {gotoTargets.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </StyledSelect>
+              {gotoTargets.length === 0 && <p className="text-[11px] text-slate-400">Add more steps first — there's nowhere to jump to yet.</p>}
+            </>
           ) : null}
         </div>
         <div className="flex justify-end gap-2 p-4 border-t">
@@ -2307,6 +2395,14 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
     }, 400)
     return () => { cancelled = true; clearTimeout(t) }
   }, [objectKey, triggerType, triggerConfig])
+
+  // Document templates for this workflow's object (for the email "attach documents" picker).
+  const [docTemplates, setDocTemplates] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    let cancel = false
+    listActiveDocumentTemplates(objectKey).then((t) => { if (!cancel) setDocTemplates(t) }).catch(() => {})
+    return () => { cancel = true }
+  }, [objectKey])
 
   const allObjects = workflowObjectsWith(customObjects)
   const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
@@ -2539,6 +2635,8 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions} tokens={objectTokens}
           fieldTokens={objectFieldTokens} templates={templates}
           objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [] }))}
+          documentTemplates={docTemplates}
+          gotoTargets={Object.values(graph.nodes).filter(n => n.kind !== "goto" && n.id !== editingNode.id).map(n => ({ id: n.id, label: nodeSummary(n) }))}
         />
       )}
     </div>

@@ -84,6 +84,12 @@ export type GraphNode =
       arms: BranchArm[]
       elseNext: string | null
     }
+  | {
+      id: string
+      kind: "goto"
+      target: string | null   // node id to jump to (null = end). A cycle guard in
+                               // the walker prevents an infinite delay-less loop.
+    }
 
 export function delayMs(amount: number, unit: DelayUnit): number {
   const per = unit === "minutes" ? 60_000 : unit === "hours" ? 3_600_000 : 86_400_000
@@ -132,6 +138,8 @@ export function resolveGraphActions(
     if (node.kind === "action") {
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next
+    } else if (node.kind === "goto") {
+      currentId = node.target // jump; the visited-set guard stops runaway loops
     } else if (node.kind === "delay" || node.kind === "waitUntil") {
       currentId = node.next // flat resolver ignores waits; walkGraph handles pausing
     } else if (node.kind === "branch") {
@@ -287,6 +295,8 @@ export function walkGraph(
       }
       out.push({ type: node.actionType, config: node.config ?? {} })
       currentId = node.next
+    } else if (node.kind === "goto") {
+      currentId = node.target // jump to another step (loops need a delay in between)
     } else if (node.kind === "delay") {
       const resumeAt = delayResumeTime(node, referral)
       if (!resumeAt || resumeAt.getTime() <= Date.now()) { currentId = node.next; continue }
@@ -393,6 +403,7 @@ export function insertAt(graph: AutomationGraph, slot: Slot, node: GraphNode): A
   const target = getSlot(g, slot)
   const n = structuredCloneSafe(node)
   if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") n.next = target
+  else if (n.kind === "goto") { /* leaf: it jumps to its own target, doesn't carry the slot's continuation */ }
   else if (n.kind === "branch") { n.thenNext = target; n.elseNext = null }
   else {
     if (n.arms.length > 0) n.arms[0].next = target
@@ -403,9 +414,12 @@ export function insertAt(graph: AutomationGraph, slot: Slot, node: GraphNode): A
   return g
 }
 
-// All outgoing pointers of a node.
+// All structural outgoing pointers of a node. A goto is a leaf here — its
+// `target` is a soft jump reference (resolved at run time), not a subtree edge —
+// so subtree copy/prune treat it like an End.
 function nodeTargets(n: GraphNode): (string | null)[] {
   if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") return [n.next]
+  if (n.kind === "goto") return []
   if (n.kind === "branch") return [n.thenNext, n.elseNext]
   return [...n.arms.map(a => a.next), n.elseNext]
 }
@@ -437,11 +451,13 @@ export function deleteNode(graph: AutomationGraph, id: string): AutomationGraph 
   const continuation =
     node.kind === "action" || node.kind === "delay" || node.kind === "waitUntil" ? node.next
     : node.kind === "branch" ? node.thenNext
+    : node.kind === "goto" ? null
     : (node.arms[0]?.next ?? node.elseNext)
 
   if (g.rootId === id) g.rootId = continuation
   for (const n of Object.values(g.nodes)) {
     if ((n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") && n.next === id) n.next = continuation
+    else if (n.kind === "goto") { if (n.target === id) n.target = continuation }
     else if (n.kind === "branch") {
       if (n.thenNext === id) n.thenNext = continuation
       if (n.elseNext === id) n.elseNext = continuation
@@ -528,6 +544,7 @@ function remapIds(sub: Subgraph): Subgraph {
     const n = structuredCloneSafe(node)
     n.id = map.get(oldId)!
     if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") n.next = remap(n.next)
+    else if (n.kind === "goto") n.target = remap(n.target)
     else if (n.kind === "branch") { n.thenNext = remap(n.thenNext); n.elseNext = remap(n.elseNext) }
     else { n.arms = n.arms.map(a => ({ ...a, id: newNodeId(), next: remap(a.next) })); n.elseNext = remap(n.elseNext) }
     nodes[n.id] = n
@@ -543,6 +560,7 @@ function primaryTailId(nodes: Record<string, GraphNode>, startId: string): strin
     if (!n) return null
     const next: string | null =
       (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") ? n.next
+      : n.kind === "goto" ? null
       : n.kind === "branch" ? n.thenNext
       : (n.arms[0]?.next ?? n.elseNext)
     if (next == null) return id
@@ -552,6 +570,7 @@ function primaryTailId(nodes: Record<string, GraphNode>, startId: string): strin
 }
 function setPrimaryNext(node: GraphNode, value: string | null): void {
   if (node.kind === "action" || node.kind === "delay" || node.kind === "waitUntil") node.next = value
+  else if (node.kind === "goto") { /* leaf: no continuation to set */ }
   else if (node.kind === "branch") node.thenNext = value
   else if (node.arms[0]) node.arms[0].next = value
   else node.elseNext = value
@@ -579,6 +598,7 @@ export function deleteSubtree(graph: AutomationGraph, id: string): AutomationGra
   if (g.rootId === id) g.rootId = null
   for (const n of Object.values(g.nodes)) {
     if (n.kind === "action" || n.kind === "delay" || n.kind === "waitUntil") { if (n.next === id) n.next = null }
+    else if (n.kind === "goto") { if (n.target === id) n.target = null }
     else if (n.kind === "branch") { if (n.thenNext === id) n.thenNext = null; if (n.elseNext === id) n.elseNext = null }
     else { for (const a of n.arms) if (a.next === id) a.next = null; if (n.elseNext === id) n.elseNext = null }
   }
