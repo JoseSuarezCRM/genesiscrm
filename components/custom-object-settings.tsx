@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Plus, Trash2, Loader2, Check, ChevronDown, ChevronRight, Box, GripVertical, ExternalLink, Pencil } from "lucide-react"
+import { Plus, Trash2, Loader2, Check, Box, GripVertical, ExternalLink, Pencil } from "lucide-react"
 import {
   createCustomObject, updateCustomObject, saveCustomObjectProperties, saveCustomObjectCards, deleteCustomObject,
   type CustomObjectDefLite, type CustomObjectProperty, type CustomObjectCard, type CustomPropType,
 } from "@/app/actions/custom-objects"
 import StyledSelect from "@/components/ui/styled-select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import PropertyEditor, { type PropertyDraft } from "@/components/property-editor"
 
 const PROP_TYPES: { value: CustomPropType; label: string }[] = [
@@ -36,68 +37,95 @@ export default function CustomObjectSettings({ objects }: { objects: CustomObjec
   const [singular, setSingular] = useState("")
   const [plural, setPlural] = useState("")
   const [err, setErr] = useState("")
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [selectedId, setSelectedId] = useState<string>(objects[0]?.id ?? "")
 
-  function handleCreate(e: React.FormEvent) {
-    e.preventDefault()
+  const selected = objects.find((o) => o.id === selectedId) ?? null
+
+  function handleCreate() {
     setErr("")
     if (!singular.trim() || !plural.trim()) { setErr("Both names are required."); return }
     startTransition(async () => {
       const res = await createCustomObject({ singular, plural })
       if ((res as any)?.error) { setErr((res as any).error); return }
-      setSingular(""); setPlural("")
-      setExpanded((res as any).id)
+      setSingular(""); setPlural(""); setShowCreate(false)
+      setSelectedId((res as any).id)
       router.refresh()
     })
   }
 
   return (
-    <div className="space-y-6">
-      {/* Create */}
-      <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-800">New object</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-slate-600 block mb-1">Singular name</label>
-            <input className={inputCls + " w-full"} value={singular} onChange={(e) => setSingular(e.target.value)} placeholder="Visit" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-600 block mb-1">Plural name</label>
-            <input className={inputCls + " w-full"} value={plural} onChange={(e) => setPlural(e.target.value)} placeholder="Visits" />
-          </div>
-        </div>
-        {err && <p className="text-xs text-red-600">{err}</p>}
-        <button type="submit" disabled={isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create object
+    <div className="space-y-5">
+      {/* Toolbar: choose an object + create */}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-xs font-medium text-slate-600">Select an object
+          <StyledSelect value={selectedId} onChange={(e) => setSelectedId(e.target.value)}
+            className="mt-1 block min-w-[240px] h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
+            <option value="">Select an object…</option>
+            {objects.map((o) => <option key={o.id} value={o.id}>{o.plural}</option>)}
+          </StyledSelect>
+        </label>
+        <button onClick={() => { setErr(""); setShowCreate(true) }}
+          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+          <Plus className="h-4 w-4" /> New object
         </button>
-      </form>
+        {selected && (
+          <Link href={`/objects/${selected.key}`} className="ml-auto text-sm text-blue-600 hover:underline inline-flex items-center gap-1 pb-1.5">
+            Open {selected.plural} <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        )}
+      </div>
 
-      {/* Existing */}
+      {/* Selected object editor */}
       {objects.length === 0 ? (
-        <div className="bg-white border rounded-xl py-12 text-center text-slate-400">No custom objects yet.</div>
-      ) : (
-        <div className="space-y-2">
-          {objects.map((o) => (
-            <div key={o.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="flex items-center gap-3 px-4 py-3">
-                <button onClick={() => setExpanded(expanded === o.id ? null : o.id)} className="text-slate-400 hover:text-slate-700">
-                  {expanded === o.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-                <Box className="h-4 w-4 text-slate-400" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{o.plural}</p>
-                  <p className="text-xs text-slate-400">{o.properties.length} propert{o.properties.length === 1 ? "y" : "ies"} · owner: {o.ownerLabel}</p>
-                </div>
-                <Link href={`/objects/${o.key}`} className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1">
-                  Open <ExternalLink className="h-3 w-3" />
-                </Link>
-              </div>
-              {expanded === o.id && <ObjectEditor object={o} />}
+        <div className="bg-white border border-dashed border-slate-200 rounded-xl py-12 text-center text-sm text-slate-400">
+          No custom objects yet. Click “New object” to create one.
+        </div>
+      ) : selected ? (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
+            <Box className="h-4 w-4 text-slate-400" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900">{selected.plural}</p>
+              <p className="text-xs text-slate-400">{selected.properties.length} propert{selected.properties.length === 1 ? "y" : "ies"} · owner: {selected.ownerLabel}</p>
             </div>
-          ))}
+          </div>
+          <ObjectEditor object={selected} />
+        </div>
+      ) : (
+        <div className="bg-white border border-dashed border-slate-200 rounded-xl py-12 text-center text-sm text-slate-400">
+          Pick an object above to edit it.
         </div>
       )}
+
+      {/* Create modal */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>New object</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Singular name</label>
+                <input className={inputCls + " w-full"} value={singular} onChange={(e) => setSingular(e.target.value)} placeholder="Visit" autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCreate() }} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Plural name</label>
+                <input className={inputCls + " w-full"} value={plural} onChange={(e) => setPlural(e.target.value)} placeholder="Visits"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCreate() }} />
+              </div>
+            </div>
+            {err && <p className="text-xs text-red-600">{err}</p>}
+          </div>
+          <DialogFooter>
+            <button onClick={() => setShowCreate(false)} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
+            <button onClick={handleCreate} disabled={isPending}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create object
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

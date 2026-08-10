@@ -100,6 +100,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   })
   const [optionStyle, setOptionStyle] = useState<string>(editing?.optionStyle ?? "default")
   const [colorPickerIdx, setColorPickerIdx] = useState<number | null>(null)
+  const [colorAnchor, setColorAnchor] = useState<{ x: number; y: number } | null>(null)
   const [optQuery, setOptQuery] = useState("")
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [optPage, setOptPage] = useState(0)
@@ -335,19 +336,14 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                             title={row.locked ? "Internal value is fixed once saved (records reference it)" : "Internal value"}
                             placeholder="internal_value" className="text-xs font-mono border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400 disabled:bg-slate-50 disabled:text-slate-400" />
                           {showColor && (
-                            <div className="relative">
-                              <button type="button" title="Choose a color" onClick={() => setColorPickerIdx(colorPickerIdx === i ? null : i)}
-                                className="h-6 w-6 rounded-full border border-slate-200 hover:ring-2 hover:ring-slate-200"
-                                style={{ backgroundColor: row.color || defaultColorForIndex(i) }} />
-                              {colorPickerIdx === i && (
-                                <>
-                                  <div className="fixed inset-0 z-40" onClick={() => setColorPickerIdx(null)} />
-                                  <div className="absolute right-0 top-8 z-50">
-                                    <ColorPicker value={row.color || ""} onChange={(hex) => { setRowColor(i, hex); setColorPickerIdx(null) }} />
-                                  </div>
-                                </>
-                              )}
-                            </div>
+                            <button type="button" title="Choose a color"
+                              onClick={(e) => {
+                                if (colorPickerIdx === i) { setColorPickerIdx(null); return }
+                                const r = e.currentTarget.getBoundingClientRect()
+                                setColorAnchor({ x: r.right, y: r.bottom }); setColorPickerIdx(i)
+                              }}
+                              className="h-6 w-6 rounded-full border border-slate-200 hover:ring-2 hover:ring-slate-200"
+                              style={{ backgroundColor: row.color || defaultColorForIndex(i) }} />
                           )}
                           <button onClick={() => removeOpt(i)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
@@ -368,6 +364,14 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                     })()}
                   </div>
                 )}
+
+                {colorPickerIdx !== null && colorAnchor && optRows[colorPickerIdx] && typeof document !== "undefined" && createPortal(
+                  <>
+                    <div className="fixed inset-0 z-[100000]" onClick={() => setColorPickerIdx(null)} />
+                    <div className="fixed z-[100001]" style={{ top: colorAnchor.y + 6, left: Math.max(8, Math.min(colorAnchor.x - 188, (typeof window !== "undefined" ? window.innerWidth : 9999) - 200)) }}>
+                      <div className="w-[188px]"><ColorPicker value={optRows[colorPickerIdx].color || ""} onChange={(hex) => { setRowColor(colorPickerIdx, hex); setColorPickerIdx(null) }} /></div>
+                    </div>
+                  </>, document.body)}
 
                 {type === "NUMBER" && (
                   <div>
