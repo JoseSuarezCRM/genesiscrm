@@ -56,6 +56,9 @@ async function iq<T>(path: string): Promise<T> {
 export interface IntakeSummary {
   Id: string
   ClientId?: number
+  ClientName?: string
+  ClientFirstName?: string
+  ClientLastName?: string
   Status: string
   DateCreated: number
   DateSubmitted: number | null

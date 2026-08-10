@@ -5,14 +5,15 @@ import { cn } from "@/lib/utils"
 import IntakeqIntegrationConfig from "@/components/intakeq-integration-config"
 import IntakeqIntegrationActivity from "@/components/intakeq-integration-activity"
 import IntakeqReferralReport from "@/components/intakeq-referral-report"
-import type { IntegrationSettings, ReferralSourceReport, IntegrationActivity } from "@/app/actions/intakeq"
+import type { IntegrationSettings, ReferralSourceReport, IntegrationActivity, IntakeSubmission } from "@/app/actions/intakeq"
 
 type TabId = "report" | "activity" | "config"
 
-export default function IntakeqIntegrationClient({ settings, report, activity, canEdit }: {
+export default function IntakeqIntegrationClient({ settings, report, activity, submissions, canEdit }: {
   settings: IntegrationSettings
   report: ReferralSourceReport
   activity: IntegrationActivity
+  submissions: IntakeSubmission[]
   canEdit: boolean
 }) {
   const [tab, setTab] = useState<TabId>(settings.connected ? "report" : "config")
@@ -34,7 +35,7 @@ export default function IntakeqIntegrationClient({ settings, report, activity, c
         ))}
       </div>
       {tab === "report" && <IntakeqReferralReport initial={report} canEdit={canEdit} />}
-      {tab === "activity" && <IntakeqIntegrationActivity activity={activity} />}
+      {tab === "activity" && <IntakeqIntegrationActivity activity={activity} submissions={submissions} />}
       {tab === "config" && <IntakeqIntegrationConfig settings={settings} />}
     </div>
   )

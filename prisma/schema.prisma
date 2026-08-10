@@ -1088,6 +1088,7 @@ model IntakeReferralResponse {
   id                String   @id @default(cuid())
   intakeId          String   @unique
   clientId          String?
+  clientName        String?  // patient name from IntakeQ (PHI) — for the submissions view
   questionnaireId   String?
   questionnaireName String?
   language          String?  // "EN" | "ES" | null

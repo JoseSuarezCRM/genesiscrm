@@ -349,6 +349,36 @@ export async function getIntegrationActivity(): Promise<IntegrationActivity> {
   }
 }
 
+// ─── Recent submissions (who filled the intake) ──────────────────────────────
+
+export interface IntakeSubmission {
+  id: string
+  clientName: string | null
+  clientId: string | null
+  category: string
+  language: string | null
+  submittedAt: string
+}
+
+// The most recent stored intake submissions, newest first. Contains patient
+// names (PHI) — gated by REPORTS VIEW, same as the rest of the integration page.
+export async function getRecentIntakeSubmissions(limit = 50): Promise<IntakeSubmission[]> {
+  await requireAccess("REPORTS", "VIEW")
+  const rows = await (prisma as any).intakeReferralResponse.findMany({
+    orderBy: { submittedAt: "desc" },
+    take: Math.min(200, Math.max(1, limit)),
+    select: { id: true, clientName: true, clientId: true, category: true, language: true, submittedAt: true },
+  })
+  return (rows as any[]).map((r) => ({
+    id: r.id,
+    clientName: r.clientName ?? null,
+    clientId: r.clientId ?? null,
+    category: r.category,
+    language: r.language ?? null,
+    submittedAt: new Date(r.submittedAt).toISOString(),
+  }))
+}
+
 // Diagnostics: list questionnaire templates so we can confirm the exact form name.
 export async function listIntakeQuestionnaires(): Promise<{ items?: { Id: string; Name: string; Archived: boolean }[]; error?: string }> {
   await requireAccess("REPORTS", "EDIT")

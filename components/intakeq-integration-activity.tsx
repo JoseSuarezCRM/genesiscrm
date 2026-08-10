@@ -1,15 +1,19 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Activity, AlertCircle } from "lucide-react"
-import type { IntegrationActivity } from "@/app/actions/intakeq"
+import { Activity, AlertCircle, Users } from "lucide-react"
+import type { IntegrationActivity, IntakeSubmission } from "@/app/actions/intakeq"
 
 function dayLabel(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number)
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })
 }
 
-export default function IntakeqIntegrationActivity({ activity }: { activity: IntegrationActivity }) {
+function submittedLabel(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
+}
+
+export default function IntakeqIntegrationActivity({ activity, submissions }: { activity: IntegrationActivity; submissions: IntakeSubmission[] }) {
   const max = Math.max(1, ...activity.perDay.map((d) => d.calls))
 
   return (
@@ -40,6 +44,41 @@ export default function IntakeqIntegrationActivity({ activity }: { activity: Int
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Recent submissions (who filled the intake) */}
+      <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50 flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5 text-slate-500" />
+          <p className="text-xs font-semibold text-slate-600">Recent submissions</p>
+        </div>
+        {submissions.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-slate-400 text-center">No submissions yet. They appear here as intakes are received or backfilled.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                  <th className="px-4 py-2 font-medium">Name</th>
+                  <th className="px-4 py-2 font-medium">Referral source</th>
+                  <th className="px-4 py-2 font-medium whitespace-nowrap">Submitted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {submissions.map((s) => (
+                  <tr key={s.id}>
+                    <td className="px-4 py-2 text-slate-800">
+                      {s.clientName ?? (s.clientId ? <span className="text-slate-500">Client #{s.clientId}</span> : <span className="text-slate-400">—</span>)}
+                      {s.language && <span className="ml-1.5 text-[10px] text-slate-400">{s.language}</span>}
+                    </td>
+                    <td className="px-4 py-2 text-slate-600">{s.category}</td>
+                    <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{submittedLabel(s.submittedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Recent events */}

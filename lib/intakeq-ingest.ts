@@ -1,6 +1,14 @@
 import { prisma } from "@/lib/prisma"
-import { getIntake, listIntakeSummaries, IntakeqRateLimitError } from "@/lib/intakeq"
+import { getIntake, listIntakeSummaries, IntakeqRateLimitError, type IntakeSummary } from "@/lib/intakeq"
 import { parseIntakeReferral, isTargetQuestionnaire } from "@/lib/intakeq-referral"
+
+// The patient's name from an IntakeQ intake/summary (ClientName, else first+last).
+function intakeClientName(intake: Pick<IntakeSummary, "ClientName" | "ClientFirstName" | "ClientLastName">): string | null {
+  const full = (intake.ClientName ?? "").trim()
+  if (full) return full
+  const parts = [intake.ClientFirstName, intake.ClientLastName].map((s) => (s ?? "").trim()).filter(Boolean)
+  return parts.length ? parts.join(" ") : null
+}
 
 // Fetch one intake, categorize its referral answer, and upsert it (idempotent by
 // intakeId, so webhook re-deliveries and backfill overlap don't double-count).
@@ -14,11 +22,14 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
     ? new Date(intake.DateSubmitted)
     : intake.DateCreated ? new Date(intake.DateCreated) : new Date()
 
+  const clientName = intakeClientName(intake)
+
   await (prisma as any).intakeReferralResponse.upsert({
     where: { intakeId },
     create: {
       intakeId,
       clientId: intake.ClientId != null ? String(intake.ClientId) : null,
+      clientName,
       questionnaireId: intake.QuestionnaireId ?? null,
       questionnaireName: intake.QuestionnaireName ?? null,
       language: parsed.language,
@@ -27,6 +38,7 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
       category: parsed.category,
     },
     update: {
+      clientName,
       language: parsed.language,
       submittedAt,
       rawAnswer: parsed.rawAnswer,
@@ -48,12 +60,17 @@ export async function backfillRange(startDate: string, endDate: string): Promise
   // Candidate ids from the summary endpoint (1 request per 100 rows), filtered to
   // submitted target-questionnaire forms.
   const candidates: string[] = []
+  const nameById = new Map<string, string>()
   try {
     for (let page = 1; page <= 50; page++) {
       const rows = await listIntakeSummaries({ startDate, endDate, page })
       if (!rows.length) break
       for (const r of rows) {
-        if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName)) candidates.push(r.Id)
+        if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName)) {
+          candidates.push(r.Id)
+          const nm = intakeClientName(r)
+          if (nm) nameById.set(r.Id, nm)
+        }
       }
       if (rows.length < 100) break
     }
@@ -65,9 +82,16 @@ export async function backfillRange(startDate: string, endDate: string): Promise
   // Skip ones already stored (no detail call needed for those).
   const existing = await (prisma as any).intakeReferralResponse.findMany({
     where: { intakeId: { in: candidates } },
-    select: { intakeId: true },
+    select: { intakeId: true, clientName: true },
   })
   const have = new Set(existing.map((e: any) => e.intakeId))
+  // Fill names for already-stored rows that don't have one yet — free, from the
+  // summary scan (no per-intake detail call).
+  for (const e of existing as { intakeId: string; clientName: string | null }[]) {
+    if (e.clientName) continue
+    const nm = nameById.get(e.intakeId)
+    if (nm) await (prisma as any).intakeReferralResponse.update({ where: { intakeId: e.intakeId }, data: { clientName: nm } }).catch(() => {})
+  }
   const todo = candidates.filter((id) => !have.has(id))
 
   const batch = todo.slice(0, BACKFILL_MAX)
