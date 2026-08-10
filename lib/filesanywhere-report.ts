@@ -8,7 +8,13 @@ import { sendEmail } from "@/lib/graph-mailer"
 import { recordName } from "@/lib/record-name"
 import type { FaConfig } from "@/lib/filesanywhere-import"
 
-const WEEK_MS = 7 * 86_400_000
+const DAY_MS = 86_400_000
+
+// How many days back the report covers (configurable; default 7).
+export function reportWindowDays(cfg: FaConfig): number {
+  const d = Math.round(Number(cfg.report?.windowDays))
+  return d >= 1 && d <= 365 ? d : 7
+}
 
 function fmtDay(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
@@ -32,9 +38,9 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 export interface FaReport { providerCount: number; rowCount: number; subject: string; html: string }
 
-// Build the report for providers created since (now - 7 days).
+// Build the report for providers created within the configured window.
 export async function buildProviderReport(cfg: FaConfig): Promise<FaReport> {
-  const since = new Date(Date.now() - WEEK_MS)
+  const since = new Date(Date.now() - reportWindowDays(cfg) * DAY_MS)
   const provType = `CO:${cfg.providerObjectSlug}`
   const apptType = `CO:${cfg.objectSlug}`
 
@@ -140,7 +146,7 @@ export async function sendFilesanywhereReport(opts: { manual?: boolean } = {}): 
   if (!cfg.providerObjectSlug || !cfg.objectSlug) return { error: "Pick the referring-providers and appointments objects first." }
 
   const report = await buildProviderReport(cfg)
-  if (report.providerCount === 0) return { skipped: true, message: "No new referring providers in the last 7 days — nothing to send." }
+  if (report.providerCount === 0) return { skipped: true, message: `No new referring providers in the last ${reportWindowDays(cfg)} days — nothing to send.` }
 
   const res = await sendEmail(recipients, report.subject, report.html)
   if (!res.success) return { error: res.error ?? "Email failed to send." }

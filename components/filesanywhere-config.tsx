@@ -44,6 +44,7 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
   const [reportHour, setReportHour] = useState(settings.report.hour ?? 8)
   const [reportProvFields, setReportProvFields] = useState<string[]>(settings.report.providerFields ?? [])
   const [reportApptFields, setReportApptFields] = useState<string[]>(settings.report.appointmentFields ?? [])
+  const [reportWindowDays, setReportWindowDays] = useState(settings.report.windowDays ?? 7)
 
   const selectedObject = settings.objects.find((o) => o.slug === objectSlug)
   const selectedProviderObject = settings.objects.find((o) => o.slug === providerObjectSlug)
@@ -102,6 +103,7 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
     recipients: reportRecipients.split(",").map((s) => s.trim()).filter(Boolean),
     dayOfWeek: reportDay, hour: reportHour,
     providerFields: reportProvFields, appointmentFields: reportApptFields,
+    windowDays: reportWindowDays,
   })
   function saveReport() {
     setMsg(null)
@@ -375,11 +377,19 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
             </button>
           </label>
         </div>
-        <p className="text-xs text-slate-500">Emails a table of referring providers created in the last 7 days, each with their appointment info.</p>
+        <p className="text-xs text-slate-500">Emails a table of referring providers created in the last {reportWindowDays} day{reportWindowDays === 1 ? "" : "s"}, each with their appointment info.</p>
         <label className="block text-xs text-slate-500">Recipients (comma-separated)
           <input value={reportRecipients} onChange={(e) => setReportRecipients(e.target.value)} placeholder="name@genesisortho.com, other@…" className={input} />
         </label>
         <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-slate-500">Include providers from the last
+            <div className="flex items-center gap-1.5">
+              <input type="number" min={1} max={365} value={reportWindowDays}
+                onChange={(e) => setReportWindowDays(Math.min(365, Math.max(1, Number(e.target.value) || 1)))}
+                className={sel + " w-20"} />
+              <span className="text-[11px] text-slate-400 pb-2">days</span>
+            </div>
+          </label>
           <label className="text-xs text-slate-500">Send weekly on
             <select value={reportDay} onChange={(e) => setReportDay(Number(e.target.value))} className={sel + " w-36"}>
               {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
