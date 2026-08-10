@@ -56,7 +56,15 @@ const BACKFILL_MAX = 12
 // Pull submitted target-questionnaire intakes for a date range and ingest the ones
 // we don't already have. Bounded per run; returns how many still remain (so the
 // caller can run again) plus a rateLimited flag so the caller can back off.
-export async function backfillRange(startDate: string, endDate: string): Promise<{ processed: number; remaining: number; candidates: number; rateLimited: boolean }> {
+export async function backfillRange(
+  startDate: string,
+  endDate: string,
+  opts: { budgetMs?: number; max?: number } = {},
+): Promise<{ processed: number; remaining: number; candidates: number; rateLimited: boolean }> {
+  // How many to ingest this call: an explicit max, else the whole time budget
+  // (server-side drain), else the small default (a single UI/cron batch).
+  const max = opts.max ?? (opts.budgetMs ? Number.POSITIVE_INFINITY : BACKFILL_MAX)
+  const startedAt = Date.now()
   // Candidate ids from the summary endpoint (1 request per 100 rows), filtered to
   // submitted target-questionnaire forms.
   const candidates: string[] = []
@@ -94,9 +102,10 @@ export async function backfillRange(startDate: string, endDate: string): Promise
   }
   const todo = candidates.filter((id) => !have.has(id))
 
-  const batch = todo.slice(0, BACKFILL_MAX)
   let processed = 0
-  for (const id of batch) {
+  for (const id of todo) {
+    if (processed >= max) break
+    if (opts.budgetMs && Date.now() - startedAt >= opts.budgetMs) break
     try {
       await ingestIntake(id); processed++
     } catch (e) {
