@@ -144,7 +144,7 @@ export default function LeftCardEditorModal({
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Card type</label>
               <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
-                {[["PROPERTIES", "Properties"], ["CALL_LOG", "Call log"]].map(([v, l]) => (
+                {[["PROPERTIES", "Properties"], ["CALL_LOG", "Call log"], ["ATTACHMENTS", "Attachments"]].map(([v, l]) => (
                   <button key={v} type="button" onClick={() => setKind(v)}
                     className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors",
                       kind === v ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100")}>
@@ -162,6 +162,8 @@ export default function LeftCardEditorModal({
                 onChange={(e) => setMaxCalls(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} className="w-28" />
               <p className="text-xs text-slate-400">Log up to {maxCalls} call{maxCalls > 1 ? "s" : ""} on this card.</p>
             </div>
+          ) : kind === "ATTACHMENTS" ? (
+            <p className="text-xs text-slate-500">Upload documents and files directly on the record. No properties to configure — just name the card.</p>
           ) : (
           <>
           {columnsEnabled && (

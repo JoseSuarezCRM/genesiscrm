@@ -10,6 +10,7 @@ import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import { useCardReorder } from "@/components/use-card-reorder"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import CallLogCard from "@/components/call-log-card"
+import AttachmentsCard from "@/components/attachments-card"
 import PhoneInput from "@/components/phone-input"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import StyledSelect from "@/components/ui/styled-select"
@@ -263,7 +264,7 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
       )}
 
       {dnd.order.map((card) => {
-        const isFunctional = !!card.kind && card.kind !== "PROPERTIES" && card.kind !== "CALL_LOG"
+        const isFunctional = !!card.kind && card.kind !== "PROPERTIES" && card.kind !== "CALL_LOG" && card.kind !== "ATTACHMENTS"
         return (
         <div key={card.cardName} {...dnd.cardProps(card.cardName)}
           className={cn("bg-white border border-slate-200 rounded-xl transition-shadow", dnd.dragging === card.cardName && "opacity-50 ring-2 ring-zinc-300")}>
@@ -286,6 +287,8 @@ export default function RecordPropertyCards({ entityType, recordId, cards, catal
             <div className="p-5">{renderFunctional?.(card)}</div>
           ) : card.kind === "CALL_LOG" ? (
             <CallLogCard recordType={entityType} recordId={recordId} maxCalls={card.config?.maxCalls ?? 3} canEdit={canEdit} />
+          ) : card.kind === "ATTACHMENTS" ? (
+            <AttachmentsCard recordType={entityType} recordId={recordId} canEdit={canEdit} />
           ) : (
             <div className={cn("p-5 text-sm", (card.columns ?? 1) > 1 && "grid gap-x-5",
               (card.columns ?? 1) === 2 && "sm:grid-cols-2", (card.columns ?? 1) >= 3 && "sm:grid-cols-3")}>
