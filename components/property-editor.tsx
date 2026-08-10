@@ -7,6 +7,9 @@ import {
   Type, AlignLeft, Hash, ChevronDownCircle, ListChecks, CheckSquare, Calendar, CalendarClock, Mail, Phone, Link2,
 } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
+import { ColorPicker } from "@/components/ui/color-picker"
+import { defaultColorForIndex } from "@/lib/option-colors"
+import { OptionValue } from "@/components/option-value"
 import { cn } from "@/lib/utils"
 
 export type Conditional = { controllingPropertyId: string; rules: Record<string, string[]> } | null
@@ -19,6 +22,8 @@ export interface PropertyDraft {
   required: boolean; unique: boolean; defaultValue?: string; options: string[]
   optionLabels?: Record<string, string>; conditional: Conditional; visibilityRule: VisibilityRule
   numberFormat?: string   // NUMBER only: "currency" or undefined (plain)
+  optionColors?: Record<string, string>   // DROPDOWN/MULTI_SELECT: value → hex
+  optionStyle?: string                     // "default" | "dot" | "badge"
 }
 
 export interface EditingProperty {
@@ -26,6 +31,7 @@ export interface EditingProperty {
   required?: boolean; unique?: boolean; description?: string | null; defaultValue?: string | null
   options?: string[]; optionLabels?: Record<string, string> | null; conditional?: Conditional; visibilityRule?: VisibilityRule
   numberFormat?: string | null
+  optionColors?: Record<string, string> | null; optionStyle?: string | null
 }
 
 // A sibling single-select property that can control this one's options.
@@ -87,10 +93,13 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   const [numberFormat, setNumberFormat] = useState(editing?.numberFormat ?? "")
   // Each option carries a display label + a stable internal value (what records
   // store). `locked` = existed when the editor opened → its value is immutable.
-  const [optRows, setOptRows] = useState<{ label: string; value: string; locked: boolean; touched: boolean }[]>(() => {
+  const [optRows, setOptRows] = useState<{ label: string; value: string; locked: boolean; touched: boolean; color?: string }[]>(() => {
     const labels = (editing?.optionLabels ?? {}) as Record<string, string>
-    return (editing?.options ?? []).map((v) => ({ label: labels[v] ?? v, value: v, locked: true, touched: true }))
+    const colors = (editing?.optionColors ?? {}) as Record<string, string>
+    return (editing?.options ?? []).map((v) => ({ label: labels[v] ?? v, value: v, locked: true, touched: true, color: colors[v] }))
   })
+  const [optionStyle, setOptionStyle] = useState<string>(editing?.optionStyle ?? "default")
+  const [colorPickerIdx, setColorPickerIdx] = useState<number | null>(null)
   const [optQuery, setOptQuery] = useState("")
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [optPage, setOptPage] = useState(0)
@@ -123,7 +132,8 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
 
   const setRowLabel = (i: number, label: string) => setOptRows((rs) => rs.map((r, idx) => idx === i ? { ...r, label, value: r.locked || r.touched ? r.value : slugify(label) } : r))
   const setRowValue = (i: number, value: string) => setOptRows((rs) => rs.map((r, idx) => idx === i ? { ...r, value: slugify(value), touched: true } : r))
-  const addOpt = () => { setOptQuery(""); setOptRows((rs) => [...rs, { label: "", value: "", locked: false, touched: false }]); setOptPage(Math.floor(optRows.length / OPT_PAGE)); setFocusNew(true) }
+  const setRowColor = (i: number, color: string) => setOptRows((rs) => rs.map((r, idx) => idx === i ? { ...r, color } : r))
+  const addOpt = () => { setOptQuery(""); setOptRows((rs) => [...rs, { label: "", value: "", locked: false, touched: false, color: defaultColorForIndex(rs.length) }]); setOptPage(Math.floor(optRows.length / OPT_PAGE)); setFocusNew(true) }
   const removeOpt = (i: number) => setOptRows((rs) => rs.filter((_, idx) => idx !== i))
 
   // Options are paginated (10/page). Search filters across all, then paginates.
@@ -136,7 +146,7 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   }
 
   // Cleaned rows → the stable values records store, plus a value→label lookup.
-  const cleanRows = optRows.map((r) => ({ label: r.label.trim(), value: r.value.trim() || slugify(r.label) })).filter((r) => r.value)
+  const cleanRows = optRows.map((r, i) => ({ label: r.label.trim(), value: r.value.trim() || slugify(r.label), color: r.color || defaultColorForIndex(i) })).filter((r) => r.value)
   const cleanOptions = cleanRows.map((r) => r.value)
   const labelOfValue = (v: string) => cleanRows.find((r) => r.value === v)?.label || v
   const allowedFor = (v: string) => rules[v] ?? cleanOptions
@@ -159,12 +169,16 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
       : null
     const visibilityRule: VisibilityRule = visKey && visValues.length > 0 ? { controllingKey: visKey, equals: visValues } : null
     const labelMap = Object.fromEntries(cleanRows.filter((r) => r.label && r.label !== r.value).map((r) => [r.value, r.label]))
+    const styled = hasOptions && optionStyle !== "default"
+    const colorMap = styled ? Object.fromEntries(cleanRows.map((r) => [r.value, r.color])) : undefined
     const draft: PropertyDraft = {
       name: name.trim(), internalName: slugify(internalName || name), type,
       description: description.trim() || undefined, required, unique,
       defaultValue: defaultValue || undefined, options: cleanOptions,
       optionLabels: Object.keys(labelMap).length ? labelMap : undefined, conditional, visibilityRule,
       numberFormat: type === "NUMBER" ? (numberFormat || undefined) : undefined,
+      optionStyle: hasOptions ? optionStyle : undefined,
+      optionColors: colorMap && Object.keys(colorMap).length ? colorMap : undefined,
     }
     startTransition(async () => {
       const res = await onSave(draft)
@@ -274,6 +288,20 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                 )}
 
                 {hasOptions && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Option style</label>
+                    <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
+                      {[["default", "Default"], ["dot", "With dot"], ["badge", "Badge"]].map(([v, l]) => (
+                        <button key={v} type="button" onClick={() => setOptionStyle(v)}
+                          className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors", optionStyle === v ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100")}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">{optionStyle === "default" ? "Options show as plain text." : optionStyle === "dot" ? "A colored dot before each label." : "A colored badge for each option."}</p>
+                  </div>
+                )}
+                {hasOptions && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-sm font-medium text-slate-700">Options ({optRows.length})</label>
@@ -284,15 +312,19 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                         </div>
                       )}
                     </div>
+                    {(() => {
+                      const showColor = optionStyle !== "default"
+                      const gridCls = showColor ? "grid-cols-[24px_1fr_1fr_28px_32px]" : "grid-cols-[24px_1fr_1fr_32px]"
+                      return (
                     <div className="border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                        <span></span><span>Label</span><span>Internal name</span><span></span>
+                      <div className={cn("grid gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wide", gridCls)}>
+                        <span></span><span>Label</span><span>Internal name</span>{showColor && <span></span>}<span></span>
                       </div>
                       {optVisible.map(({ r: row, i }) => (
                         <div key={i} draggable onDragStart={() => setDragIdx(i)}
                           onDragOver={(e) => { e.preventDefault(); if (dragIdx !== null && dragIdx !== i) { moveOpt(dragIdx, i); setDragIdx(i) } }}
                           onDragEnd={() => setDragIdx(null)}
-                          className="grid grid-cols-[24px_1fr_1fr_32px] gap-2 items-center px-3 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                          className={cn("grid gap-2 items-center px-3 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60", gridCls)}>
                           <GripVertical className="h-4 w-4 text-slate-300 cursor-grab" />
                           <input ref={i === optRows.length - 1 ? lastLabelRef : undefined}
                             value={row.label} onChange={(e) => setRowLabel(i, e.target.value)}
@@ -302,6 +334,21 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOpt() } }}
                             title={row.locked ? "Internal value is fixed once saved (records reference it)" : "Internal value"}
                             placeholder="internal_value" className="text-xs font-mono border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:border-zinc-400 disabled:bg-slate-50 disabled:text-slate-400" />
+                          {showColor && (
+                            <div className="relative">
+                              <button type="button" title="Choose a color" onClick={() => setColorPickerIdx(colorPickerIdx === i ? null : i)}
+                                className="h-6 w-6 rounded-full border border-slate-200 hover:ring-2 hover:ring-slate-200"
+                                style={{ backgroundColor: row.color || defaultColorForIndex(i) }} />
+                              {colorPickerIdx === i && (
+                                <>
+                                  <div className="fixed inset-0 z-40" onClick={() => setColorPickerIdx(null)} />
+                                  <div className="absolute right-0 top-8 z-50">
+                                    <ColorPicker value={row.color || ""} onChange={(hex) => { setRowColor(i, hex); setColorPickerIdx(null) }} />
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                           <button onClick={() => removeOpt(i)} className="text-slate-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
@@ -317,6 +364,8 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                         </div>
                       )}
                     </div>
+                      )
+                    })()}
                   </div>
                 )}
 
@@ -479,7 +528,9 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
                 <p className="text-sm text-slate-500">How this property appears on a record.</p>
                 <div className="max-w-sm border border-slate-200 rounded-xl p-4">
                   <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">{name || "Property label"}{required && <span className="text-red-500"> *</span>}</span>
-                  <PreviewField type={type} options={cleanOptions.map(labelOfValue)} defaultValue={defaultValue ? labelOfValue(defaultValue) : ""} />
+                  <PreviewField type={type} options={cleanOptions.map(labelOfValue)} defaultValue={defaultValue ? labelOfValue(defaultValue) : ""}
+                    optionStyle={optionStyle} multi={type === "MULTI_SELECT"}
+                    optionColors={Object.fromEntries(cleanRows.map((r) => [r.label || r.value, r.color]))} />
                 </div>
               </div>
             )}
@@ -490,11 +541,19 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
   ), document.body)
 }
 
-function PreviewField({ type, options, defaultValue }: { type: string; options: string[]; defaultValue: string }) {
+function PreviewField({ type, options, defaultValue, optionStyle, optionColors, multi }: { type: string; options: string[]; defaultValue: string; optionStyle?: string; optionColors?: Record<string, string>; multi?: boolean }) {
   const cls = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-500"
   if (type === "CHECKBOX") return <div className="inline-flex items-center gap-2 text-sm text-slate-500"><span className="h-5 w-9 rounded-full bg-slate-200 relative"><span className="absolute h-4 w-4 rounded-full bg-white top-0.5 left-0.5" /></span> No</div>
   if (type === "LONG_TEXT") return <div className={cls + " h-16"}>{defaultValue || ""}</div>
-  if (type === "DROPDOWN" || type === "MULTI_SELECT") return <div className={cls + " flex items-center justify-between"}><span>{defaultValue || (options[0] ?? "Select…")}</span><ChevronDownCircle className="h-3.5 w-3.5" /></div>
+  if (type === "DROPDOWN" || type === "MULTI_SELECT") {
+    const shown = multi ? options.slice(0, 3) : options.slice(0, 1)
+    return (
+      <div className={cls + " flex items-center justify-between gap-2"}>
+        {shown.length ? <OptionValue value={multi ? shown : shown[0]} optionColors={optionColors} optionStyle={optionStyle} className="text-slate-700" /> : <span>Select…</span>}
+        <ChevronDownCircle className="h-3.5 w-3.5 shrink-0" />
+      </div>
+    )
+  }
   return <div className={cls}>{defaultValue || placeholderFor(type)}</div>
 }
 function placeholderFor(type: string) {

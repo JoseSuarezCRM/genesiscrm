@@ -13,6 +13,8 @@ export interface CustomObjectProperty {
   type: CustomPropType
   options?: string[]
   optionLabels?: Record<string, string>
+  optionColors?: Record<string, string>   // DROPDOWN/MULTI_SELECT: value → hex color
+  optionStyle?: string                     // "default" | "dot" | "badge"
   required?: boolean
   primary?: boolean
   // Extended (HubSpot-style) attributes — all optional, stored in the def JSON.

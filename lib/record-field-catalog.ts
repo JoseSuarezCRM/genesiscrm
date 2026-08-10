@@ -24,6 +24,9 @@ export interface RecordFieldDef {
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> }
   // Dropdown/select display labels keyed by the stored internal value.
   optionLabels?: Record<string, string>
+  // DROPDOWN/MULTI_SELECT option styling: value→hex color + one style for the field.
+  optionColors?: Record<string, string>
+  optionStyle?: string   // "default" | "dot" | "badge"
   // Show this field on the record only when the controlling field's value matches.
   visibilityRule?: { controllingKey: string; equals: string[] } | null
   // NUMBER only: "currency" renders the value as USD currency; otherwise plain.

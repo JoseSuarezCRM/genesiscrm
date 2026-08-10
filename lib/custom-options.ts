@@ -17,3 +17,9 @@ export function optionLabelFor(value: unknown, optionLabels?: Record<string, str
   if (value == null) return ""
   return labels[String(value)] ?? String(value)
 }
+
+// Plain-text rendering of a dropdown/multi-select value — for sorting + CSV export
+// (the styled UI uses <OptionValue> instead). Alias of optionLabelFor.
+export function optionText(value: unknown, optionLabels?: Record<string, string> | null | unknown): string {
+  return optionLabelFor(value, optionLabels)
+}

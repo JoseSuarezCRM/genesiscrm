@@ -122,7 +122,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
     const prop: CustomObjectProperty = {
       id: existing?.id ?? newPropId(),
       name: draft.name, type: (existing?.type ?? draft.type) as CustomPropType,
-      options: draft.options, optionLabels: draft.optionLabels, required: draft.required, primary: existing?.primary,
+      options: draft.options, optionLabels: draft.optionLabels, optionColors: draft.optionColors, optionStyle: draft.optionStyle, required: draft.required, primary: existing?.primary,
       internalName: draft.internalName, description: draft.description,
       unique: draft.unique, defaultValue: draft.defaultValue, conditional: draft.conditional,
       visibilityRule: draft.visibilityRule, numberFormat: draft.numberFormat,

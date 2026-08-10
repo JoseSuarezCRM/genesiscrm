@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { useRef, useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { Settings, Plus, Loader2, GripVertical } from "lucide-react"
 import { showToast } from "@/components/toast"
@@ -13,6 +13,7 @@ import CallLogCard from "@/components/call-log-card"
 import AttachmentsCard from "@/components/attachments-card"
 import PhoneInput from "@/components/phone-input"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
+import { OptionValue } from "@/components/option-value"
 import StyledSelect from "@/components/ui/styled-select"
 import { formatNumber } from "@/lib/number-format"
 import { cn } from "@/lib/utils"
@@ -47,15 +48,15 @@ interface Props {
   renderFunctional?: (card: PropertyCard) => React.ReactNode | null
 }
 
-function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): string {
-  if (v === null || v === undefined || v === "") return "—"
+function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): ReactNode {
+  if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return "—"
   if (f.type === "user") return userMap[v] ?? String(v)
   if (f.type === "datetime") return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
   if (f.type === "date") return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
   if (f.type === "number") return formatNumber(v, f.numberFormat as any)
+  if (f.type === "select") return <OptionValue value={v} optionLabels={f.optionLabels} optionColors={f.optionColors} optionStyle={f.optionStyle} />
   const lbl = f.optionLabels
   if (Array.isArray(v)) return v.map((x) => lbl?.[String(x)] ?? String(x)).join(", ")
-  if (f.type === "select" && lbl) return lbl[String(v)] ?? String(v)
   return String(v)
 }
 

@@ -6,6 +6,7 @@ import StyledSelect from "@/components/ui/styled-select"
 import { useState, useTransition } from "react"
 import { Edit2, Check, X } from "lucide-react"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
+import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
 import { cn } from "@/lib/utils"
 
@@ -15,6 +16,9 @@ interface CustomProperty {
   type: string
   required: boolean
   options: string[]
+  optionLabels?: Record<string, string> | null
+  optionColors?: Record<string, string> | null
+  optionStyle?: string | null
   numberFormat?: string | null
 }
 
@@ -78,7 +82,10 @@ export default function CustomPropertiesDisplay({
       case "DATE_TIME":
         return prop.value ? new Date(prop.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
       case "MULTI_SELECT":
-        return Array.isArray(prop.value) ? prop.value.join(", ") : "—"
+      case "DROPDOWN":
+        return (prop.value == null || prop.value === "" || (Array.isArray(prop.value) && prop.value.length === 0))
+          ? "—"
+          : <OptionValue value={prop.value} optionLabels={prop.optionLabels} optionColors={prop.optionColors} optionStyle={prop.optionStyle} />
       case "NUMBER":
         return prop.value === "" || prop.value == null ? "—" : formatNumber(prop.value, prop.numberFormat as any)
       default:

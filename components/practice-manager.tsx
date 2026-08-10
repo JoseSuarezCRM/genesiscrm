@@ -5,7 +5,8 @@ import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { formatNumber } from "@/lib/number-format"
-import { useState, useTransition, useRef, useEffect } from "react"
+import { useState, useTransition, useRef, useEffect, type ReactNode } from "react"
+import { OptionValue } from "@/components/option-value"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
   createPractice, updatePractice, deletePractice, mergePractice,
@@ -513,12 +514,13 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   ]
   const providerColumns = [...PROVIDER_COLUMNS, ...extraProviderCols]
   const cpDefById = Object.fromEntries(providerCustomPropertyDefs.map((p) => [p.id, p]))
-  const cpValue = (d: any, key: string) => {
+  const cpValue = (d: any, key: string): ReactNode => {
     const id = key.slice(3)
     const raw = (d.customProperties as Record<string, any> | undefined)?.[id]
-    if (raw == null || raw === "") return "—"
-    if (Array.isArray(raw)) return raw.join(", ")
+    if (raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)) return "—"
     const def = cpDefById[id]
+    if (def?.type === "DROPDOWN" || def?.type === "MULTI_SELECT") return <OptionValue value={raw} optionLabels={(def as any).optionLabels} optionColors={(def as any).optionColors} optionStyle={(def as any).optionStyle} />
+    if (Array.isArray(raw)) return raw.join(", ")
     if (def?.type === "NUMBER") return formatNumber(raw, (def as any).numberFormat)
     return String(raw)
   }

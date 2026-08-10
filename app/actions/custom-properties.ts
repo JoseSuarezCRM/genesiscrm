@@ -31,6 +31,8 @@ interface CreateCustomPropertyInput {
   defaultValue?: string
   options?: string[]
   optionLabels?: Record<string, string>
+  optionColors?: Record<string, string>   // DROPDOWN/MULTI_SELECT: value → hex
+  optionStyle?: string                     // "default" | "dot" | "badge"
   internalName?: string
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
   visibilityRule?: { controllingKey: string; equals: string[] } | null
@@ -126,6 +128,8 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
         defaultValue: data.defaultValue || null,
         options: data.options || [],
         optionLabels: (data.optionLabels ?? undefined) as any,
+        optionColors: (data.optionColors ?? undefined) as any,
+        optionStyle: data.optionStyle ?? null,
         conditional: (data.conditional ?? undefined) as any,
         visibilityRule: (data.visibilityRule ?? undefined) as any,
         numberFormat: data.numberFormat || null,
@@ -160,6 +164,8 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
         ...(rest.conditional !== undefined ? { conditional: (rest.conditional ?? null) as any } : {}),
         ...(rest.visibilityRule !== undefined ? { visibilityRule: (rest.visibilityRule ?? null) as any } : {}),
         ...(rest.optionLabels !== undefined ? { optionLabels: (rest.optionLabels ?? null) as any } : {}),
+        ...(rest.optionColors !== undefined ? { optionColors: (rest.optionColors ?? null) as any } : {}),
+        ...(rest.optionStyle !== undefined ? { optionStyle: rest.optionStyle || null } : {}),
         ...(rest.numberFormat !== undefined ? { numberFormat: rest.numberFormat || null } : {}),
         options: rest.options,
       },

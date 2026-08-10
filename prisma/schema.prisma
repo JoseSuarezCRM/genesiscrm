@@ -181,6 +181,8 @@ model CustomProperty {
   defaultValue String?                                     // pre-filled on new records
   options      String[]                   @default([])  // DROPDOWN/MULTI_SELECT: the stable internal VALUES records store
   optionLabels Json?                                       // { [value]: displayLabel } — rename labels without breaking records
+  optionColors Json?                                       // DROPDOWN/MULTI_SELECT: { [value]: hexColor }
+  optionStyle  String?                                     // DROPDOWN/MULTI_SELECT: "default" | "dot" | "badge"
   conditional  Json?                                       // { controllingPropertyId, rules: { value: [opts] } }
   visibilityRule Json?                                      // { controllingKey, equals: [values] } — show only when the controlling field's value is one of these
   numberFormat String?                                      // NUMBER only: "currency" or null (plain)
