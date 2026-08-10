@@ -93,16 +93,17 @@ export function defaultPeriodCount(g: Granularity): number {
   return g === "day" ? 14 : g === "week" ? 12 : g === "month" ? 12 : g === "quarter" ? 8 : 5
 }
 
-// The prior full week (Mon–Sun) as { start, end } YYYY-MM-DD, used by the cron for
-// reconciliation. Widened a couple days on each side so forms created just outside
-// the week but submitted within it aren't missed (results are deduped anyway).
+// The prior full week as { start, end } YYYY-MM-DD = exactly Monday → Sunday
+// (America/Chicago). Used by the report window and the reconciliation pull; the
+// pull is idempotent (deduped by intakeId) and the DB query is buffered a day, so
+// no extra slack is needed and the report shows a clean 7-day Mon–Sun table.
 export function priorWeekRange(): { start: string; end: string } {
   const thisMonday = mondayOfYmd(chicagoYmd(new Date()))
   const [y, m, d] = thisMonday.split("-").map(Number)
   const start = new Date(Date.UTC(y, m - 1, d))
-  start.setUTCDate(start.getUTCDate() - 9) // prior Monday, minus 2 days of slack
+  start.setUTCDate(start.getUTCDate() - 7) // prior Monday
   const end = new Date(Date.UTC(y, m - 1, d))
-  end.setUTCDate(end.getUTCDate() + 1)
+  end.setUTCDate(end.getUTCDate() - 1) // prior Sunday
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
 }
 
