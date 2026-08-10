@@ -435,7 +435,7 @@ export async function getRecentIntakeSubmissions(limit = 50, offset = 0): Promis
   })
   return (rows as any[]).map((r) => ({
     id: r.id,
-    clientName: r.clientName ?? null,
+    clientName: r.clientName || null,
     clientId: r.clientId ?? null,
     category: r.category,
     language: r.language ?? null,
