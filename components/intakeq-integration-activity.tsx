@@ -1,8 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { Activity, AlertCircle, Users } from "lucide-react"
-import type { IntegrationActivity, IntakeSubmission } from "@/app/actions/intakeq"
+import { Activity, AlertCircle, Users, Loader2 } from "lucide-react"
+import { getRecentIntakeSubmissions, type IntegrationActivity, type IntakeSubmission } from "@/app/actions/intakeq"
+
+const SUBMISSIONS_PAGE = 25
 
 function dayLabel(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number)
@@ -15,6 +18,22 @@ function submittedLabel(iso: string): string {
 
 export default function IntakeqIntegrationActivity({ activity, submissions }: { activity: IntegrationActivity; submissions: IntakeSubmission[] }) {
   const max = Math.max(1, ...activity.perDay.map((d) => d.calls))
+
+  const [subs, setSubs] = useState<IntakeSubmission[]>(submissions)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // If the first page came back full, there may be more to fetch.
+  const [done, setDone] = useState(submissions.length < SUBMISSIONS_PAGE)
+
+  async function loadMore() {
+    setLoadingMore(true)
+    try {
+      const next = await getRecentIntakeSubmissions(SUBMISSIONS_PAGE, subs.length)
+      setSubs((prev) => [...prev, ...next])
+      if (next.length < SUBMISSIONS_PAGE) setDone(true)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -52,32 +71,43 @@ export default function IntakeqIntegrationActivity({ activity, submissions }: { 
           <Users className="h-3.5 w-3.5 text-slate-500" />
           <p className="text-xs font-semibold text-slate-600">Recent submissions</p>
         </div>
-        {submissions.length === 0 ? (
+        {subs.length === 0 ? (
           <p className="px-4 py-6 text-sm text-slate-400 text-center">No submissions yet. They appear here as intakes are received or backfilled.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Referral source</th>
-                  <th className="px-4 py-2 font-medium whitespace-nowrap">Submitted</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {submissions.map((s) => (
-                  <tr key={s.id}>
-                    <td className="px-4 py-2 text-slate-800">
-                      {s.clientName ?? (s.clientId ? <span className="text-slate-500">Client #{s.clientId}</span> : <span className="text-slate-400">—</span>)}
-                      {s.language && <span className="ml-1.5 text-[10px] text-slate-400">{s.language}</span>}
-                    </td>
-                    <td className="px-4 py-2 text-slate-600">{s.category}</td>
-                    <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{submittedLabel(s.submittedAt)}</td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                    <th className="px-4 py-2 font-medium">Name</th>
+                    <th className="px-4 py-2 font-medium">Referral source</th>
+                    <th className="px-4 py-2 font-medium whitespace-nowrap">Submitted</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {subs.map((s) => (
+                    <tr key={s.id}>
+                      <td className="px-4 py-2 text-slate-800">
+                        {s.clientName ?? (s.clientId ? <span className="text-slate-500">Client #{s.clientId}</span> : <span className="text-slate-400">—</span>)}
+                        {s.language && <span className="ml-1.5 text-[10px] text-slate-400">{s.language}</span>}
+                      </td>
+                      <td className="px-4 py-2 text-slate-600">{s.category}</td>
+                      <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{submittedLabel(s.submittedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2">
+              <span className="text-[11px] text-slate-400">{subs.length} shown</span>
+              {!done && (
+                <button onClick={loadMore} disabled={loadingMore}
+                  className="inline-flex items-center gap-1.5 h-7 px-3 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+                  {loadingMore ? <Loader2 className="h-3 w-3 animate-spin" /> : null} Load more
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
 

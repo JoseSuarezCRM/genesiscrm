@@ -8,7 +8,7 @@ import IntakeqIntegrationClient from "@/components/intakeq-integration-client"
 export default async function IntakeqIntegrationPage() {
   const session = await requireView("REPORTS")
   const canEdit = userCanLevel(session?.user as any, "REPORTS", "EDIT")
-  const [report, settings, activity, submissions] = await Promise.all([getReferralSourceReport("week"), getIntegrationSettings(), getIntegrationActivity(), getRecentIntakeSubmissions()])
+  const [report, settings, activity, submissions] = await Promise.all([getReferralSourceReport("week"), getIntegrationSettings(), getIntegrationActivity(), getRecentIntakeSubmissions(25)])
 
   return (
     <div className="p-6 max-w-6xl mx-auto">

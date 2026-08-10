@@ -423,13 +423,14 @@ export interface IntakeSubmission {
   submittedAt: string
 }
 
-// The most recent stored intake submissions, newest first. Contains patient
-// names (PHI) — gated by REPORTS VIEW, same as the rest of the integration page.
-export async function getRecentIntakeSubmissions(limit = 50): Promise<IntakeSubmission[]> {
+// The most recent stored intake submissions, newest first (paginated). Contains
+// patient names (PHI) — gated by REPORTS VIEW, same as the rest of the page.
+export async function getRecentIntakeSubmissions(limit = 50, offset = 0): Promise<IntakeSubmission[]> {
   await requireAccess("REPORTS", "VIEW")
   const rows = await (prisma as any).intakeReferralResponse.findMany({
     orderBy: { submittedAt: "desc" },
     take: Math.min(200, Math.max(1, limit)),
+    skip: Math.max(0, offset),
     select: { id: true, clientName: true, clientId: true, category: true, language: true, submittedAt: true },
   })
   return (rows as any[]).map((r) => ({
