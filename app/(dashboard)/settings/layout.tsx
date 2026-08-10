@@ -18,6 +18,7 @@ const settingsSections = [
       { href: "/settings/data-model", label: "Data Model" },
       { href: "/settings/custom-properties", label: "Custom Properties" },
       { href: "/settings/customization", label: "Property Customization" },
+      { href: "/settings/import", label: "Import Records" },
       { href: "/settings/pipelines", label: "Pipelines" },
       { href: "/settings/org-rules", label: "Org Name Rules" },
     ],

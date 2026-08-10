@@ -7,6 +7,8 @@ import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUs
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
 import { ACTIVITY_RATINGS, ratingLabel } from "@/lib/activity-ratings"
+import { OPTION_COLORS, hexToChipStyle } from "@/lib/option-colors"
+import { ColorPicker } from "@/components/ui/color-picker"
 import { showToast } from "@/components/toast"
 import { createPractice, createLocation, createDoctor } from "@/app/actions/referring-doctors"
 import SelectedProvidersCard from "@/components/selected-providers-card"
@@ -150,47 +152,8 @@ interface Props {
 
 // ─── Color palette ────────────────────────────────────────────────────────────
 
-const COLOR_OPTIONS = [
-  { label: "Blue",   hex: "#3b82f6" },
-  { label: "Indigo", hex: "#6366f1" },
-  { label: "Purple", hex: "#a855f7" },
-  { label: "Pink",   hex: "#ec4899" },
-  { label: "Red",    hex: "#ef4444" },
-  { label: "Orange", hex: "#f97316" },
-  { label: "Yellow", hex: "#eab308" },
-  { label: "Green",  hex: "#22c55e" },
-  { label: "Teal",   hex: "#14b8a6" },
-  { label: "Slate",  hex: "#64748b" },
-]
-
-function hexToChipStyle(hex: string) {
-  return {
-    backgroundColor: hex + "20",
-    color: hex,
-    borderColor: hex + "50",
-  }
-}
-
-// ─── Color picker ─────────────────────────────────────────────────────────────
-
-function ColorPicker({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-200 rounded-lg shadow-sm">
-      {COLOR_OPTIONS.map(c => (
-        <button
-          key={c.hex}
-          type="button"
-          title={c.label}
-          onClick={() => onChange(c.hex)}
-          className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 flex items-center justify-center"
-          style={{ backgroundColor: c.hex, borderColor: value === c.hex ? "#1e293b" : "transparent" }}
-        >
-          {value === c.hex && <Check className="w-3 h-3 text-white" />}
-        </button>
-      ))}
-    </div>
-  )
-}
+// Color palette + picker are shared (lib/option-colors, components/ui/color-picker).
+const COLOR_OPTIONS = OPTION_COLORS
 
 // ─── Tag chip ─────────────────────────────────────────────────────────────────
 

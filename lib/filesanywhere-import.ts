@@ -29,7 +29,8 @@ export interface FaConfig {
   importedFiles?: string[]                  // every file name imported, so we don't re-import
   // Weekly email report of newly-created referring providers + their appointments.
   // providerFields/appointmentFields limit which columns show (empty = all).
-  report?: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null; providerFields?: string[]; appointmentFields?: string[] }
+  // windowDays: how many days back the report includes (default 7).
+  report?: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null; providerFields?: string[]; appointmentFields?: string[]; windowDays?: number }
 }
 
 export interface FaImportResult {

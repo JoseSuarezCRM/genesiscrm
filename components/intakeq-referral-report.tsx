@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap, Square, CalendarRange } from "lucide-react"
-import { runIntakeBackfill, getReferralSourceReport, type ReferralSourceReport } from "@/app/actions/intakeq"
+import { startIntakeBackfill, stopIntakeBackfill, getIntakeBackfillStatus, getReferralSourceReport, type ReferralSourceReport, type IntakeBackfillStatus } from "@/app/actions/intakeq"
 import type { Granularity } from "@/lib/intakeq-weeks"
 import IntakeqEmailReport from "@/components/intakeq-email-report"
 import { cn } from "@/lib/utils"
@@ -27,9 +27,9 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
   const [start, setStart] = useState(def.start)
   const [end, setEnd] = useState(def.end)
   const [msg, setMsg] = useState<string | null>(null)
-  const [running, setRunning] = useState(false)
-  const [autoContinue, setAutoContinue] = useState(true)
-  const cancelRef = useRef(false)
+  const [job, setJob] = useState<IntakeBackfillStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [report, setReport] = useState(initial)
   const [granularity, setGranularity] = useState<Granularity>(initial.granularity)
   const [loadingReport, setLoadingReport] = useState(false)
@@ -48,44 +48,53 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
   const rowTotal = (c: string) => (grid[c] ?? []).reduce((s, n) => s + n, 0)
   const grandTotal = colTotals.reduce((s, n) => s + n, 0)
 
-  async function runBackfill() {
-    if (running) return
-    setMsg(null); setRunning(true); cancelRef.current = false
-    let total = 0
-    try {
-      // IntakeQ's 10 req/min limit means each call processes a batch. With
-      // "Run until complete" on, we keep going through the batches; otherwise
-      // a single batch runs. Stop cancels between batches.
-      for (let i = 0; i < 2000; i++) {
-        // Checked at the TOP so Stop halts before starting another batch.
-        if (cancelRef.current) { setMsg(`Stopped. Processed ${total} this run.`); break }
-
-        const res = await runIntakeBackfill(start, end)
-        if (res.error) { setMsg(res.error); break }
-        total += res.processed ?? 0
-        const remaining = res.remaining ?? 0
-        await reloadReport()
-
-        if (cancelRef.current) { setMsg(`Stopped. Processed ${total} this run.`); break }
-
-        // Hit IntakeQ's 10/min limit — wait a minute, then keep going (Stop-aware).
-        if (res.rateLimited) {
-          if (!autoContinue) { setMsg(`Processed ${total}. Hit IntakeQ’s rate limit — click Backfill to continue.`); break }
-          for (let s = 60; s > 0 && !cancelRef.current; s--) {
-            setMsg(`Processed ${total} so far. Waiting ${s}s for IntakeQ’s rate limit…`)
-            await new Promise((r) => setTimeout(r, 1000))
-          }
-          continue // top-of-loop cancel check will stop if Stop was pressed
-        }
-        if (remaining <= 0) { setMsg(`Done — processed ${total} new submission${total === 1 ? "" : "s"}.`); break }
-        if ((res.processed ?? 0) === 0) { setMsg(`Processed ${total}. ${remaining} left but nothing new was ingested — check the date range.`); break }
-        if (!autoContinue) { setMsg(`Processed ${total}. ${remaining} remaining — click Backfill again to continue.`); break }
-        setMsg(`Processing… ${total} done, ${remaining} remaining. You can leave this open.`)
+  // The backfill now runs as a SERVER-side job drained by a minutely cron, so it
+  // continues after you close the page. We just start/stop it and poll progress.
+  function stopPolling() { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
+  function startPolling() {
+    stopPolling()
+    pollRef.current = setInterval(async () => {
+      const s = await getIntakeBackfillStatus().catch(() => null)
+      if (!s) return
+      setJob(s)
+      await reloadReport()
+      if (!s.active) {
+        stopPolling()
+        setMsg(s.done ? `Done — ${s.processed} submission${s.processed === 1 ? "" : "s"} processed.`
+          : s.error ? s.error
+          : `Stopped — ${s.processed} processed.`)
       }
-    } finally {
-      setRunning(false)
-    }
+    }, 4000)
   }
+
+  // Resume the live display if a job is already running (started here earlier, in
+  // another tab, or by the scheduled reconciliation).
+  useEffect(() => {
+    getIntakeBackfillStatus().then((s) => { setJob(s); if (s.active) startPolling() }).catch(() => {})
+    return () => stopPolling()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function startBackfill() {
+    setBusy(true); setMsg(null)
+    try {
+      const r = await startIntakeBackfill(start, end)
+      if (r.error) { setMsg(r.error); return }
+      setJob(await getIntakeBackfillStatus())
+      startPolling()
+      setMsg("Started — processing in the background. You can safely close this page.")
+    } finally { setBusy(false) }
+  }
+  async function stopBackfill() {
+    setBusy(true)
+    try {
+      await stopIntakeBackfill()
+      const s = await getIntakeBackfillStatus(); setJob(s); stopPolling()
+      setMsg(`Stopped — ${s.processed} processed.`)
+    } finally { setBusy(false) }
+  }
+
+  const jobActive = !!job?.active
 
   function exportCsv() {
     const header = ["Referral Source", ...weeks.map((w) => w.label), "Total"]
@@ -143,20 +152,17 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
               <label className="block text-[11px] font-medium text-slate-500 mb-1">to</label>
               <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="h-8 px-2 text-sm border border-slate-200 rounded-lg bg-white" />
             </div>
-            <button onClick={runBackfill} disabled={running || !report.configured}
+            <button onClick={startBackfill} disabled={busy || jobActive || !report.configured}
               className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
-              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Backfill
+              {busy || jobActive ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Backfill
             </button>
-            {running && autoContinue && (
-              <button onClick={() => { cancelRef.current = true }}
-                className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100">
+            {jobActive && (
+              <button onClick={stopBackfill} disabled={busy}
+                className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50">
                 <Square className="h-3 w-3" /> Stop
               </button>
             )}
-            <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 pb-1.5 ml-1" title="Keep going through IntakeQ's rate-limited batches until the whole range is done">
-              <input type="checkbox" checked={autoContinue} onChange={(e) => setAutoContinue(e.target.checked)} disabled={running} className="rounded border-slate-300" />
-              Run until complete
-            </label>
+            <span className="text-[11px] text-slate-400 pb-1.5 ml-1">Runs in the background — safe to close this page.</span>
           </div>
         )}
         <div className="ml-auto flex items-center gap-2">
@@ -175,7 +181,13 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
           </button>
         </div>
       </div>
-      {msg && <p className="text-xs text-slate-600">{msg}</p>}
+      {jobActive ? (
+        <p className="text-xs text-slate-600 inline-flex items-center gap-1.5">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Processing in the background — {job!.processed} done{job!.remaining != null ? `, ${job!.remaining} remaining` : ""}
+          {job!.rateLimitedUntil && new Date(job!.rateLimitedUntil).getTime() > Date.now() ? " · waiting out IntakeQ's rate limit" : ""}. Safe to close this page.
+        </p>
+      ) : msg ? <p className="text-xs text-slate-600">{msg}</p> : null}
 
       {/* Grid */}
       <div className="overflow-x-auto rounded-xl border border-slate-200">

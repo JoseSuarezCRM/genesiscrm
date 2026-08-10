@@ -36,7 +36,7 @@ export interface FaSettings {
   lastRunAt: string | null
   lastImportedFile: string | null
   objects: FaCustomObject[]
-  report: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null; providerFields: string[]; appointmentFields: string[] }
+  report: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; lastSentAt: string | null; providerFields: string[]; appointmentFields: string[]; windowDays: number }
 }
 
 async function cfgOf(): Promise<Partial<FaConfig>> {
@@ -87,20 +87,23 @@ export async function getFaSettings(): Promise<FaSettings> {
       lastSentAt: cfg.report?.lastSentAt ?? null,
       providerFields: cfg.report?.providerFields ?? [],
       appointmentFields: cfg.report?.appointmentFields ?? [],
+      windowDays: cfg.report?.windowDays ?? 7,
     },
   }
 }
 
 // Save the weekly report settings (recipients + schedule + enabled).
-export async function saveFaReportConfig(input: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; providerFields?: string[]; appointmentFields?: string[] }): Promise<{ ok?: boolean; error?: string }> {
+export async function saveFaReportConfig(input: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; providerFields?: string[]; appointmentFields?: string[]; windowDays?: number }): Promise<{ ok?: boolean; error?: string }> {
   await requirePermission("MANAGE_USERS")
   const cfg = await cfgOf()
   const recipients = (input.recipients ?? []).map((r) => r.trim()).filter(Boolean)
+  const windowDaysNum = Math.round(Number(input.windowDays))
   const report = {
     enabled: !!input.enabled, recipients, dayOfWeek: input.dayOfWeek, hour: input.hour,
     lastSentAt: cfg.report?.lastSentAt ?? null,
     providerFields: input.providerFields ?? [],
     appointmentFields: input.appointmentFields ?? [],
+    windowDays: windowDaysNum >= 1 && windowDaysNum <= 365 ? windowDaysNum : 7,
   }
   await (prisma as any).integration.update({ where: { provider: PROVIDER }, data: { config: { ...cfg, report } } })
   revalidate()

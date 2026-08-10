@@ -1,6 +1,14 @@
 import { prisma } from "@/lib/prisma"
-import { getIntake, listIntakeSummaries, IntakeqRateLimitError } from "@/lib/intakeq"
+import { getIntake, listIntakeSummaries, IntakeqRateLimitError, type IntakeSummary } from "@/lib/intakeq"
 import { parseIntakeReferral, isTargetQuestionnaire } from "@/lib/intakeq-referral"
+
+// The patient's name from an IntakeQ intake/summary (ClientName, else first+last).
+function intakeClientName(intake: Pick<IntakeSummary, "ClientName" | "ClientFirstName" | "ClientLastName">): string | null {
+  const full = (intake.ClientName ?? "").trim()
+  if (full) return full
+  const parts = [intake.ClientFirstName, intake.ClientLastName].map((s) => (s ?? "").trim()).filter(Boolean)
+  return parts.length ? parts.join(" ") : null
+}
 
 // Fetch one intake, categorize its referral answer, and upsert it (idempotent by
 // intakeId, so webhook re-deliveries and backfill overlap don't double-count).
@@ -14,11 +22,14 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
     ? new Date(intake.DateSubmitted)
     : intake.DateCreated ? new Date(intake.DateCreated) : new Date()
 
+  const clientName = intakeClientName(intake)
+
   await (prisma as any).intakeReferralResponse.upsert({
     where: { intakeId },
     create: {
       intakeId,
       clientId: intake.ClientId != null ? String(intake.ClientId) : null,
+      clientName,
       questionnaireId: intake.QuestionnaireId ?? null,
       questionnaireName: intake.QuestionnaireName ?? null,
       language: parsed.language,
@@ -27,6 +38,7 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
       category: parsed.category,
     },
     update: {
+      clientName,
       language: parsed.language,
       submittedAt,
       rawAnswer: parsed.rawAnswer,
@@ -44,16 +56,29 @@ const BACKFILL_MAX = 12
 // Pull submitted target-questionnaire intakes for a date range and ingest the ones
 // we don't already have. Bounded per run; returns how many still remain (so the
 // caller can run again) plus a rateLimited flag so the caller can back off.
-export async function backfillRange(startDate: string, endDate: string): Promise<{ processed: number; remaining: number; candidates: number; rateLimited: boolean }> {
+export async function backfillRange(
+  startDate: string,
+  endDate: string,
+  opts: { budgetMs?: number; max?: number } = {},
+): Promise<{ processed: number; remaining: number; candidates: number; rateLimited: boolean }> {
+  // How many to ingest this call: an explicit max, else the whole time budget
+  // (server-side drain), else the small default (a single UI/cron batch).
+  const max = opts.max ?? (opts.budgetMs ? Number.POSITIVE_INFINITY : BACKFILL_MAX)
+  const startedAt = Date.now()
   // Candidate ids from the summary endpoint (1 request per 100 rows), filtered to
   // submitted target-questionnaire forms.
   const candidates: string[] = []
+  const nameById = new Map<string, string>()
   try {
     for (let page = 1; page <= 50; page++) {
       const rows = await listIntakeSummaries({ startDate, endDate, page })
       if (!rows.length) break
       for (const r of rows) {
-        if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName)) candidates.push(r.Id)
+        if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName)) {
+          candidates.push(r.Id)
+          const nm = intakeClientName(r)
+          if (nm) nameById.set(r.Id, nm)
+        }
       }
       if (rows.length < 100) break
     }
@@ -65,14 +90,22 @@ export async function backfillRange(startDate: string, endDate: string): Promise
   // Skip ones already stored (no detail call needed for those).
   const existing = await (prisma as any).intakeReferralResponse.findMany({
     where: { intakeId: { in: candidates } },
-    select: { intakeId: true },
+    select: { intakeId: true, clientName: true },
   })
   const have = new Set(existing.map((e: any) => e.intakeId))
+  // Fill names for already-stored rows that don't have one yet — free, from the
+  // summary scan (no per-intake detail call).
+  for (const e of existing as { intakeId: string; clientName: string | null }[]) {
+    if (e.clientName) continue
+    const nm = nameById.get(e.intakeId)
+    if (nm) await (prisma as any).intakeReferralResponse.update({ where: { intakeId: e.intakeId }, data: { clientName: nm } }).catch(() => {})
+  }
   const todo = candidates.filter((id) => !have.has(id))
 
-  const batch = todo.slice(0, BACKFILL_MAX)
   let processed = 0
-  for (const id of batch) {
+  for (const id of todo) {
+    if (processed >= max) break
+    if (opts.budgetMs && Date.now() - startedAt >= opts.budgetMs) break
     try {
       await ingestIntake(id); processed++
     } catch (e) {

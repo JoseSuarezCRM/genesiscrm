@@ -90,6 +90,69 @@ export async function runIntakeBackfill(startDate: string, endDate: string): Pro
   }
 }
 
+// ─── Server-side backfill job (drains in the background, survives tab close) ──
+
+export interface IntakeBackfillStatus {
+  active: boolean
+  processed: number
+  remaining: number | null
+  done: boolean
+  startDate: string | null
+  endDate: string | null
+  rateLimitedUntil: string | null
+  error: string | null
+}
+
+function backfillStatusOf(cfg: any): IntakeBackfillStatus {
+  const b = cfg?.backfill ?? null
+  return {
+    active: !!b?.active,
+    processed: b?.processed ?? 0,
+    remaining: b?.remaining ?? null,
+    done: !!b?.done,
+    startDate: b?.startDate ?? null,
+    endDate: b?.endDate ?? null,
+    rateLimitedUntil: b?.rateLimitedUntil ?? null,
+    error: b?.error ?? null,
+  }
+}
+
+// Kick off a background backfill for a date range. The minutely cron
+// (/api/cron/intakeq-backfill) drains it to completion — closing the page no
+// longer stops it.
+export async function startIntakeBackfill(startDate: string, endDate: string): Promise<{ ok?: boolean; error?: string }> {
+  const session = await requireAccess("REPORTS", "EDIT")
+  if (!(await isIntakeqConfigured())) return { error: "IntakeQ API key isn't configured yet." }
+  if (!startDate || !endDate) return { error: "Pick a start and end date." }
+  const row = await getIntegration()
+  const cfg = (row?.config ?? {}) as any
+  if (cfg.backfill?.active) return { error: "A backfill is already running." }
+  const backfill = {
+    active: true, startDate, endDate,
+    processed: 0, remaining: null, candidates: null,
+    startedAt: new Date().toISOString(), startedById: (session!.user as any).id ?? null,
+    lastBatchAt: null, rateLimitedUntil: null, lockUntil: null, done: false, doneAt: null, error: null,
+  }
+  await (prisma as any).integration.update({ where: { provider: "intakeq" }, data: { config: { ...cfg, backfill } } })
+  return { ok: true }
+}
+
+export async function stopIntakeBackfill(): Promise<{ ok?: boolean; error?: string }> {
+  await requireAccess("REPORTS", "EDIT")
+  const row = await getIntegration()
+  const cfg = (row?.config ?? {}) as any
+  if (cfg.backfill) {
+    await (prisma as any).integration.update({ where: { provider: "intakeq" }, data: { config: { ...cfg, backfill: { ...cfg.backfill, active: false } } } }).catch(() => {})
+  }
+  return { ok: true }
+}
+
+export async function getIntakeBackfillStatus(): Promise<IntakeBackfillStatus> {
+  await requireAccess("REPORTS", "VIEW")
+  const row = await getIntegration()
+  return backfillStatusOf(row?.config ?? {})
+}
+
 // ─── Integrations index (Connected Apps table) ───────────────────────────────
 
 export interface IntegrationListItem {
@@ -347,6 +410,37 @@ export async function getIntegrationActivity(): Promise<IntegrationActivity> {
       at: new Date(r.createdAt).toISOString(),
     })),
   }
+}
+
+// ─── Recent submissions (who filled the intake) ──────────────────────────────
+
+export interface IntakeSubmission {
+  id: string
+  clientName: string | null
+  clientId: string | null
+  category: string
+  language: string | null
+  submittedAt: string
+}
+
+// The most recent stored intake submissions, newest first (paginated). Contains
+// patient names (PHI) — gated by REPORTS VIEW, same as the rest of the page.
+export async function getRecentIntakeSubmissions(limit = 50, offset = 0): Promise<IntakeSubmission[]> {
+  await requireAccess("REPORTS", "VIEW")
+  const rows = await (prisma as any).intakeReferralResponse.findMany({
+    orderBy: { submittedAt: "desc" },
+    take: Math.min(200, Math.max(1, limit)),
+    skip: Math.max(0, offset),
+    select: { id: true, clientName: true, clientId: true, category: true, language: true, submittedAt: true },
+  })
+  return (rows as any[]).map((r) => ({
+    id: r.id,
+    clientName: r.clientName ?? null,
+    clientId: r.clientId ?? null,
+    category: r.category,
+    language: r.language ?? null,
+    submittedAt: new Date(r.submittedAt).toISOString(),
+  }))
 }
 
 // Diagnostics: list questionnaire templates so we can confirm the exact form name.

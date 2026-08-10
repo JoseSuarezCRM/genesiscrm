@@ -5,6 +5,7 @@ import { useState, useTransition, useEffect } from "react"
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
+import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
 
 interface CustomProperty {
@@ -14,6 +15,8 @@ interface CustomProperty {
   required: boolean
   options: string[]
   optionLabels?: Record<string, string> | null
+  optionColors?: Record<string, string> | null
+  optionStyle?: string | null
   numberFormat?: string | null
   value?: any
 }
@@ -53,9 +56,8 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
       case "DATE_TIME":
         return new Date(property.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
       case "MULTI_SELECT":
-        return Array.isArray(property.value) ? property.value.map((x) => property.optionLabels?.[String(x)] ?? String(x)).join(", ") : "—"
       case "DROPDOWN":
-        return property.optionLabels?.[String(property.value)] ?? String(property.value)
+        return <OptionValue value={property.value} optionLabels={property.optionLabels} optionColors={property.optionColors} optionStyle={property.optionStyle} />
       case "NUMBER":
         return formatNumber(property.value, (property as any).numberFormat)
       default:

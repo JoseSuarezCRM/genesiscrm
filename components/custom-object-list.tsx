@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useTransition, useEffect, useRef } from "react"
+import { useState, useTransition, useEffect, useRef, type ReactNode } from "react"
+import { OptionValue } from "@/components/option-value"
 import Link from "next/link"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-react"
@@ -77,6 +78,14 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
     case "USER": return userMap[v] ?? String(v)
     default: return String(v)
   }
+}
+
+// Styled cell (dot/badge for dropdowns); falls back to displayValue's text.
+function displayCell(p: CustomObjectProperty, v: any, userMap: Record<string, string>): ReactNode {
+  if ((p.type === "DROPDOWN" || p.type === "MULTI_SELECT") && v != null && v !== "" && !(Array.isArray(v) && v.length === 0)) {
+    return <OptionValue value={v} optionLabels={(p as any).optionLabels} optionColors={(p as any).optionColors} optionStyle={(p as any).optionStyle} />
+  }
+  return displayValue(p, v, userMap)
 }
 
 export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [], serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50 }: Props) {
@@ -373,7 +382,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                       <td key={c.key} className="px-4 py-2.5 text-slate-600 truncate" style={{ maxWidth: colWidth(c.key) }}>
                         {c.key === "__owner" ? (r.ownerName ?? "—")
                           : c.key === "__created" ? fmtDate(r.createdAt)
-                          : displayValue(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)}
+                          : displayCell(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)}
                       </td>
                     ))}
                   </tr>

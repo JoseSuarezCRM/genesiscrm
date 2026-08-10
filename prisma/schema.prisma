@@ -181,6 +181,8 @@ model CustomProperty {
   defaultValue String?                                     // pre-filled on new records
   options      String[]                   @default([])  // DROPDOWN/MULTI_SELECT: the stable internal VALUES records store
   optionLabels Json?                                       // { [value]: displayLabel } — rename labels without breaking records
+  optionColors Json?                                       // DROPDOWN/MULTI_SELECT: { [value]: hexColor }
+  optionStyle  String?                                     // DROPDOWN/MULTI_SELECT: "default" | "dot" | "badge"
   conditional  Json?                                       // { controllingPropertyId, rules: { value: [opts] } }
   visibilityRule Json?                                      // { controllingKey, equals: [values] } — show only when the controlling field's value is one of these
   numberFormat String?                                      // NUMBER only: "currency" or null (plain)
@@ -250,6 +252,23 @@ model ObjectAssociationDef {
 // A link between two specific records (heterogeneous — no FKs).
 // A note on any record (custom or built-in) — the first engagement type in the
 // unified activity feed. recordType is a registry key ("CO:<key>" or built-in).
+// A file/document attached to any record (built-in or custom). recordType is a
+// registry key ("PROVIDER", "CO:<key>", …). Bytes live in the private Blob store;
+// served through the authenticated /api/record-attachments/[id] route.
+model RecordAttachment {
+  id          String   @id @default(cuid())
+  recordType  String
+  recordId    String
+  name        String
+  blobUrl     String   // private Blob url (read server-side with the token)
+  contentType String
+  size        Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([recordType, recordId])
+}
+
 // Logged engagements on any record: notes, call logs and meetings.
 model RecordNote {
   id          String    @id @default(cuid())
@@ -1088,6 +1107,7 @@ model IntakeReferralResponse {
   id                String   @id @default(cuid())
   intakeId          String   @unique
   clientId          String?
+  clientName        String?  // patient name from IntakeQ (PHI) — for the submissions view
   questionnaireId   String?
   questionnaireName String?
   language          String?  // "EN" | "ES" | null
