@@ -2,12 +2,17 @@ import { prisma } from "@/lib/prisma"
 import { getIntake, listIntakeSummaries, IntakeqRateLimitError, type IntakeSummary } from "@/lib/intakeq"
 import { parseIntakeReferral, isTargetQuestionnaire } from "@/lib/intakeq-referral"
 
-// The patient's name from an IntakeQ intake/summary (ClientName, else first+last).
-function intakeClientName(intake: Pick<IntakeSummary, "ClientName" | "ClientFirstName" | "ClientLastName">): string | null {
-  const full = (intake.ClientName ?? "").trim()
-  if (full) return full
-  const parts = [intake.ClientFirstName, intake.ClientLastName].map((s) => (s ?? "").trim()).filter(Boolean)
-  return parts.length ? parts.join(" ") : null
+// The patient's name from an IntakeQ intake/summary. IntakeQ isn't consistent
+// about where the name lives (and the summary endpoint may omit it entirely), so
+// check the common fields on both the summary and the full-intake detail.
+function intakeClientName(intake: Record<string, any>): string | null {
+  const s = (v: unknown) => (v == null ? "" : String(v).trim())
+  const direct = s(intake.ClientName) || s(intake.Name) || s(intake.ClientFullName) || s(intake.FullName) || s(intake?.Client?.Name)
+  if (direct) return direct
+  const first = s(intake.ClientFirstName) || s(intake.FirstName) || s(intake?.Client?.FirstName)
+  const last = s(intake.ClientLastName) || s(intake.LastName) || s(intake?.Client?.LastName)
+  const joined = [first, last].filter(Boolean).join(" ")
+  return joined || null
 }
 
 // Fetch one intake, categorize its referral answer, and upsert it (idempotent by
@@ -93,28 +98,47 @@ export async function backfillRange(
     select: { intakeId: true, clientName: true },
   })
   const have = new Set(existing.map((e: any) => e.intakeId))
-  // Fill names for already-stored rows that don't have one yet — free, from the
-  // summary scan (no per-intake detail call).
+  // Cheap name fill from the summary (free) for stored rows missing a name — only
+  // helps if the summary carries the name (some accounts don't).
+  const filledFromSummary = new Set<string>()
   for (const e of existing as { intakeId: string; clientName: string | null }[]) {
-    if (e.clientName) continue
+    if (e.clientName != null) continue
     const nm = nameById.get(e.intakeId)
-    if (nm) await (prisma as any).intakeReferralResponse.update({ where: { intakeId: e.intakeId }, data: { clientName: nm } }).catch(() => {})
+    if (nm) { await (prisma as any).intakeReferralResponse.update({ where: { intakeId: e.intakeId }, data: { clientName: nm } }).catch(() => {}); filledFromSummary.add(e.intakeId) }
   }
-  const todo = candidates.filter((id) => !have.has(id))
+
+  // Work items: intakes to ingest (not stored yet) + stored rows still missing a
+  // name (fetch the full-intake detail, which reliably carries the client's name).
+  const unstored = candidates.filter((id) => !have.has(id))
+  const nameless = (existing as { intakeId: string; clientName: string | null }[])
+    .filter((e) => e.clientName == null && !filledFromSummary.has(e.intakeId))
+    .map((e) => e.intakeId)
+  const work: { id: string; kind: "ingest" | "name" }[] = [
+    ...unstored.map((id) => ({ id, kind: "ingest" as const })),
+    ...nameless.map((id) => ({ id, kind: "name" as const })),
+  ]
 
   let processed = 0
-  for (const id of todo) {
+  for (const w of work) {
     if (processed >= max) break
     if (opts.budgetMs && Date.now() - startedAt >= opts.budgetMs) break
     try {
-      await ingestIntake(id); processed++
+      if (w.kind === "ingest") {
+        await ingestIntake(w.id)
+      } else {
+        const intake = await getIntake(w.id)
+        const nm = intakeClientName(intake as any)
+        // Store "" when the detail has no name, so it's marked tried and not re-fetched.
+        await (prisma as any).intakeReferralResponse.update({ where: { intakeId: w.id }, data: { clientName: nm || "" } }).catch(() => {})
+      }
+      processed++
     } catch (e) {
       // Rate limited → stop and let the caller back off, keeping progress so far.
       if (e instanceof IntakeqRateLimitError) {
-        return { processed, remaining: Math.max(0, todo.length - processed), candidates: candidates.length, rateLimited: true }
+        return { processed, remaining: Math.max(0, work.length - processed), candidates: candidates.length, rateLimited: true }
       }
-      // Any other single-intake failure → skip it and keep going.
+      // Any other single-item failure → skip it and keep going.
     }
   }
-  return { processed, remaining: Math.max(0, todo.length - processed), candidates: candidates.length, rateLimited: false }
+  return { processed, remaining: Math.max(0, work.length - processed), candidates: candidates.length, rateLimited: false }
 }
