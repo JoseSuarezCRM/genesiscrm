@@ -118,7 +118,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
         <p className={stepLabel}>1 · Object &amp; file</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <label className="text-sm text-slate-600">Import into
-            <StyledSelect value={objectKey} onChange={(e) => { setObjectKey(e.target.value); if (parsed) setMap(suggestMap(parsed.headers, objects.find(o => o.key === e.target.value)!)) }} className="mt-1 block min-w-[200px] h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
+            <StyledSelect value={objectKey} onChange={(e) => { setObjectKey(e.target.value); if (parsed) setMap(suggestMap(parsed.headers, objects.find(o => o.key === e.target.value)!)) }} className="mt-1 min-w-[200px] h-9 border border-slate-200 rounded-lg bg-white">
               {objects.map((o) => <option key={o.key} value={o.key}>{o.plural}</option>)}
             </StyledSelect>
           </label>
@@ -172,7 +172,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
           <p className={stepLabel}>3 · Import</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <label className="text-sm text-slate-600">When a Record ID matches
-              <StyledSelect value={mode} onChange={(e) => setMode(e.target.value as ImportMode)} className="mt-1 block min-w-[200px] h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
+              <StyledSelect value={mode} onChange={(e) => setMode(e.target.value as ImportMode)} className="mt-1 min-w-[200px] h-9 border border-slate-200 rounded-lg bg-white">
                 <option value="upsert">Create new &amp; update existing</option>
                 <option value="createOnly">Only create new (ignore matches)</option>
                 <option value="updateOnly">Only update existing (skip new)</option>

@@ -60,7 +60,7 @@ export default function CustomObjectSettings({ objects }: { objects: CustomObjec
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs font-medium text-slate-600">Select an object
           <StyledSelect value={selectedId} onChange={(e) => setSelectedId(e.target.value)}
-            className="mt-1 block min-w-[240px] h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white">
+            className="mt-1 min-w-[240px] h-9 border border-slate-200 rounded-lg bg-white">
             <option value="">Select an object…</option>
             {objects.map((o) => <option key={o.id} value={o.id}>{o.plural}</option>)}
           </StyledSelect>
@@ -90,7 +90,7 @@ export default function CustomObjectSettings({ objects }: { objects: CustomObjec
               <p className="text-xs text-slate-400">{selected.properties.length} propert{selected.properties.length === 1 ? "y" : "ies"} · owner: {selected.ownerLabel}</p>
             </div>
           </div>
-          <ObjectEditor object={selected} />
+          <ObjectEditor key={selected.id} object={selected} />
         </div>
       ) : (
         <div className="bg-white border border-dashed border-slate-200 rounded-xl py-12 text-center text-sm text-slate-400">
