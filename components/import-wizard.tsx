@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle, ArrowRight, Undo2, History } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { normalizeKey } from "@/lib/import-parse"
-import { runImportBatch, startImportRun, listImportRuns, undoImportRun, type ImportRunDTO } from "@/app/actions/import-records"
+import { runImportBatch, startImportRun, listImportRuns, undoImportRun, createImportProperty, type ImportRunDTO } from "@/app/actions/import-records"
 import { RECORD_ID_TARGET, type ImportMode } from "@/lib/import-types"
 
 export interface ImportProperty { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }
@@ -15,8 +16,15 @@ export interface AssocTarget { key: string; label: string }
 
 // Column-target sentinels. Real property ids and "assoc:<type>" are the others.
 const IGNORE = "__ignore"
+const CREATE = "__create"
 const ASSOC_PREFIX = "assoc:"
 const BATCH = 100
+const NEW_PROP_TYPES: { value: string; label: string }[] = [
+  { value: "TEXT", label: "Text" }, { value: "LONG_TEXT", label: "Long text" }, { value: "NUMBER", label: "Number" },
+  { value: "EMAIL", label: "Email" }, { value: "PHONE", label: "Phone" }, { value: "DATE", label: "Date" },
+  { value: "DATE_TIME", label: "Date & time" }, { value: "CHECKBOX", label: "Checkbox" },
+  { value: "DROPDOWN", label: "Dropdown" }, { value: "MULTI_SELECT", label: "Multi-select" }, { value: "URL", label: "URL" },
+]
 
 type Parsed = { headers: string[]; rows: Record<string, string>[]; total: number }
 type Progress = { created: number; updated: number; skipped: number; errors: { row: number; message: string }[]; done: number }
@@ -35,13 +43,47 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
   const [done, setDone] = useState(false)
   const [runs, setRuns] = useState<ImportRunDTO[]>([])
   const [undoingId, setUndoingId] = useState<string | null>(null)
+  // Properties created on the fly from the mapper (added to this object's list).
+  const [createdProps, setCreatedProps] = useState<ImportProperty[]>([])
+  const [newPropCol, setNewPropCol] = useState<string | null>(null)
+  const [newPropName, setNewPropName] = useState("")
+  const [newPropType, setNewPropType] = useState("TEXT")
+  const [creatingProp, setCreatingProp] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const object = objects.find((o) => o.key === objectKey)!
+  const baseObject = objects.find((o) => o.key === objectKey)!
+  const object = { ...baseObject, properties: [...baseObject.properties, ...createdProps] }
 
   // Load the recent imports for the selected object (for the undo history).
   const refreshRuns = (key = objectKey) => { if (key) listImportRuns(key).then(setRuns).catch(() => {}) }
-  useEffect(() => { refreshRuns(objectKey) }, [objectKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { refreshRuns(objectKey); setCreatedProps([]) }, [objectKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Distinct values in a column, for seeding a new dropdown/multi-select's options.
+  function distinctOptions(col: string, type: string): string[] {
+    if (!parsed || (type !== "DROPDOWN" && type !== "MULTI_SELECT")) return []
+    const set = new Set<string>()
+    for (const row of parsed.rows) {
+      const raw = (row[col] ?? "").trim()
+      if (!raw) continue
+      if (type === "MULTI_SELECT") raw.split(/[;,]/).map((s) => s.trim()).filter(Boolean).forEach((v) => set.add(v))
+      else set.add(raw)
+    }
+    return Array.from(set)
+  }
+
+  async function createProp() {
+    const name = newPropName.trim()
+    if (!name || !newPropCol) return
+    setCreatingProp(true); setError(null)
+    try {
+      const res = await createImportProperty(objectKey, name, newPropType, distinctOptions(newPropCol, newPropType))
+      if (res.error || !res.property) { setError(res.error ?? "Couldn't create the property."); return }
+      const p = res.property
+      setCreatedProps((prev) => [...prev, p])
+      setMap((m) => ({ ...m, [newPropCol]: p.id }))
+      setNewPropCol(null); setNewPropName("")
+    } finally { setCreatingProp(false) }
+  }
 
   async function undo(id: string) {
     setUndoingId(id)
@@ -170,10 +212,17 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
                     <td className="py-1.5 pr-4 font-medium text-slate-700 whitespace-nowrap">{h}</td>
                     <td className="py-1.5 pr-4 text-slate-400 max-w-[220px] truncate">{parsed.rows[0]?.[h] || "—"}</td>
                     <td className="py-1.5">
-                      <StyledSelect value={map[h] ?? IGNORE} onChange={(e) => setMap((m) => ({ ...m, [h]: e.target.value }))} className="min-w-[220px] h-8 px-2 text-sm border border-slate-200 rounded-md bg-white">
+                      <StyledSelect value={map[h] ?? IGNORE}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (v === CREATE) { setNewPropCol(h); setNewPropName(h); setNewPropType("TEXT") }
+                          else setMap((m) => ({ ...m, [h]: v }))
+                        }}
+                        className="min-w-[220px] h-8 px-2 text-sm border border-slate-200 rounded-md bg-white">
                         <option value={IGNORE}>Don&apos;t import</option>
                         <option value={RECORD_ID_TARGET}>Record ID (match key)</option>
                         {object.properties.map((p) => <option key={p.id} value={p.id}>Field: {p.name}</option>)}
+                        <option value={CREATE}>＋ Create new property…</option>
                         {assocTargets.map((t) => <option key={t.key} value={ASSOC_PREFIX + t.key}>Associate → {t.label}</option>)}
                       </StyledSelect>
                     </td>
@@ -261,6 +310,35 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
           <p className="mt-2 text-[11px] text-slate-400">Undo deletes the records this import created, restores prior values on the ones it updated, and removes the links it added.</p>
         </div>
       )}
+
+      {/* Create a new property on the object, then map this column to it */}
+      <Dialog open={newPropCol !== null} onOpenChange={(o) => { if (!o) setNewPropCol(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>New property on {object.plural}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1">Property name</label>
+              <input value={newPropName} onChange={(e) => setNewPropName(e.target.value)} autoFocus placeholder="e.g. Settlement Balance"
+                onKeyDown={(e) => { if (e.key === "Enter") createProp() }}
+                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 block mb-1">Field type</label>
+              <StyledSelect value={newPropType} onChange={(e) => setNewPropType(e.target.value)} className="min-w-[200px] h-9 border border-slate-200 rounded-lg bg-white">
+                {NEW_PROP_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </StyledSelect>
+            </div>
+            <p className="text-[11px] text-slate-400">Creates the property on this object now, then maps the column to it. (For Dropdown/Multi-select, options fill in from the imported values as text — set colors/labels later in Custom Objects.)</p>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setNewPropCol(null)} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
+            <button onClick={createProp} disabled={creatingProp || !newPropName.trim()}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              {creatingProp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Create &amp; map
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

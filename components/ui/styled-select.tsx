@@ -143,7 +143,7 @@ export default function StyledSelect({ value, onChange, children, className, dis
           style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight, pointerEvents: "auto" }}
         >
           {showSearch && (
-            <div className="sticky top-0 bg-white px-2 pt-1 pb-1.5 border-b border-slate-100">
+            <div className="sticky top-0 z-10 bg-white px-2 pt-1 pb-1.5 border-b border-slate-100">
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <input

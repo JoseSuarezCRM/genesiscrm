@@ -154,6 +154,33 @@ export async function runImportBatch(
   return result
 }
 
+// Create a new property on the custom object from the import mapper, so a column
+// with no matching field can be brought in without leaving the wizard.
+const IMPORT_PROP_TYPES = ["TEXT", "LONG_TEXT", "NUMBER", "EMAIL", "PHONE", "DATE", "DATE_TIME", "CHECKBOX", "DROPDOWN", "MULTI_SELECT", "URL"]
+export async function createImportProperty(objectKey: string, name: string, type: string, options?: string[]): Promise<{ property?: { id: string; name: string; type: string; options: string[]; optionLabels: Record<string, string> }; error?: string }> {
+  try { await requireAccess(`CO:${objectKey}`, "EDIT") } catch { return { error: "You don't have permission to add properties to this object." } }
+  const clean = (name ?? "").trim()
+  if (!clean) return { error: "Property name is required." }
+  const t = IMPORT_PROP_TYPES.includes(type) ? type : "TEXT"
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
+  if (!def) return { error: "Object not found." }
+  const props = ((def.properties as any[]) ?? [])
+  if (props.some((p) => (p.name ?? "").trim().toLowerCase() === clean.toLowerCase())) return { error: "A property with that name already exists." }
+  // Unique internal name (snake_case) within the object.
+  const base = clean.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase() || "field"
+  const taken = new Set(props.map((p) => p.internalName).filter(Boolean))
+  let internalName = base
+  for (let n = 2; taken.has(internalName); n++) internalName = `${base}_${n}`
+  // Dropdown/multi-select need options for import cells to match — seed them from
+  // the values found in the file (passed by the mapper), value == label.
+  const opts = (t === "DROPDOWN" || t === "MULTI_SELECT") ? Array.from(new Set((options ?? []).map((o) => o.trim()).filter(Boolean))).slice(0, 500) : []
+  const id = `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  const property = { id, name: clean, internalName, type: t, options: opts, required: false }
+  await (prisma as any).customObjectDef.update({ where: { id: def.id }, data: { properties: [...props, property] } })
+  revalidatePath(`/objects/${objectKey}`)
+  return { property: { id, name: clean, type: t, options: opts, optionLabels: {} } }
+}
+
 // ─── Import runs: history + undo ─────────────────────────────────────────────
 
 export interface ImportRunDTO {
