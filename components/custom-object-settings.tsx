@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Plus, Trash2, Loader2, Check, Box, GripVertical, ExternalLink, Pencil } from "lucide-react"
+import { Plus, Trash2, Loader2, Check, Box, GripVertical, ExternalLink, Pencil, Search, ChevronLeft, ChevronRight } from "lucide-react"
 import {
   createCustomObject, updateCustomObject, saveCustomObjectProperties, saveCustomObjectCards, deleteCustomObject,
   type CustomObjectDefLite, type CustomObjectProperty, type CustomObjectCard, type CustomPropType,
@@ -139,6 +139,9 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
   const [cards, setCards] = useState<CustomObjectCard[]>(object.cards)
   const [saved, setSaved] = useState(false)
   const [editingProp, setEditingProp] = useState<CustomObjectProperty | "new" | null>(null)
+  const [propQuery, setPropQuery] = useState("")
+  const [propPage, setPropPage] = useState(0)
+  const PROP_PAGE = 10
 
   function removeProp(id: string) {
     const next = props.filter((x) => x.id !== id)
@@ -195,10 +198,27 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
         </div>
       </div>
 
+      {(() => {
+        const filtered = props.filter((p) => !propQuery || (p.name || "").toLowerCase().includes(propQuery.toLowerCase()) || (p.internalName || "").toLowerCase().includes(propQuery.toLowerCase()))
+        const pages = Math.max(1, Math.ceil(filtered.length / PROP_PAGE))
+        const pageC = Math.min(propPage, pages - 1)
+        const visible = filtered.slice(pageC * PROP_PAGE, pageC * PROP_PAGE + PROP_PAGE)
+        return (
       <div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Properties</p>
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Properties ({props.length})</p>
+          {props.length > PROP_PAGE && (
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input value={propQuery} onChange={(e) => { setPropQuery(e.target.value); setPropPage(0) }} placeholder="Search properties…"
+                className="pl-8 pr-2 h-8 w-52 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400" />
+            </div>
+          )}
+        </div>
         <div className="border border-slate-200 rounded-xl overflow-hidden bg-white divide-y divide-slate-100">
-          {props.map((p) => (
+          {visible.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-slate-400">No properties match “{propQuery}”.</p>
+          ) : visible.map((p) => (
             <div key={p.id} className="group flex items-center gap-2 px-3 py-2">
               <GripVertical className="h-3.5 w-3.5 text-slate-300 shrink-0" />
               <div className="flex-1 min-w-0">
@@ -212,10 +232,22 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
             </div>
           ))}
         </div>
-        <button onClick={() => setEditingProp("new")} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
-          <Plus className="h-3.5 w-3.5" /> Add property
-        </button>
+        <div className="flex items-center justify-between mt-2">
+          <button onClick={() => setEditingProp("new")} className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
+            <Plus className="h-3.5 w-3.5" /> Add property
+          </button>
+          {filtered.length > PROP_PAGE && (
+            <div className="flex items-center gap-1 text-xs text-slate-500">
+              <span>{pageC * PROP_PAGE + 1}–{Math.min(filtered.length, pageC * PROP_PAGE + PROP_PAGE)} of {filtered.length}</span>
+              <button disabled={pageC === 0} onClick={() => setPropPage(pageC - 1)} className="h-6 w-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+              <span>{pageC + 1} / {pages}</span>
+              <button disabled={pageC >= pages - 1} onClick={() => setPropPage(pageC + 1)} className="h-6 w-6 inline-flex items-center justify-center rounded-md hover:bg-slate-100 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          )}
+        </div>
       </div>
+        )
+      })()}
 
       {editingProp && (
         <PropertyEditor
@@ -223,7 +255,9 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
           editing={editingProp === "new" ? null : {
             id: editingProp.id, name: editingProp.name, internalName: editingProp.internalName, type: editingProp.type,
             required: editingProp.required, unique: editingProp.unique, description: editingProp.description,
-            defaultValue: editingProp.defaultValue, options: editingProp.options, optionLabels: editingProp.optionLabels, conditional: editingProp.conditional, visibilityRule: editingProp.visibilityRule,
+            defaultValue: editingProp.defaultValue, options: editingProp.options, optionLabels: editingProp.optionLabels,
+            optionColors: editingProp.optionColors, optionStyle: editingProp.optionStyle,
+            conditional: editingProp.conditional, visibilityRule: editingProp.visibilityRule,
             numberFormat: (editingProp as any).numberFormat,
           }}
           controllingProps={props.filter((p) => p.type === "DROPDOWN" && (editingProp === "new" || p.id !== editingProp.id)).map((p) => ({ id: p.id, name: p.name, options: p.options ?? [] }))}
