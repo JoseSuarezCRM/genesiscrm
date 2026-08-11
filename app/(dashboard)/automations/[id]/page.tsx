@@ -24,7 +24,7 @@ export default async function WorkflowEditorPage({ params }: Props) {
   })
   const customObjects = customObjectDefs.map((d: any) => ({
     key: d.key, singular: d.singular, plural: d.plural,
-    properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options ?? [], optionLabels: p.optionLabels ?? {} })),
+    properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, internalName: p.internalName ?? null, type: p.type, options: p.options ?? [], optionLabels: p.optionLabels ?? {} })),
   }))
 
   // Group custom properties by entity type so the editor can show the right

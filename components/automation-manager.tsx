@@ -1456,9 +1456,9 @@ function ActionConfigFields({
             </button>
           </div>
           {showVars && (
-            <div className="flex flex-wrap gap-1 mb-2">
-              {tokens.map(v => (
-                <span key={v} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
+            <div className="flex flex-wrap gap-1 mb-2 max-h-40 overflow-y-auto">
+              {(fieldTokens && fieldTokens.length ? fieldTokens.map(f => f.value) : tokens).map(v => (
+                <span key={v} title={`Insert ${v}`} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-slate-200"
                   onClick={() => set("subject", ((config.subject as string) || "") + v)}>{v}</span>
               ))}
             </div>
@@ -2423,12 +2423,17 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const customDefs = rawCustoms.map(customPropertyToDef)
   const objectActions = actionsForObject(objectKey)
   const objectTokens = tokensForObject(objectKey)
-  // Fields menu for message bodies: native tokens + every custom property of the
-  // object, addressed by its readable internal name, so newly-created properties
-  // are usable in workflow sends.
+  // Fields menu for message bodies + the "from a property" recipient list: native
+  // tokens + every property of the object, addressed by the SAME key the token
+  // resolver uses (internalName, else snake_case of the name). For a custom object
+  // the properties come from its definition; for built-ins, from customPropsByEntity.
+  const snakeTok = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase()
+  const customFieldTokens: PersonalizationToken[] = customObjectDef
+    ? (customObjectDef.properties ?? []).map(p => ({ label: p.name, value: `{${(p as any).internalName || snakeTok(p.name)}}` }))
+    : rawCustoms.map(c => ({ label: c.name, value: `{${c.internalName || snakeTok(c.name)}}` }))
   const objectFieldTokens: PersonalizationToken[] = [
     ...tokensFromStrings(objectTokens),
-    ...rawCustoms.map(c => ({ label: c.name, value: `{${c.internalName || c.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}}` })),
+    ...customFieldTokens,
   ]
 
   function handleObjectChange(key: string) {
