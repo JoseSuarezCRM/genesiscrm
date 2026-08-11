@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma"
 import { requireAccess } from "@/lib/auth-guard"
+import { auth } from "@/lib/auth"
+import { userCanLevel } from "@/lib/permissions"
 import { revalidatePath } from "next/cache"
 import { createRecordFor, delegateFor, isCustomObject } from "@/lib/automation-records"
 import { ensureAssociation, ensureAssociationDef } from "@/lib/object-associations"
@@ -49,6 +51,7 @@ export async function runImportBatch(
   config: ImportConfig,
   rows: Record<string, string>[],
   startIndex = 0,
+  runId?: string,
 ): Promise<ImportBatchResult> {
   const type = `CO:${objectKey}`
   let session
@@ -58,6 +61,10 @@ export async function runImportBatch(
     return { created: 0, updated: 0, skipped: 0, errors: [], error: "You don't have permission to import into this object." }
   }
   const uid = (session!.user as any).id
+
+  // Undo bookkeeping for this batch (only when part of a tracked run).
+  const changes: { runId: string; kind: string; recordId: string; before?: any }[] = []
+  const assocs: { runId: string; fromType: string; fromId: string; toType: string; toId: string }[] = []
 
   const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
   if (!def) return { created: 0, updated: 0, skipped: 0, errors: [], error: "Object not found." }
@@ -105,13 +112,19 @@ export async function runImportBatch(
       // Create or update the record (no workflow triggers).
       let recordId: string
       if (isUpdate) {
-        const merged = { ...(existing!.values ?? {}), ...coerced }
+        const prev = (existing!.values ?? {}) as Record<string, unknown>
+        // Snapshot the prior values of exactly the fields we're about to write.
+        const before: Record<string, unknown> = {}
+        for (const k of Object.keys(coerced)) before[k] = prev[k] ?? null
+        const merged = { ...prev, ...coerced }
         await (prisma as any).customObjectRecord.update({ where: { id: existing!.id }, data: { values: merged, updatedById: uid } })
         recordId = existing!.id
         result.updated++
+        if (runId) changes.push({ runId, kind: "update", recordId, before })
       } else {
         recordId = await createRecordFor(type, coerced, { ownerId: uid, createdById: uid })
         result.created++
+        if (runId) changes.push({ runId, kind: "create", recordId })
       }
 
       // Associations: link by the related record's id/Record ID in the same row.
@@ -121,7 +134,8 @@ export async function runImportBatch(
         const targetId = await resolveTargetId(targetType, raw, coDefCache)
         if (!targetId) { result.errors.push({ row: rowNum, message: `Couldn't find ${targetType} "${raw}" to associate` }); continue }
         await ensureAssociationDef(type, targetType)
-        await ensureAssociation(type, recordId, targetType, targetId)
+        const created = await ensureAssociation(type, recordId, targetType, targetId)
+        if (runId && created) assocs.push({ runId, fromType: type, fromId: recordId, toType: targetType, toId: targetId })
       }
     } catch (e) {
       result.errors.push({ row: rowNum, message: e instanceof Error ? e.message : String(e) })
@@ -129,6 +143,108 @@ export async function runImportBatch(
     }
   }
 
+  // Persist this batch's undo bookkeeping + roll up the run counts.
+  if (runId) {
+    if (changes.length) await (prisma as any).importRunChange.createMany({ data: changes }).catch(() => {})
+    if (assocs.length) await (prisma as any).importRunAssoc.createMany({ data: assocs }).catch(() => {})
+    await (prisma as any).importRun.update({ where: { id: runId }, data: { created: { increment: result.created }, updated: { increment: result.updated } } }).catch(() => {})
+  }
+
   revalidatePath(`/objects/${objectKey}`)
   return result
+}
+
+// ─── Import runs: history + undo ─────────────────────────────────────────────
+
+export interface ImportRunDTO {
+  id: string
+  status: string
+  created: number
+  updated: number
+  createdAt: string
+  createdByName: string | null
+}
+
+export async function startImportRun(objectKey: string): Promise<{ runId?: string; error?: string }> {
+  let session
+  try { session = await requireAccess(`CO:${objectKey}`, "EDIT") } catch { return { error: "You don't have permission to import into this object." } }
+  const run = await (prisma as any).importRun.create({ data: { objectKey, createdById: (session!.user as any).id ?? null } })
+  return { runId: run.id }
+}
+
+export async function listImportRuns(objectKey: string, limit = 10): Promise<ImportRunDTO[]> {
+  const session = await auth()
+  if (!session?.user || !userCanLevel(session.user as any, `CO:${objectKey}`, "VIEW")) return []
+  const runs = await (prisma as any).importRun.findMany({ where: { objectKey }, orderBy: { createdAt: "desc" }, take: Math.min(50, Math.max(1, limit)) })
+  const names = await resolveUserNames(runs.map((r: any) => r.createdById))
+  return runs.map((r: any) => ({
+    id: r.id, status: r.status, created: r.created, updated: r.updated,
+    createdAt: r.createdAt.toISOString(),
+    createdByName: r.createdById ? names[r.createdById] ?? null : null,
+  }))
+}
+
+async function resolveUserNames(ids: (string | null | undefined)[]): Promise<Record<string, string>> {
+  const unique = Array.from(new Set(ids.filter(Boolean) as string[]))
+  if (!unique.length) return {}
+  const users = await prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, name: true, email: true } })
+  return Object.fromEntries(users.map((u) => [u.id, u.name ?? u.email]))
+}
+
+// Reverse an import: delete created records, restore prior values on updated ones,
+// and remove associations the run added (pre-existing links are untouched).
+export async function undoImportRun(runId: string): Promise<{ ok?: boolean; deleted?: number; restored?: number; associationsRemoved?: number; error?: string }> {
+  const run = await (prisma as any).importRun.findUnique({ where: { id: runId } })
+  if (!run) return { error: "Import not found." }
+  try { await requireAccess(`CO:${run.objectKey}`, "EDIT") } catch { return { error: "You don't have permission to undo this import." } }
+  if (run.status === "undone") return { ok: true, deleted: 0, restored: 0, associationsRemoved: 0 }
+
+  const [changes, assocRows] = await Promise.all([
+    (prisma as any).importRunChange.findMany({ where: { runId } }),
+    (prisma as any).importRunAssoc.findMany({ where: { runId } }),
+  ])
+
+  // 1) Remove associations this run created (both orderings).
+  let associationsRemoved = 0
+  for (const a of assocRows as any[]) {
+    const res = await (prisma as any).objectAssociation.deleteMany({
+      where: { OR: [{ fromType: a.fromType, fromId: a.fromId, toType: a.toType, toId: a.toId }, { fromType: a.toType, fromId: a.toId, toType: a.fromType, toId: a.fromId }] },
+    }).catch(() => ({ count: 0 }))
+    associationsRemoved += res.count ?? 0
+  }
+
+  // 2) Restore prior values on updated records (only the fields the import wrote).
+  let restored = 0
+  const updates = (changes as any[]).filter((c) => c.kind === "update")
+  for (const c of updates) {
+    const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: c.recordId }, select: { values: true } }).catch(() => null)
+    if (!rec) continue
+    const merged = { ...((rec.values as any) ?? {}), ...((c.before as any) ?? {}) }
+    await (prisma as any).customObjectRecord.update({ where: { id: c.recordId }, data: { values: merged } }).catch(() => {})
+    restored++
+  }
+
+  // 3) Delete records this run created.
+  const createdIds = (changes as any[]).filter((c) => c.kind === "create").map((c) => c.recordId)
+  let deleted = 0
+  if (createdIds.length) {
+    const res = await (prisma as any).customObjectRecord.deleteMany({ where: { id: { in: createdIds } } }).catch(() => ({ count: 0 }))
+    deleted = res.count ?? 0
+    // Clear any leftover associations pointing at the deleted records.
+    await (prisma as any).objectAssociation.deleteMany({ where: { OR: [{ fromId: { in: createdIds } }, { toId: { in: createdIds } }] } }).catch(() => {})
+  }
+
+  await (prisma as any).importRun.update({ where: { id: runId }, data: { status: "undone", undoneAt: new Date() } }).catch(() => {})
+  revalidatePath(`/objects/${run.objectKey}`)
+  return { ok: true, deleted, restored, associationsRemoved }
+}
+
+export async function deleteImportRun(runId: string): Promise<{ ok?: boolean; error?: string }> {
+  const run = await (prisma as any).importRun.findUnique({ where: { id: runId } })
+  if (!run) return { ok: true }
+  try { await requireAccess(`CO:${run.objectKey}`, "EDIT") } catch { return { error: "You don't have permission." } }
+  await (prisma as any).importRunChange.deleteMany({ where: { runId } }).catch(() => {})
+  await (prisma as any).importRunAssoc.deleteMany({ where: { runId } }).catch(() => {})
+  await (prisma as any).importRun.delete({ where: { id: runId } }).catch(() => {})
+  return { ok: true }
 }

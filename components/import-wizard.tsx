@@ -1,12 +1,12 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react"
+import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle, ArrowRight, Undo2, History } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
 import { Button } from "@/components/ui/button"
 import { normalizeKey } from "@/lib/import-parse"
-import { runImportBatch } from "@/app/actions/import-records"
+import { runImportBatch, startImportRun, listImportRuns, undoImportRun, type ImportRunDTO } from "@/app/actions/import-records"
 import { RECORD_ID_TARGET, type ImportMode } from "@/lib/import-types"
 
 export interface ImportProperty { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }
@@ -33,9 +33,24 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [done, setDone] = useState(false)
+  const [runs, setRuns] = useState<ImportRunDTO[]>([])
+  const [undoingId, setUndoingId] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const object = objects.find((o) => o.key === objectKey)!
+
+  // Load the recent imports for the selected object (for the undo history).
+  const refreshRuns = (key = objectKey) => { if (key) listImportRuns(key).then(setRuns).catch(() => {}) }
+  useEffect(() => { refreshRuns(objectKey) }, [objectKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function undo(id: string) {
+    setUndoingId(id)
+    try {
+      const r = await undoImportRun(id)
+      if (r.error) setError(r.error)
+      refreshRuns(); router.refresh()
+    } finally { setUndoingId(null) }
+  }
 
   // Auto-suggest a mapping by matching each header to a property name / Record ID.
   function suggestMap(headers: string[], obj: ImportObject): Record<string, string> {
@@ -90,16 +105,20 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
     const acc: Progress = { created: 0, updated: 0, skipped: 0, errors: [], done: 0 }
     setProgress({ ...acc })
     try {
+      // A tracked run so this import can be undone later.
+      const started = await startImportRun(objectKey)
+      if (started.error || !started.runId) { setError(started.error ?? "Couldn't start the import."); return }
+      const runId = started.runId
       for (let i = 0; i < parsed.rows.length; i += BATCH) {
         const slice = parsed.rows.slice(i, i + BATCH)
-        const r = await runImportBatch(objectKey, config, slice, i)
+        const r = await runImportBatch(objectKey, config, slice, i, runId)
         if (r.error) { setError(r.error); break }
         acc.created += r.created; acc.updated += r.updated; acc.skipped += r.skipped
         acc.errors.push(...r.errors); acc.done += slice.length
         setProgress({ ...acc, errors: acc.errors.slice(0, 200) })
       }
       setDone(true)
-      router.refresh()
+      refreshRuns(); router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed. Click Import to resume the remaining rows.")
     } finally {
@@ -163,6 +182,9 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
               </tbody>
             </table>
           </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Tip: to link a record to another object, set that column to <span className="font-medium">Associate → …</span> — it should hold the related record&apos;s <span className="font-medium">id or Record ID</span>.
+          </p>
         </div>
       )}
 
@@ -210,6 +232,33 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Recent imports — undo (delete created, restore updated, remove links) */}
+      {runs.length > 0 && (
+        <div className={card}>
+          <p className={stepLabel + " flex items-center gap-1.5"}><History className="h-3.5 w-3.5" /> Recent imports</p>
+          <div className="mt-3 divide-y divide-zinc-100">
+            {runs.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-sm">
+                <span className="text-slate-500 w-40 shrink-0">{new Date(r.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                <span className="text-slate-600"><span className="font-semibold">{r.created}</span> created · <span className="font-semibold">{r.updated}</span> updated</span>
+                {r.createdByName && <span className="text-slate-400">by {r.createdByName}</span>}
+                <div className="ml-auto">
+                  {r.status === "undone" ? (
+                    <span className="text-xs text-slate-400">Undone</span>
+                  ) : (
+                    <button onClick={() => undo(r.id)} disabled={undoingId === r.id}
+                      className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                      {undoingId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} Undo
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">Undo deletes the records this import created, restores prior values on the ones it updated, and removes the links it added.</p>
         </div>
       )}
     </div>
