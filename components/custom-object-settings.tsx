@@ -150,9 +150,12 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
   }
   // Persist a created/edited property from the full editor into the def.
   async function saveProp(draft: PropertyDraft, existing: CustomObjectProperty | null) {
+    // Type is fixed after creation, except DROPDOWN ↔ MULTI_SELECT (shared options).
+    const optType = (t?: string) => t === "DROPDOWN" || t === "MULTI_SELECT"
+    const nextType = existing && optType(existing.type) && optType(draft.type) ? draft.type : (existing?.type ?? draft.type)
     const prop: CustomObjectProperty = {
       id: existing?.id ?? newPropId(),
-      name: draft.name, type: (existing?.type ?? draft.type) as CustomPropType,
+      name: draft.name, type: nextType as CustomPropType,
       options: draft.options, optionLabels: draft.optionLabels, optionColors: draft.optionColors, optionStyle: draft.optionStyle, required: draft.required, primary: existing?.primary,
       internalName: draft.internalName, description: draft.description,
       unique: draft.unique, defaultValue: draft.defaultValue, conditional: draft.conditional,
