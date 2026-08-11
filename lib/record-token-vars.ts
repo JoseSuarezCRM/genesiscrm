@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 import { buildReferralVars, REFERRAL_TOKEN_SELECT } from "@/lib/message-tokens"
 import { optionLabelFor } from "@/lib/custom-options"
+import { formatNumber } from "@/lib/number-format"
 
 // snake_case a field key so it matches the {single_brace} token resolver.
 export function snakeToken(key: string): string {
@@ -37,11 +38,12 @@ function fmtDateTimeToken(v: any): string {
 // UPPER types (DATE/DATE_TIME/DROPDOWN/MULTI_SELECT) and native lower types
 // (date/datetime/select/select_or_other). DATE renders date-only so a stored ISO
 // (e.g. "2026-08-19T12:00:00.000Z") shows as "Aug 19, 2026", not the raw timestamp.
-function tokenValueForProp(type: string | undefined, raw: any, optionLabels?: any): string {
+function tokenValueForProp(type: string | undefined, raw: any, optionLabels?: any, numberFormat?: string | null): string {
   const t = (type ?? "").toUpperCase()
   if (t === "DATE") return fmtDate(raw)
   if (t === "DATE_TIME" || t === "DATETIME") return fmtDateTimeToken(raw)
   if (t === "DROPDOWN" || t === "MULTI_SELECT" || t === "SELECT" || t === "SELECT_OR_OTHER") return optionLabelFor(raw, optionLabels)
+  if (t === "NUMBER") return raw == null || raw === "" ? "" : formatNumber(raw, numberFormat as any)
   return tokenValueForDisplay(raw)
 }
 
@@ -126,7 +128,7 @@ export async function buildRecordTokenVars(recordType: string, recordId: string)
     const values: Record<string, any> = (rec?.values as any) ?? {}
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: recordType.slice(3) }, select: { properties: true } }).catch(() => null)
     for (const p of ((def?.properties as any[]) ?? [])) {
-      const v = tokenValueForProp(p.type, values[p.id], p.optionLabels)
+      const v = tokenValueForProp(p.type, values[p.id], p.optionLabels, p.numberFormat)
       vars[`cp_${p.id}`] = v
       vars[p.internalName || snakeToken(p.name)] = v
     }
@@ -141,11 +143,11 @@ export async function buildRecordTokenVars(recordType: string, recordId: string)
     ])
     if (rec) {
       for (const f of (RECORD_FIELDS[recordType] ?? [])) {
-        vars[snakeToken(f.key)] = tokenValueForProp(f.type, (rec as any)[f.key], (f as any).optionLabels)
+        vars[snakeToken(f.key)] = tokenValueForProp(f.type, (rec as any)[f.key], (f as any).optionLabels, (f as any).numberFormat)
       }
       const bag: Record<string, any> = (rec.customProperties as any) ?? {}
       for (const d of defs) {
-        const v = tokenValueForProp(d.type as any, bag[d.id], (d as any).optionLabels)
+        const v = tokenValueForProp(d.type as any, bag[d.id], (d as any).optionLabels, (d as any).numberFormat)
         vars[`cp_${d.id}`] = v                                   // back-compat token
         vars[(d as any).internalName || snakeToken(d.name)] = v  // readable token
       }
