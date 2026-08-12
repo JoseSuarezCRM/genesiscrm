@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useState, useTransition } from "react"
 import { cn } from "@/lib/utils"
 
@@ -688,8 +689,8 @@ function LocationsTab({ locations, staff }: { locations: Location[]; staff: Staf
     }
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Delete this location? All schedule entries for it will also be removed.")) return
+  async function handleDelete(id: string) {
+    if (!(await confirmDialog("Delete this location? All schedule entries for it will also be removed."))) return
     startTransition(async () => { await deleteLocation(id) })
   }
 
@@ -724,8 +725,8 @@ export default function StaffManager({ staff, locations }: { staff: StaffMember[
   const [isPending, startTransition] = useTransition()
   const [filterRole, setFilterRole] = useState<StaffRole | "ALL">("ALL")
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Deactivate ${name}?`)) return
+  async function handleDelete(id: string, name: string) {
+    if (!(await confirmDialog(`Deactivate ${name}?`))) return
     startTransition(async () => { await deleteStaffMember(id) })
   }
 

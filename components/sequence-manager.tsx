@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useState, useTransition, useEffect } from "react"
 import { getWorkflowSenderOptions } from "@/app/actions/account"
 import {
@@ -455,8 +456,8 @@ export default function SequenceManager({ sequences: initial, practices }: Props
     })
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Delete this sequence? Active enrollments will be cancelled.")) return
+  async function handleDelete(id: string) {
+    if (!(await confirmDialog("Delete this sequence? Active enrollments will be cancelled."))) return
     startTransition(async () => {
       const res = await deleteSequence(id)
       if (!res.success) { showFlash(res.error ?? "Failed.", false); return }

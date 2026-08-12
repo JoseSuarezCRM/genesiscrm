@@ -6,6 +6,7 @@ import SessionWatcher from "@/components/session-watcher"
 import TopToolbar from "@/components/top-toolbar"
 import ToastHost from "@/components/toast"
 import NavHistoryTracker from "@/components/nav-history-tracker"
+import { ConfirmDialogHost } from "@/components/ui/confirm-dialog"
 
 export default async function DashboardLayout({
   children,
@@ -48,6 +49,7 @@ export default async function DashboardLayout({
       </div>
       <SessionWatcher />
       <ToastHost />
+      <ConfirmDialogHost />
       <NavHistoryTracker />
     </div>
   )

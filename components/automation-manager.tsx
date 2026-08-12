@@ -15,7 +15,8 @@ import {
 } from "@/app/actions/automations"
 import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal, CornerUpLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
+import DatePicker from "@/components/ui/date-picker"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -1384,9 +1385,8 @@ function ActionConfigFields({
             </div>
           )}
           {schedule.mode === "fixed" && (
-            <input type="datetime-local" value={schedule.datetime ? clinicDatetimeLocalValue(new Date(schedule.datetime)) : ""}
-              onChange={e => setSchedule({ datetime: clinicDatetimeLocalToISO(e.target.value) })}
-              className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 bg-white" />
+            <DatePicker withTime autoOpen={false} value={schedule.datetime ?? ""}
+              onCommit={v => setSchedule({ datetime: v || null })} onCancel={() => {}} />
           )}
         </div>
 
@@ -1563,10 +1563,8 @@ function ActionConfigFields({
             <option value="field">On a date from the record</option>
           </StyledSelect>
           {eventMode === "fixed" && (
-            <input type="datetime-local"
-              value={config.eventDatetime ? clinicDatetimeLocalValue(new Date(config.eventDatetime as string)) : ""}
-              onChange={e => set("eventDatetime", clinicDatetimeLocalToISO(e.target.value))}
-              className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 bg-white" />
+            <DatePicker withTime autoOpen={false} value={(config.eventDatetime as string) ?? ""}
+              onCommit={v => set("eventDatetime", v || null)} onCancel={() => {}} />
           )}
           {eventMode === "field" && (
             <div className="space-y-2">
@@ -2185,9 +2183,8 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 </div>
               ) : draft.mode === "calendar" ? (
                 <div className="space-y-1">
-                  <input type="datetime-local" value={draft.datetime ? clinicDatetimeLocalValue(new Date(draft.datetime as string)) : ""}
-                    onChange={e => setDraft({ ...draft, datetime: clinicDatetimeLocalToISO(e.target.value) })}
-                    className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                  <DatePicker withTime autoOpen={false} value={draft.datetime ?? ""}
+                    onCommit={v => setDraft({ ...draft, datetime: v || null })} onCancel={() => {}} />
                   <p className="text-xs text-slate-400">The workflow resumes at this Central Time date and time (e.g. a fixed launch date).</p>
                 </div>
               ) : draft.mode === "property" ? (
@@ -2260,9 +2257,8 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                   {dateProps.length === 0 && <p className="text-xs text-amber-600">This object has no date properties to wait on.</p>}
                 </div>
               ) : (
-                <input type="datetime-local" value={draft.datetime ? clinicDatetimeLocalValue(new Date(draft.datetime as string)) : ""}
-                  onChange={e => setDraft({ ...draft, datetime: clinicDatetimeLocalToISO(e.target.value) })}
-                  className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
+                <DatePicker withTime autoOpen={false} value={draft.datetime ?? ""}
+                  onCommit={v => setDraft({ ...draft, datetime: v || null })} onCancel={() => {}} />
               )}
             </>
           ) : draft.kind === "branch" ? (
@@ -2449,7 +2445,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
     setTriggerConfig({ ...emptyTriggerConfig(t), ...(isGenericTrigger(t) ? { objectType: objectKey } : {}) })
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!name.trim()) { setError("Workflow name is required"); return }
     if (!graph.rootId) { setError("Add at least one action to the workflow"); return }
     setError("")
@@ -2457,10 +2453,11 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
     const effectiveActionType = (firstNode && firstNode.kind === "action" ? firstNode.actionType : "CREATE_TASK") as AutomationAction
     // Confirm before backfilling existing records — it runs the whole workflow.
     if (enrollExisting && matchCount && matchCount > 0) {
-      const ok = window.confirm(
-        `Run this workflow now on ${matchCount.toLocaleString()} existing ${objectDef.label.toLowerCase()} record${matchCount === 1 ? "" : "s"}?\n\n` +
-        `Every action runs on each — including any emails or SMS. This can’t be undone.`
-      )
+      const ok = await confirmDialog({
+        title: "Run on existing records?",
+        description: `Run this workflow now on ${matchCount.toLocaleString()} existing ${objectDef.label.toLowerCase()} record${matchCount === 1 ? "" : "s"}?\n\nEvery action runs on each — including any emails or SMS. This can’t be undone.`,
+        confirmLabel: "Run workflow",
+      })
       if (!ok) return
     }
     const cfg = { ...triggerConfig, objectType: objectKey }
@@ -2671,8 +2668,8 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
     })
   }
 
-  function handleDelete() {
-    if (!confirm(`Delete workflow "${auto.name}"? This cannot be undone.`)) return
+  async function handleDelete() {
+    if (!(await confirmDialog(`Delete workflow "${auto.name}"? This cannot be undone.`))) return
     startTransition(async () => {
       await deleteAutomation(auto.id)
       router.refresh()

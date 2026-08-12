@@ -75,9 +75,11 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
   // Emit the storage ISO. Date-only → UTC midnight of the picked day. Datetime →
   // interpret the picked day + time as CLINIC (Chicago) wall time, stored as UTC.
   function emit(d: Date) {
-    if (!withTime) { onCommit(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString()); return }
-    onCommit(clinicDatetimeLocalToISO(`${toDateStr(d)}T${timeRef.current || "00:00"}`) ?? "")
+    if (!withTime) onCommit(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString())
+    else onCommit(clinicDatetimeLocalToISO(`${toDateStr(d)}T${timeRef.current || "00:00"}`) ?? "")
+    setOpen(false) // close our own panel (matters when mounted persistently, e.g. a form field)
   }
+  function cancel() { onCancel(); setOpen(false) }
 
   useEffect(() => { place() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -88,9 +90,9 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
       // Click-away: datetime commits the current selection (like the other inline
       // editors); date-only already committed on the day click, so just close.
       if (withTime && selRef.current) emit(selRef.current)
-      else onCancel()
+      else cancel()
     }
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel() }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") cancel() }
     function onMove() { place() }
     document.addEventListener("mousedown", onDown)
     document.addEventListener("keydown", onKey)
@@ -203,7 +205,7 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
 
           {/* Footer */}
           <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-            <button type="button" onClick={() => onCommit("")} className="text-xs font-medium text-slate-500 hover:text-slate-700">Clear</button>
+            <button type="button" onClick={() => { onCommit(""); setSelected(null); setOpen(false) }} className="text-xs font-medium text-slate-500 hover:text-slate-700">Clear</button>
             <div className="flex items-center gap-3">
               <button type="button" onClick={goToday} className="text-xs font-medium text-blue-600 hover:text-blue-700">Today</button>
               {withTime && <button type="button" onClick={() => selected && emit(selected)} disabled={!selected} className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40">Apply</button>}

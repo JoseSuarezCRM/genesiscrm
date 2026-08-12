@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Plus, Trash2, Loader2, ArrowLeftRight } from "lucide-react"
 import { createAssociationDef, deleteAssociationDef } from "@/app/actions/associations"
 import StyledSelect from "@/components/ui/styled-select"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 
 interface Def { id: string; typeA: string; typeB: string; label: string | null; labelA: string; labelB: string }
 interface ObjType { key: string; label: string }
@@ -75,7 +76,7 @@ export default function DataModelSettings({ defs, types }: { defs: Def[]; types:
                 <span className="font-medium">{d.labelB}</span>
                 {d.label && <span className="text-xs text-slate-400">({d.label})</span>}
               </div>
-              <button onClick={() => { if (confirm("Remove this relationship?")) startTransition(async () => { await deleteAssociationDef(d.id); router.refresh() }) }}
+              <button onClick={async () => { if (await confirmDialog("Remove this relationship?")) startTransition(async () => { await deleteAssociationDef(d.id); router.refresh() }) }}
                 className="h-8 w-8 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
           ))}

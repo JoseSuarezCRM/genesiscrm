@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, Trash2, Loader2, Check, Box, GripVertical, ExternalLink, Pencil, Search, ChevronLeft, ChevronRight } from "lucide-react"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import {
   createCustomObject, updateCustomObject, saveCustomObjectProperties, saveCustomObjectCards, deleteCustomObject,
   type CustomObjectDefLite, type CustomObjectProperty, type CustomObjectCard, type CustomPropType,
@@ -307,7 +308,7 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
         </button>
         {saved && <span className="text-xs text-green-600">Saved</span>}
         <button
-          onClick={() => { if (confirm(`Delete "${object.plural}" and all its records? This cannot be undone.`)) startTransition(async () => { await deleteCustomObject(object.id); router.refresh() }) }}
+          onClick={async () => { if (await confirmDialog(`Delete "${object.plural}" and all its records? This cannot be undone.`)) startTransition(async () => { await deleteCustomObject(object.id); router.refresh() }) }}
           className="ml-auto inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
           <Trash2 className="h-3.5 w-3.5" /> Delete object
         </button>

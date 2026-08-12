@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Pencil, Trash2, Plus, Loader2, Check, MapPin, User, ExternalLink, ChevronRight, ChevronDown } from "lucide-react"
@@ -162,8 +163,8 @@ export default function PracticeDetailClient({ practice, referrals, isAdmin, cus
     })
   }
 
-  function deleteLoc(id: string) {
-    if (!confirm("Delete this location?")) return
+  async function deleteLoc(id: string) {
+    if (!(await confirmDialog("Delete this location?"))) return
     startTransition(async () => {
       const r = await deleteLocation(id) as any
       if (r?.error) alert(r.error); else refresh()
@@ -188,8 +189,8 @@ export default function PracticeDetailClient({ practice, referrals, isAdmin, cus
     })
   }
 
-  function deleteDoc(id: string) {
-    if (!confirm("Delete this provider?")) return
+  async function deleteDoc(id: string) {
+    if (!(await confirmDialog("Delete this provider?"))) return
     startTransition(async () => {
       const r = await deleteDoctor(id) as any
       if (r?.error) alert(r.error); else refresh()

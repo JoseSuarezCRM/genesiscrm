@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { createActivityView, updateActivityView, deleteActivityView } from "@/app/actions/activity-views"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
@@ -1194,9 +1195,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
-  function bulkDelete() {
+  async function bulkDelete() {
     const ids = Array.from(selectedIds)
-    if (!ids.length || !confirm(`Delete ${ids.length} activit${ids.length === 1 ? "y" : "ies"}? This cannot be undone.`)) return
+    if (!ids.length || !(await confirmDialog(`Delete ${ids.length} activit${ids.length === 1 ? "y" : "ies"}? This cannot be undone.`))) return
     startTransition(async () => {
       for (const id of ids) await deleteActivity(id)
       setSelectedIds(new Set())
