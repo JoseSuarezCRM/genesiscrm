@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { MultiSelectField } from "@/components/record-property-cards"
 import { useState, useTransition, useEffect } from "react"
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -172,6 +173,24 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
             {checked ? "Yes" : "No"}
           </span>
         </div>
+      </div>
+    )
+  }
+
+  if (editing && property.type === "MULTI_SELECT") {
+    // Same compact popover as the shared record cards — commits on Done/click-away.
+    return (
+      <div className="py-2.5 border-b border-slate-100 last:border-0 space-y-1">
+        <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide">
+          {property.name}
+        </span>
+        <MultiSelectField
+          options={property.options}
+          optionLabels={property.optionLabels ?? undefined}
+          value={property.value}
+          onCommit={(v) => startTransition(async () => { await saveCustomPropertyValue(entityType, entityId, property.id, v); setEditing(false); setEditValue(null) })}
+          onCancel={() => { setEditing(false); setEditValue(null) }}
+        />
       </div>
     )
   }

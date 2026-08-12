@@ -3,6 +3,7 @@
 import type { CPEntity } from "@/lib/custom-property-entities"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { MultiSelectField } from "@/components/record-property-cards"
 import { useState, useTransition } from "react"
 import { Edit2, Check, X } from "lucide-react"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
@@ -210,6 +211,16 @@ export default function CustomPropertiesDisplay({
                 </label>
 
                 {editingId === prop.id ? (
+                  prop.type === "MULTI_SELECT" ? (
+                    // Same compact popover as the shared record cards — commits on Done/click-away.
+                    <MultiSelectField
+                      options={prop.options}
+                      optionLabels={prop.optionLabels ?? undefined}
+                      value={prop.value}
+                      onCommit={(v) => startTransition(async () => { await saveCustomPropertyValue(entityType, entityId, prop.id, v); setEditingId(null) })}
+                      onCancel={handleCancel}
+                    />
+                  ) : (
                   <div className="space-y-2">
                     {renderInput(prop)}
                     <div className="flex gap-2">
@@ -229,6 +240,7 @@ export default function CustomPropertiesDisplay({
                       </button>
                     </div>
                   </div>
+                  )
                 ) : (
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-slate-700">{renderValue(prop)}</div>

@@ -64,7 +64,7 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): Re
 // MULTI_SELECT editor: a compact trigger (like the single-select StyledSelect)
 // that opens a body-portaled panel — search header + checkbox list + footer — so
 // it never stretches the card. Commits the array on "Done" or click-away; Escape cancels.
-function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: {
+export function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: {
   options: string[]
   optionLabels?: Record<string, string>
   value: any
