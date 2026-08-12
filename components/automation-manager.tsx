@@ -1384,8 +1384,8 @@ function ActionConfigFields({
             </div>
           )}
           {schedule.mode === "fixed" && (
-            <input type="datetime-local" value={schedule.datetime ? schedule.datetime.slice(0, 16) : ""}
-              onChange={e => setSchedule({ datetime: e.target.value ? new Date(e.target.value).toISOString() : null })}
+            <input type="datetime-local" value={schedule.datetime ? clinicDatetimeLocalValue(new Date(schedule.datetime)) : ""}
+              onChange={e => setSchedule({ datetime: clinicDatetimeLocalToISO(e.target.value) })}
               className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400 bg-white" />
           )}
         </div>
@@ -2185,10 +2185,10 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 </div>
               ) : draft.mode === "calendar" ? (
                 <div className="space-y-1">
-                  <input type="datetime-local" value={draft.datetime ? draft.datetime.slice(0, 16) : ""}
-                    onChange={e => setDraft({ ...draft, datetime: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  <input type="datetime-local" value={draft.datetime ? clinicDatetimeLocalValue(new Date(draft.datetime as string)) : ""}
+                    onChange={e => setDraft({ ...draft, datetime: clinicDatetimeLocalToISO(e.target.value) })}
                     className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
-                  <p className="text-xs text-slate-400">The workflow resumes at this date and time (e.g. a fixed launch date).</p>
+                  <p className="text-xs text-slate-400">The workflow resumes at this Central Time date and time (e.g. a fixed launch date).</p>
                 </div>
               ) : draft.mode === "property" ? (
                 <div className="space-y-2">
@@ -2260,8 +2260,8 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                   {dateProps.length === 0 && <p className="text-xs text-amber-600">This object has no date properties to wait on.</p>}
                 </div>
               ) : (
-                <input type="datetime-local" value={draft.datetime ? draft.datetime.slice(0, 16) : ""}
-                  onChange={e => setDraft({ ...draft, datetime: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                <input type="datetime-local" value={draft.datetime ? clinicDatetimeLocalValue(new Date(draft.datetime as string)) : ""}
+                  onChange={e => setDraft({ ...draft, datetime: clinicDatetimeLocalToISO(e.target.value) })}
                   className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-400" />
               )}
             </>
