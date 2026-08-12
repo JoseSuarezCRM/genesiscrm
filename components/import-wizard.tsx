@@ -6,6 +6,7 @@ import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle, ArrowRig
 import StyledSelect from "@/components/ui/styled-select"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import { normalizeKey } from "@/lib/import-parse"
 import { runImportBatch, startImportRun, listImportRuns, undoImportRun, createImportProperty, type ImportRunDTO } from "@/app/actions/import-records"
 import { RECORD_ID_TARGET, type ImportMode } from "@/lib/import-types"
@@ -49,7 +50,17 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
   const [newPropName, setNewPropName] = useState("")
   const [newPropType, setNewPropType] = useState("TEXT")
   const [creatingProp, setCreatingProp] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragging(false)
+    const f = e.dataTransfer.files?.[0]
+    if (!f) return
+    const ext = f.name.split(".").pop()?.toLowerCase()
+    if (!["csv", "xlsx", "xls"].includes(ext ?? "")) { setError("Only .csv, .xlsx or .xls files are supported."); return }
+    onFile(f)
+  }
 
   const baseObject = objects.find((o) => o.key === objectKey)!
   const object = { ...baseObject, properties: [...baseObject.properties, ...createdProps] }
@@ -177,17 +188,30 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
       {/* Step 1 — object + file */}
       <div className={card}>
         <p className={stepLabel}>1 · Object &amp; file</p>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-sm text-slate-600">Import into
             <StyledSelect value={objectKey} onChange={(e) => { setObjectKey(e.target.value); if (parsed) setMap(suggestMap(parsed.headers, objects.find(o => o.key === e.target.value)!)) }} className="mt-1 min-w-[200px] h-9 border border-slate-200 rounded-lg bg-white">
               {objects.map((o) => <option key={o.key} value={o.key}>{o.plural}</option>)}
             </StyledSelect>
           </label>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = "" }} />
-          <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={parsing} className="mt-5">
-            {parsing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />} Choose file
-          </Button>
-          {fileName && <span className="mt-5 inline-flex items-center gap-1.5 text-sm text-slate-500"><FileSpreadsheet className="h-4 w-4" /> {fileName}{parsed ? ` · ${parsed.rows.length} rows` : ""}</span>}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            onClick={() => fileRef.current?.click()}
+            className={cn("flex-1 min-w-[280px] cursor-pointer rounded-lg border-2 border-dashed px-4 py-2.5 flex items-center gap-3 transition-colors",
+              dragging ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:border-slate-300")}
+          >
+            {parsing ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" /> : <Upload className="h-4 w-4 shrink-0 text-slate-400" />}
+            <span className="text-sm truncate">
+              {fileName ? (
+                <span className="inline-flex items-center gap-1.5 text-slate-600"><FileSpreadsheet className="h-4 w-4 shrink-0" /> {fileName}{parsed ? ` · ${parsed.rows.length} rows` : ""}</span>
+              ) : (
+                <span className="text-slate-500"><span className="font-medium text-blue-600">Choose a file</span> or drag &amp; drop — .csv, .xlsx, .xls</span>
+              )}
+            </span>
+          </div>
         </div>
         {error && <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
       </div>
