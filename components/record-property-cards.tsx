@@ -16,6 +16,7 @@ import PhoneInput from "@/components/phone-input"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import { OptionValue } from "@/components/option-value"
 import StyledSelect from "@/components/ui/styled-select"
+import DatePicker from "@/components/ui/date-picker"
 import { formatNumber } from "@/lib/number-format"
 import { cn } from "@/lib/utils"
 
@@ -187,14 +188,6 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
   )
 }
 
-// ISO → the value a <input type="datetime-local"> expects (local wall time).
-function isoToLocalInput(iso: any): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ""
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 // One property row — label on top, value underneath (matching Referrals). Click
 // the value to edit it in place; the owner is a dropdown; audit fields are read-only.
 // Exported so the "View all properties" panel edits fields the same way.
@@ -325,10 +318,12 @@ export function FieldRow({ f, value, values, recordId, entityType, canEdit, user
           onKeyDown={(e) => { if (e.key === "Escape") cancelEdit() }} className={input + " resize-none"} autoFocus />
       ) : f.type === "phone" ? (
         <PhoneInput value={String(draft ?? "")} onChange={setDraft} onCommit={(v) => commit(v)} />
+      ) : f.type === "date" || f.type === "datetime" ? (
+        <DatePicker value={draft} withTime={f.type === "datetime"} onCommit={commit} onCancel={cancelEdit} />
       ) : (
         <input
-          type={f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "datetime" ? "datetime-local" : "text"}
-          value={f.type === "datetime" && draft ? isoToLocalInput(draft) : String(draft ?? "")}
+          type={f.type === "number" ? "number" : "text"}
+          value={String(draft ?? "")}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => commit(draft)}
           onKeyDown={onKey}

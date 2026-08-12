@@ -3,6 +3,7 @@
 import type { CPEntity } from "@/lib/custom-property-entities"
 
 import StyledSelect from "@/components/ui/styled-select"
+import DatePicker from "@/components/ui/date-picker"
 import { MultiSelectField } from "@/components/record-property-cards"
 import { useState, useTransition } from "react"
 import { Edit2, Check, X } from "lucide-react"
@@ -211,13 +212,24 @@ export default function CustomPropertiesDisplay({
                 </label>
 
                 {editingId === prop.id ? (
+                  // Self-contained popovers (multi-select, date) match the shared record
+                  // cards and commit on their own — no Save row.
                   prop.type === "MULTI_SELECT" ? (
-                    // Same compact popover as the shared record cards — commits on Done/click-away.
                     <MultiSelectField
                       options={prop.options}
                       optionLabels={prop.optionLabels ?? undefined}
                       value={prop.value}
                       onCommit={(v) => startTransition(async () => { await saveCustomPropertyValue(entityType, entityId, prop.id, v); setEditingId(null) })}
+                      onCancel={handleCancel}
+                    />
+                  ) : prop.type === "DATE" || prop.type === "DATE_TIME" ? (
+                    <DatePicker
+                      value={prop.value}
+                      withTime={prop.type === "DATE_TIME"}
+                      onCommit={(v) => startTransition(async () => {
+                        await saveCustomPropertyValue(entityType, entityId, prop.id, v ? new Date(v).toISOString() : "")
+                        setEditingId(null)
+                      })}
                       onCancel={handleCancel}
                     />
                   ) : (
