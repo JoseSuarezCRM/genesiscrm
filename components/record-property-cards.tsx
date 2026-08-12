@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
-import { Settings, Plus, Loader2, GripVertical, Search } from "lucide-react"
+import { Settings, Plus, Loader2, GripVertical, Search, ChevronDown, Check } from "lucide-react"
 import { showToast } from "@/components/toast"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
@@ -60,8 +61,9 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): Re
   return String(v)
 }
 
-// Inline checkbox editor for MULTI_SELECT fields (multiple values). Commits the
-// array on "Done" or on click-away; cancels on Escape.
+// MULTI_SELECT editor: a compact trigger (like the single-select StyledSelect)
+// that opens a body-portaled panel — search header + checkbox list + footer — so
+// it never stretches the card. Commits the array on "Done" or click-away; Escape cancels.
 function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: {
   options: string[]
   optionLabels?: Record<string, string>
@@ -72,44 +74,116 @@ function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: 
   const initial = Array.isArray(value) ? value.map(String) : (value != null && value !== "" ? [String(value)] : [])
   const [sel, setSel] = useState<string[]>(initial)
   const [q, setQ] = useState("")
+  const [open, setOpen] = useState(true) // edit mode: open immediately, like StyledSelect autoOpen
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, width: 0, maxHeight: 288 })
   const selRef = useRef(sel); selRef.current = sel
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  function place() {
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (!r) return
+    const below = window.innerHeight - r.bottom
+    const above = r.top
+    const openUp = below < 260 && above > below
+    setPos(openUp
+      ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 4, maxHeight: Math.min(320, above - 12) }
+      : { left: r.left, width: r.width, top: r.bottom + 4, maxHeight: Math.min(320, below - 12) })
+  }
+
+  // Open on mount (one-click inline editing), then keep positioned on scroll/resize.
+  useEffect(() => { place() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    function onDown(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onCommit(selRef.current) }
+    if (!open) return
+    setQ("")
+    requestAnimationFrame(() => searchRef.current?.focus())
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node
+      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      onCommit(selRef.current) // click-away commits (matches the old behaviour)
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel() }
+    function onMove() { place() }
     document.addEventListener("mousedown", onDown)
-    return () => document.removeEventListener("mousedown", onDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    document.addEventListener("keydown", onKey)
+    window.addEventListener("resize", onMove)
+    window.addEventListener("scroll", onMove, true)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+      window.removeEventListener("resize", onMove)
+      window.removeEventListener("scroll", onMove, true)
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggle = (o: string) => setSel((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]))
   const query = q.trim().toLowerCase()
   const shown = query ? options.filter((o) => `${optionLabels?.[o] ?? o} ${o}`.toLowerCase().includes(query)) : options
+  const showSearch = options.length > 8
+  const triggerLabel = sel.length ? sel.map((o) => optionLabels?.[o] ?? o).join(", ") : "Select…"
+
   return (
-    <div ref={ref} className="border border-slate-200 rounded-lg bg-white shadow-sm flex flex-col" onKeyDown={(e) => { if (e.key === "Escape") onCancel() }}>
-      {options.length > 8 && (
-        <div className="shrink-0 p-1.5 border-b border-slate-100">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
-              className="w-full h-7 pl-7 pr-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-zinc-400" />
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => { if (!open) place(); setOpen((o) => !o) }}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 border border-slate-200 rounded-md bg-white text-sm text-left hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <span className={cn("flex-1 truncate", sel.length ? "text-slate-800" : "text-slate-400")}>{triggerLabel}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          data-select-menu-open=""
+          onPointerDown={(e) => e.stopPropagation()}
+          className="fixed z-[999] bg-white border border-slate-200 rounded-md shadow-lg flex flex-col"
+          style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight, pointerEvents: "auto" }}
+        >
+          {showSearch && (
+            <div className="shrink-0 bg-white px-2 pt-2 pb-1.5 border-b border-slate-100 rounded-t-md">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
+                  className="w-full h-8 pl-7 pr-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-zinc-400" />
+              </div>
+            </div>
+          )}
+          <div className="overflow-y-auto py-1 min-h-0">
+            {shown.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-slate-400">{options.length === 0 ? "No options" : "No matches"}</p>
+            ) : shown.map((o) => {
+              const isSelected = sel.includes(o)
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => toggle(o)}
+                  className={cn(
+                    "w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 transition-colors",
+                    isSelected ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-800"
+                  )}
+                >
+                  <span className="truncate">{optionLabels?.[o] ?? o}</span>
+                  {isSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
+                </button>
+              )
+            })}
           </div>
-        </div>
+          <div className="shrink-0 flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
+            <span className="text-[11px] text-slate-400">{sel.length} selected</span>
+            <div className="flex gap-3">
+              <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+              <button type="button" onClick={() => onCommit(sel)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
-      <div className="max-h-48 overflow-y-auto p-1 min-h-0">
-        {shown.length === 0 ? <p className="px-2 py-1.5 text-xs text-slate-400">{options.length === 0 ? "No options" : `No matches for “${q}”`}</p> : shown.map((o) => (
-          <label key={o} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
-            <input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} className="accent-blue-600 rounded border-slate-300" />
-            <span className="truncate">{optionLabels?.[o] ?? o}</span>
-          </label>
-        ))}
-      </div>
-      <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2 py-1.5">
-        <span className="text-[11px] text-slate-400">{sel.length} selected</span>
-        <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-          <button type="button" onClick={() => onCommit(sel)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
-        </div>
-      </div>
-    </div>
+    </>
   )
 }
 
