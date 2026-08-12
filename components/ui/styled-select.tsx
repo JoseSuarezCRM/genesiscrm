@@ -139,11 +139,12 @@ export default function StyledSelect({ value, onChange, children, className, dis
           // its content (pointerEvents:auto re-enables them) and dismisses on outside
           // pointerdown (stopPropagation keeps it from closing the parent dialog).
           onPointerDown={(e) => e.stopPropagation()}
-          className="fixed z-[999] bg-white border border-slate-200 rounded-md shadow-lg overflow-y-auto py-1"
+          className="fixed z-[999] bg-white border border-slate-200 rounded-md shadow-lg flex flex-col"
           style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight, pointerEvents: "auto" }}
         >
           {showSearch && (
-            <div className="sticky top-0 z-10 bg-white px-2 pt-1 pb-1.5 border-b border-slate-100">
+            // Fixed header (not part of the scroll area) so options never bleed behind it.
+            <div className="shrink-0 bg-white px-2 pt-2 pb-1.5 border-b border-slate-100 rounded-t-md">
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <input
@@ -159,24 +160,26 @@ export default function StyledSelect({ value, onChange, children, className, dis
               </div>
             </div>
           )}
-          {filtered.length === 0 && <div className="px-3 py-2 text-sm text-slate-400">No matches</div>}
-          {filtered.map((o, i) => {
-            const isSelected = current ? o.value === current.value : false
-            return (
-              <button
-                key={`${o.value}-${i}`}
-                type="button"
-                onClick={() => { onChange({ target: { value: o.value } }); setOpen(false) }}
-                className={cn(
-                  "w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 transition-colors",
-                  isSelected ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-800"
-                )}
-              >
-                <span className="truncate">{o.label || "—"}</span>
-                {isSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
-              </button>
-            )
-          })}
+          <div className="overflow-y-auto py-1 min-h-0">
+            {filtered.length === 0 && <div className="px-3 py-2 text-sm text-slate-400">No matches</div>}
+            {filtered.map((o, i) => {
+              const isSelected = current ? o.value === current.value : false
+              return (
+                <button
+                  key={`${o.value}-${i}`}
+                  type="button"
+                  onClick={() => { onChange({ target: { value: o.value } }); setOpen(false) }}
+                  className={cn(
+                    "w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 transition-colors",
+                    isSelected ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-800"
+                  )}
+                >
+                  <span className="truncate">{o.label || "—"}</span>
+                  {isSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
+                </button>
+              )
+            })}
+          </div>
         </div>,
         document.body
       )}

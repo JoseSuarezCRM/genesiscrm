@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useTransition, type ReactNode } from "react"
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { Settings, Plus, Loader2, GripVertical } from "lucide-react"
 import { showToast } from "@/components/toast"
@@ -58,6 +58,44 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): Re
   const lbl = f.optionLabels
   if (Array.isArray(v)) return v.map((x) => lbl?.[String(x)] ?? String(x)).join(", ")
   return String(v)
+}
+
+// Inline checkbox editor for MULTI_SELECT fields (multiple values). Commits the
+// array on "Done" or on click-away; cancels on Escape.
+function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: {
+  options: string[]
+  optionLabels?: Record<string, string>
+  value: any
+  onCommit: (v: string[]) => void
+  onCancel: () => void
+}) {
+  const initial = Array.isArray(value) ? value.map(String) : (value != null && value !== "" ? [String(value)] : [])
+  const [sel, setSel] = useState<string[]>(initial)
+  const selRef = useRef(sel); selRef.current = sel
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function onDown(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onCommit(selRef.current) }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const toggle = (o: string) => setSel((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]))
+  return (
+    <div ref={ref} className="border border-slate-200 rounded-lg bg-white shadow-sm" onKeyDown={(e) => { if (e.key === "Escape") onCancel() }}>
+      <div className="max-h-48 overflow-y-auto p-1">
+        {options.length === 0 ? <p className="px-2 py-1.5 text-xs text-slate-400">No options</p> : options.map((o) => (
+          <label key={o} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+            <input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} className="accent-blue-600 rounded border-slate-300" />
+            <span className="truncate">{optionLabels?.[o] ?? o}</span>
+          </label>
+        ))}
+      </div>
+      <div className="flex justify-end gap-2 border-t border-slate-100 px-2 py-1.5">
+        <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+        <button type="button" onClick={() => onCommit(sel)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
+      </div>
+    </div>
+  )
 }
 
 // ISO → the value a <input type="datetime-local"> expects (local wall time).
@@ -172,7 +210,9 @@ export function FieldRow({ f, value, values, recordId, entityType, canEdit, user
   return (
     <div className="py-2 space-y-1.5">
       {Label}
-      {f.type === "select" ? (
+      {f.type === "select" && f.multi ? (
+        <MultiSelectField options={effectiveOptions} optionLabels={f.optionLabels} value={value} onCommit={commit} onCancel={cancelEdit} />
+      ) : f.type === "select" ? (
         <StyledSelect autoOpen searchable value={String(draft ?? "")} onChange={(e) => commit(e.target.value)} className={input}>
           <option value="">—</option>
           {effectiveOptions.map((o) => <option key={o} value={o}>{f.optionLabels?.[o] ?? o}</option>)}
