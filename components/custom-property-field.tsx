@@ -54,9 +54,9 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
       case "CHECKBOX":
         return property.value ? "✓ Yes" : "○ No"
       case "DATE":
-        return new Date(property.value).toLocaleDateString()
+        return new Date(property.value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
       case "DATE_TIME":
-        return new Date(property.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+        return new Date(property.value).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Chicago" })
       case "MULTI_SELECT":
       case "DROPDOWN":
         return <OptionValue value={property.value} optionLabels={property.optionLabels} optionColors={property.optionColors} optionStyle={property.optionStyle} />

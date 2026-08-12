@@ -80,9 +80,9 @@ export default function CustomPropertiesDisplay({
       case "CHECKBOX":
         return prop.value ? "✓ Yes" : "○ No"
       case "DATE":
-        return prop.value ? new Date(prop.value).toLocaleDateString() : "—"
+        return prop.value ? new Date(prop.value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—"
       case "DATE_TIME":
-        return prop.value ? new Date(prop.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
+        return prop.value ? new Date(prop.value).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Chicago" }) : "—"
       case "MULTI_SELECT":
       case "DROPDOWN":
         return (prop.value == null || prop.value === "" || (Array.isArray(prop.value) && prop.value.length === 0))

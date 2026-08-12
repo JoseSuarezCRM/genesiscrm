@@ -54,7 +54,9 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): Re
   if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return "—"
   if (f.type === "user") return userMap[v] ?? String(v)
   if (f.type === "datetime") return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
-  if (f.type === "date") return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  // Date-only is stored at UTC midnight (a pure calendar day) — render its UTC
+  // parts so the shown day matches the picker regardless of the viewer's timezone.
+  if (f.type === "date") return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
   if (f.type === "number") return formatNumber(v, f.numberFormat as any)
   if (f.type === "select") return <OptionValue value={v} optionLabels={f.optionLabels} optionColors={f.optionColors} optionStyle={f.optionStyle} />
   const lbl = f.optionLabels

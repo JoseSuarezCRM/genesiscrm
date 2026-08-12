@@ -4,12 +4,15 @@ import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CLINIC_TZ, zonedParts, clinicDatetimeLocalToISO } from "@/lib/tz"
 
 // Styled calendar picker — a drop-in for native <input type="date">/<input
 // type="datetime-local"> that matches the app's dropdown design (portaled panel,
 // zinc/slate palette, blue accent). Mirrors MultiSelectField's contract so the
-// record-card FieldRow can swap it in: onCommit fires the native-format string
-// ("yyyy-mm-dd" or "yyyy-mm-ddThh:mm"), onCancel closes without saving.
+// record-card FieldRow can swap it in. onCommit fires the final STORAGE value: a
+// UTC-midnight ISO for date-only, and (for datetime) the UTC ISO of the picked
+// CLINIC (Chicago) wall time — so datetime editing matches the Chicago display
+// no matter the editor's own browser timezone. "" clears; onCancel is a no-save close.
 interface Props {
   value: any
   withTime?: boolean
@@ -23,9 +26,11 @@ const pad = (n: number) => String(n).padStart(2, "0")
 const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 
-// Parse the stored value into a local Date. Date-only values are kept as UTC
-// midnight in the DB, so read the calendar day from the string (not new Date(),
-// which would shift a day in negative timezones); datetime is a real instant.
+// Parse the stored value into a Date whose LOCAL parts are the ones to show in
+// the grid/time box. Date-only values are UTC midnight in the DB, so read the
+// calendar day from the string (not new Date(), which would shift a day in a
+// negative timezone). Datetime is a real instant → show its CLINIC (Chicago)
+// wall parts, so the calendar day + time match how the value displays.
 function parseValue(value: any, withTime?: boolean): Date | null {
   if (value === null || value === undefined || value === "") return null
   if (!withTime && typeof value === "string") {
@@ -33,7 +38,10 @@ function parseValue(value: any, withTime?: boolean): Date | null {
     if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
   }
   const d = new Date(value)
-  return isNaN(d.getTime()) ? null : d
+  if (isNaN(d.getTime())) return null
+  if (!withTime) return d
+  const p = zonedParts(d, CLINIC_TZ)
+  return new Date(p.year, p.month, p.day, p.hour, p.minute)
 }
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
@@ -64,7 +72,12 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
     setPos(openUp ? { left, bottom: window.innerHeight - r.top + 4 } : { left, top: r.bottom + 4 })
   }
 
-  function emit(d: Date) { onCommit(withTime ? `${toDateStr(d)}T${timeRef.current || "00:00"}` : toDateStr(d)) }
+  // Emit the storage ISO. Date-only → UTC midnight of the picked day. Datetime →
+  // interpret the picked day + time as CLINIC (Chicago) wall time, stored as UTC.
+  function emit(d: Date) {
+    if (!withTime) { onCommit(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString()); return }
+    onCommit(clinicDatetimeLocalToISO(`${toDateStr(d)}T${timeRef.current || "00:00"}`) ?? "")
+  }
 
   useEffect(() => { place() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -91,7 +104,9 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const today = new Date()
+  // "Today" highlight = the clinic's (Chicago) current calendar day.
+  const tp = zonedParts(new Date(), CLINIC_TZ)
+  const today = new Date(tp.year, tp.month, tp.day)
   const firstWeekday = new Date(view.y, view.m, 1).getDay()
   const gridStart = new Date(view.y, view.m, 1 - firstWeekday)
   const cells = Array.from({ length: 42 }, (_, i) => { const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d })
@@ -102,7 +117,10 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
     else emit(d) // date-only: choosing a day commits immediately
   }
   function goToday() {
-    const t = new Date()
+    // For datetime, "today/now" means the clinic's (Chicago) current wall time.
+    const p = zonedParts(new Date(), CLINIC_TZ)
+    const t = withTime ? new Date(p.year, p.month, p.day, p.hour, p.minute) : new Date()
+    if (withTime) setTime(`${pad(t.getHours())}:${pad(t.getMinutes())}`)
     setSelected(t); setView({ y: t.getFullYear(), m: t.getMonth() })
     if (!withTime) emit(t)
   }
