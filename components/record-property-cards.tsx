@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Settings, Plus, Loader2, GripVertical } from "lucide-react"
+import { Settings, Plus, Loader2, GripVertical, Search } from "lucide-react"
 import { showToast } from "@/components/toast"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
@@ -71,6 +71,7 @@ function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: 
 }) {
   const initial = Array.isArray(value) ? value.map(String) : (value != null && value !== "" ? [String(value)] : [])
   const [sel, setSel] = useState<string[]>(initial)
+  const [q, setQ] = useState("")
   const selRef = useRef(sel); selRef.current = sel
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -80,19 +81,33 @@ function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const toggle = (o: string) => setSel((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]))
+  const query = q.trim().toLowerCase()
+  const shown = query ? options.filter((o) => `${optionLabels?.[o] ?? o} ${o}`.toLowerCase().includes(query)) : options
   return (
-    <div ref={ref} className="border border-slate-200 rounded-lg bg-white shadow-sm" onKeyDown={(e) => { if (e.key === "Escape") onCancel() }}>
-      <div className="max-h-48 overflow-y-auto p-1">
-        {options.length === 0 ? <p className="px-2 py-1.5 text-xs text-slate-400">No options</p> : options.map((o) => (
+    <div ref={ref} className="border border-slate-200 rounded-lg bg-white shadow-sm flex flex-col" onKeyDown={(e) => { if (e.key === "Escape") onCancel() }}>
+      {options.length > 8 && (
+        <div className="shrink-0 p-1.5 border-b border-slate-100">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
+              className="w-full h-7 pl-7 pr-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:border-zinc-400" />
+          </div>
+        </div>
+      )}
+      <div className="max-h-48 overflow-y-auto p-1 min-h-0">
+        {shown.length === 0 ? <p className="px-2 py-1.5 text-xs text-slate-400">{options.length === 0 ? "No options" : `No matches for “${q}”`}</p> : shown.map((o) => (
           <label key={o} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
             <input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} className="accent-blue-600 rounded border-slate-300" />
             <span className="truncate">{optionLabels?.[o] ?? o}</span>
           </label>
         ))}
       </div>
-      <div className="flex justify-end gap-2 border-t border-slate-100 px-2 py-1.5">
-        <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-        <button type="button" onClick={() => onCommit(sel)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
+      <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2 py-1.5">
+        <span className="text-[11px] text-slate-400">{sel.length} selected</span>
+        <div className="flex gap-2">
+          <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+          <button type="button" onClick={() => onCommit(sel)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
+        </div>
       </div>
     </div>
   )
