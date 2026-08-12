@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { KeyRound, FolderSearch, ListChecks, CalendarClock, Loader2, Power, PlayCircle, ShieldAlert, CheckCircle2, Trash2, Mail } from "lucide-react"
 import { saveFaConnection, saveFaImportConfig, setFaEnabled, testFaConnection, loadFaColumns, runFaImportNow, importFaFile, importAllFaFiles, resetFaImport, saveFaReportConfig, sendFaReportNow, type FaSettings } from "@/app/actions/filesanywhere"
 import { cn } from "@/lib/utils"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}` }))
@@ -130,8 +131,8 @@ export default function FilesanywhereConfig({ settings }: { settings: FaSettings
     const base = list.length === 0 ? allIds : list
     setList(base.includes(id) ? base.filter((x) => x !== id) : [...base, id])
   }
-  function reset() {
-    if (!confirm("Delete every record created by the import (all records in the referring-providers and appointments objects, plus any legacy imported providers)? This can't be undone.")) return
+  async function reset() {
+    if (!(await confirmDialog("Delete every record created by the import (all records in the referring-providers and appointments objects, plus any legacy imported providers)? This can't be undone."))) return
     setMsg(null)
     start(async () => {
       const r = await resetFaImport()

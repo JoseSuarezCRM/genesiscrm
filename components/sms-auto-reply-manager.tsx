@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useState, useTransition } from "react"
 import { Plus, Trash2, Pencil, CheckCircle2, AlertCircle, X, Check, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -183,8 +184,8 @@ export default function SmsAutoReplyManager({ initialRules }: Props) {
     })
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Delete this auto-reply rule?")) return
+  async function handleDelete(id: string) {
+    if (!(await confirmDialog("Delete this auto-reply rule?"))) return
     startTransition(async () => {
       const res = await deleteSmsAutoResponse(id)
       if (!res.success) { flash(res.error ?? "Failed.", true); return }

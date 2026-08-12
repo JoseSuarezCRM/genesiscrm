@@ -7,6 +7,7 @@ import {
   Table2, LayoutList, Columns3, Download, Check, ChevronUp, ChevronDown, LayoutTemplate,
 } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { Button } from "@/components/ui/button"
 import { RichTextEditor } from "@/components/rich-text-editor"
@@ -140,8 +141,8 @@ export default function MessageTemplateManager({ channel, templates, canManage =
       close(); router.refresh()
     })
   }
-  function remove(id: string) {
-    if (!confirm("Delete this template? This cannot be undone.")) return
+  async function remove(id: string) {
+    if (!(await confirmDialog("Delete this template? This cannot be undone."))) return
     startTransition(async () => { await deleteMessageTemplate(id); router.refresh() })
   }
   function toggle(t: Template) {
@@ -165,8 +166,8 @@ export default function MessageTemplateManager({ channel, templates, canManage =
   const toggleRow = (id: string) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const allChecked = sorted.length > 0 && sorted.every((t) => selected.has(t.id))
   const toggleAll = () => setSelected(allChecked ? new Set() : new Set(sorted.map((t) => t.id)))
-  function bulkDelete() {
-    if (!confirm(`Delete ${selected.size} template${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return
+  async function bulkDelete() {
+    if (!(await confirmDialog(`Delete ${selected.size} template${selected.size !== 1 ? "s" : ""}? This cannot be undone.`))) return
     startTransition(async () => { for (const id of Array.from(selected)) await deleteMessageTemplate(id); setSelected(new Set()); router.refresh() })
   }
 

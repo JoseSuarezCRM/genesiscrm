@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { KeyRound, Plus, Copy, Check, Loader2, Trash2, ShieldCheck, X, TriangleAlert } from "lucide-react"
 import { createApiToken, revokeApiToken, deleteApiToken, type ApiTokenRow } from "@/app/actions/api-tokens"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import type { ApiScopeDef } from "@/lib/api-objects"
 import { cn } from "@/lib/utils"
 
@@ -34,12 +35,12 @@ export default function ApiKeysManager({ initial, scopes: scopeDefs }: { initial
     })
   }
 
-  function revoke(id: string) {
-    if (!confirm("Revoke this key? Any system using it loses access immediately.")) return
+  async function revoke(id: string) {
+    if (!(await confirmDialog("Revoke this key? Any system using it loses access immediately."))) return
     startTransition(async () => { await revokeApiToken(id); router.refresh() })
   }
-  function remove(id: string) {
-    if (!confirm("Delete this key permanently?")) return
+  async function remove(id: string) {
+    if (!(await confirmDialog("Delete this key permanently?"))) return
     startTransition(async () => { await deleteApiToken(id); router.refresh() })
   }
   function copy(t: string) { navigator.clipboard.writeText(t).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }

@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { ChevronUp } from "lucide-react"
 import { createCustomObjectRecord, bulkDeleteCustomObjectRecords, exportCustomObjectRecords } from "@/app/actions/custom-object-records"
@@ -238,8 +239,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const allChecked = filtered.length > 0 && filtered.every((r) => selected.has(r.id))
   function toggleRow(id: string) { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-  function bulkDelete() {
-    if (!confirm(`Delete ${selected.size} record${selected.size !== 1 ? "s" : ""}?`)) return
+  async function bulkDelete() {
+    if (!(await confirmDialog(`Delete ${selected.size} record${selected.size !== 1 ? "s" : ""}?`))) return
     startTransition(async () => { await bulkDeleteCustomObjectRecords(objectKey, Array.from(selected)); setSelected(new Set()); router.refresh() })
   }
 

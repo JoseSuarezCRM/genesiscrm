@@ -1,6 +1,7 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useState, useTransition, createContext, useContext } from "react"
 import { Role } from "@prisma/client"
 import { inviteUser, resendInvite, updateUserRole, updateUserPermissions, deleteUser, resetPassword } from "@/app/actions/users"
@@ -232,8 +233,8 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
     startTransition(async () => { await removeTeamMember(team.id, userId) })
   }
 
-  function handleDelete() {
-    if (!confirm(`Delete team "${team.name}"? Members will lose team permissions.`)) return
+  async function handleDelete() {
+    if (!(await confirmDialog(`Delete team "${team.name}"? Members will lose team permissions.`))) return
     startTransition(async () => { await deleteTeam(team.id) })
   }
 
@@ -417,7 +418,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
   }
 
   async function handleDelete(userId: string) {
-    if (!confirm("Delete this user? This cannot be undone.")) return
+    if (!(await confirmDialog("Delete this user? This cannot be undone."))) return
     startTransition(async () => {
       const result = await deleteUser(userId)
       if (result?.error) setError(typeof result.error === "string" ? result.error : "Error")

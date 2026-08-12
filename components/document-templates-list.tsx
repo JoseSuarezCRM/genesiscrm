@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { FileText, Plus, Trash2, Loader2, Pencil } from "lucide-react"
 import { createDocumentTemplate, deleteDocumentTemplate } from "@/app/actions/document-templates"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { cn } from "@/lib/utils"
 
 interface Tpl { id: string; name: string; objectType: string; isActive: boolean; updatedAt: string }
@@ -25,8 +26,8 @@ export default function DocumentTemplatesList({ templates, objectTypes }: { temp
       router.push(`/communications/documents/${r.id}`)
     })
   }
-  function remove(id: string) {
-    if (!confirm("Delete this template?")) return
+  async function remove(id: string) {
+    if (!(await confirmDialog("Delete this template?"))) return
     start(async () => { await deleteDocumentTemplate(id); router.refresh() })
   }
 

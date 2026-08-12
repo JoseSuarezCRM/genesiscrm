@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { createPipeline, updatePipeline, deletePipeline } from "@/app/actions/pipelines"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { Pencil, Trash2, Plus, Check, X } from "lucide-react"
 
 const COLOR_OPTIONS = [
@@ -52,8 +53,8 @@ export default function PipelineManager({ pipelines: initial }: { pipelines: Pip
     })
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete pipeline "${name}"?`)) return
+  async function handleDelete(id: string, name: string) {
+    if (!(await confirmDialog(`Delete pipeline "${name}"?`))) return
     setError(null)
     startTransition(async () => {
       const res = await deletePipeline(id)

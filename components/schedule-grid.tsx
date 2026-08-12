@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { StaffRole, SchedDay } from "@prisma/client"
 import { cn } from "@/lib/utils"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import {
   assignStaff, removeEntry, autoGenerate, clearSchedule,
 } from "@/app/actions/scheduler"
@@ -241,8 +242,8 @@ export default function ScheduleGrid({ schedule: initialSchedule, locations, sta
     })
   }
 
-  function handleClear() {
-    if (!confirm("Clear all assignments for this week?")) return
+  async function handleClear() {
+    if (!(await confirmDialog("Clear all assignments for this week?"))) return
     startTransition(async () => {
       await clearSchedule(initialSchedule.id)
       showFlash("Schedule cleared.")

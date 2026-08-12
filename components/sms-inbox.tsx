@@ -7,6 +7,7 @@ import {
   ExternalLink, Search, Link2, Unlink, Loader2, FileText, Braces,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import {
   sendSms, createThread, markThreadRead, deleteThread,
   getMessages, getThreads, linkThreadToReferral, searchReferralsForSms,
@@ -336,8 +337,8 @@ export default function SmsInbox({ initialThreads, isAdmin, templates = [] }: Pr
     })
   }
 
-  function handleDelete(threadId: string) {
-    if (!confirm("Delete this conversation? All messages will be removed.")) return
+  async function handleDelete(threadId: string) {
+    if (!(await confirmDialog("Delete this conversation? All messages will be removed."))) return
     startTransition(async () => {
       await deleteThread(threadId)
       setThreads((prev) => prev.filter((t) => t.id !== threadId))

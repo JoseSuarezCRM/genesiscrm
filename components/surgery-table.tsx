@@ -7,6 +7,7 @@ import {
   LayoutList, Table2, Download, Columns3, Check, Stethoscope,
 } from "lucide-react"
 import BulkActionBar, { bulkBtn, bulkDanger } from "@/components/ui/bulk-action-bar"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
@@ -167,8 +168,8 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
       clearSelection(); setMenuOpen(false); router.refresh()
     })
   }
-  function bulkDelete() {
-    if (!confirm(`Delete ${selected.size} case${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return
+  async function bulkDelete() {
+    if (!(await confirmDialog(`Delete ${selected.size} case${selected.size !== 1 ? "s" : ""}? This cannot be undone.`))) return
     startTransition(async () => {
       await bulkDeleteSurgeryCases(Array.from(selected))
       clearSelection(); router.refresh()

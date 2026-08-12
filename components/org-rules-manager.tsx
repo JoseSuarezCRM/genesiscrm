@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from "react"
 import { Plus, Trash2, Pencil, GripVertical, CheckCircle2, AlertCircle, ArrowRight, RefreshCw, Clock, History, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { createOrgRule, updateOrgRule, deleteOrgRule, reorderOrgRules, applyRulesToExistingPractices, setOrgRulesPoller, getOrgRulesRunLogs, OrgRuleInput, OrgRulesPollerConfig, OrgRulesRunLogEntry } from "@/app/actions/org-rules"
 
 interface Rule {
@@ -262,8 +263,8 @@ export default function OrgRulesManager({ initialRules, initialPoller, initialLo
     })
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Delete this rule?")) return
+  async function handleDelete(id: string) {
+    if (!(await confirmDialog("Delete this rule?"))) return
     startTransition(async () => {
       const res = await deleteOrgRule(id)
       if (!res.success) { flash(res.error ?? "Failed.", true); return }
@@ -307,8 +308,8 @@ export default function OrgRulesManager({ initialRules, initialPoller, initialLo
           {rules.length > 0 && (
             <button
               disabled={isPending}
-              onClick={() => {
-                if (!confirm("This will merge all existing practices that match a rule into their canonical name. Continue?")) return
+              onClick={async () => {
+                if (!(await confirmDialog({ title: "Merge existing practices?", description: "This will merge all existing practices that match a rule into their canonical name. Continue?", confirmLabel: "Merge", destructive: false }))) return
                 startTransition(async () => {
                   const res = await applyRulesToExistingPractices()
                   if (!res.success) { flash(res.error ?? "Failed.", true); return }

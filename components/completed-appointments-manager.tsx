@@ -3,6 +3,7 @@
 import { useState, useRef, useTransition } from "react"
 import { Upload, FileText, AlertCircle, CheckCircle2, Trash2, ChevronDown, ChevronUp } from "lucide-react"
 import { importCompletedAppointments, deleteAppointmentBatch, AppointmentRow } from "@/app/actions/completed-appointments"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 
 // ── CSV parser ──────────────────────────────────────────────────────────────
 function parseCsvLine(line: string): string[] {
@@ -134,8 +135,8 @@ export default function CompletedAppointmentsManager({ appointments, isAdmin }: 
     })
   }
 
-  function handleDeleteBatch(batchId: string) {
-    if (!confirm("Delete all appointments in this import batch?")) return
+  async function handleDeleteBatch(batchId: string) {
+    if (!(await confirmDialog("Delete all appointments in this import batch?"))) return
     startTransition(async () => {
       const res = await deleteAppointmentBatch(batchId)
       if (!res.success) setError(res.error ?? "Delete failed.")

@@ -8,6 +8,7 @@ import {
   LayoutList, Table2, Download, Columns3, ChevronDown, ChevronUp,
 } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
@@ -157,8 +158,8 @@ export default function LocationManager({ locations, practices, customPropertyDe
   function toggleRow(id: string) {
     setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
-  function bulkDelete() {
-    if (!confirm(`Delete ${selected.size} location${selected.size !== 1 ? "s" : ""}? Locations linked to referrals or providers are skipped.`)) return
+  async function bulkDelete() {
+    if (!(await confirmDialog(`Delete ${selected.size} location${selected.size !== 1 ? "s" : ""}? Locations linked to referrals or providers are skipped.`))) return
     startTransition(async () => {
       const res = await bulkDeleteLocations(Array.from(selected))
       setSelected(new Set())
@@ -320,7 +321,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                         <div className="inline-flex gap-1">
                           <button onClick={() => setEditRow(l)} className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil className="h-3.5 w-3.5" /></button>
                           {canDelete && (
-                            <button disabled={isPending} onClick={() => { if (confirm(`Delete "${l.name}"?`)) startTransition(async () => { const r = await deleteLocation(l.id); if ((r as any)?.error) alert((r as any).error); else router.refresh() }) }}
+                            <button disabled={isPending} onClick={async () => { if (await confirmDialog(`Delete "${l.name}"?`)) startTransition(async () => { const r = await deleteLocation(l.id); if ((r as any)?.error) alert((r as any).error); else router.refresh() }) }}
                               className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /></button>
                           )}
                         </div>

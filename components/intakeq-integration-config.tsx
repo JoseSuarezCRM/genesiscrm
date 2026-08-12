@@ -6,6 +6,7 @@ import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarCl
 import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, saveIntakeqReportSchedule, sendIntakeReportNow, type IntegrationSettings } from "@/app/actions/intakeq"
 import { INTAKE_WINDOWS, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { cn } from "@/lib/utils"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}` }))
@@ -89,8 +90,8 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
     startTransition(async () => { await setIntakeqEnabled(enabled); router.refresh() })
   }
 
-  function disconnect() {
-    if (!confirm("Remove the stored IntakeQ API key and disable the integration? Your saved data stays.")) return
+  async function disconnect() {
+    if (!(await confirmDialog("Remove the stored IntakeQ API key and disable the integration? Your saved data stays."))) return
     startTransition(async () => { await disconnectIntakeq(); setEditingKey(true); router.refresh() })
   }
 

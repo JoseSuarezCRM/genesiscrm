@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2, Upload, Loader2, FileText, Check, Pencil, X, Package, Settings } from "lucide-react"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import {
   createCategory, renameCategory, deleteCategory,
   createMarketingItem, deleteMarketingItem,
@@ -104,8 +105,8 @@ export default function MarketingManager({ categories: initialCategories, orders
     })
   }
 
-  function deleteCat(id: string) {
-    if (!confirm("Delete this category and all its items?")) return
+  async function deleteCat(id: string) {
+    if (!(await confirmDialog("Delete this category and all its items?"))) return
     startTransition(async () => {
       await deleteCategory(id)
       refresh()
@@ -145,8 +146,8 @@ export default function MarketingManager({ categories: initialCategories, orders
     }
   }
 
-  function deleteItem(id: string) {
-    if (!confirm("Delete this item?")) return
+  async function deleteItem(id: string) {
+    if (!(await confirmDialog("Delete this item?"))) return
     startTransition(async () => {
       await deleteMarketingItem(id)
       refresh()
@@ -160,8 +161,8 @@ export default function MarketingManager({ categories: initialCategories, orders
     })
   }
 
-  function deleteOrder(id: string) {
-    if (!confirm("Delete this order?")) return
+  async function deleteOrder(id: string) {
+    if (!(await confirmDialog("Delete this order?"))) return
     startTransition(async () => {
       await deleteMarketingOrder(id)
       refresh()

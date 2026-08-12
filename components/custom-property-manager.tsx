@@ -3,6 +3,7 @@
 import { CP_ENTITIES } from "@/lib/custom-property-entities"
 
 import StyledSelect from "@/components/ui/styled-select"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useState, useTransition, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createCustomProperty, updateCustomProperty, deleteCustomProperty, getNativeVisibilityControllers } from "@/app/actions/custom-properties"
@@ -67,8 +68,8 @@ export default function CustomPropertyManager({ propsByEntity }: Props) {
   const q = query.trim().toLowerCase()
   const list = q ? all.filter((p) => p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q)) : all
 
-  function remove(p: CustomProperty) {
-    if (!confirm(`Delete "${p.name}"? Existing data isn't removed, but the field stops appearing.`)) return
+  async function remove(p: CustomProperty) {
+    if (!(await confirmDialog(`Delete "${p.name}"? Existing data isn't removed, but the field stops appearing.`))) return
     startTransition(async () => { await deleteCustomProperty(p.id); router.refresh() })
   }
 
