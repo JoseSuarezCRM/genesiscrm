@@ -66,7 +66,8 @@ function fmtDate(d: string | Date | null | undefined) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
 }
 
-function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, string>): string {
+function displayValue(p: CustomObjectProperty | undefined, v: any, userMap: Record<string, string>): string {
+  if (!p) return "—"
   if (v === null || v === undefined || v === "") return "—"
   switch (p.type) {
     case "CHECKBOX": return v ? "Yes" : "No"
@@ -81,7 +82,8 @@ function displayValue(p: CustomObjectProperty, v: any, userMap: Record<string, s
 }
 
 // Styled cell (dot/badge for dropdowns); falls back to displayValue's text.
-function displayCell(p: CustomObjectProperty, v: any, userMap: Record<string, string>): ReactNode {
+function displayCell(p: CustomObjectProperty | undefined, v: any, userMap: Record<string, string>): ReactNode {
+  if (!p) return "—"
   if ((p.type === "DROPDOWN" || p.type === "MULTI_SELECT") && v != null && v !== "" && !(Array.isArray(v) && v.length === 0)) {
     return <OptionValue value={v} optionLabels={(p as any).optionLabels} optionColors={(p as any).optionColors} optionStyle={(p as any).optionStyle} />
   }
@@ -170,6 +172,14 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     return sortDir === "asc" ? cmp : -cmp
   })
   const SortIcon = ({ k }: { k: string }) => sortKey === k ? (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : null
+
+  // Client-side pagination (25 / 50 / 100 per page). Server mode paginates via URL.
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const clientPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const pageC = Math.min(page, clientPages)
+  const paged = isServer ? sorted : sorted.slice((pageC - 1) * pageSize, (pageC - 1) * pageSize + pageSize)
+  useEffect(() => { setPage(1) }, [search, filter, sortKey, sortDir, pageSize]) // reset on result/size change
 
   // Server-mode search: debounce URL updates so typing doesn't spam the server.
   useEffect(() => {
@@ -344,8 +354,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
               <colgroup>
                 <col style={{ width: 40 }} />
                 <col style={{ width: colWidth("__id") ?? 96 }} />
-                <col style={{ width: colWidth("__name") }} />
-                {cols.map((c) => <col key={c.key} style={{ width: colWidth(c.key) }} />)}
+                <col style={{ width: colWidth("__name") ?? 240 }} />
+                {cols.map((c) => <col key={c.key} style={{ width: colWidth(c.key) ?? 180 }} />)}
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -369,17 +379,17 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sorted.map((r) => (
+                {paged.map((r) => (
                   <tr key={r.id} className={cn("transition-colors", selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50")}>
                     <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
                     <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{r.recordNumber != null ? `#${r.recordNumber}` : "—"}</td>
-                    <td className="px-4 py-2.5 truncate" style={{ maxWidth: colWidth("__name") }}>
+                    <td className="px-4 py-2.5 truncate" style={{ maxWidth: colWidth("__name") ?? 240 }}>
                       <Link href={`/objects/${objectKey}/${r.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                         {recordName(properties, r.values, "") || (primary && displayValue(primary, r.values[primary.id], userMap)) || "Untitled"}
                       </Link>
                     </td>
                     {cols.map((c) => (
-                      <td key={c.key} className="px-4 py-2.5 text-slate-600 truncate" style={{ maxWidth: colWidth(c.key) }}>
+                      <td key={c.key} className="px-4 py-2.5 text-slate-600 truncate" style={{ maxWidth: colWidth(c.key) ?? 180 }}>
                         {c.key === "__owner" ? (r.ownerName ?? "—")
                           : c.key === "__created" ? fmtDate(r.createdAt)
                           : displayCell(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)}
@@ -389,6 +399,27 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Client-side pagination (25 / 50 / 100 per page) */}
+      {!isServer && sorted.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
+          <span>Showing {(pageC - 1) * pageSize + 1}–{Math.min(sorted.length, (pageC - 1) * pageSize + pageSize)} of {sorted.length}</span>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-slate-400">Per page
+              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="h-8 px-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-700 focus:outline-none">
+                <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+              </select>
+            </label>
+            <div className="flex items-center gap-1">
+              <button disabled={pageC <= 1} onClick={() => setPage(pageC - 1)}
+                className="h-8 px-2.5 inline-flex items-center rounded-lg border border-slate-200 bg-white hover:border-slate-400 disabled:opacity-40">Prev</button>
+              <span className="px-2 tabular-nums">Page {pageC} of {clientPages}</span>
+              <button disabled={pageC >= clientPages} onClick={() => setPage(pageC + 1)}
+                className="h-8 px-2.5 inline-flex items-center rounded-lg border border-slate-200 bg-white hover:border-slate-400 disabled:opacity-40">Next</button>
+            </div>
           </div>
         </div>
       )}

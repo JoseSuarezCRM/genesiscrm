@@ -332,6 +332,45 @@ model ObjectAssociation {
   @@index([toType, toId])
 }
 
+// A record-import run, kept so it can be undone (delete created records, restore
+// prior values on updated ones, remove associations it added).
+model ImportRun {
+  id          String   @id @default(cuid())
+  objectKey   String   // custom object key imported into
+  status      String   @default("active") // active | undone
+  created     Int      @default(0)
+  updated     Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  undoneAt    DateTime?
+
+  @@index([objectKey, createdAt])
+}
+
+// One created/updated record in an import run. `before` holds the prior values of
+// exactly the fields the import wrote (for restore); null on creates.
+model ImportRunChange {
+  id       String  @id @default(cuid())
+  runId    String
+  kind     String  // create | update
+  recordId String
+  before   Json?
+
+  @@index([runId])
+}
+
+// An association an import run newly created (so undo removes only those).
+model ImportRunAssoc {
+  id       String @id @default(cuid())
+  runId    String
+  fromType String
+  fromId   String
+  toType   String
+  toId     String
+
+  @@index([runId])
+}
+
 model CustomObjectView {
   id            String   @id @default(cuid())
   objectKey     String                    // which custom object this view belongs to

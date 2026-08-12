@@ -1,6 +1,8 @@
 "use client"
 
 import StyledSelect from "@/components/ui/styled-select"
+import DatePicker from "@/components/ui/date-picker"
+import { MultiSelectField } from "@/components/record-property-cards"
 import { useState, useTransition, useEffect } from "react"
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -52,9 +54,9 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
       case "CHECKBOX":
         return property.value ? "✓ Yes" : "○ No"
       case "DATE":
-        return new Date(property.value).toLocaleDateString()
+        return new Date(property.value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
       case "DATE_TIME":
-        return new Date(property.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+        return new Date(property.value).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Chicago" })
       case "MULTI_SELECT":
       case "DROPDOWN":
         return <OptionValue value={property.value} optionLabels={property.optionLabels} optionColors={property.optionColors} optionStyle={property.optionStyle} />
@@ -172,6 +174,39 @@ export default function CustomPropertyField({ entityType, entityId, property }: 
             {checked ? "Yes" : "No"}
           </span>
         </div>
+      </div>
+    )
+  }
+
+  // Self-contained popover editors (multi-select, date) — same components the
+  // shared record cards use; they commit on their own Done/pick, no Save row.
+  if (editing && (property.type === "MULTI_SELECT" || property.type === "DATE" || property.type === "DATE_TIME")) {
+    const closeAfter = (raw: any) => {
+      let val: any = raw
+      if ((property.type === "DATE" || property.type === "DATE_TIME") && raw) val = new Date(String(raw)).toISOString()
+      startTransition(async () => { await saveCustomPropertyValue(entityType, entityId, property.id, val); setEditing(false); setEditValue(null) })
+    }
+    return (
+      <div className="py-2.5 border-b border-slate-100 last:border-0 space-y-1">
+        <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide">
+          {property.name}
+        </span>
+        {property.type === "MULTI_SELECT" ? (
+          <MultiSelectField
+            options={property.options}
+            optionLabels={property.optionLabels ?? undefined}
+            value={property.value}
+            onCommit={(v) => closeAfter(v)}
+            onCancel={() => { setEditing(false); setEditValue(null) }}
+          />
+        ) : (
+          <DatePicker
+            value={property.value}
+            withTime={property.type === "DATE_TIME"}
+            onCommit={(v) => closeAfter(v)}
+            onCancel={() => { setEditing(false); setEditValue(null) }}
+          />
+        )}
       </div>
     )
   }

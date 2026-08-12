@@ -3,6 +3,8 @@
 import type { CPEntity } from "@/lib/custom-property-entities"
 
 import StyledSelect from "@/components/ui/styled-select"
+import DatePicker from "@/components/ui/date-picker"
+import { MultiSelectField } from "@/components/record-property-cards"
 import { useState, useTransition } from "react"
 import { Edit2, Check, X } from "lucide-react"
 import { saveCustomPropertyValue } from "@/app/actions/custom-properties"
@@ -78,9 +80,9 @@ export default function CustomPropertiesDisplay({
       case "CHECKBOX":
         return prop.value ? "✓ Yes" : "○ No"
       case "DATE":
-        return prop.value ? new Date(prop.value).toLocaleDateString() : "—"
+        return prop.value ? new Date(prop.value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—"
       case "DATE_TIME":
-        return prop.value ? new Date(prop.value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
+        return prop.value ? new Date(prop.value).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Chicago" }) : "—"
       case "MULTI_SELECT":
       case "DROPDOWN":
         return (prop.value == null || prop.value === "" || (Array.isArray(prop.value) && prop.value.length === 0))
@@ -210,6 +212,27 @@ export default function CustomPropertiesDisplay({
                 </label>
 
                 {editingId === prop.id ? (
+                  // Self-contained popovers (multi-select, date) match the shared record
+                  // cards and commit on their own — no Save row.
+                  prop.type === "MULTI_SELECT" ? (
+                    <MultiSelectField
+                      options={prop.options}
+                      optionLabels={prop.optionLabels ?? undefined}
+                      value={prop.value}
+                      onCommit={(v) => startTransition(async () => { await saveCustomPropertyValue(entityType, entityId, prop.id, v); setEditingId(null) })}
+                      onCancel={handleCancel}
+                    />
+                  ) : prop.type === "DATE" || prop.type === "DATE_TIME" ? (
+                    <DatePicker
+                      value={prop.value}
+                      withTime={prop.type === "DATE_TIME"}
+                      onCommit={(v) => startTransition(async () => {
+                        await saveCustomPropertyValue(entityType, entityId, prop.id, v ? new Date(v).toISOString() : "")
+                        setEditingId(null)
+                      })}
+                      onCancel={handleCancel}
+                    />
+                  ) : (
                   <div className="space-y-2">
                     {renderInput(prop)}
                     <div className="flex gap-2">
@@ -229,6 +252,7 @@ export default function CustomPropertiesDisplay({
                       </button>
                     </div>
                   </div>
+                  )
                 ) : (
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-slate-700">{renderValue(prop)}</div>

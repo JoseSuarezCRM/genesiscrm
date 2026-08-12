@@ -27,6 +27,8 @@ export interface RecordFieldDef {
   // DROPDOWN/MULTI_SELECT option styling: value→hex color + one style for the field.
   optionColors?: Record<string, string>
   optionStyle?: string   // "default" | "dot" | "badge"
+  // A select that holds MULTIPLE values (MULTI_SELECT) — edited with checkboxes.
+  multi?: boolean
   // Show this field on the record only when the controlling field's value matches.
   visibilityRule?: { controllingKey: string; equals: string[] } | null
   // NUMBER only: "currency" renders the value as USD currency; otherwise plain.

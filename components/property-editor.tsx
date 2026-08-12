@@ -268,10 +268,23 @@ export default function PropertyEditor({ entityLabel, editing, controllingProps 
               <div className="space-y-5">
                 <h2 className="text-lg font-semibold text-slate-900">Choose a field type</h2>
                 {editing ? (
-                  <div className="flex items-center gap-2.5 p-3 border border-slate-200 rounded-xl bg-slate-50">
-                    {(() => { const I = typeMeta(type).icon; return <I className="h-4 w-4 text-slate-500" /> })()}
-                    <div><p className="text-sm font-medium text-slate-800">{typeMeta(type).label}</p><p className="text-xs text-slate-400">Field type can't be changed after creation</p></div>
-                  </div>
+                  (type === "DROPDOWN" || type === "MULTI_SELECT") ? (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-slate-700">Field type</label>
+                      <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
+                        {[["DROPDOWN", "Dropdown select"], ["MULTI_SELECT", "Multiple select"]].map(([v, l]) => (
+                          <button key={v} type="button" onClick={() => setType(v)}
+                            className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors", type === v ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100")}>{l}</button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-400">Switch between single and multiple selection — the options are shared.</p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2.5 p-3 border border-slate-200 rounded-xl bg-slate-50">
+                      {(() => { const I = typeMeta(type).icon; return <I className="h-4 w-4 text-slate-500" /> })()}
+                      <div><p className="text-sm font-medium text-slate-800">{typeMeta(type).label}</p><p className="text-xs text-slate-400">Field type can't be changed after creation</p></div>
+                    </div>
+                  )
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {FIELD_TYPES.map((ft) => {

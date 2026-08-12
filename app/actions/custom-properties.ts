@@ -148,15 +148,19 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
   const { id, ...rest } = data
 
   try {
-    const existing = await prisma.customProperty.findUnique({ where: { id }, select: { entityType: true } })
+    const existing = await prisma.customProperty.findUnique({ where: { id }, select: { entityType: true, type: true } })
     const internalName = rest.internalName !== undefined && existing
       ? await uniqueInternalName(rest.internalName || rest.name || "field", existing.entityType, id)
       : undefined
+    // Type is immutable after creation, except DROPDOWN ↔ MULTI_SELECT (shared options).
+    const optType = (t?: string) => t === "DROPDOWN" || t === "MULTI_SELECT"
+    const nextType = rest.type && existing && optType(existing.type) && optType(rest.type) ? rest.type : undefined
     await prisma.customProperty.update({
       where: { id },
       data: {
         name: rest.name,
         ...(internalName !== undefined ? { internalName } : {}),
+        ...(nextType ? { type: nextType } : {}),
         description: rest.description,
         required: rest.required,
         ...(rest.unique !== undefined ? { unique: rest.unique } : {}),
