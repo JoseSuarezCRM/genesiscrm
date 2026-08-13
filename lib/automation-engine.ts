@@ -1811,7 +1811,7 @@ export async function runTrigger_TaskOverdue() {
   if (!automations.length) return
 
   const overdue = await prisma.task.findMany({
-    where: { dueDate: { lt: new Date() }, status: { not: "DONE" } },
+    where: { dueDate: { lt: new Date() }, status: { not: "COMPLETED" } },
     include: { assignedTo: { select: { name: true, email: true } }, referral: { select: { id: true, patientFirstName: true, patientLastName: true } } },
     take: 200,
   })

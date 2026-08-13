@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
+import { stageMeta } from "@/lib/task-meta"
 import { userCan } from "@/lib/permissions"
 import { sendEmail, sendEmailTracked, replyToMessage, sendCalendarInvite, type EmailAttachment } from "@/lib/graph-mailer"
 import { buildIcs } from "@/lib/ics"
@@ -129,7 +130,7 @@ export async function listRecordActivities(recordType: string, recordId: string)
   if (taskIds.length) {
     const tasks = await prisma.task.findMany({ where: { id: { in: taskIds } }, include: { createdBy: { select: { name: true, email: true } }, assignedTo: { select: { name: true, email: true } } } })
     for (const t of tasks) {
-      const bits = [`Status: ${t.status}`, t.dueDate ? `Due ${fmtDate(t.dueDate)}` : "", t.assignedTo ? `Assigned to ${t.assignedTo.name ?? t.assignedTo.email}` : ""].filter(Boolean)
+      const bits = [`Status: ${stageMeta(t.status).label}`, t.dueDate ? `Due ${fmtDate(t.dueDate)}` : "", t.assignedTo ? `Assigned to ${t.assignedTo.name ?? t.assignedTo.email}` : ""].filter(Boolean)
       items.push({ id: t.id, kind: "TASK", title: t.title, body: bits.join(" · "), date: t.createdAt, by: t.createdBy?.name ?? t.createdBy?.email ?? null })
     }
   }
