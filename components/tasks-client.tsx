@@ -181,8 +181,11 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
   return (
     <form
       onSubmit={async (e) => { e.preventDefault(); if (!v.title.trim()) { setErr("Task title is required"); return } await onSubmit(v) }}
-      className="space-y-4 max-h-[70vh] overflow-y-auto px-0.5"
+      className="space-y-4"
     >
+      {/* Full-width scroll region (negative margin cancels the dialog's p-6 so the
+          scrollbar sits at the edge and focus rings aren't clipped). */}
+      <div className="space-y-4 max-h-[62vh] overflow-y-auto overflow-x-hidden -mx-6 px-6 py-1">
       <div className="space-y-1.5">
         <Label className={fieldLabel}>Task title *</Label>
         <Input value={v.title} onChange={(e) => { set("title", e.target.value); setErr("") }} placeholder="What needs to be done?" autoFocus />
@@ -277,6 +280,7 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
           rows={3}
           className="flex w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
         />
+      </div>
       </div>
 
       <DialogFooter>
