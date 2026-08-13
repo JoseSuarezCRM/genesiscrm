@@ -901,7 +901,8 @@ model Activity {
   frontDesk   String?
   flyer       String?
   notes       String?
-  rating      Int?               // value rating: 1 Low / 2 Mid / 3 High
+  rating      Int?               // clinic value: 1 Low / 2 Mid / 3 High
+  meetingRating Int?             // meeting rating: 1 (lowest) … 5 (highest)
   customProperties Json          @default("{}") // custom property values
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])
