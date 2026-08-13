@@ -47,6 +47,24 @@ function parseValue(value: any, withTime?: boolean): Date | null {
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
+// mm/dd/yyyy string for the typable input.
+function fmtDateInput(d: Date | null): string {
+  return d ? `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()}` : ""
+}
+// Parse a typed "m/d/yyyy" (2-digit years pivot at 50 → 1950–2049). Rejects
+// invalid/overflow dates (e.g. 02/31/2020) so garbage is never committed.
+function parseTypedDate(s: string): Date | null {
+  const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  if (!m) return null
+  const month = Number(m[1]), day = Number(m[2])
+  let year = Number(m[3])
+  if (m[3].length <= 2) year = year >= 50 ? 1900 + year : 2000 + year
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  const d = new Date(year, month - 1, day)
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null
+  return d
+}
+
 export default function DatePicker({ value, withTime, onCommit, onCancel, autoOpen = true }: Props) {
   const initial = parseValue(value, withTime)
   const [selected, setSelected] = useState<Date | null>(initial)
@@ -55,10 +73,13 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
   const [open, setOpen] = useState(autoOpen)
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number }>({ left: 0 })
 
-  const triggerRef = useRef<HTMLButtonElement>(null)
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const selRef = useRef(selected); selRef.current = selected
   const timeRef = useRef(time); timeRef.current = time
+  const [typed, setTyped] = useState<string>(fmtDateInput(initial))
+  const typedRef = useRef(typed); typedRef.current = typed
   const PANEL_W = 288
 
   function place() {
@@ -81,16 +102,35 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
   }
   function cancel() { onCancel(); setOpen(false) }
 
-  useEffect(() => { place() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Commit whatever is in the typed box (empty clears; invalid just closes so the
+  // prior value is kept). Used on click-away and Enter.
+  function commitTyped() {
+    const s = typedRef.current.trim()
+    if (!s) { onCommit(""); setSelected(null); setOpen(false); return }
+    const d = parseTypedDate(s)
+    if (d) emit(d)
+    else setOpen(false)
+  }
+
+  // Digits-only mask → mm/dd/yyyy; keeps `selected`/view in sync while typing.
+  function onType(raw: string) {
+    const digits = raw.replace(/\D/g, "").slice(0, 8)
+    const out = digits.length > 4 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+      : digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits
+    setTyped(out)
+    const d = parseTypedDate(out)
+    if (d) { setSelected(d); setView({ y: d.getFullYear(), m: d.getMonth() }) }
+  }
+
+  // Focus the text box on mount so you can type immediately (e.g. a DOB) without
+  // navigating the calendar.
+  useEffect(() => { place(); if (autoOpen) inputRef.current?.focus() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return
     function onDown(e: MouseEvent) {
       const t = e.target as Node
       if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return
-      // Click-away: datetime commits the current selection (like the other inline
-      // editors); date-only already committed on the day click, so just close.
-      if (withTime && selRef.current) emit(selRef.current)
-      else cancel()
+      commitTyped() // click-away commits the typed/selected value
     }
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") cancel() }
     function onMove() { place() }
@@ -114,7 +154,7 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
   const cells = Array.from({ length: 42 }, (_, i) => { const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d })
 
   function pickDay(d: Date) {
-    setSelected(d)
+    setSelected(d); setTyped(fmtDateInput(d))
     if (withTime) setView({ y: d.getFullYear(), m: d.getMonth() })
     else emit(d) // date-only: choosing a day commits immediately
   }
@@ -123,26 +163,40 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
     const p = zonedParts(new Date(), CLINIC_TZ)
     const t = withTime ? new Date(p.year, p.month, p.day, p.hour, p.minute) : new Date()
     if (withTime) setTime(`${pad(t.getHours())}:${pad(t.getMinutes())}`)
-    setSelected(t); setView({ y: t.getFullYear(), m: t.getMonth() })
+    setSelected(t); setTyped(fmtDateInput(t)); setView({ y: t.getFullYear(), m: t.getMonth() })
     if (!withTime) emit(t)
   }
   const step = (delta: number) => setView((v) => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() } })
 
-  const triggerLabel = selected
-    ? selected.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + (withTime ? `, ${time}` : "")
-    : (withTime ? "mm/dd/yyyy, --:--" : "mm/dd/yyyy")
-
   return (
     <>
-      <button
+      <div
         ref={triggerRef}
-        type="button"
-        onClick={() => { if (!open) place(); setOpen((o) => !o) }}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-left hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500"
       >
-        <span className={cn("flex-1 truncate", selected ? "text-slate-800" : "text-slate-400")}>{triggerLabel}</span>
-        <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-      </button>
+        <input
+          ref={inputRef}
+          value={typed}
+          onChange={(e) => onType(e.target.value)}
+          onFocus={() => { if (!open) { place(); setOpen(true) } }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitTyped() } }}
+          placeholder="mm/dd/yyyy"
+          inputMode="numeric"
+          className="flex-1 min-w-0 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
+        />
+        {withTime && (
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="shrink-0 w-[7.5rem] bg-transparent text-sm text-slate-800 focus:outline-none border-l border-slate-200 pl-2"
+          />
+        )}
+        <button type="button" tabIndex={-1} onClick={() => { if (!open) { place(); setOpen(true) } else setOpen(false) }}
+          className="shrink-0 p-0.5 text-slate-400 hover:text-slate-600" title="Open calendar">
+          <Calendar className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
       {open && typeof document !== "undefined" && createPortal(
         <div
@@ -205,7 +259,7 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
 
           {/* Footer */}
           <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-            <button type="button" onClick={() => { onCommit(""); setSelected(null); setOpen(false) }} className="text-xs font-medium text-slate-500 hover:text-slate-700">Clear</button>
+            <button type="button" onClick={() => { onCommit(""); setSelected(null); setTyped(""); setOpen(false) }} className="text-xs font-medium text-slate-500 hover:text-slate-700">Clear</button>
             <div className="flex items-center gap-3">
               <button type="button" onClick={goToday} className="text-xs font-medium text-blue-600 hover:text-blue-700">Today</button>
               {withTime && <button type="button" onClick={() => selected && emit(selected)} disabled={!selected} className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40">Apply</button>}

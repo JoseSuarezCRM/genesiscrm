@@ -12,6 +12,10 @@ export function ratingLabel(rating?: number | null): string | null {
   return ACTIVITY_RATINGS.find((r) => r.value === Number(rating))?.label ?? null
 }
 
+// Meeting rating: a simple 1 (lowest) … 5 (highest) scale, separate from the
+// clinic value above.
+export const MEETING_RATINGS: number[] = [1, 2, 3, 4, 5]
+
 // Normalize an incoming rating to { rating } for meta, or nothing when unset/invalid.
 export function ratingMeta(rating?: number): { rating: number } | undefined {
   const r = Number(rating)

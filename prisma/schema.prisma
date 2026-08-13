@@ -130,9 +130,25 @@ enum TaskPriority {
 }
 
 enum TaskStatus {
-  TODO
+  NOT_STARTED
   IN_PROGRESS
-  DONE
+  WAITING
+  COMPLETED
+  DEFERRED
+}
+
+enum TaskType {
+  TODO
+  CALL
+  EMAIL
+}
+
+enum TaskRepeat {
+  NONE
+  DAILY
+  WEEKDAYS
+  WEEKLY
+  MONTHLY
 }
 
 enum ReferralStatus {
@@ -799,7 +815,14 @@ model Task {
   description   String?
   dueDate       DateTime?
   priority      TaskPriority  @default(NORMAL)
-  status        TaskStatus    @default(TODO)
+  status        TaskStatus    @default(NOT_STARTED)
+  type          TaskType      @default(TODO)
+  repeat        TaskRepeat    @default(NONE)
+  // Minutes before dueDate to fire a reminder (0 = at due time); null = no reminder.
+  reminderMinutesBefore Int?
+  reminderSentAt DateTime?
+  queueId       String?
+  queue         TaskQueue?    @relation(fields: [queueId], references: [id], onDelete: SetNull)
   createdById   String
   createdBy     User          @relation("TaskCreatedBy", fields: [createdById], references: [id])
   assignedToId  String?
@@ -816,7 +839,15 @@ model Task {
   @@index([assignedToId])
   @@index([createdById])
   @@index([referralId])
+  @@index([queueId])
   @@index([status])
+}
+
+model TaskQueue {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  tasks     Task[]
 }
 
 model Notification {
@@ -901,7 +932,8 @@ model Activity {
   frontDesk   String?
   flyer       String?
   notes       String?
-  rating      Int?               // value rating: 1 Low / 2 Mid / 3 High
+  rating      Int?               // clinic value: 1 Low / 2 Mid / 3 High
+  meetingRating Int?             // meeting rating: 1 (lowest) … 5 (highest)
   customProperties Json          @default("{}") // custom property values
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])

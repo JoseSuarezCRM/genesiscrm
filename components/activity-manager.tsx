@@ -7,7 +7,7 @@ import { createActivityView, updateActivityView, deleteActivityView } from "@/ap
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
-import { ACTIVITY_RATINGS, ratingLabel } from "@/lib/activity-ratings"
+import { ACTIVITY_RATINGS, MEETING_RATINGS, ratingLabel } from "@/lib/activity-ratings"
 import { OPTION_COLORS, hexToChipStyle } from "@/lib/option-colors"
 import { ColorPicker } from "@/components/ui/color-picker"
 import { showToast } from "@/components/toast"
@@ -116,6 +116,7 @@ interface ActivityRow {
   providers: { doctor: { id: string; name: string; title: string | null } }[]
   nextStep: string | null; frontDesk: string | null; flyer: string | null; notes: string | null
   rating: number | null
+  meetingRating: number | null
   createdBy: { name: string | null; email: string }
 }
 
@@ -712,7 +713,7 @@ function emptyForm() {
     practiceId: "", locationId: "", providerIds: [] as string[],
     tagIds: [] as string[], selectedTags: [] as TagObj[],
     nextStep: "", date: format(new Date(), "yyyy-MM-dd"),
-    frontDesk: "", flyer: "", notes: "", rating: "",
+    frontDesk: "", flyer: "", notes: "", rating: "", meetingRating: "",
   }
 }
 
@@ -916,6 +917,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       nextStep: a.nextStep ?? "", date: format(activityDay(a.date), "yyyy-MM-dd"),
       frontDesk: a.frontDesk ?? "", flyer: a.flyer ?? "", notes: a.notes ?? "",
       rating: a.rating != null ? String(a.rating) : "",
+      meetingRating: a.meetingRating != null ? String(a.meetingRating) : "",
     })
     setEditId(a.id); setError(null); setOpen(true)
   }
@@ -952,6 +954,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         flyer: form.flyer || undefined,
         notes: form.notes || undefined,
         rating: form.rating ? Number(form.rating) : null,
+        meetingRating: form.meetingRating ? Number(form.meetingRating) : null,
       }
       const result = editId ? await updateActivity(editId, payload) : await createActivity(payload)
       if (result.error) {
@@ -1758,7 +1761,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Rating</label>
+              <label className="text-sm font-medium text-slate-700">Clinic Value (can change)</label>
               <div className="flex flex-wrap gap-2">
                 {ACTIVITY_RATINGS.map(r => (
                   <button
@@ -1772,6 +1775,25 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                     }`}
                   >
                     {r.value} - {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Meeting Rating (1 lowest, 5 highest)</label>
+              <div className="flex flex-wrap gap-2">
+                {MEETING_RATINGS.map(v => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => set("meetingRating", form.meetingRating === String(v) ? "" : String(v))}
+                    className={`h-9 w-9 rounded-lg border text-sm font-medium transition-all ${
+                      form.meetingRating === String(v)
+                        ? "bg-zinc-900 text-white border-zinc-900"
+                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    {v}
                   </button>
                 ))}
               </div>
