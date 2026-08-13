@@ -2,6 +2,11 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { createActivity, updateActivity, deleteActivity } from "@/app/actions/activities"
+import { createTask } from "@/app/actions/tasks"
+import { TaskType, TaskPriority } from "@prisma/client"
+import DatePicker from "@/components/ui/date-picker"
+import StyledSelect from "@/components/ui/styled-select"
+import { TASK_TYPES, PRIORITY_LABELS, REMINDER_OPTIONS } from "@/lib/task-meta"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { createActivityView, updateActivityView, deleteActivityView } from "@/app/actions/activity-views"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
@@ -717,6 +722,16 @@ function emptyForm() {
   }
 }
 
+// The optional follow-up task drafted on step 2 of the New Activity dialog.
+function emptyTaskDraft() {
+  return {
+    title: "", description: "", dueDate: "", assignedToId: "",
+    type: "TODO" as TaskType, priority: "NORMAL" as TaskPriority,
+    reminderMinutesBefore: null as number | null,
+    skipAssoc: new Set<string>(), // association keys ("PRACTICE:id") the user removed
+  }
+}
+
 const ACTIVITY_TYPES: { value: string; color: string; bg: string; border: string }[] = [
   { value: "Presentation", color: "text-violet-700", bg: "bg-violet-100", border: "border-violet-300" },
   { value: "Lunch",        color: "text-emerald-700", bg: "bg-emerald-100", border: "border-emerald-300" },
@@ -749,10 +764,15 @@ const DEFAULT_ACTIVITY_COLS = ["date", "account", "location", "providers", "type
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true }: Props & { canManage?: boolean }) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
+  // Two-step "New Activity" dialog: step 2 is an optional follow-up task built
+  // from the Next Step text + the selected practice/location/providers.
+  const [step, setStep] = useState<1 | 2>(1)
+  const [taskDraft, setTaskDraft] = useState(emptyTaskDraft())
+  const setTask = <K extends keyof ReturnType<typeof emptyTaskDraft>>(k: K, val: ReturnType<typeof emptyTaskDraft>[K]) => setTaskDraft((p) => ({ ...p, [k]: val }))
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
@@ -906,7 +926,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   }
 
   function openNew() {
-    setForm(emptyForm()); setEditId(null); setError(null); setOpen(true)
+    setForm(emptyForm()); setEditId(null); setError(null); setStep(1); setTaskDraft(emptyTaskDraft()); setOpen(true)
   }
 
   function openEdit(a: ActivityRow) {
@@ -919,7 +939,32 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       rating: a.rating != null ? String(a.rating) : "",
       meetingRating: a.meetingRating != null ? String(a.meetingRating) : "",
     })
-    setEditId(a.id); setError(null); setOpen(true)
+    setEditId(a.id); setError(null); setStep(1); setOpen(true)
+  }
+
+  // Association {type,id,label} list built from the activity's practice/location/providers.
+  const followupAssocs = (): { key: string; type: string; id: string; label: string }[] => {
+    const out: { key: string; type: string; id: string; label: string }[] = []
+    if (form.practiceId) out.push({ key: `PRACTICE:${form.practiceId}`, type: "PRACTICE", id: form.practiceId, label: practiceOptions.find(p => p.id === form.practiceId)?.label ?? "Practice" })
+    if (form.locationId) out.push({ key: `LOCATION:${form.locationId}`, type: "LOCATION", id: form.locationId, label: locationOptions.find(l => l.id === form.locationId)?.label ?? "Location" })
+    for (const id of form.providerIds) {
+      const d = combinedDoctors.find(x => x.id === id)
+      out.push({ key: `PROVIDER:${id}`, type: "PROVIDER", id, label: d ? `${d.name}${d.title ? `, ${d.title}` : ""}` : "Provider" })
+    }
+    return out
+  }
+
+  // Whether the follow-up task step is offered (new activity + Next Step text + can create tasks).
+  const followupAvailable = !editId && canCreateTasks && form.nextStep.trim().length > 0
+
+  function goToTaskStep() {
+    setTaskDraft({
+      ...emptyTaskDraft(),
+      title: form.nextStep.trim(),
+      description: form.nextStep.trim(),
+      assignedToId: currentUserId,
+    })
+    setStep(2)
   }
 
   function set(field: string, value: string | string[]) {
@@ -940,7 +985,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     setForm(prev => ({ ...prev, selectedTags: tags, tagIds: tags.map(t => t.id) }))
   }
 
-  function handleSubmit() {
+  function handleSubmit(withTask = false) {
     setError(null)
     startTransition(async () => {
       const payload = {
@@ -959,9 +1004,28 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       const result = editId ? await updateActivity(editId, payload) : await createActivity(payload)
       if (result.error) {
         setError(typeof result.error === "string" ? result.error : "Error saving activity.")
-      } else {
-        setOpen(false)
+        return
       }
+      // Optional follow-up task from the Next Step. The activity is already saved,
+      // so a task failure is non-fatal — surface it but don't discard the activity.
+      if (withTask) {
+        const associations = followupAssocs().filter(a => !taskDraft.skipAssoc.has(a.key)).map(a => ({ type: a.type, id: a.id }))
+        const tr = await createTask({
+          title: taskDraft.title.trim() || form.nextStep.trim(),
+          description: taskDraft.description || undefined,
+          dueDate: taskDraft.dueDate || undefined,
+          assignedToId: taskDraft.assignedToId || undefined,
+          type: taskDraft.type, priority: taskDraft.priority,
+          reminderMinutesBefore: taskDraft.reminderMinutesBefore,
+          associations,
+        })
+        if ((tr as any)?.error) {
+          setError("Activity saved, but the follow-up task couldn't be created. You can add it from the Tasks page.")
+          return
+        }
+        showToast("Activity logged and follow-up task created")
+      }
+      setOpen(false)
     })
   }
 
@@ -1670,7 +1734,20 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <DialogTitle>{editId ? "Edit Activity" : "New Activity"}</DialogTitle>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-4 py-2">
+          {(followupAvailable || step === 2) && (
+            <div className="flex gap-1 p-1 bg-slate-100 rounded-lg text-sm font-medium">
+              <button type="button" onClick={() => setStep(1)}
+                className={cn("flex-1 py-1.5 rounded-md transition-colors", step === 1 ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                1 · Activity
+              </button>
+              <button type="button" onClick={() => step === 1 ? goToTaskStep() : setStep(2)}
+                className={cn("flex-1 py-1.5 rounded-md transition-colors", step === 2 ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+                2 · Follow-up task
+              </button>
+            </div>
+          )}
+
+          <div className={cn("grid grid-cols-2 gap-4 py-2", step === 2 && "hidden")}>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Account <span className="text-slate-400 font-normal">(Organization)</span></label>
               <Picker placeholder="Search Account..." value={form.practiceId} options={practiceOptions}
@@ -1805,14 +1882,101 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             </div>
           </div>
 
+          {/* ── Step 2: follow-up task ── */}
+          {step === 2 && (
+            <div className="space-y-4 py-2">
+              <p className="text-xs text-slate-500">Create a task from this next step. It's linked to the practice, location, and providers you picked.</p>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Task title *</label>
+                <Input value={taskDraft.title} onChange={e => setTask("title", e.target.value)} placeholder="What needs to be done?" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Deadline</label>
+                  <DatePicker withTime autoOpen={false} value={taskDraft.dueDate} onCommit={v => setTask("dueDate", v)} onCancel={() => {}} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Assigned to</label>
+                  <StyledSelect value={taskDraft.assignedToId} onChange={e => setTask("assignedToId", e.target.value)} className="w-full">
+                    <option value="">— Unassigned —</option>
+                    {shareUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                  </StyledSelect>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Task type</label>
+                  <StyledSelect value={taskDraft.type} onChange={e => setTask("type", e.target.value as TaskType)} className="w-full">
+                    {TASK_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </StyledSelect>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Priority</label>
+                  <StyledSelect value={taskDraft.priority} onChange={e => setTask("priority", e.target.value as TaskPriority)} className="w-full">
+                    {Object.values(TaskPriority).map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+                  </StyledSelect>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Reminder</label>
+                  <StyledSelect value={String(taskDraft.reminderMinutesBefore ?? "")} onChange={e => setTask("reminderMinutesBefore", e.target.value === "" ? null : Number(e.target.value))} className="w-full">
+                    {REMINDER_OPTIONS.map(r => <option key={String(r.value)} value={r.value === null ? "" : r.value}>{r.label}</option>)}
+                  </StyledSelect>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Associated with</label>
+                <div className="flex flex-wrap gap-1.5 min-h-[38px] border border-slate-200 rounded-md bg-slate-50 px-3 py-2 content-start">
+                  {followupAssocs().length === 0 ? (
+                    <p className="text-xs text-slate-400 self-center">No practice/location/providers selected on the activity.</p>
+                  ) : followupAssocs().map(a => {
+                    const skipped = taskDraft.skipAssoc.has(a.key)
+                    const kind = a.type === "PRACTICE" ? "Practice" : a.type === "LOCATION" ? "Location" : "Provider"
+                    return (
+                      <button key={a.key} type="button"
+                        onClick={() => { const s = new Set(taskDraft.skipAssoc); skipped ? s.delete(a.key) : s.add(a.key); setTask("skipAssoc", s) }}
+                        className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+                          skipped ? "bg-slate-100 text-slate-400 line-through" : "bg-white border border-slate-200 text-slate-700")}
+                        title={skipped ? "Click to re-add" : "Click to remove"}>
+                        <span className="text-slate-400">{kind}:</span> {a.label}
+                        {!skipped && <X className="h-3 w-3 text-slate-400" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Description</label>
+                <Textarea value={taskDraft.description} onChange={e => setTask("description", e.target.value)} placeholder="Task details…" rows={3} />
+              </div>
+            </div>
+          )}
+
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={isPending}>
-              {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editId ? "Save Changes" : "Log Activity"}
-            </Button>
+            {step === 2 ? (
+              <>
+                <Button variant="outline" onClick={() => setStep(1)} disabled={isPending}>← Back</Button>
+                <Button onClick={() => handleSubmit(true)} disabled={isPending || !taskDraft.title.trim()}>
+                  {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Log activity &amp; create task
+                </Button>
+              </>
+            ) : followupAvailable ? (
+              <>
+                <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>Cancel</Button>
+                <Button variant="outline" onClick={() => handleSubmit(false)} disabled={isPending}>Log activity only</Button>
+                <Button onClick={goToTaskStep} disabled={isPending}>Next → Task details</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>Cancel</Button>
+                <Button onClick={() => handleSubmit(false)} disabled={isPending}>
+                  {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {editId ? "Save Changes" : "Log Activity"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
