@@ -9,6 +9,8 @@ import StyledSelect from "@/components/ui/styled-select"
 import { TASK_TYPES, PRIORITY_LABELS, REMINDER_OPTIONS } from "@/lib/task-meta"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { createActivityView, updateActivityView, deleteActivityView } from "@/app/actions/activity-views"
+import { reorderViews } from "@/app/actions/view-order"
+import { useCardReorder } from "@/components/use-card-reorder"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
@@ -828,6 +830,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   // Saved views
   const [savedViews, setSavedViews] = useState<SavedView[]>(initialSavedViews)
   const [activeViewId, setActiveViewId] = useState<string | null>(null)
+  // Drag to reorder the view tabs (per-user order, persisted).
+  const viewReorder = useCardReorder(savedViews, (v) => v.id, (ids) => startTransition(() => { reorderViews("ACTIVITY", "", ids) }))
   const [savingView, setSavingView] = useState(false)
   const [newViewName, setNewViewName] = useState("")
   const [showSaveForm, setShowSaveForm] = useState(false)
@@ -1327,10 +1331,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         >
           All
         </button>
-        {savedViews.map(view => (
-          <div key={view.id} className={`inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden ${
-            activeViewId === view.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400"
-          }`}>
+        {viewReorder.order.map(view => (
+          <div key={view.id}
+            {...viewReorder.handleProps(view.id)}
+            {...viewReorder.cardProps(view.id)}
+            className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden cursor-grab active:cursor-grabbing",
+              viewReorder.dragging === view.id && "opacity-50",
+              activeViewId === view.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
             <button className={`pl-3 h-full ${view.isOwner === false ? "pr-3" : "pr-1.5"}`} onClick={() => applyView(view)}>
               {view.name}
               {view.isOwner === false && view.visibility && view.visibility !== "PRIVATE" && (

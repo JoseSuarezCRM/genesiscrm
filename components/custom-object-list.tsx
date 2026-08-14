@@ -17,6 +17,8 @@ import FilterBuilder from "@/components/ui/filter-builder"
 import ExportDialog from "@/components/ui/export-dialog"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { createCustomObjectView, deleteCustomObjectView } from "@/app/actions/custom-object-views"
+import { reorderViews } from "@/app/actions/view-order"
+import { useCardReorder } from "@/components/use-card-reorder"
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields, decodeFilterParam } from "@/lib/filters"
 import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -208,6 +210,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     ?? (!filtersActive && !search ? "__default__" : null)
   function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); setVisibleCols(v.config.columns ?? allCols.map((c) => c.key)); setSearch("") }
   function applyDefault() { setFilter(emptyFilter()); setVisibleCols(allCols.map((c) => c.key)); setSearch("") }
+  // Drag to reorder the view tabs (per-user order, persisted).
+  const viewReorder = useCardReorder(savedViews, (v) => v.id, (ids) => startTransition(() => { reorderViews("CUSTOM_OBJECT", objectKey, ids) }))
   function saveView() {
     if (!newViewName.trim()) return
     setSavingView(true)
@@ -297,8 +301,11 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
           className={cn("inline-flex items-center h-8 px-3 rounded-lg border text-sm font-medium transition-all", activeViewId === "__default__" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
           Default
         </button>
-        {savedViews.map((v) => (
-          <div key={v.id} className={cn("inline-flex items-center h-8 rounded-lg border text-sm font-medium overflow-hidden", activeViewId === v.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+        {viewReorder.order.map((v) => (
+          <div key={v.id}
+            {...viewReorder.handleProps(v.id)}
+            {...viewReorder.cardProps(v.id)}
+            className={cn("inline-flex items-center h-8 rounded-lg border text-sm font-medium overflow-hidden cursor-grab active:cursor-grabbing", viewReorder.dragging === v.id && "opacity-50", activeViewId === v.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
             <button className={cn("pl-3 h-full", v.isOwner === false ? "pr-3" : "pr-1.5")} onClick={() => applyView(v)}>
               {v.name}
               {v.isOwner === false && v.visibility && v.visibility !== "PRIVATE" && (

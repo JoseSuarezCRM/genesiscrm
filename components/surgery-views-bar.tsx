@@ -4,6 +4,8 @@ import { useState, useTransition } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Plus, Check, Loader2, X, Globe, Users, UserCog } from "lucide-react"
 import { createSurgeryView, deleteSurgeryView, type SurgeryViewConfig } from "@/app/actions/surgery-views"
+import { reorderViews } from "@/app/actions/view-order"
+import { useCardReorder } from "@/components/use-card-reorder"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { DEFAULT_SURGERY_COLS } from "@/components/surgery-table"
 import { cn } from "@/lib/utils"
@@ -61,6 +63,9 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
   const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
   const [saving, setSaving] = useState(false)
 
+  // Drag to reorder the view tabs (per-user order, persisted).
+  const reorder = useCardReorder(views, (v) => v.id, (ids) => startTransition(() => { reorderViews("SURGERY", "", ids) }))
+
   const currentQuery = normalizeQuery(params.toString())
   const activeViewId =
     views.find((v) => normalizeQuery(v.config.query) === currentQuery)?.id ??
@@ -107,8 +112,11 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
         Default
       </button>
 
-      {views.map((view) => (
-        <div key={view.id} className={cn(pill, activeViewId === view.id ? activeCls : idleCls)}>
+      {reorder.order.map((view) => (
+        <div key={view.id}
+          {...reorder.handleProps(view.id)}
+          {...reorder.cardProps(view.id)}
+          className={cn(pill, "cursor-grab active:cursor-grabbing", reorder.dragging === view.id && "opacity-50", activeViewId === view.id ? activeCls : idleCls)}>
           <button className={cn("pl-3 h-full", view.isOwner === false ? "pr-3" : "pr-1.5")} onClick={() => applyView(view)}>
             {view.name}
             {view.isOwner === false && view.visibility && view.visibility !== "PRIVATE" && (

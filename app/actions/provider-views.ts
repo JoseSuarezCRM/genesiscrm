@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { applyUserOrder } from "@/lib/view-order"
 
 export interface ProviderViewConfig {
   columns: string[]
@@ -43,7 +44,7 @@ export async function getProviderViews() {
     orderBy: { createdAt: "asc" },
   })
   // Mark which views the current user owns (can edit/delete)
-  return views.map((v: any) => ({ ...v, isOwner: v.userId === userId }))
+  return applyUserOrder(userId, "PROVIDER", "", views.map((v: any) => ({ ...v, isOwner: v.userId === userId })))
 }
 
 export async function createProviderView(name: string, config: ProviderViewConfig, access?: ViewAccess) {

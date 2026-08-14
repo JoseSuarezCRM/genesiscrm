@@ -14,6 +14,8 @@ import {
   createDoctor, updateDoctor, deleteDoctor, mergeDoctor,
 } from "@/app/actions/referring-doctors"
 import { createProviderView, updateProviderView, deleteProviderView } from "@/app/actions/provider-views"
+import { reorderViews } from "@/app/actions/view-order"
+import { useCardReorder } from "@/components/use-card-reorder"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -369,6 +371,9 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     setSearch(view.config.search ?? "")
     setActiveViewId(view.id)
   }
+
+  // Drag to reorder the view tabs (per-user order, persisted).
+  const viewReorder = useCardReorder(savedViews, (v) => v.id, (ids) => startTransition(() => { reorderViews("PROVIDER", "", ids) }))
 
   async function handleSaveProviderView() {
     if (!newViewName.trim()) return
@@ -733,8 +738,11 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           >
             Default
           </button>
-          {savedViews.map(view => (
-            <div key={view.id} className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden", activeViewId === view.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
+          {viewReorder.order.map(view => (
+            <div key={view.id}
+              {...viewReorder.handleProps(view.id)}
+              {...viewReorder.cardProps(view.id)}
+              className={cn("inline-flex items-center gap-1 h-8 rounded-lg border text-sm font-medium transition-all overflow-hidden cursor-grab active:cursor-grabbing", viewReorder.dragging === view.id && "opacity-50", activeViewId === view.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
               <button className={cn("pl-3 h-full", view.isOwner === false ? "pr-3" : "pr-1.5")} onClick={() => applyProviderView(view)}>
                 {view.name}
                 {view.isOwner === false && view.visibility && view.visibility !== "PRIVATE" && (

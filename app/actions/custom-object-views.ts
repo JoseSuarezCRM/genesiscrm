@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { applyUserOrder } from "@/lib/view-order"
 
 export interface CustomObjectViewConfig {
   filter: unknown        // FilterState
@@ -37,7 +38,7 @@ export async function getCustomObjectViews(objectKey: string) {
     },
     orderBy: { createdAt: "asc" },
   })
-  return views.map((v: any) => ({ ...v, isOwner: v.userId === userId }))
+  return applyUserOrder(userId, "CUSTOM_OBJECT", objectKey, views.map((v: any) => ({ ...v, isOwner: v.userId === userId })))
 }
 
 export async function createCustomObjectView(objectKey: string, name: string, config: CustomObjectViewConfig, access?: ViewAccess) {

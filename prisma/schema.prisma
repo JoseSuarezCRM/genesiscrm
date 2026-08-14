@@ -474,6 +474,7 @@ model User {
   activityViews         ActivityView[]
   providerViews         ProviderView[]
   surgeryViews          SurgeryView[]
+  viewOrders            UserViewOrder[]
   savedReports          SavedReport[]        @relation("SavedReportCreatedBy")
   dashboards            Dashboard[]          @relation("DashboardCreatedBy")
   surgeryCases          SurgeryCase[]        @relation("SurgeryCaseCreatedBy")
@@ -989,6 +990,20 @@ model SurgeryView {
   createdAt     DateTime @default(now())
 
   @@index([userId])
+}
+
+// Per-user display order for the saved-view tabs on a list. One row per
+// (user, viewType, scopeKey); orderedIds are the view ids in the user's order.
+model UserViewOrder {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewType   String   // "SURGERY" | "ACTIVITY" | "PROVIDER" | "CUSTOM_OBJECT"
+  scopeKey   String   @default("") // custom-object key for CUSTOM_OBJECT, "" otherwise
+  orderedIds String[] @default([])
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, viewType, scopeKey])
 }
 
 model DirectEmail {
