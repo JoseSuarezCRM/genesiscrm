@@ -1,6 +1,8 @@
 // Pretty, email-safe HTML report for a set of activities (referring-practice
 // visits/calls). Inline styles + table layout so it renders in every mail client.
 
+import { ratingLabel } from "@/lib/activity-ratings"
+
 export interface ReportActivity {
   id: string
   date: string | Date
@@ -11,6 +13,8 @@ export interface ReportActivity {
   frontDesk: string | null
   flyer: string | null // legacy column name — this is the activity "Type"
   notes: string | null
+  rating: number | null        // Clinic Value (1 Low / 2 Mid / 3 High)
+  meetingRating: number | null // Meeting Rating (1 lowest … 5 highest)
   tags: { name: string; color?: string | null }[]
   createdBy?: { name: string | null; email: string } | null
 }
@@ -51,6 +55,10 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
   const practices = new Set(activities.map((a) => a.practice?.name).filter(Boolean))
   const providers = new Set(activities.flatMap((a) => a.providers.map((p) => p.doctor.name)))
 
+  // Average meeting rating across activities that have one.
+  const mrs = activities.map((a) => a.meetingRating).filter((r): r is number => r != null)
+  const avgMeetingRating = mrs.length ? (mrs.reduce((s, r) => s + r, 0) / mrs.length).toFixed(1) : null
+
   // Top tags by frequency (up to 4) for the summary.
   const tagCounts = new Map<string, number>()
   for (const a of activities) for (const t of a.tags) tagCounts.set(t.name, (tagCounts.get(t.name) ?? 0) + 1)
@@ -86,6 +94,8 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
         ${detailRow("Providers", providerNames(a) || null)}
         ${detailRow("Next step", a.nextStep)}
         ${detailRow("Front desk", a.frontDesk)}
+        ${detailRow("Clinic Value", a.rating != null ? `${a.rating} · ${ratingLabel(a.rating) ?? ""}`.trim() : null)}
+        ${detailRow("Meeting Rating", a.meetingRating != null ? `${a.meetingRating} / 5` : null)}
         ${detailRow("Notes", a.notes)}
       </table>
       ${a.tags.length ? `<div style="margin-top:10px;">${a.tags.map((t) => chip(t.name, t.color)).join("")}</div>` : ""}
@@ -113,6 +123,7 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
               ${summaryRow("Date range", rangeLabel)}
               ${summaryRow("Practices visited", String(practices.size))}
               ${summaryRow("Providers seen", String(providers.size))}
+              ${avgMeetingRating ? summaryRow("Avg. meeting rating", `${avgMeetingRating} / 5`) : ""}
             </table>
             ${topTags.length ? `<div style="margin-top:14px;text-align:center;">${topTags.map(([n, c]) => chip(`${n} · ${c}`)).join("")}</div>` : ""}
           </td></tr>

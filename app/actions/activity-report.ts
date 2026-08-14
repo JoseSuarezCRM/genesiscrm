@@ -37,6 +37,7 @@ export async function emailActivityReport(input: { activityIds: string[]; to: st
     location: a.location ? { name: a.location.name, address: a.location.address } : null,
     providers: a.providers.map((p) => ({ doctor: { name: p.doctor.name, title: p.doctor.title } })),
     nextStep: a.nextStep, frontDesk: a.frontDesk, flyer: a.flyer, notes: a.notes,
+    rating: a.rating, meetingRating: a.meetingRating,
     tags: a.tags.map((t) => ({ name: t.tag.name, color: t.tag.color })),
     createdBy: a.createdBy ? { name: a.createdBy.name, email: a.createdBy.email } : null,
   }))
