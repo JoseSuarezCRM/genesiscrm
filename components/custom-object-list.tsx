@@ -19,6 +19,9 @@ import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTea
 import { createCustomObjectView, deleteCustomObjectView } from "@/app/actions/custom-object-views"
 import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
+import ColumnChooserModal from "@/components/ui/column-chooser"
+import { useColumnPrefs } from "@/components/ui/use-column-prefs"
+import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields, decodeFilterParam } from "@/lib/filters"
 import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -116,15 +119,10 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
 
   // Columns: property columns + owner + created (recordId + primary always shown).
   const allCols = [...otherProps.map((p) => ({ key: p.id, label: p.name })), { key: "__owner", label: ownerLabel }, { key: "__created", label: "Created" }]
-  const [visibleCols, setVisibleCols] = useState<string[]>(allCols.map((c) => c.key))
-  const [colMenu, setColMenu] = useState(false)
-  const colRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    function onDoc(e: MouseEvent) { if (colRef.current && !colRef.current.contains(e.target as Node)) setColMenu(false) }
-    document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
-  }, [])
-  const cols = allCols.filter((c) => visibleCols.includes(c.key))
+  const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs(`co_${objectKey}_cols`, allCols.map((c) => c.key))
+  const [colModalOpen, setColModalOpen] = useState(false)
+  // Columns render in the user's chosen order (not catalog order).
+  const cols = (visibleCols.map((k) => allCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[])
 
   // Filter + search + export.
   const filterFields: FilterField[] = [
@@ -150,6 +148,14 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const filtersActive = activeConditionCount(filter, filterFields) > 0
 
   const { colWidth, startResize } = useColumnResize(`co_${objectKey}_colWidths`)
+  // Drag column headers to reorder; the order (and frozen count) persist per user.
+  const colReorder = useCardReorder(cols, (c) => c.key, (ids) => setVisibleCols(ids))
+  // Frozen (sticky) columns: leading fixed __id/__name + the first data columns,
+  // offset past the 40px row-select checkbox. widthOf mirrors the <colgroup>.
+  const widthOf = (k: string) => k === "__id" ? (colWidth("__id") ?? 96) : k === "__name" ? (colWidth("__name") ?? 240) : (colWidth(k) ?? 180)
+  const frozenKeys = ["__id", "__name", ...colReorder.order.map((c) => c.key)]
+  const fmap = frozenMap(frozenKeys, frozenCount, widthOf, 40)
+  const cbFrozen = frozenCount > 0 // freeze the checkbox column whenever anything is frozen
   const [sortKeyC, setSortKeyC] = useState<string>("__id")
   const [sortDirC, setSortDirC] = useState<"asc" | "desc">("asc")
   const sortKey = isServer ? (urlParams.get("sort") ?? "__id") : sortKeyC
@@ -208,15 +214,15 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const currentKey = JSON.stringify({ filter, columns: visibleCols })
   const activeViewId = savedViews.find((v) => JSON.stringify({ filter: v.config.filter, columns: v.config.columns }) === currentKey)?.id
     ?? (!filtersActive && !search ? "__default__" : null)
-  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); setVisibleCols(v.config.columns ?? allCols.map((c) => c.key)); setSearch("") }
-  function applyDefault() { setFilter(emptyFilter()); setVisibleCols(allCols.map((c) => c.key)); setSearch("") }
+  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); applyCols(v.config.columns ?? allCols.map((c) => c.key), (v.config as any).frozen ?? 0); setSearch("") }
+  function applyDefault() { setFilter(emptyFilter()); applyCols(allCols.map((c) => c.key), 0); setSearch("") }
   // Drag to reorder the view tabs (per-user order, persisted).
   const viewReorder = useCardReorder(savedViews, (v) => v.id, (ids) => startTransition(() => { reorderViews("CUSTOM_OBJECT", objectKey, ids) }))
   function saveView() {
     if (!newViewName.trim()) return
     setSavingView(true)
     startTransition(async () => {
-      await createCustomObjectView(objectKey, newViewName.trim(), { filter, columns: visibleCols }, newViewAccess)
+      await createCustomObjectView(objectKey, newViewName.trim(), { filter, columns: visibleCols, frozen: frozenCount } as any, newViewAccess)
       setSavingView(false); setShowSaveForm(false); setNewViewName(""); setNewViewAccess({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
       router.refresh()
     })
@@ -254,25 +260,10 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <FilterBuilder fields={filterFields} value={filter} onChange={onFilterChange} />
-        <div className="relative" ref={colRef}>
-          <button onClick={() => setColMenu((v) => !v)}
-            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
-            <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
-          </button>
-          {colMenu && (
-            <div className="absolute left-0 top-full mt-1.5 z-50 w-52 bg-white border border-zinc-200 rounded-xl shadow-xl py-1">
-              {allCols.map((c) => (
-                <button key={c.key} onClick={() => setVisibleCols((prev) => prev.includes(c.key) ? prev.filter((k) => k !== c.key) : [...prev, c.key])}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 text-left">
-                  <span className={cn("w-[14px] h-[14px] rounded border flex items-center justify-center", visibleCols.includes(c.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
-                    {visibleCols.includes(c.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                  </span>
-                  <span className="text-zinc-700 truncate">{c.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <button onClick={() => setColModalOpen(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
+          <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
+        </button>
         <button onClick={() => setExportOpen(true)} disabled={filtered.length === 0} title="Export current view to CSV"
           className="ml-auto inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50">
           <Download className="h-3.5 w-3.5" /> Export
@@ -363,23 +354,27 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                 <col style={{ width: 40 }} />
                 <col style={{ width: colWidth("__id") ?? 96 }} />
                 <col style={{ width: colWidth("__name") ?? 240 }} />
-                {cols.map((c) => <col key={c.key} style={{ width: colWidth(c.key) ?? 180 }} />)}
+                {colReorder.order.map((c) => <col key={c.key} style={{ width: colWidth(c.key) ?? 180 }} />)}
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  <th className="px-4 py-3 w-10">
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-3 w-10", cbFrozen && "bg-slate-50")}>
                     <input type="checkbox" checked={allChecked} onChange={() => setSelected(allChecked ? new Set() : new Set(filtered.map((r) => r.id)))} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  <th className="px-4 py-3 font-semibold relative">
+                  <th style={frozenHeadStyle(fmap.get("__id"))} className={cn("px-4 py-3 font-semibold relative", frozenClass(fmap.get("__id"), "bg-slate-50"))}>
                     <button onClick={() => toggleSort("__id")} className="inline-flex items-center gap-1 hover:text-slate-800">Record ID <SortIcon k="__id" /></button>
                     <ColResizer onMouseDown={(e) => startResize("__id", e)} />
                   </th>
-                  <th className="px-4 py-3 font-semibold relative">
+                  <th style={frozenHeadStyle(fmap.get("__name"))} className={cn("px-4 py-3 font-semibold relative", frozenClass(fmap.get("__name"), "bg-slate-50"))}>
                     <button onClick={() => toggleSort("__name")} className="inline-flex items-center gap-1 hover:text-slate-800">{nameHeader} <SortIcon k="__name" /></button>
                     <ColResizer onMouseDown={(e) => startResize("__name", e)} />
                   </th>
-                  {cols.map((c) => (
-                    <th key={c.key} className="px-4 py-3 font-semibold relative">
+                  {colReorder.order.map((c) => (
+                    <th key={c.key}
+                      {...colReorder.handleProps(c.key)}
+                      {...colReorder.cardProps(c.key)}
+                      style={frozenHeadStyle(fmap.get(c.key))}
+                      className={cn("px-4 py-3 font-semibold relative cursor-grab active:cursor-grabbing", colReorder.dragging === c.key && "opacity-50", frozenClass(fmap.get(c.key), "bg-slate-50"))}>
                       <button onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 hover:text-slate-800">{c.label} <SortIcon k={c.key} /></button>
                       <ColResizer onMouseDown={(e) => startResize(c.key, e)} />
                     </th>
@@ -389,15 +384,15 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
               <tbody className="divide-y divide-slate-100">
                 {paged.map((r) => (
                   <tr key={r.id} className={cn("transition-colors", selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50")}>
-                    <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
-                    <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{r.recordNumber != null ? `#${r.recordNumber}` : "—"}</td>
-                    <td className="px-4 py-2.5 truncate" style={{ maxWidth: colWidth("__name") ?? 240 }}>
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-2.5", cbFrozen && "bg-white")}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
+                    <td style={frozenCellStyle(fmap.get("__id"))} className={cn("px-4 py-2.5 text-slate-400 font-mono text-xs", frozenClass(fmap.get("__id")))}>{r.recordNumber != null ? `#${r.recordNumber}` : "—"}</td>
+                    <td style={{ maxWidth: colWidth("__name") ?? 240, ...frozenCellStyle(fmap.get("__name")) }} className={cn("px-4 py-2.5 truncate", frozenClass(fmap.get("__name")))}>
                       <Link href={`/objects/${objectKey}/${r.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                         {recordName(properties, r.values, "") || (primary && displayValue(primary, r.values[primary.id], userMap)) || "Untitled"}
                       </Link>
                     </td>
-                    {cols.map((c) => (
-                      <td key={c.key} className="px-4 py-2.5 text-slate-600 truncate" style={{ maxWidth: colWidth(c.key) ?? 180 }}>
+                    {colReorder.order.map((c) => (
+                      <td key={c.key} style={{ maxWidth: colWidth(c.key) ?? 180, ...frozenCellStyle(fmap.get(c.key)) }} className={cn("px-4 py-2.5 text-slate-600 truncate", frozenClass(fmap.get(c.key)))}>
                         {c.key === "__owner" ? (r.ownerName ?? "—")
                           : c.key === "__created" ? fmtDate(r.createdAt)
                           : displayCell(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)}
@@ -452,6 +447,17 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
       )}
 
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={plural} defaultName={objectKey} getData={exportData} count={isServer ? serverTotal : undefined} />
+
+      <ColumnChooserModal
+        open={colModalOpen}
+        onClose={() => setColModalOpen(false)}
+        columns={[{ key: "__id", label: "Record ID" }, { key: "__name", label: nameHeader }, ...allCols]}
+        required={["__id", "__name"]}
+        selected={visibleCols}
+        frozen={frozenCount}
+        onApply={(sel, fr) => applyCols(sel.filter((k) => k !== "__id" && k !== "__name"), fr)}
+        createHref="/settings/objects"
+      />
     </div>
   )
 }
