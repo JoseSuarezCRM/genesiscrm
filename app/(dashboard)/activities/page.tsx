@@ -77,6 +77,7 @@ export default async function ActivitiesPage() {
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}
         canManage={userCanLevel(session?.user as any, "ACTIVITIES", "EDIT")}
+        canCreateTasks={userCanLevel(session?.user as any, "TASKS", "EDIT")}
       />
     </div>
   )
