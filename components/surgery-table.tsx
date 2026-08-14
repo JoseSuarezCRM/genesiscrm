@@ -4,11 +4,14 @@ import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import {
   Phone, FileText, ChevronDown, ChevronUp, Loader2, Trash2,
-  LayoutList, Table2, Download, Columns3, Check, Stethoscope,
+  LayoutList, Table2, Download, Columns3, Stethoscope,
 } from "lucide-react"
 import BulkActionBar, { bulkBtn, bulkDanger } from "@/components/ui/bulk-action-bar"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
+import ColumnChooserModal from "@/components/ui/column-chooser"
+import { useCardReorder } from "@/components/use-card-reorder"
+import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
@@ -53,6 +56,13 @@ const SURGERY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "docs",             label: "Docs" },
 ]
 export const DEFAULT_SURGERY_COLS = ["patient", "mrn", "status", "surgeryDate", "language", "procedure", "diagnosis", "calls", "docs"]
+// Default widths (frozen columns need deterministic widths for their sticky offsets).
+const SURGERY_COL_W: Record<string, number> = {
+  patient: 220, mrn: 140, status: 150, surgeryDate: 130, language: 110, procedure: 220,
+  facility: 160, orderingProvider: 180, diagnosis: 220, referral: 170, email: 200,
+  calls: 90, docs: 90, glp1: 100, dme: 100, ctRequired: 120, expires: 120,
+}
+const surgeryColW = (key: string, colWidth: (k: string) => number | undefined) => colWidth(key) ?? SURGERY_COL_W[key] ?? 160
 
 interface SurgeryCase {
   id: string
@@ -105,8 +115,8 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
   // (URL params), so they cover the whole filtered set, not just this page.
   const [viewMode, setViewMode] = useState<"cards" | "table">("table")
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_SURGERY_COLS)
-  const [colMenuOpen, setColMenuOpen] = useState(false)
-  const colMenuRef = useRef<HTMLDivElement>(null)
+  const [frozenCount, setFrozenCount] = useState(0)
+  const [colModalOpen, setColModalOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
 
   const sortKey = searchParams.get("sort") ?? ""
@@ -121,6 +131,8 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
         if (v === "cards" || v === "table") setViewMode(v)
         const c = localStorage.getItem("surgeryCols")
         if (c) { const arr = JSON.parse(c); if (Array.isArray(arr) && arr.length) setVisibleCols(arr) }
+        const f = localStorage.getItem("surgeryFrozen")
+        if (f != null) { const n = Number(f); if (!Number.isNaN(n)) setFrozenCount(n) }
       } catch {}
     }
     loadPrefs()
@@ -130,6 +142,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
   }, [])
   useEffect(() => { try { localStorage.setItem("surgeryViewMode", viewMode) } catch {} }, [viewMode])
   useEffect(() => { try { localStorage.setItem("surgeryCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
+  useEffect(() => { try { localStorage.setItem("surgeryFrozen", String(frozenCount)) } catch {} }, [frozenCount])
 
   const allPageChecked = cases.length > 0 && cases.every((c) => selected.has(c.id))
   const someChecked = selected.size > 0 && !allPageChecked
@@ -142,7 +155,6 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false)
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
@@ -176,9 +188,15 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
     })
   }
 
-  const cols = SURGERY_COLUMNS.filter((c) => visibleCols.includes(c.key))
-  const toggleCol = (key: string) =>
-    setVisibleCols((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  // Render in the user's chosen order, with the required "patient" column first.
+  const orderedKeys = ["patient", ...visibleCols.filter((k) => k !== "patient")]
+  const cols = orderedKeys.map((k) => SURGERY_COLUMNS.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string; sortable?: boolean }[]
+  const reorderableCols = cols.filter((c) => c.key !== "patient")
+  const colReorder = useCardReorder(reorderableCols, (c) => c.key, (ids) => setVisibleCols(["patient", ...ids]))
+  const orderedCols = [cols.find((c) => c.key === "patient")!, ...colReorder.order].filter(Boolean) as typeof cols
+  const widthOf = (k: string) => surgeryColW(k, colWidth)
+  const fmap = frozenMap(orderedCols.map((c) => c.key), frozenCount, widthOf, 40)
+  const cbFrozen = frozenCount > 0
 
   // Server-side sort: update the URL (resetting to page 1) so it covers all pages.
   function toggleSort(key: "patient" | "status" | "surgeryDate") {
@@ -271,26 +289,11 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
         </div>
 
         {viewMode === "table" && (
-          <div className="relative" ref={colMenuRef}>
-            <button onClick={() => setColMenuOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors">
-              <Columns3 className="h-3.5 w-3.5" /> Columns
-              <ChevronDown className="h-3 w-3 opacity-50" />
-            </button>
-            {colMenuOpen && (
-              <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden py-1">
-                {SURGERY_COLUMNS.map((col) => (
-                  <button key={col.key} onClick={() => toggleCol(col.key)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
-                    <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
-                      {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                    </span>
-                    <span className="text-zinc-700">{col.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button onClick={() => setColModalOpen(true)}
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors">
+            <Columns3 className="h-3.5 w-3.5" /> Columns
+            <ChevronDown className="h-3 w-3 opacity-50" />
+          </button>
         )}
 
         <button onClick={() => setExportOpen(true)} disabled={cases.length === 0} title="Export current view to CSV"
@@ -344,34 +347,40 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
             <table className="w-full text-sm">
               <colgroup>
                 <col style={{ width: 40 }} />
-                {cols.map((col) => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+                {orderedCols.map((col) => <col key={col.key} style={{ width: widthOf(col.key) }} />)}
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-                  <th className="px-4 py-3 w-10">
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-3 w-10", cbFrozen && "bg-slate-50")}>
                     <input ref={headerCheckRef} type="checkbox" checked={allPageChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  {cols.map((col) => (
-                    <th key={col.key} className="text-left px-4 py-3 font-semibold relative">
-                      {col.sortable ? (
-                        <button onClick={() => toggleSort(col.key as "patient" | "status" | "surgeryDate")} className="inline-flex items-center gap-1 hover:text-slate-800">
-                          {col.label}
-                          {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                        </button>
-                      ) : col.label}
-                      <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
-                    </th>
-                  ))}
+                  {orderedCols.map((col) => {
+                    const draggable = col.key !== "patient"
+                    return (
+                      <th key={col.key}
+                        {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
+                        style={frozenHeadStyle(fmap.get(col.key))}
+                        className={cn("text-left px-4 py-3 font-semibold relative", draggable && "cursor-grab active:cursor-grabbing", draggable && colReorder.dragging === col.key && "opacity-50", frozenClass(fmap.get(col.key), "bg-slate-50"))}>
+                        {col.sortable ? (
+                          <button onClick={() => toggleSort(col.key as "patient" | "status" | "surgeryDate")} className="inline-flex items-center gap-1 hover:text-slate-800">
+                            {col.label}
+                            {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                          </button>
+                        ) : col.label}
+                        <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((c) => (
                   <tr key={c.id} className={`border-b transition-colors ${selected.has(c.id) ? "bg-blue-50" : "hover:bg-slate-50"}`}>
-                    <td className="px-4 py-3">
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-3", cbFrozen && "bg-white")}>
                       <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleRow(c.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
-                    {cols.map((col) => (
-                      <td key={col.key} className="px-4 py-3 truncate" style={{ maxWidth: colWidth(col.key) ?? (col.key === "diagnosis" ? 200 : 240) }}>{renderCell(c, col.key)}</td>
+                    {orderedCols.map((col) => (
+                      <td key={col.key} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }} className={cn("px-4 py-3 truncate", frozenClass(fmap.get(col.key)))}>{renderCell(c, col.key)}</td>
                     ))}
                   </tr>
                 ))}
@@ -416,6 +425,16 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
         defaultName={`surgery-cases-${new Date().toISOString().slice(0, 10)}`}
         href={exportHref}
         count={total}
+      />
+
+      <ColumnChooserModal
+        open={colModalOpen}
+        onClose={() => setColModalOpen(false)}
+        columns={SURGERY_COLUMNS}
+        required={["patient"]}
+        selected={visibleCols}
+        frozen={frozenCount}
+        onApply={(sel, fr) => { setVisibleCols(sel); setFrozenCount(fr) }}
       />
     </>
   )
