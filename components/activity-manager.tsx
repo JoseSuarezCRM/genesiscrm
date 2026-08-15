@@ -1608,7 +1608,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </colgroup>
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2.5 w-10", cbFrozen && "bg-zinc-50")}>
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-zinc-50")}>
                     <button onClick={toggleSelectAll}
                       className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center align-middle", allSelected ? "bg-blue-600 border-blue-600" : "border-zinc-300 hover:border-zinc-400")}>
                       {allSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
@@ -1620,7 +1620,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                       <th key={col.key}
                         {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
                         style={frozenHeadStyle(fmap.get(col.key))}
-                        className={cn("px-4 py-2.5 relative", draggable && "cursor-grab active:cursor-grabbing", draggable && colReorder.dragging === col.key && "opacity-50", frozenClass(fmap.get(col.key), "bg-zinc-50"))}>
+                        className={cn("px-4 py-2 relative", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-zinc-200/70" : frozenClass(fmap.get(col.key), "bg-zinc-50"))}>
                         <button onClick={() => toggleSort(col.key)} className="inline-flex items-center gap-1 hover:text-zinc-800">
                           {col.label}
                           {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
@@ -1629,7 +1629,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                       </th>
                     )
                   })}
-                  <th className="px-4 py-2.5 w-16"></th>
+                  <th className="px-4 py-2 w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">

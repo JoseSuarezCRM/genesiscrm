@@ -260,10 +260,10 @@ export default function LocationManager({ locations, practices, customPropertyDe
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-3 w-10", cbFrozen && "bg-slate-50")}>
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-slate-50")}>
                     <input ref={headerCheckRef} type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-4 py-3 font-semibold relative", frozenClass(fmap.get("name"), "bg-slate-50"))}>
+                  <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-4 py-2 font-semibold relative", frozenClass(fmap.get("name"), "bg-slate-50"))}>
                     <button onClick={() => toggleSort("name")} className="inline-flex items-center gap-1 hover:text-slate-800">
                       Name {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                     </button>
@@ -274,7 +274,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                       {...colReorder.handleProps(col.key)}
                       {...colReorder.cardProps(col.key)}
                       style={frozenHeadStyle(fmap.get(col.key))}
-                      className={cn("px-4 py-3 font-semibold relative cursor-grab active:cursor-grabbing", colReorder.dragging === col.key && "opacity-50", col.align === "right" && "text-right", frozenClass(fmap.get(col.key), "bg-slate-50"))}>
+                      className={cn("px-4 py-2 font-semibold relative cursor-grab active:cursor-grabbing", col.align === "right" && "text-right", colReorder.dragging === col.key ? "bg-slate-200/70" : frozenClass(fmap.get(col.key), "bg-slate-50"))}>
                       {col.sortable ? (
                         <button onClick={() => toggleSort(col.key as SortKey)} className="inline-flex items-center gap-1 hover:text-slate-800">
                           {col.label} {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
@@ -283,7 +283,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                       <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}
-                  {canEdit && <th className="px-4 py-3 w-20" />}
+                  {canEdit && <th className="px-4 py-2 w-20" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

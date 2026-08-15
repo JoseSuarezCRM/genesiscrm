@@ -267,14 +267,14 @@ export default function MessageTemplateManager({ channel, templates, canManage =
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-3 w-10", cbFrozen && "bg-slate-50")}><input type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-slate-50")}><input type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
                   {orderedCols.map((col) => {
                     const draggable = col.key !== "name"
                     return (
                       <th key={col.key}
                         {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
                         style={frozenHeadStyle(fmap.get(col.key))}
-                        className={cn("text-left px-4 py-3 font-semibold relative", draggable && "cursor-grab active:cursor-grabbing", draggable && colReorder.dragging === col.key && "opacity-50", frozenClass(fmap.get(col.key), "bg-slate-50"))}>
+                        className={cn("text-left px-4 py-2 font-semibold relative", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-slate-200/70" : frozenClass(fmap.get(col.key), "bg-slate-50"))}>
                         {col.sortable ? (
                           <button onClick={() => toggleSort(col.key as "name" | "created" | "updated")} className="inline-flex items-center gap-1 hover:text-slate-800">
                             {col.label}{sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
@@ -284,7 +284,7 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                       </th>
                     )
                   })}
-                  <th className="px-4 py-3 w-16"></th>
+                  <th className="px-4 py-2 w-16"></th>
                 </tr>
               </thead>
               <tbody>

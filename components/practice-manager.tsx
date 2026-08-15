@@ -823,17 +823,17 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                   </colgroup>
                   <thead>
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-4 py-2.5 font-semibold relative", frozenClass(provFmap.get("name"), "bg-slate-50"))}>Name<ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-4 py-2 font-semibold relative", frozenClass(provFmap.get("name"), "bg-slate-50"))}>Name<ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
                       {provColReorder.order.map((c) => (
                         <th key={c.key}
                           {...provColReorder.handleProps(c.key)}
                           {...provColReorder.cardProps(c.key)}
                           style={frozenHeadStyle(provFmap.get(c.key))}
-                          className={cn("px-4 py-2.5 font-semibold relative cursor-grab active:cursor-grabbing", provColReorder.dragging === c.key && "opacity-50", c.key === "referrals" && "text-right", frozenClass(provFmap.get(c.key), "bg-slate-50"))}>
+                          className={cn("px-4 py-2 font-semibold relative cursor-grab active:cursor-grabbing", c.key === "referrals" && "text-right", provColReorder.dragging === c.key ? "bg-slate-200/70" : frozenClass(provFmap.get(c.key), "bg-slate-50"))}>
                           {c.label}<ColResizer onMouseDown={(e) => startResize(c.key, e)} />
                         </th>
                       ))}
-                      {isAdmin && <th className="px-4 py-2.5 font-semibold text-right w-20"></th>}
+                      {isAdmin && <th className="px-4 py-2 font-semibold text-right w-20"></th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
