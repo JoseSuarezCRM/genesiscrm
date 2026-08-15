@@ -10,6 +10,9 @@ import {
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
+import ColumnChooserModal from "@/components/ui/column-chooser"
+import { useCardReorder } from "@/components/use-card-reorder"
+import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
@@ -57,6 +60,7 @@ const LOCATION_COLUMNS: { key: string; label: string; sortable?: boolean; align?
   { key: "created", label: "Created", sortable: true },
 ]
 const DEFAULT_LOCATION_COLS = ["practice", "address", "phone", "providers", "referrals"]
+const LOCATION_COL_W: Record<string, number> = { name: 220, practice: 180, address: 220, phone: 140, fax: 140, providers: 110, referrals: 110, activities: 110, owner: 160, created: 130 }
 
 function fmtDate(d: string | Date | null | undefined) {
   if (!d) return "—"
@@ -73,17 +77,17 @@ export default function LocationManager({ locations, practices, customPropertyDe
   const [filter, setFilter] = useState<FilterState>(emptyFilter())
   const [viewMode, setViewMode] = useState<"cards" | "table">("table")
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_LOCATION_COLS)
-  const [colMenuOpen, setColMenuOpen] = useState(false)
+  const [frozenCount, setFrozenCount] = useState(0)
+  const [colModalOpen, setColModalOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const { colWidth, startResize } = useColumnResize("locationColWidths")
-  const [sortKey, setSortKey] = useState<SortKey>("referrals")
+  const [sortKey, setSortKey] = useState<SortKey>("created") // newest first
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const [addOpen, setAddOpen] = useState(false)
   const [editRow, setEditRow] = useState<LocationRow | null>(null)
 
-  const colMenuRef = useRef<HTMLDivElement>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
 
   // Persist view prefs
@@ -93,16 +97,13 @@ export default function LocationManager({ locations, practices, customPropertyDe
       if (v === "cards" || v === "table") setViewMode(v)
       const c = localStorage.getItem("locationCols")
       if (c) { const arr = JSON.parse(c); if (Array.isArray(arr) && arr.length) setVisibleCols(arr) }
+      const f = localStorage.getItem("locationFrozen")
+      if (f != null) { const n = Number(f); if (!Number.isNaN(n)) setFrozenCount(n) }
     } catch {}
   }, [])
   useEffect(() => { try { localStorage.setItem("locationViewMode", viewMode) } catch {} }, [viewMode])
   useEffect(() => { try { localStorage.setItem("locationCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false) }
-    document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
-  }, [])
+  useEffect(() => { try { localStorage.setItem("locationFrozen", String(frozenCount)) } catch {} }, [frozenCount])
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const practiceNames = Array.from(new Set(locations.map((l) => l.practiceName).filter(Boolean))).sort()
@@ -147,8 +148,12 @@ export default function LocationManager({ locations, practices, customPropertyDe
     else { setSortKey(key); setSortDir(key === "practice" || key === "name" ? "asc" : "desc") }
   }
 
-  const cols = LOCATION_COLUMNS.filter((c) => visibleCols.includes(c.key))
-  const toggleCol = (key: string) => setVisibleCols((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  // Render in the user's chosen order (name is the fixed leading column, always first).
+  const cols = (visibleCols.map((k) => LOCATION_COLUMNS.find((c) => c.key === k)).filter(Boolean) as typeof LOCATION_COLUMNS)
+  const colReorder = useCardReorder(cols, (c) => c.key, (ids) => setVisibleCols(ids))
+  const widthOf = (k: string) => colWidth(k) ?? LOCATION_COL_W[k] ?? 160
+  const fmap = frozenMap(["name", ...colReorder.order.map((c) => c.key)], frozenCount, widthOf, 40)
+  const cbFrozen = frozenCount > 0
 
   // ── Selection ────────────────────────────────────────────────────────────────
   const allChecked = sorted.length > 0 && sorted.every((l) => selected.has(l.id))
@@ -196,25 +201,10 @@ export default function LocationManager({ locations, practices, customPropertyDe
         <FilterBuilder fields={filterFields} value={filter} onChange={setFilter} />
 
         {viewMode === "table" && (
-          <div className="relative" ref={colMenuRef}>
-            <button onClick={() => setColMenuOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors">
-              <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
-            </button>
-            {colMenuOpen && (
-              <div className="absolute left-0 top-full mt-1.5 z-50 w-52 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden py-1">
-                {LOCATION_COLUMNS.map((col) => (
-                  <button key={col.key} onClick={() => toggleCol(col.key)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
-                    <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
-                      {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                    </span>
-                    <span className="text-zinc-700">{col.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button onClick={() => setColModalOpen(true)}
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors">
+            <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
+          </button>
         )}
 
         <button onClick={() => setExportOpen(true)} disabled={sorted.length === 0} title="Export current view to CSV"
@@ -260,51 +250,55 @@ export default function LocationManager({ locations, practices, customPropertyDe
         </div>
       ) : viewMode === "table" ? (
         <div className="bg-white border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-xl">
+            <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: 40 }} />
-                <col style={{ width: colWidth("name") }} />
-                {cols.map((col) => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+                <col style={{ width: widthOf("name") }} />
+                {colReorder.order.map((col) => <col key={col.key} style={{ width: widthOf(col.key) }} />)}
                 {canEdit && <col style={{ width: 80 }} />}
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  <th className="px-4 py-3 w-10">
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-3 py-2 w-10", cbFrozen && "bg-slate-50")}>
                     <input ref={headerCheckRef} type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  <th className="px-4 py-3 font-semibold relative">
-                    <button onClick={() => toggleSort("name")} className="inline-flex items-center gap-1 hover:text-slate-800">
-                      Name {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(fmap.get("name"), "bg-slate-50"))}>
+                    <button onClick={() => toggleSort("name")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
+                      <span className="flex-1 min-w-0 truncate text-left">Name</span> {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                     </button>
                     <ColResizer onMouseDown={(e) => startResize("name", e)} />
                   </th>
-                  {cols.map((col) => (
-                    <th key={col.key} className={cn("px-4 py-3 font-semibold relative", col.align === "right" && "text-right")}>
+                  {colReorder.order.map((col) => (
+                    <th key={col.key}
+                      {...colReorder.handleProps(col.key)}
+                      {...colReorder.cardProps(col.key)}
+                      style={frozenHeadStyle(fmap.get(col.key))}
+                      className={cn("px-3 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", col.align === "right" && "text-right", colReorder.dragging === col.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
                       {col.sortable ? (
-                        <button onClick={() => toggleSort(col.key as SortKey)} className="inline-flex items-center gap-1 hover:text-slate-800">
-                          {col.label} {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                        <button onClick={() => toggleSort(col.key as SortKey)} className={cn("flex items-center gap-1 w-full min-w-0 hover:text-slate-800", col.align === "right" && "justify-end")}>
+                          <span className="min-w-0 truncate">{col.label}</span> {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                         </button>
-                      ) : col.label}
+                      ) : <span className="block truncate">{col.label}</span>}
                       <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}
-                  {canEdit && <th className="px-4 py-3 w-20" />}
+                  {canEdit && <th className="px-3 py-2 w-20" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {sorted.map((l) => (
                   <tr key={l.id} className={cn("transition-colors", selected.has(l.id) ? "bg-blue-50" : "hover:bg-slate-50")}>
-                    <td className="px-4 py-2.5">
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}>
                       <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleRow(l.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
-                    <td className="px-4 py-2.5 truncate" style={{ maxWidth: colWidth("name") }}>
+                    <td style={{ maxWidth: widthOf("name"), ...frozenCellStyle(fmap.get("name")) }} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get("name")))}>
                       <Link href={`/locations/${l.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                         {l.name}
                       </Link>
                     </td>
-                    {cols.map((col) => (
-                      <td key={col.key} className={cn("px-4 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right")} style={{ maxWidth: colWidth(col.key) }}>
+                    {colReorder.order.map((col) => (
+                      <td key={col.key} className={cn("px-3 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>
                         {col.key === "practice" && <Link href={`/practices/${l.practiceId}`} className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200">{l.practiceName}</Link>}
                         {col.key === "address" && <span className="text-slate-500">{l.address || "—"}</span>}
                         {col.key === "phone" && <span className="text-slate-500">{l.phone || "—"}</span>}
@@ -357,6 +351,16 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
       {/* Dialogs */}
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject="locations" defaultName="locations" getData={buildExport} />
+
+      <ColumnChooserModal
+        open={colModalOpen}
+        onClose={() => setColModalOpen(false)}
+        columns={[{ key: "name", label: "Name" }, ...LOCATION_COLUMNS]}
+        required={["name"]}
+        selected={visibleCols}
+        frozen={frozenCount}
+        onApply={(sel, fr) => { setVisibleCols(sel.filter((k) => k !== "name")); setFrozenCount(fr) }}
+      />
 
       {canEdit && (
         <>

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { applyUserOrder } from "@/lib/view-order"
 
 export interface ViewFilters {
   search: string
@@ -48,7 +49,7 @@ export async function getActivityViews() {
     },
     orderBy: { createdAt: "asc" },
   })
-  return views.map((v: any) => ({ ...v, isOwner: v.userId === userId }))
+  return applyUserOrder(userId, "ACTIVITY", "", views.map((v: any) => ({ ...v, isOwner: v.userId === userId })))
 }
 
 export async function createActivityView(name: string, filters: ViewFilters, access?: ViewAccess) {

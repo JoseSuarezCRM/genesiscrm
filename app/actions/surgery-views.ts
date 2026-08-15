@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { applyUserOrder } from "@/lib/view-order"
 
 // A surgery saved view captures the full list query (filters/sort as a URL query
 // string) plus the client-side column + layout prefs.
@@ -43,7 +44,7 @@ export async function getSurgeryViews() {
     },
     orderBy: { createdAt: "asc" },
   })
-  return views.map((v: any) => ({ ...v, isOwner: v.userId === userId }))
+  return applyUserOrder(userId, "SURGERY", "", views.map((v: any) => ({ ...v, isOwner: v.userId === userId })))
 }
 
 export async function createSurgeryView(name: string, config: SurgeryViewConfig, access?: ViewAccess) {
