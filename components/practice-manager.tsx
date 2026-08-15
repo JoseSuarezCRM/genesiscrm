@@ -16,6 +16,8 @@ import {
 import { createProviderView, updateProviderView, deleteProviderView } from "@/app/actions/provider-views"
 import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
+import ColumnChooserModal from "@/components/ui/column-chooser"
+import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -340,9 +342,9 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
 
   // Provider table columns + saved views
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_PROVIDER_COLUMNS)
+  const [frozenCount, setFrozenCount] = useState(0)
+  const [colModalOpen, setColModalOpen] = useState(false)
   const { colWidth, startResize } = useColumnResize("providerColWidths")
-  const [colMenuOpen, setColMenuOpen] = useState(false)
-  const colMenuRef = useRef<HTMLDivElement>(null)
   const [savedViews, setSavedViews] = useState<SavedProviderView[]>(initialSavedViews)
   const [activeViewId, setActiveViewId] = useState<string | null>(null)
   const [showSaveForm, setShowSaveForm] = useState(false)
@@ -353,20 +355,19 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const [editAccessValue, setEditAccessValue] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
   const [savingAccess, setSavingAccess] = useState(false)
 
+  // Persist provider column choice + frozen count per user (loaded after mount).
   useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false)
-    }
-    if (colMenuOpen) document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [colMenuOpen])
-
-  function toggleCol(key: string) {
-    setVisibleCols(prev => prev.includes(key) ? prev.filter(c => c !== key) : [...prev, key])
-  }
+    try {
+      const c = localStorage.getItem("providerCols"); if (c) { const a = JSON.parse(c); if (Array.isArray(a) && a.length) setVisibleCols(a) }
+      const f = localStorage.getItem("providerFrozen"); if (f != null) { const n = Number(f); if (!Number.isNaN(n)) setFrozenCount(n) }
+    } catch {}
+  }, [])
+  useEffect(() => { try { localStorage.setItem("providerCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
+  useEffect(() => { try { localStorage.setItem("providerFrozen", String(frozenCount)) } catch {} }, [frozenCount])
 
   function applyProviderView(view: SavedProviderView) {
     setVisibleCols(view.config.columns ?? DEFAULT_PROVIDER_COLUMNS)
+    setFrozenCount((view.config as any).frozen ?? 0)
     setProviderSort(view.config.sort ?? "name")
     setSearch(view.config.search ?? "")
     setActiveViewId(view.id)
@@ -378,7 +379,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   async function handleSaveProviderView() {
     if (!newViewName.trim()) return
     setSavingView(true)
-    const config = { columns: visibleCols, sort: providerSort, search }
+    const config = { columns: visibleCols, sort: providerSort, search, frozen: frozenCount }
     const res = await createProviderView(newViewName.trim(), config, newViewAccess) as any
     if (res?.success) {
       setSavedViews(prev => [...prev, {
@@ -408,7 +409,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   async function handleUpdateProviderView() {
     if (!activeView) return
     setSavingView(true)
-    const config = { columns: visibleCols, sort: providerSort, search }
+    const config = { columns: visibleCols, sort: providerSort, search, frozen: frozenCount }
     const res = await updateProviderView(activeView.id, config) as any
     if (res?.success) {
       setSavedViews(prev => prev.map(v => v.id === activeView.id ? { ...v, config } : v))
@@ -530,6 +531,30 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     return String(raw)
   }
 
+  // ── Data-driven provider table columns (name is the fixed leading column) ──
+  const PROVIDER_COL_W: Record<string, number> = { name: 220, title: 150, practice: 180, npi: 130, phone: 150, officePhone: 150, email: 200, locations: 200, referrals: 110, owner: 160, specialty: 160, created: 130 }
+  const provWidthOf = (k: string) => colWidth(k) ?? PROVIDER_COL_W[k] ?? 160
+  const provOrderedCols = (visibleCols.map((k) => providerColumns.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[])
+  const provColReorder = useCardReorder(provOrderedCols, (c) => c.key, (ids) => setVisibleCols(ids))
+  const provFmap = frozenMap(["name", ...provColReorder.order.map((c) => c.key)], frozenCount, provWidthOf, 0)
+  const PROV_CELL_CLASS: Record<string, string> = { npi: "text-slate-400 font-mono text-xs", referrals: "text-right text-slate-600 tabular-nums", email: "text-slate-500 truncate max-w-[200px]", locations: "text-slate-500 text-xs" }
+  const renderProviderCell = (d: any, key: string): ReactNode => {
+    switch (key) {
+      case "title": return d.title || "—"
+      case "practice": return <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{d.practiceName}</span>
+      case "npi": return d.npi || "—"
+      case "phone": return d.phone || "—"
+      case "officePhone": return d.officePhone || "—"
+      case "email": return d.email || "—"
+      case "locations": return d.locations?.length ? d.locations.map((l: any) => l.location.name).join(", ") : "—"
+      case "referrals": return d._count.referrals
+      case "owner": return ownerLabel(d) || "—"
+      case "specialty": return d.specialty || "—"
+      case "created": return fmtProviderDate(d.createdAt)
+      default: return cpValue(d, key)
+    }
+  }
+
   // Providers after search + advanced filters — used by both the table and the export.
   const filteredProviders = allProviders.filter((d) => {
     const q = search.toLowerCase().trim()
@@ -641,32 +666,14 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
               )}
             </div>
             {/* Column selector */}
-            <div className="relative" ref={colMenuRef}>
-              <button
-                onClick={() => setColMenuOpen(v => !v)}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 transition-colors"
-              >
-                <Columns3 className="h-3.5 w-3.5" />
-                Columns
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </button>
-              {colMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 z-50 w-56 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1">
-                  {providerColumns.map(col => (
-                    <button
-                      key={col.key}
-                      onClick={() => toggleCol(col.key)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-slate-300")}>
-                        {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                      </span>
-                      <span className="text-slate-700">{col.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setColModalOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 transition-colors"
+            >
+              <Columns3 className="h-3.5 w-3.5" />
+              Columns
+              <ChevronDown className="h-3 w-3 opacity-50" />
+            </button>
             {/* Export */}
             <button
               onClick={() => setExportOpen(true)}
@@ -800,7 +807,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
       {/* ── Providers tab ──────────────────────────────────────────────────── */}
       {tab === "providers" && (() => {
         const filtered = filteredProviders
-        const shows = (key: string) => visibleCols.includes(key)
         return (
           <div className="bg-white border rounded-lg overflow-hidden">
             {filtered.length === 0 ? (
@@ -811,26 +817,21 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <colgroup>
-                    <col style={{ width: colWidth("name") }} />
-                    {["title", "practice", "npi", "phone", "officePhone", "email", "locations", "referrals", "owner", ...extraProviderCols.map((c) => c.key)].filter((k) => shows(k)).map((k) => (
-                      <col key={k} style={{ width: colWidth(k) }} />
-                    ))}
+                    <col style={{ width: provWidthOf("name") }} />
+                    {provColReorder.order.map((c) => <col key={c.key} style={{ width: provWidthOf(c.key) }} />)}
                     {isAdmin && <col style={{ width: 80 }} />}
                   </colgroup>
                   <thead>
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th className="px-4 py-2.5 font-semibold relative">Name<ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
-                      {shows("title") && <th className="px-4 py-2.5 font-semibold relative">Title<ColResizer onMouseDown={(e) => startResize("title", e)} /></th>}
-                      {shows("practice") && <th className="px-4 py-2.5 font-semibold relative">Practice<ColResizer onMouseDown={(e) => startResize("practice", e)} /></th>}
-                      {shows("npi") && <th className="px-4 py-2.5 font-semibold relative">NPI<ColResizer onMouseDown={(e) => startResize("npi", e)} /></th>}
-                      {shows("phone") && <th className="px-4 py-2.5 font-semibold relative">Phone<ColResizer onMouseDown={(e) => startResize("phone", e)} /></th>}
-                      {shows("officePhone") && <th className="px-4 py-2.5 font-semibold relative">Office Phone<ColResizer onMouseDown={(e) => startResize("officePhone", e)} /></th>}
-                      {shows("email") && <th className="px-4 py-2.5 font-semibold relative">Email<ColResizer onMouseDown={(e) => startResize("email", e)} /></th>}
-                      {shows("locations") && <th className="px-4 py-2.5 font-semibold relative">Locations<ColResizer onMouseDown={(e) => startResize("locations", e)} /></th>}
-                      {shows("referrals") && <th className="px-4 py-2.5 font-semibold text-right relative">Referrals<ColResizer onMouseDown={(e) => startResize("referrals", e)} /></th>}
-                      {shows("owner") && <th className="px-4 py-2.5 font-semibold relative">Provider Owner<ColResizer onMouseDown={(e) => startResize("owner", e)} /></th>}
-                      {extraProviderCols.filter((c) => shows(c.key)).map((c) => (
-                        <th key={c.key} className="px-4 py-2.5 font-semibold relative">{c.label}<ColResizer onMouseDown={(e) => startResize(c.key, e)} /></th>
+                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-4 py-2.5 font-semibold relative", frozenClass(provFmap.get("name"), "bg-slate-50"))}>Name<ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      {provColReorder.order.map((c) => (
+                        <th key={c.key}
+                          {...provColReorder.handleProps(c.key)}
+                          {...provColReorder.cardProps(c.key)}
+                          style={frozenHeadStyle(provFmap.get(c.key))}
+                          className={cn("px-4 py-2.5 font-semibold relative cursor-grab active:cursor-grabbing", provColReorder.dragging === c.key && "opacity-50", c.key === "referrals" && "text-right", frozenClass(provFmap.get(c.key), "bg-slate-50"))}>
+                          {c.label}<ColResizer onMouseDown={(e) => startResize(c.key, e)} />
+                        </th>
                       ))}
                       {isAdmin && <th className="px-4 py-2.5 font-semibold text-right w-20"></th>}
                     </tr>
@@ -838,33 +839,14 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                   <tbody className="divide-y divide-slate-100">
                     {filtered.map((d) => (
                       <tr key={d.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-2.5">
+                        <td style={{ maxWidth: provWidthOf("name"), ...frozenCellStyle(provFmap.get("name")) }} className={cn("px-4 py-2.5", frozenClass(provFmap.get("name")))}>
                           <Link href={`/referring-doctors/${d.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                             {d.name}
                           </Link>
                         </td>
-                        {shows("title") && <td className="px-4 py-2.5 text-slate-500">{(d as any).title || "—"}</td>}
-                        {shows("practice") && (
-                          <td className="px-4 py-2.5">
-                            <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{d.practiceName}</span>
-                          </td>
-                        )}
-                        {shows("npi") && <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{d.npi || "—"}</td>}
-                        {shows("phone") && <td className="px-4 py-2.5 text-slate-500">{(d as any).phone || "—"}</td>}
-                        {shows("officePhone") && <td className="px-4 py-2.5 text-slate-500">{(d as any).officePhone || "—"}</td>}
-                        {shows("email") && <td className="px-4 py-2.5 text-slate-500 truncate max-w-[200px]">{(d as any).email || "—"}</td>}
-                        {shows("locations") && (
-                          <td className="px-4 py-2.5 text-slate-500 text-xs">
-                            {d.locations?.length ? d.locations.map((l) => l.location.name).join(", ") : "—"}
-                          </td>
-                        )}
-                        {shows("referrals") && <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">{d._count.referrals}</td>}
-                        {shows("owner") && <td className="px-4 py-2.5 text-slate-500">{ownerLabel(d) || "—"}</td>}
-                        {extraProviderCols.filter((c) => shows(c.key)).map((c) => (
-                          <td key={c.key} className="px-4 py-2.5 text-slate-500 truncate">
-                            {c.key === "specialty" ? ((d as any).specialty || "—")
-                              : c.key === "created" ? fmtProviderDate((d as any).createdAt)
-                              : cpValue(d, c.key)}
+                        {provColReorder.order.map((c) => (
+                          <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn("px-4 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
+                            {renderProviderCell(d, c.key)}
                           </td>
                         ))}
                         {isAdmin && (
@@ -1035,6 +1017,16 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
         subject="providers"
         defaultName="providers"
         getData={buildProviderExport}
+      />
+
+      <ColumnChooserModal
+        open={colModalOpen}
+        onClose={() => setColModalOpen(false)}
+        columns={[{ key: "name", label: "Name" }, ...providerColumns]}
+        required={["name"]}
+        selected={visibleCols}
+        frozen={frozenCount}
+        onApply={(sel, fr) => { setVisibleCols(sel.filter((k) => k !== "name")); setFrozenCount(fr) }}
       />
 
       <Dialog open={!!editPractice} onOpenChange={(o) => !o && setEditPractice(null)}>

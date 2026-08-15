@@ -4,11 +4,14 @@ import { useState, useTransition, useRef, useEffect, type ReactNode } from "reac
 import { useRouter } from "next/navigation"
 import {
   Plus, Loader2, X, Pencil, Trash2, MessageSquare, Mail,
-  Table2, LayoutList, Columns3, Download, Check, ChevronUp, ChevronDown, LayoutTemplate,
+  Table2, LayoutList, Columns3, Download, ChevronUp, ChevronDown, LayoutTemplate,
 } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
+import ColumnChooserModal from "@/components/ui/column-chooser"
+import { useCardReorder } from "@/components/use-card-reorder"
+import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { Button } from "@/components/ui/button"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import TokenTextarea from "@/components/ui/token-textarea"
@@ -47,6 +50,7 @@ const TEMPLATE_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "viewed",       label: "Last viewed" },
 ]
 const DEFAULT_TEMPLATE_COLS = ["name", "status", "createdBy", "created", "updatedBy", "updated", "viewedBy"]
+const TEMPLATE_COL_W: Record<string, number> = { name: 240, status: 120, preview: 260, createdBy: 160, created: 140, updatedBy: 160, updated: 140, viewedBy: 160, viewed: 140 }
 
 function fmtDate(d: string | Date | null | undefined) {
   if (!d) return "—"
@@ -77,8 +81,8 @@ export default function MessageTemplateManager({ channel, templates, canManage =
   // Standard table state (view toggle, columns, sort, selection, export).
   const [viewMode, setViewMode] = useState<"cards" | "table">("table")
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_TEMPLATE_COLS)
-  const [colMenuOpen, setColMenuOpen] = useState(false)
-  const colMenuRef = useRef<HTMLDivElement>(null)
+  const [frozenCount, setFrozenCount] = useState(0)
+  const [colModalOpen, setColModalOpen] = useState(false)
   const { colWidth, startResize } = useColumnResize(`templateColWidths_${channel}`)
   const [sortKey, setSortKey] = useState<"name" | "created" | "updated">("updated")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
@@ -89,14 +93,12 @@ export default function MessageTemplateManager({ channel, templates, canManage =
     try {
       const v = localStorage.getItem("templateViewMode"); if (v === "cards" || v === "table") setViewMode(v)
       const c = localStorage.getItem("templateCols"); if (c) { const a = JSON.parse(c); if (Array.isArray(a) && a.length) setVisibleCols(a) }
+      const f = localStorage.getItem("templateFrozen"); if (f != null) { const n = Number(f); if (!Number.isNaN(n)) setFrozenCount(n) }
     } catch {}
   }, [])
   useEffect(() => { try { localStorage.setItem("templateViewMode", viewMode) } catch {} }, [viewMode])
   useEffect(() => { try { localStorage.setItem("templateCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
-  useEffect(() => {
-    function h(e: MouseEvent) { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false) }
-    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h)
-  }, [])
+  useEffect(() => { try { localStorage.setItem("templateFrozen", String(frozenCount)) } catch {} }, [frozenCount])
 
   const hasBlocks = (t: Template) => Array.isArray((t as any).blocks) && (t as any).blocks.length > 0
   function openNew() { setEditId(null); setForm({ name: "", subject: "", body: "" }); setError(""); setOpen(true) }
@@ -149,8 +151,15 @@ export default function MessageTemplateManager({ channel, templates, canManage =
     startTransition(async () => { await toggleMessageTemplate(t.id, !t.isActive); router.refresh() })
   }
 
-  const cols = TEMPLATE_COLUMNS.filter((c) => visibleCols.includes(c.key))
-  const toggleCol = (key: string) => setVisibleCols((p) => (p.includes(key) ? p.filter((k) => k !== key) : [...p, key]))
+  // Render in the user's chosen order, with the required "name" column first.
+  const orderedKeys = ["name", ...visibleCols.filter((k) => k !== "name")]
+  const cols = (orderedKeys.map((k) => TEMPLATE_COLUMNS.find((c) => c.key === k)).filter(Boolean) as typeof TEMPLATE_COLUMNS)
+  const reorderableCols = cols.filter((c) => c.key !== "name")
+  const colReorder = useCardReorder(reorderableCols, (c) => c.key, (ids) => setVisibleCols(["name", ...ids]))
+  const orderedCols = [cols.find((c) => c.key === "name")!, ...colReorder.order].filter(Boolean) as typeof cols
+  const widthOf = (k: string) => colWidth(k) ?? TEMPLATE_COL_W[k] ?? 160
+  const fmap = frozenMap(orderedCols.map((c) => c.key), frozenCount, widthOf, 40)
+  const cbFrozen = frozenCount > 0
   const toggleSort = (key: "name" | "created" | "updated") => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
     else { setSortKey(key); setSortDir("desc") }
@@ -223,23 +232,9 @@ export default function MessageTemplateManager({ channel, templates, canManage =
               className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition-colors ${viewMode === "cards" ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-800"}`}><LayoutList className="h-3.5 w-3.5" /></button>
           </div>
           {viewMode === "table" && (
-            <div className="relative" ref={colMenuRef}>
-              <button onClick={() => setColMenuOpen((v) => !v)} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors">
-                <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
-              </button>
-              {colMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 z-50 w-56 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden py-1">
-                  {TEMPLATE_COLUMNS.map((col) => (
-                    <button key={col.key} onClick={() => toggleCol(col.key)} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
-                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
-                        {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                      </span>
-                      <span className="text-zinc-700">{col.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button onClick={() => setColModalOpen(true)} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors">
+              <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
+            </button>
           )}
           <button onClick={() => setExportOpen(true)} disabled={templates.length === 0} title="Export to CSV"
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50 transition-colors"><Download className="h-3.5 w-3.5" /> Export</button>
@@ -267,30 +262,36 @@ export default function MessageTemplateManager({ channel, templates, canManage =
             <table className="w-full text-sm">
               <colgroup>
                 <col style={{ width: 40 }} />
-                {cols.map((col) => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+                {orderedCols.map((col) => <col key={col.key} style={{ width: widthOf(col.key) }} />)}
                 <col style={{ width: 64 }} />
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-                  <th className="px-4 py-3 w-10"><input type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
-                  {cols.map((col) => (
-                    <th key={col.key} className="text-left px-4 py-3 font-semibold relative">
-                      {col.sortable ? (
-                        <button onClick={() => toggleSort(col.key as "name" | "created" | "updated")} className="inline-flex items-center gap-1 hover:text-slate-800">
-                          {col.label}{sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                        </button>
-                      ) : col.label}
-                      <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
-                    </th>
-                  ))}
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-3 w-10", cbFrozen && "bg-slate-50")}><input type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
+                  {orderedCols.map((col) => {
+                    const draggable = col.key !== "name"
+                    return (
+                      <th key={col.key}
+                        {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
+                        style={frozenHeadStyle(fmap.get(col.key))}
+                        className={cn("text-left px-4 py-3 font-semibold relative", draggable && "cursor-grab active:cursor-grabbing", draggable && colReorder.dragging === col.key && "opacity-50", frozenClass(fmap.get(col.key), "bg-slate-50"))}>
+                        {col.sortable ? (
+                          <button onClick={() => toggleSort(col.key as "name" | "created" | "updated")} className="inline-flex items-center gap-1 hover:text-slate-800">
+                            {col.label}{sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                          </button>
+                        ) : col.label}
+                        <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
+                      </th>
+                    )
+                  })}
                   <th className="px-4 py-3 w-16"></th>
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((t) => (
                   <tr key={t.id} className={`border-b transition-colors ${selected.has(t.id) ? "bg-blue-50" : "hover:bg-slate-50"}`}>
-                    <td className="px-4 py-3"><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleRow(t.id)} className="rounded border-slate-300 cursor-pointer" /></td>
-                    {cols.map((col) => <td key={col.key} className="px-4 py-3 truncate" style={{ maxWidth: colWidth(col.key) ?? 220 }}>{renderCell(t, col.key)}</td>)}
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-3", cbFrozen && "bg-white")}><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleRow(t.id)} className="rounded border-slate-300 cursor-pointer" /></td>
+                    {orderedCols.map((col) => <td key={col.key} className={cn("px-4 py-3 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{renderCell(t, col.key)}</td>)}
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex gap-0.5">
                         {canManage && <button onClick={() => openEdit(t)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>}
@@ -334,6 +335,16 @@ export default function MessageTemplateManager({ channel, templates, canManage =
 
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={isEmail ? "email templates" : "SMS templates"}
         defaultName={`${isEmail ? "email" : "sms"}-templates-${new Date().toISOString().slice(0, 10)}`} getData={buildExportData} />
+
+      <ColumnChooserModal
+        open={colModalOpen}
+        onClose={() => setColModalOpen(false)}
+        columns={TEMPLATE_COLUMNS}
+        required={["name"]}
+        selected={visibleCols}
+        frozen={frozenCount}
+        onApply={(sel, fr) => { setVisibleCols(sel); setFrozenCount(fr) }}
+      />
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-overlay-in">

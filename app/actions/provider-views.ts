@@ -9,6 +9,7 @@ export interface ProviderViewConfig {
   columns: string[]
   sort: "name" | "referrals"
   search: string
+  frozen?: number
 }
 
 export interface ViewAccess {

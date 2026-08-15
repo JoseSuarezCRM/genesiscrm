@@ -11,6 +11,8 @@ import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { createActivityView, updateActivityView, deleteActivityView } from "@/app/actions/activity-views"
 import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
+import ColumnChooserModal from "@/components/ui/column-chooser"
+import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
@@ -763,6 +765,7 @@ const ACTIVITY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "loggedBy",  label: "Logged By" },
 ]
 const DEFAULT_ACTIVITY_COLS = ["date", "account", "location", "providers", "type", "rating", "nextStep", "tags", "loggedBy"]
+const ACTIVITY_COL_W: Record<string, number> = { date: 120, account: 200, location: 180, providers: 200, type: 130, rating: 140, nextStep: 200, frontDesk: 160, tags: 180, notes: 240, loggedBy: 150 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -791,19 +794,22 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   // Table view: columns, sort, selection
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_ACTIVITY_COLS)
-  const [colMenuOpen, setColMenuOpen] = useState(false)
-  const colMenuRef = useRef<HTMLDivElement>(null)
+  const [frozenCount, setFrozenCount] = useState(0)
+  const [colModalOpen, setColModalOpen] = useState(false)
   const [sortKey, setSortKey] = useState<string>("date")
   const { colWidth, startResize } = useColumnResize("activityColWidths")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
+  // Persist column choice + frozen count per user (loaded after mount).
   useEffect(() => {
-    if (!colMenuOpen) return
-    const onDown = (e: MouseEvent) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target as Node)) setColMenuOpen(false) }
-    document.addEventListener("mousedown", onDown)
-    return () => document.removeEventListener("mousedown", onDown)
-  }, [colMenuOpen])
+    try {
+      const c = localStorage.getItem("activityCols"); if (c) { const a = JSON.parse(c); if (Array.isArray(a) && a.length) setVisibleCols(a) }
+      const f = localStorage.getItem("activityFrozen"); if (f != null) { const n = Number(f); if (!Number.isNaN(n)) setFrozenCount(n) }
+    } catch {}
+  }, [])
+  useEffect(() => { try { localStorage.setItem("activityCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
+  useEffect(() => { try { localStorage.setItem("activityFrozen", String(frozenCount)) } catch {} }, [frozenCount])
 
   // Filters
   const [dateFrom, setDateFrom] = useState("")
@@ -1250,9 +1256,15 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     return rows
   }, [filtered, sortKey, sortDir])
 
-  const cols = ACTIVITY_COLUMNS.filter(c => visibleCols.includes(c.key))
-  const toggleCol = (key: string) =>
-    setVisibleCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  // Render in chosen order, with the required "date" column first.
+  const orderedActKeys = ["date", ...visibleCols.filter((k) => k !== "date")]
+  const cols = (orderedActKeys.map((k) => ACTIVITY_COLUMNS.find((c) => c.key === k)).filter(Boolean) as typeof ACTIVITY_COLUMNS)
+  const reorderableActCols = cols.filter((c) => c.key !== "date")
+  const colReorder = useCardReorder(reorderableActCols, (c) => c.key, (ids) => setVisibleCols(["date", ...ids]))
+  const orderedCols = [cols.find((c) => c.key === "date")!, ...colReorder.order].filter(Boolean) as typeof cols
+  const widthOf = (k: string) => colWidth(k) ?? ACTIVITY_COL_W[k] ?? 160
+  const fmap = frozenMap(orderedCols.map((c) => c.key), frozenCount, widthOf, 40)
+  const cbFrozen = frozenCount > 0
   // Text columns start A→Z; date starts newest first.
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc")
@@ -1416,28 +1428,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
           {/* Column selector (table view only) */}
           {viewMode === "table" && (
-            <div className="relative" ref={colMenuRef}>
-              <button
-                onClick={() => setColMenuOpen(v => !v)}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors"
-              >
-                <Columns3 className="h-3.5 w-3.5" /> Columns
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </button>
-              {colMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 z-50 w-52 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden py-1">
-                  {ACTIVITY_COLUMNS.map(col => (
-                    <button key={col.key} onClick={() => toggleCol(col.key)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 transition-colors text-left">
-                      <span className={cn("shrink-0 w-[14px] h-[14px] rounded border flex items-center justify-center transition-all", visibleCols.includes(col.key) ? "bg-blue-600 border-blue-600" : "border-zinc-300")}>
-                        {visibleCols.includes(col.key) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                      </span>
-                      <span className="text-zinc-700">{col.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setColModalOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 transition-colors"
+            >
+              <Columns3 className="h-3.5 w-3.5" /> Columns
+              <ChevronDown className="h-3 w-3 opacity-50" />
+            </button>
           )}
 
           {/* Email report */}
@@ -1606,40 +1603,46 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <table className="w-full text-sm">
               <colgroup>
                 <col style={{ width: 40 }} />
-                {cols.map(col => <col key={col.key} style={{ width: colWidth(col.key) }} />)}
+                {orderedCols.map(col => <col key={col.key} style={{ width: widthOf(col.key) }} />)}
                 <col style={{ width: 64 }} />
               </colgroup>
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                  <th className="px-4 py-2.5 w-10">
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2.5 w-10", cbFrozen && "bg-zinc-50")}>
                     <button onClick={toggleSelectAll}
                       className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center align-middle", allSelected ? "bg-blue-600 border-blue-600" : "border-zinc-300 hover:border-zinc-400")}>
                       {allSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                     </button>
                   </th>
-                  {cols.map(col => (
-                    <th key={col.key} className="px-4 py-2.5 relative">
-                      <button onClick={() => toggleSort(col.key)} className="inline-flex items-center gap-1 hover:text-zinc-800">
-                        {col.label}
-                        {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                      </button>
-                      <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
-                    </th>
-                  ))}
+                  {orderedCols.map(col => {
+                    const draggable = col.key !== "date"
+                    return (
+                      <th key={col.key}
+                        {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
+                        style={frozenHeadStyle(fmap.get(col.key))}
+                        className={cn("px-4 py-2.5 relative", draggable && "cursor-grab active:cursor-grabbing", draggable && colReorder.dragging === col.key && "opacity-50", frozenClass(fmap.get(col.key), "bg-zinc-50"))}>
+                        <button onClick={() => toggleSort(col.key)} className="inline-flex items-center gap-1 hover:text-zinc-800">
+                          {col.label}
+                          {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                        </button>
+                        <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
+                      </th>
+                    )
+                  })}
                   <th className="px-4 py-2.5 w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {sorted.map(a => (
                   <tr key={a.id} className={cn("hover:bg-zinc-50 transition-colors align-top", selectedIds.has(a.id) && "bg-blue-50/40")}>
-                    <td className="px-4 py-3">
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-3", cbFrozen && "bg-white")}>
                       <button onClick={() => toggleSelect(a.id)}
                         className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center", selectedIds.has(a.id) ? "bg-blue-600 border-blue-600" : "border-zinc-300 hover:border-zinc-400")}>
                         {selectedIds.has(a.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                       </button>
                     </td>
-                    {cols.map(col => (
-                      <td key={col.key} className="px-4 py-3 truncate" style={{ maxWidth: colWidth(col.key) ?? 240 }}>{renderCell(a, col.key)}</td>
+                    {orderedCols.map(col => (
+                      <td key={col.key} className={cn("px-4 py-3 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{renderCell(a, col.key)}</td>
                     ))}
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex gap-0.5">
@@ -1995,6 +1998,16 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         subject="activities"
         defaultName={`activities-${format(new Date(), "yyyy-MM-dd")}`}
         getData={buildExportData}
+      />
+
+      <ColumnChooserModal
+        open={colModalOpen}
+        onClose={() => setColModalOpen(false)}
+        columns={ACTIVITY_COLUMNS}
+        required={["date"]}
+        selected={visibleCols}
+        frozen={frozenCount}
+        onApply={(sel, fr) => { setVisibleCols(sel); setFrozenCount(fr) }}
       />
 
       {/* ── Email report dialog ── */}
