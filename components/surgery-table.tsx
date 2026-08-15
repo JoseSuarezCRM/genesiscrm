@@ -343,15 +343,15 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
         <div className="bg-white border rounded-xl py-16 text-center text-slate-400">No cases match the current filters.</div>
       ) : viewMode === "table" ? (
         <div className="bg-white border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl">
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: 40 }} />
                 {orderedCols.map((col) => <col key={col.key} style={{ width: widthOf(col.key) }} />)}
               </colgroup>
               <thead>
-                <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-slate-50")}>
+                <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-3 py-2 w-10", cbFrozen && "bg-slate-50")}>
                     <input ref={headerCheckRef} type="checkbox" checked={allPageChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
                   {orderedCols.map((col) => {
@@ -360,7 +360,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
                       <th key={col.key}
                         {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
                         style={frozenHeadStyle(fmap.get(col.key))}
-                        className={cn("text-left px-4 py-2 font-semibold relative overflow-hidden transition-colors", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
+                        className={cn("text-left px-3 py-2 font-semibold relative overflow-hidden transition-colors", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
                         {col.sortable ? (
                           <button onClick={() => toggleSort(col.key as "patient" | "status" | "surgeryDate")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
                             <span className="flex-1 min-w-0 truncate text-left">{col.label}</span>
@@ -376,11 +376,11 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
               <tbody>
                 {sorted.map((c) => (
                   <tr key={c.id} className={`border-b transition-colors ${selected.has(c.id) ? "bg-blue-50" : "hover:bg-slate-50"}`}>
-                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-3", cbFrozen && "bg-white")}>
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}>
                       <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleRow(c.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
                     {orderedCols.map((col) => (
-                      <td key={col.key} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }} className={cn("px-4 py-3 truncate", frozenClass(fmap.get(col.key)))}>{renderCell(c, col.key)}</td>
+                      <td key={col.key} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))}>{renderCell(c, col.key)}</td>
                     ))}
                   </tr>
                 ))}

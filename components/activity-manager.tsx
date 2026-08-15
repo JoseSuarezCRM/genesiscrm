@@ -1599,7 +1599,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             <button onClick={() => setReportOpen(true)} className={bulkBtn}><Mail className="h-3.5 w-3.5" /> Email report</button>
             <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
           </BulkActionBar>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl">
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: 40 }} />
@@ -1607,8 +1607,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 <col style={{ width: 64 }} />
               </colgroup>
               <thead>
-                <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-zinc-50")}>
+                <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-3 py-2 w-10", cbFrozen && "bg-slate-50")}>
                     <button onClick={toggleSelectAll}
                       className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center align-middle", allSelected ? "bg-blue-600 border-blue-600" : "border-zinc-300 hover:border-zinc-400")}>
                       {allSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
@@ -1620,8 +1620,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                       <th key={col.key}
                         {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
                         style={frozenHeadStyle(fmap.get(col.key))}
-                        className={cn("px-4 py-2 relative overflow-hidden transition-colors", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-zinc-200/70" : cn("hover:bg-zinc-100", frozenClass(fmap.get(col.key), "bg-zinc-50")))}>
-                        <button onClick={() => toggleSort(col.key)} className="flex items-center gap-1 w-full min-w-0 hover:text-zinc-800">
+                        className={cn("px-3 py-2 font-semibold relative overflow-hidden transition-colors", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
+                        <button onClick={() => toggleSort(col.key)} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
                           <span className="flex-1 min-w-0 truncate text-left">{col.label}</span>
                           {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                         </button>
@@ -1629,22 +1629,22 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                       </th>
                     )
                   })}
-                  <th className="px-4 py-2 w-16"></th>
+                  <th className="px-3 py-2 w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {sorted.map(a => (
                   <tr key={a.id} className={cn("hover:bg-zinc-50 transition-colors align-top", selectedIds.has(a.id) && "bg-blue-50/40")}>
-                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-3", cbFrozen && "bg-white")}>
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}>
                       <button onClick={() => toggleSelect(a.id)}
                         className={cn("w-[15px] h-[15px] rounded border flex items-center justify-center", selectedIds.has(a.id) ? "bg-blue-600 border-blue-600" : "border-zinc-300 hover:border-zinc-400")}>
                         {selectedIds.has(a.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                       </button>
                     </td>
                     {orderedCols.map(col => (
-                      <td key={col.key} className={cn("px-4 py-3 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{renderCell(a, col.key)}</td>
+                      <td key={col.key} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{renderCell(a, col.key)}</td>
                     ))}
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       <div className="inline-flex gap-0.5">
                         <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600"><Pencil className="h-3.5 w-3.5" /></button>
                         <button onClick={() => setDeleteId(a.id)} className="p-1.5 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>

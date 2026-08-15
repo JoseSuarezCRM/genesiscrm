@@ -250,7 +250,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
         </div>
       ) : viewMode === "table" ? (
         <div className="bg-white border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl">
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: 40 }} />
@@ -260,10 +260,10 @@ export default function LocationManager({ locations, practices, customPropertyDe
               </colgroup>
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-slate-50")}>
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-3 py-2 w-10", cbFrozen && "bg-slate-50")}>
                     <input ref={headerCheckRef} type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-4 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(fmap.get("name"), "bg-slate-50"))}>
+                  <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(fmap.get("name"), "bg-slate-50"))}>
                     <button onClick={() => toggleSort("name")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
                       <span className="flex-1 min-w-0 truncate text-left">Name</span> {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                     </button>
@@ -274,7 +274,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                       {...colReorder.handleProps(col.key)}
                       {...colReorder.cardProps(col.key)}
                       style={frozenHeadStyle(fmap.get(col.key))}
-                      className={cn("px-4 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", col.align === "right" && "text-right", colReorder.dragging === col.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
+                      className={cn("px-3 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", col.align === "right" && "text-right", colReorder.dragging === col.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
                       {col.sortable ? (
                         <button onClick={() => toggleSort(col.key as SortKey)} className={cn("flex items-center gap-1 w-full min-w-0 hover:text-slate-800", col.align === "right" && "justify-end")}>
                           <span className="min-w-0 truncate">{col.label}</span> {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
@@ -283,22 +283,22 @@ export default function LocationManager({ locations, practices, customPropertyDe
                       <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}
-                  {canEdit && <th className="px-4 py-2 w-20" />}
+                  {canEdit && <th className="px-3 py-2 w-20" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {sorted.map((l) => (
                   <tr key={l.id} className={cn("transition-colors", selected.has(l.id) ? "bg-blue-50" : "hover:bg-slate-50")}>
-                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-2.5", cbFrozen && "bg-white")}>
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}>
                       <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleRow(l.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
-                    <td style={{ maxWidth: widthOf("name"), ...frozenCellStyle(fmap.get("name")) }} className={cn("px-4 py-2.5 truncate", frozenClass(fmap.get("name")))}>
+                    <td style={{ maxWidth: widthOf("name"), ...frozenCellStyle(fmap.get("name")) }} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get("name")))}>
                       <Link href={`/locations/${l.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                         {l.name}
                       </Link>
                     </td>
                     {colReorder.order.map((col) => (
-                      <td key={col.key} className={cn("px-4 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>
+                      <td key={col.key} className={cn("px-3 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>
                         {col.key === "practice" && <Link href={`/practices/${l.practiceId}`} className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200">{l.practiceName}</Link>}
                         {col.key === "address" && <span className="text-slate-500">{l.address || "—"}</span>}
                         {col.key === "phone" && <span className="text-slate-500">{l.phone || "—"}</span>}

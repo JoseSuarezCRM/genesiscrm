@@ -814,7 +814,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                 {search || providerFiltersActive ? "No providers match your search or filters." : "No providers yet."}
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-lg">
                 <table className="w-full text-sm table-fixed">
                   <colgroup>
                     <col style={{ width: provWidthOf("name") }} />
@@ -823,34 +823,34 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                   </colgroup>
                   <thead>
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-4 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(provFmap.get("name"), "bg-slate-50"))}><span className="block truncate">Name</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(provFmap.get("name"), "bg-slate-50"))}><span className="block truncate">Name</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
                       {provColReorder.order.map((c) => (
                         <th key={c.key}
                           {...provColReorder.handleProps(c.key)}
                           {...provColReorder.cardProps(c.key)}
                           style={frozenHeadStyle(provFmap.get(c.key))}
-                          className={cn("px-4 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", c.key === "referrals" && "text-right", provColReorder.dragging === c.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(provFmap.get(c.key), "bg-slate-50")))}>
+                          className={cn("px-3 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", c.key === "referrals" && "text-right", provColReorder.dragging === c.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(provFmap.get(c.key), "bg-slate-50")))}>
                           <span className="block truncate">{c.label}</span><ColResizer onMouseDown={(e) => startResize(c.key, e)} />
                         </th>
                       ))}
-                      {isAdmin && <th className="px-4 py-2 font-semibold text-right w-20"></th>}
+                      {isAdmin && <th className="px-3 py-2 font-semibold text-right w-20"></th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filtered.map((d) => (
                       <tr key={d.id} className="hover:bg-slate-50 transition-colors">
-                        <td style={{ maxWidth: provWidthOf("name"), ...frozenCellStyle(provFmap.get("name")) }} className={cn("px-4 py-2.5", frozenClass(provFmap.get("name")))}>
+                        <td style={{ maxWidth: provWidthOf("name"), ...frozenCellStyle(provFmap.get("name")) }} className={cn("px-3 py-2.5", frozenClass(provFmap.get("name")))}>
                           <Link href={`/referring-doctors/${d.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                             {d.name}
                           </Link>
                         </td>
                         {provColReorder.order.map((c) => (
-                          <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn("px-4 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
+                          <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn("px-3 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
                             {renderProviderCell(d, c.key)}
                           </td>
                         ))}
                         {isAdmin && (
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2.5">
                             <div className="flex gap-1 justify-end">
                               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditDoctor({ doc: d, practice: d.practice })}>
                                 <Pencil className="h-3.5 w-3.5" />

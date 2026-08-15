@@ -258,7 +258,7 @@ export default function MessageTemplateManager({ channel, templates, canManage =
         </div>
       ) : viewMode === "table" ? (
         <div className="bg-white border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl">
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: 40 }} />
@@ -266,15 +266,15 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                 <col style={{ width: 64 }} />
               </colgroup>
               <thead>
-                <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-slate-50")}><input type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
+                <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-3 py-2 w-10", cbFrozen && "bg-slate-50")}><input type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
                   {orderedCols.map((col) => {
                     const draggable = col.key !== "name"
                     return (
                       <th key={col.key}
                         {...(draggable ? { ...colReorder.handleProps(col.key), ...colReorder.cardProps(col.key) } : {})}
                         style={frozenHeadStyle(fmap.get(col.key))}
-                        className={cn("text-left px-4 py-2 font-semibold relative overflow-hidden transition-colors", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
+                        className={cn("text-left px-3 py-2 font-semibold relative overflow-hidden transition-colors", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === col.key) ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
                         {col.sortable ? (
                           <button onClick={() => toggleSort(col.key as "name" | "created" | "updated")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
                             <span className="flex-1 min-w-0 truncate text-left">{col.label}</span>{sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
@@ -284,15 +284,15 @@ export default function MessageTemplateManager({ channel, templates, canManage =
                       </th>
                     )
                   })}
-                  <th className="px-4 py-2 w-16"></th>
+                  <th className="px-3 py-2 w-16"></th>
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((t) => (
                   <tr key={t.id} className={`border-b transition-colors ${selected.has(t.id) ? "bg-blue-50" : "hover:bg-slate-50"}`}>
-                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-4 py-3", cbFrozen && "bg-white")}><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleRow(t.id)} className="rounded border-slate-300 cursor-pointer" /></td>
-                    {orderedCols.map((col) => <td key={col.key} className={cn("px-4 py-3 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{renderCell(t, col.key)}</td>)}
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleRow(t.id)} className="rounded border-slate-300 cursor-pointer" /></td>
+                    {orderedCols.map((col) => <td key={col.key} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{renderCell(t, col.key)}</td>)}
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       <div className="inline-flex gap-0.5">
                         {canManage && <button onClick={() => openEdit(t)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>}
                         {canDelete && <button onClick={() => remove(t.id)} className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>}
