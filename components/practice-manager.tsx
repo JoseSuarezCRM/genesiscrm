@@ -815,7 +815,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm table-fixed">
                   <colgroup>
                     <col style={{ width: provWidthOf("name") }} />
                     {provColReorder.order.map((c) => <col key={c.key} style={{ width: provWidthOf(c.key) }} />)}
@@ -823,14 +823,14 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                   </colgroup>
                   <thead>
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-4 py-2 font-semibold relative", frozenClass(provFmap.get("name"), "bg-slate-50"))}>Name<ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-4 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(provFmap.get("name"), "bg-slate-50"))}><span className="block truncate">Name</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
                       {provColReorder.order.map((c) => (
                         <th key={c.key}
                           {...provColReorder.handleProps(c.key)}
                           {...provColReorder.cardProps(c.key)}
                           style={frozenHeadStyle(provFmap.get(c.key))}
-                          className={cn("px-4 py-2 font-semibold relative cursor-grab active:cursor-grabbing", c.key === "referrals" && "text-right", provColReorder.dragging === c.key ? "bg-slate-200/70" : frozenClass(provFmap.get(c.key), "bg-slate-50"))}>
-                          {c.label}<ColResizer onMouseDown={(e) => startResize(c.key, e)} />
+                          className={cn("px-4 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", c.key === "referrals" && "text-right", provColReorder.dragging === c.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(provFmap.get(c.key), "bg-slate-50")))}>
+                          <span className="block truncate">{c.label}</span><ColResizer onMouseDown={(e) => startResize(c.key, e)} />
                         </th>
                       ))}
                       {isAdmin && <th className="px-4 py-2 font-semibold text-right w-20"></th>}

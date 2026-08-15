@@ -251,7 +251,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
       ) : viewMode === "table" ? (
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: 40 }} />
                 <col style={{ width: widthOf("name") }} />
@@ -263,9 +263,9 @@ export default function LocationManager({ locations, practices, customPropertyDe
                   <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-4 py-2 w-10", cbFrozen && "bg-slate-50")}>
                     <input ref={headerCheckRef} type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" />
                   </th>
-                  <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-4 py-2 font-semibold relative", frozenClass(fmap.get("name"), "bg-slate-50"))}>
-                    <button onClick={() => toggleSort("name")} className="inline-flex items-center gap-1 hover:text-slate-800">
-                      Name {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-4 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(fmap.get("name"), "bg-slate-50"))}>
+                    <button onClick={() => toggleSort("name")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
+                      <span className="flex-1 min-w-0 truncate text-left">Name</span> {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                     </button>
                     <ColResizer onMouseDown={(e) => startResize("name", e)} />
                   </th>
@@ -274,12 +274,12 @@ export default function LocationManager({ locations, practices, customPropertyDe
                       {...colReorder.handleProps(col.key)}
                       {...colReorder.cardProps(col.key)}
                       style={frozenHeadStyle(fmap.get(col.key))}
-                      className={cn("px-4 py-2 font-semibold relative cursor-grab active:cursor-grabbing", col.align === "right" && "text-right", colReorder.dragging === col.key ? "bg-slate-200/70" : frozenClass(fmap.get(col.key), "bg-slate-50"))}>
+                      className={cn("px-4 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", col.align === "right" && "text-right", colReorder.dragging === col.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(col.key), "bg-slate-50")))}>
                       {col.sortable ? (
-                        <button onClick={() => toggleSort(col.key as SortKey)} className="inline-flex items-center gap-1 hover:text-slate-800">
-                          {col.label} {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                        <button onClick={() => toggleSort(col.key as SortKey)} className={cn("flex items-center gap-1 w-full min-w-0 hover:text-slate-800", col.align === "right" && "justify-end")}>
+                          <span className="min-w-0 truncate">{col.label}</span> {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                         </button>
-                      ) : col.label}
+                      ) : <span className="block truncate">{col.label}</span>}
                       <ColResizer onMouseDown={(e) => startResize(col.key, e)} />
                     </th>
                   ))}

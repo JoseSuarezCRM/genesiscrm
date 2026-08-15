@@ -348,8 +348,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
         </div>
       ) : (
         <div className="bg-white border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-xl">
+            <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: 40 }} />
                 {colReorder.order.map((c) => <col key={c.key} style={{ width: widthOf(c.key) }} />)}
@@ -364,8 +364,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                       {...colReorder.handleProps(c.key)}
                       {...colReorder.cardProps(c.key)}
                       style={frozenHeadStyle(fmap.get(c.key))}
-                      className={cn("px-3 py-2 font-semibold relative cursor-grab active:cursor-grabbing", colReorder.dragging === c.key ? "bg-slate-200/70" : frozenClass(fmap.get(c.key), "bg-slate-50"))}>
-                      <button onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 hover:text-slate-800">{c.label} <SortIcon k={c.key} /></button>
+                      className={cn("px-3 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", colReorder.dragging === c.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(c.key), "bg-slate-50")))}>
+                      <button onClick={() => toggleSort(c.key)} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800"><span className="flex-1 min-w-0 truncate text-left">{c.label}</span><SortIcon k={c.key} /></button>
                       <ColResizer onMouseDown={(e) => startResize(c.key, e)} />
                     </th>
                   ))}
