@@ -2,9 +2,14 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
-import { Phone, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
+import { Phone, ChevronDown, ChevronUp, Loader2, Columns3 } from "lucide-react"
 import BulkActionBar, { bulkBtn } from "@/components/ui/bulk-action-bar"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
+import ColumnChooserModal from "@/components/ui/column-chooser"
+import { useColumnPrefs } from "@/components/ui/use-column-prefs"
+import { useCardReorder } from "@/components/use-card-reorder"
+import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
+import { cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate, formatPhone } from "@/lib/utils"
 import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
@@ -46,6 +51,19 @@ interface Props {
   allMatchingIds: string[]
 }
 
+const REFERRAL_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
+  { key: "patient", label: "Patient", sortable: true },
+  { key: "phone", label: "Phone", sortable: true },
+  { key: "practice", label: "Referring Practice", sortable: true },
+  { key: "tags", label: "Tags" },
+  { key: "referralDate", label: "Referral Date", sortable: true },
+  { key: "apptDate", label: "Appt Date", sortable: true },
+  { key: "calls", label: "Calls", sortable: true },
+  { key: "status", label: "Status", sortable: true },
+]
+const DEFAULT_REFERRAL_COLS = REFERRAL_COLUMNS.map((c) => c.key)
+const REFERRAL_COL_W: Record<string, number> = { patient: 200, phone: 150, practice: 220, tags: 180, referralDate: 130, apptDate: 130, calls: 90, status: 150 }
+
 export default function ReferralTable({ referrals, pipelines, allTags, listUrl, total, allMatchingIds }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [allPagesSelected, setAllPagesSelected] = useState(false)
@@ -60,6 +78,17 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
   const statusRef = useRef<HTMLDivElement>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
   const { colWidth, startResize } = useColumnResize("referralColWidths")
+  const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs("referralCols", DEFAULT_REFERRAL_COLS)
+  const [colModalOpen, setColModalOpen] = useState(false)
+  // Render in the user's chosen order, with the required "patient" column first.
+  const orderedKeys = ["patient", ...visibleCols.filter((k) => k !== "patient")]
+  const cols = (orderedKeys.map((k) => REFERRAL_COLUMNS.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string; sortable?: boolean }[])
+  const reorderableCols = cols.filter((c) => c.key !== "patient")
+  const colReorder = useCardReorder(reorderableCols, (c) => c.key, (ids) => setVisibleCols(["patient", ...ids]))
+  const orderedCols = [cols.find((c) => c.key === "patient")!, ...colReorder.order].filter(Boolean) as typeof cols
+  const widthOf = (k: string) => colWidth(k) ?? REFERRAL_COL_W[k] ?? 160
+  const fmap = frozenMap(orderedCols.map((c) => c.key), frozenCount, widthOf, 40)
+  const cbFrozen = frozenCount > 0
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -178,6 +207,33 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
       clearSelection()
       router.refresh()
     })
+  }
+
+  function renderReferralCell(r: Referral, key: string) {
+    switch (key) {
+      case "patient":
+        return <Link href={`/referrals/${r.id}?from=${encodeURIComponent(listUrl)}`} className="font-medium text-slate-900 hover:text-blue-600">{r.patientFirstName} {r.patientLastName}</Link>
+      case "phone":
+        return <span className="text-slate-600">{formatPhone(r.patientPhone)}</span>
+      case "practice":
+        return <span className="text-slate-600">{r.referringPractice?.name ?? "—"}</span>
+      case "tags":
+        return r.tags.length > 0
+          ? <div className="flex gap-1">{r.tags.map(({ tag }) => <span key={tag.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-white shrink-0" style={{ backgroundColor: tag.color }}>{tag.name}</span>)}</div>
+          : <span className="text-slate-400">—</span>
+      case "referralDate":
+        return <span className="text-slate-600">{formatDate(r.referralDate)}</span>
+      case "apptDate":
+        return <span className="text-slate-600">{formatDate(r.appointmentDate)}</span>
+      case "calls":
+        return r._count.callAttempts > 0
+          ? <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600"><Phone className="h-3 w-3" />{r._count.callAttempts}/3</span>
+          : <span className="text-slate-300 text-xs">—</span>
+      case "status":
+        return <StatusBadge status={r.status as any} />
+      default:
+        return null
+    }
   }
 
   return (
@@ -322,17 +378,24 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
           </div>
 
       </BulkActionBar>
+
+      <div className="flex justify-end mb-2">
+        <button onClick={() => setColModalOpen(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
+          <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
+        </button>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto rounded-xl">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
           <colgroup>
             <col style={{ width: 40 }} />
-            {["patient", "phone", "practice", "tags", "referralDate", "apptDate", "calls", "status"].map((k) => (
-              <col key={k} style={{ width: colWidth(k) }} />
-            ))}
+            {orderedCols.map((c) => <col key={c.key} style={{ width: widthOf(c.key) }} />)}
           </colgroup>
           <thead>
             <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-              <th className="px-3 py-2 w-10">
+              <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-3 py-2 w-10", cbFrozen && "bg-slate-50")}>
                 <input
                   ref={headerCheckRef}
                   type="checkbox"
@@ -341,28 +404,30 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                   className="rounded border-slate-300 cursor-pointer"
                 />
               </th>
-              {[
-                ["patient", "Patient"], ["phone", "Phone"], ["practice", "Referring Practice"],
-                ["tags", "Tags"], ["referralDate", "Referral Date"], ["apptDate", "Appt Date"],
-                ["calls", "Calls"], ["status", "Status"],
-              ].map(([k, label]) => (
-                <th key={k} className="text-left px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100">
-                  {k === "tags" ? <span className="block truncate">{label}</span> : (
-                    <button onClick={() => toggleSort(k)} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
-                      <span className="flex-1 min-w-0 truncate text-left">{label}</span>
-                      {sortKey === k && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
-                    </button>
-                  )}
-                  <ColResizer onMouseDown={(e) => startResize(k, e)} />
-                </th>
-              ))}
+              {orderedCols.map((c) => {
+                const draggable = c.key !== "patient"
+                return (
+                  <th key={c.key}
+                    {...(draggable ? { ...colReorder.handleProps(c.key), ...colReorder.cardProps(c.key) } : {})}
+                    style={frozenHeadStyle(fmap.get(c.key))}
+                    className={cn("text-left px-3 py-2 font-semibold relative overflow-hidden transition-colors", draggable && "cursor-grab active:cursor-grabbing", (draggable && colReorder.dragging === c.key) ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(c.key), "bg-slate-50")))}>
+                    {c.sortable ? (
+                      <button onClick={() => toggleSort(c.key)} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
+                        <span className="flex-1 min-w-0 truncate text-left">{c.label}</span>
+                        {sortKey === c.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
+                      </button>
+                    ) : <span className="block truncate">{c.label}</span>}
+                    <ColResizer onMouseDown={(e) => startResize(c.key, e)} />
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
             {/* Select-all-pages banner */}
             {(showSelectAllBanner || allPagesSelected) && (
               <tr>
-                <td colSpan={9} className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-center text-sm text-blue-800">
+                <td colSpan={orderedCols.length + 1} className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-center text-sm text-blue-800">
                   {allPagesSelected ? (
                     <>
                       All <span className="font-semibold">{total}</span> records are selected.{" "}
@@ -383,7 +448,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
             )}
             {referrals.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-6 py-12 text-center text-slate-400">
+                <td colSpan={orderedCols.length + 1} className="px-6 py-12 text-center text-slate-400">
                   No referrals found.{" "}
                   <Link href="/referrals/new" className="text-blue-600 hover:underline">
                     Create one
@@ -399,7 +464,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                     selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50"
                   }`}
                 >
-                  <td className="px-3 py-2.5">
+                  <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}>
                     <input
                       type="checkbox"
                       checked={selected.has(r.id)}
@@ -407,55 +472,28 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                       className="rounded border-slate-300 cursor-pointer"
                     />
                   </td>
-                  <td className="px-3 py-2.5">
-                    <Link
-                      href={`/referrals/${r.id}?from=${encodeURIComponent(listUrl)}`}
-                      className="font-medium text-slate-900 hover:text-blue-600"
-                    >
-                      {r.patientFirstName} {r.patientLastName}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2.5 text-slate-600">{formatPhone(r.patientPhone)}</td>
-                  <td className="px-3 py-2.5 text-slate-600">{r.referringPractice?.name ?? "—"}</td>
-                  <td className="px-3 py-2.5">
-                    {r.tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {r.tags.map(({ tag }) => (
-                          <span
-                            key={tag.id}
-                            className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-white"
-                            style={{ backgroundColor: tag.color }}
-                          >
-                            {tag.name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-slate-600">{formatDate(r.referralDate)}</td>
-                  <td className="px-3 py-2.5 text-slate-600">{formatDate(r.appointmentDate)}</td>
-                  <td className="px-3 py-2.5">
-                    {r._count.callAttempts > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600">
-                        <Phone className="h-3 w-3" />
-                        {r._count.callAttempts}/3
-                      </span>
-                    ) : (
-                      <span className="text-slate-300 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge status={r.status as any} />
-                  </td>
+                  {orderedCols.map((c) => (
+                    <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get(c.key)))}>
+                      {renderReferralCell(r, c.key)}
+                    </td>
+                  ))}
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+      </div>
 
+      <ColumnChooserModal
+        open={colModalOpen}
+        onClose={() => setColModalOpen(false)}
+        columns={REFERRAL_COLUMNS}
+        required={["patient"]}
+        selected={visibleCols}
+        frozen={frozenCount}
+        onApply={(sel, fr) => applyCols(sel, fr)}
+      />
     </>
   )
 }

@@ -311,22 +311,20 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         </Suspense>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border rounded-lg overflow-hidden">
-        <ReferralTable referrals={referrals} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
+      {/* Table (renders its own card + column chooser) */}
+      <ReferralTable referrals={referrals} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            total={total}
-            baseParams={Object.entries(searchParams).flatMap(([k, v]) =>
-              v == null || k === "page" ? [] : Array.isArray(v) ? v.map((val): [string, string] => [k, val]) : [[k, v] as [string, string]]
-            )}
-          />
-        )}
-      </div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          baseParams={Object.entries(searchParams).flatMap(([k, v]) =>
+            v == null || k === "page" ? [] : Array.isArray(v) ? v.map((val): [string, string] => [k, val]) : [[k, v] as [string, string]]
+          )}
+        />
+      )}
     </div>
   )
 }
