@@ -322,7 +322,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
           </div>
 
       </BulkActionBar>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-xl">
         <table className="w-full text-sm">
           <colgroup>
             <col style={{ width: 40 }} />
@@ -331,8 +331,8 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
             ))}
           </colgroup>
           <thead>
-            <tr className="border-b bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-              <th className="px-4 py-3 w-10">
+            <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <th className="px-3 py-2 w-10">
                 <input
                   ref={headerCheckRef}
                   type="checkbox"
@@ -346,11 +346,11 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                 ["tags", "Tags"], ["referralDate", "Referral Date"], ["apptDate", "Appt Date"],
                 ["calls", "Calls"], ["status", "Status"],
               ].map(([k, label]) => (
-                <th key={k} className="text-left px-4 py-3 font-semibold relative">
-                  {k === "tags" ? label : (
-                    <button onClick={() => toggleSort(k)} className="inline-flex items-center gap-1 hover:text-slate-800">
-                      {label}
-                      {sortKey === k && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                <th key={k} className="text-left px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100">
+                  {k === "tags" ? <span className="block truncate">{label}</span> : (
+                    <button onClick={() => toggleSort(k)} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
+                      <span className="flex-1 min-w-0 truncate text-left">{label}</span>
+                      {sortKey === k && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                     </button>
                   )}
                   <ColResizer onMouseDown={(e) => startResize(k, e)} />
@@ -399,7 +399,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                     selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50"
                   }`}
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     <input
                       type="checkbox"
                       checked={selected.has(r.id)}
@@ -407,7 +407,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                       className="rounded border-slate-300 cursor-pointer"
                     />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     <Link
                       href={`/referrals/${r.id}?from=${encodeURIComponent(listUrl)}`}
                       className="font-medium text-slate-900 hover:text-blue-600"
@@ -415,9 +415,9 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                       {r.patientFirstName} {r.patientLastName}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{formatPhone(r.patientPhone)}</td>
-                  <td className="px-4 py-3 text-slate-600">{r.referringPractice?.name ?? "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5 text-slate-600">{formatPhone(r.patientPhone)}</td>
+                  <td className="px-3 py-2.5 text-slate-600">{r.referringPractice?.name ?? "—"}</td>
+                  <td className="px-3 py-2.5">
                     {r.tags.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {r.tags.map(({ tag }) => (
@@ -434,9 +434,9 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                       <span className="text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(r.referralDate)}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(r.appointmentDate)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5 text-slate-600">{formatDate(r.referralDate)}</td>
+                  <td className="px-3 py-2.5 text-slate-600">{formatDate(r.appointmentDate)}</td>
+                  <td className="px-3 py-2.5">
                     {r._count.callAttempts > 0 ? (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600">
                         <Phone className="h-3 w-3" />
@@ -446,7 +446,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
                       <span className="text-slate-300 text-xs">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     <StatusBadge status={r.status as any} />
                   </td>
                 </tr>

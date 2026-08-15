@@ -81,7 +81,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
   const [colModalOpen, setColModalOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const { colWidth, startResize } = useColumnResize("locationColWidths")
-  const [sortKey, setSortKey] = useState<SortKey>("referrals")
+  const [sortKey, setSortKey] = useState<SortKey>("created") // newest first
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [selected, setSelected] = useState<Set<string>>(new Set())
 

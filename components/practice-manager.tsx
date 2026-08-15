@@ -478,7 +478,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
       .sort((a, b) =>
         providerSort === "referrals"
           ? b._count.referrals - a._count.referrals
-          : a.name.localeCompare(b.name)
+          : new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime() // newest first
       )
   })()
 

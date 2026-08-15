@@ -157,7 +157,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const fmap = frozenMap(colReorder.order.map((c) => c.key), frozenCount, widthOf, 40)
   const cbFrozen = frozenCount > 0 // freeze the checkbox column whenever anything is frozen
   const [sortKeyC, setSortKeyC] = useState<string>("__id")
-  const [sortDirC, setSortDirC] = useState<"asc" | "desc">("asc")
+  const [sortDirC, setSortDirC] = useState<"asc" | "desc">("desc") // newest record first
   const sortKey = isServer ? (urlParams.get("sort") ?? "__id") : sortKeyC
   const sortDir: "asc" | "desc" = isServer ? (urlParams.get("dir") === "asc" ? "asc" : "desc") : sortDirC
   // Text columns start A→Z; id/date columns start newest/highest first.
