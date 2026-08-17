@@ -62,7 +62,14 @@ export async function updateCustomObjectView(id: string, config: CustomObjectVie
   const userId = (session.user as any).id
   const view = await (prisma as any).customObjectView.findUnique({ where: { id } })
   if (!view) return { error: "View not found" }
-  if (view.userId !== userId) return { error: "You can only edit views you own." }
+  // The owner can always edit; anyone the view is shared with can edit it too
+  // (shared views are collaborative — saving updates it for everyone).
+  const teamIds = await myTeamIds(userId)
+  const canEdit = view.userId === userId
+    || view.visibility === "EVERYONE"
+    || (view.visibility === "TEAM" && teamIds.includes(view.teamId))
+    || (view.visibility === "CUSTOM" && (view.sharedUserIds ?? []).includes(userId))
+  if (!canEdit) return { error: "You don't have access to this view." }
   await (prisma as any).customObjectView.update({ where: { id }, data: { config: config as any } })
   revalidatePath(`/objects/${view.objectKey}`)
   return { success: true }

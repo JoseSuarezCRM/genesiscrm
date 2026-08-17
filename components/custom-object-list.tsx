@@ -219,7 +219,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     ?? (!filtersActive && !search ? "__default__" : null)
   const activeViewId = appliedViewId ?? matchedViewId
   const activeView = savedViews.find((v) => v.id === appliedViewId)
-  const viewDirty = !!activeView && activeView.isOwner !== false
+  const viewDirty = !!activeView
     && JSON.stringify({ filter, columns: visibleCols, frozen: frozenCount }) !== JSON.stringify({ filter: activeView.config.filter, columns: activeView.config.columns, frozen: (activeView.config as any).frozen ?? 0 })
   function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); applyCols(v.config.columns ?? allCols.map((c) => c.key), (v.config as any).frozen ?? 0); setSearch(""); setAppliedViewId(v.id) }
   function applyDefault() { setFilter(emptyFilter()); applyCols(allCols.map((c) => c.key), 0); setSearch(""); setAppliedViewId(null) }

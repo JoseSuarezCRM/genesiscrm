@@ -143,6 +143,8 @@ interface SavedView {
     filterLocationMode: "any" | "none"
     filterProviderIds: string[]
     filterProviderMode: "any" | "none"
+    columns?: string[]
+    frozen?: number
   }
   visibility?: Visibility
   teamId?: string | null
@@ -1055,6 +1057,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     setFilterLocationMode(f.filterLocationMode ?? "any")
     setFilterProviderIds(f.filterProviderIds ?? [])
     setFilterProviderMode(f.filterProviderMode ?? "any")
+    if (f.columns) setVisibleCols(f.columns)
+    if (typeof f.frozen === "number") setFrozenCount(f.frozen)
     setActiveViewId(view.id)
   }
 
@@ -1096,13 +1100,14 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     filterPracticeIds, filterPracticeMode,
     filterLocationIds, filterLocationMode,
     filterProviderIds, filterProviderMode,
+    columns: visibleCols, frozen: frozenCount,
   }
 
   const editAccessView = savedViews.find(v => v.id === editAccessId) ?? null
 
   const activeView = savedViews.find(v => v.id === activeViewId)
   const sameSet = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every(x => b.includes(x))
-  const viewDirty = !!activeView && activeView.isOwner !== false && (
+  const viewDirty = !!activeView && (
     activeView.filters.search !== search ||
     activeView.filters.dateFrom !== dateFrom ||
     activeView.filters.dateTo !== dateTo ||
@@ -1112,7 +1117,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     !sameSet(activeView.filters.activeTagIds, activeTagIds) ||
     !sameSet(activeView.filters.filterPracticeIds, filterPracticeIds) ||
     !sameSet(activeView.filters.filterLocationIds, filterLocationIds) ||
-    !sameSet(activeView.filters.filterProviderIds, filterProviderIds)
+    !sameSet(activeView.filters.filterProviderIds, filterProviderIds) ||
+    !sameSet(activeView.filters.columns ?? DEFAULT_ACTIVITY_COLS, visibleCols) ||
+    (activeView.filters.frozen ?? 0) !== frozenCount
   )
 
   async function handleUpdateView() {

@@ -11,6 +11,7 @@ export interface SurgeryViewConfig {
   query: string
   columns: string[]
   viewMode: "cards" | "table"
+  frozen?: number
 }
 
 export interface ViewAccess {
@@ -67,16 +68,24 @@ export async function createSurgeryView(name: string, config: SurgeryViewConfig,
 export async function updateSurgeryView(id: string, config: SurgeryViewConfig, access?: ViewAccess) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
+  const userId = (session.user as any).id
+  const view = await (prisma as any).surgeryView.findUnique({ where: { id } })
+  if (!view) return { error: "View not found" }
+  const teamIds = await myTeamIds(userId)
+  // Content is collaborative — anyone the view is shared with can save changes.
+  const canEdit = view.userId === userId
+    || view.visibility === "EVERYONE"
+    || (view.visibility === "TEAM" && teamIds.includes(view.teamId))
+    || (view.visibility === "CUSTOM" && (view.sharedUserIds ?? []).includes(userId))
+  if (!canEdit) return { error: "You don't have access to this view." }
   const data: any = { config }
   if (access) {
+    if (view.userId !== userId) return { error: "Only the view owner can change sharing." }
     data.visibility = access.visibility
     data.teamId = access.visibility === "TEAM" ? access.teamId ?? null : null
     data.sharedUserIds = access.visibility === "CUSTOM" ? access.sharedUserIds ?? [] : []
   }
-  await (prisma as any).surgeryView.update({
-    where: { id, userId: (session.user as any).id },
-    data,
-  })
+  await (prisma as any).surgeryView.update({ where: { id }, data })
   revalidatePath("/surgery")
   return { success: true }
 }

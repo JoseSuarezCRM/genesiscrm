@@ -140,9 +140,11 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
     window.addEventListener("surgery-view-applied", loadPrefs)
     return () => window.removeEventListener("surgery-view-applied", loadPrefs)
   }, [])
-  useEffect(() => { try { localStorage.setItem("surgeryViewMode", viewMode) } catch {} }, [viewMode])
-  useEffect(() => { try { localStorage.setItem("surgeryCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
-  useEffect(() => { try { localStorage.setItem("surgeryFrozen", String(frozenCount)) } catch {} }, [frozenCount])
+  // Persist prefs + notify the views bar so it can offer "Save changes" when the
+  // active view's columns/frozen/viewMode are modified.
+  useEffect(() => { try { localStorage.setItem("surgeryViewMode", viewMode); window.dispatchEvent(new Event("surgery-prefs-changed")) } catch {} }, [viewMode])
+  useEffect(() => { try { localStorage.setItem("surgeryCols", JSON.stringify(visibleCols)); window.dispatchEvent(new Event("surgery-prefs-changed")) } catch {} }, [visibleCols])
+  useEffect(() => { try { localStorage.setItem("surgeryFrozen", String(frozenCount)); window.dispatchEvent(new Event("surgery-prefs-changed")) } catch {} }, [frozenCount])
 
   const allPageChecked = cases.length > 0 && cases.every((c) => selected.has(c.id))
   const someChecked = selected.size > 0 && !allPageChecked

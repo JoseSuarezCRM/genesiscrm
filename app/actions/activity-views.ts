@@ -16,6 +16,8 @@ export interface ViewFilters {
   filterLocationMode: "any" | "none"
   filterProviderIds: string[]
   filterProviderMode: "any" | "none"
+  columns?: string[]
+  frozen?: number
 }
 
 export interface ViewAccess {
@@ -72,16 +74,25 @@ export async function createActivityView(name: string, filters: ViewFilters, acc
 export async function updateActivityView(id: string, filters: ViewFilters, access?: ViewAccess) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
+  const userId = (session.user as any).id
+  const view = await (prisma as any).activityView.findUnique({ where: { id } })
+  if (!view) return { error: "View not found" }
+  const teamIds = await myTeamIds(userId)
+  // Content (filters/columns) is collaborative — anyone the view is shared with can save.
+  const canEdit = view.userId === userId
+    || view.visibility === "EVERYONE"
+    || (view.visibility === "TEAM" && teamIds.includes(view.teamId))
+    || (view.visibility === "CUSTOM" && (view.sharedUserIds ?? []).includes(userId))
+  if (!canEdit) return { error: "You don't have access to this view." }
   const data: any = { filters }
   if (access) {
+    // Only the owner may change who a view is shared with.
+    if (view.userId !== userId) return { error: "Only the view owner can change sharing." }
     data.visibility = access.visibility
     data.teamId = access.visibility === "TEAM" ? access.teamId ?? null : null
     data.sharedUserIds = access.visibility === "CUSTOM" ? access.sharedUserIds ?? [] : []
   }
-  await (prisma as any).activityView.update({
-    where: { id, userId: (session.user as any).id },
-    data,
-  })
+  await (prisma as any).activityView.update({ where: { id }, data })
   revalidatePath("/activities")
   return { success: true }
 }
