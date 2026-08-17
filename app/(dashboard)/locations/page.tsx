@@ -29,7 +29,7 @@ export default async function LocationsPage() {
       <LocationManager
         locations={locations.map((l) => ({ ...l, createdAt: l.createdAt as any })) as any}
         practices={practices}
-        customPropertyDefs={customPropertyDefs.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options }))}
+        customPropertyDefs={customPropertyDefs as any}
         canEdit={canEdit}
         canDelete={canDelete}
       />

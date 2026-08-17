@@ -56,6 +56,18 @@ export async function createCustomObjectView(objectKey: string, name: string, co
   return { success: true, id: view.id }
 }
 
+export async function updateCustomObjectView(id: string, config: CustomObjectViewConfig) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  const userId = (session.user as any).id
+  const view = await (prisma as any).customObjectView.findUnique({ where: { id } })
+  if (!view) return { error: "View not found" }
+  if (view.userId !== userId) return { error: "You can only edit views you own." }
+  await (prisma as any).customObjectView.update({ where: { id }, data: { config: config as any } })
+  revalidatePath(`/objects/${view.objectKey}`)
+  return { success: true }
+}
+
 export async function deleteCustomObjectView(id: string) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }

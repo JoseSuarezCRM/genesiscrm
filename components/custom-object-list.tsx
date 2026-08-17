@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import FilterBuilder from "@/components/ui/filter-builder"
 import ExportDialog from "@/components/ui/export-dialog"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
-import { createCustomObjectView, deleteCustomObjectView } from "@/app/actions/custom-object-views"
+import { createCustomObjectView, updateCustomObjectView, deleteCustomObjectView } from "@/app/actions/custom-object-views"
 import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
 import ColumnChooserModal from "@/components/ui/column-chooser"
@@ -211,11 +211,26 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const [newViewName, setNewViewName] = useState("")
   const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
   const [savingView, setSavingView] = useState(false)
+  // The view the user last applied — kept even after they tweak columns/filters, so
+  // we can offer to save those changes back to it.
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null)
   const currentKey = JSON.stringify({ filter, columns: visibleCols })
-  const activeViewId = savedViews.find((v) => JSON.stringify({ filter: v.config.filter, columns: v.config.columns }) === currentKey)?.id
+  const matchedViewId = savedViews.find((v) => JSON.stringify({ filter: v.config.filter, columns: v.config.columns }) === currentKey)?.id
     ?? (!filtersActive && !search ? "__default__" : null)
-  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); applyCols(v.config.columns ?? allCols.map((c) => c.key), (v.config as any).frozen ?? 0); setSearch("") }
-  function applyDefault() { setFilter(emptyFilter()); applyCols(allCols.map((c) => c.key), 0); setSearch("") }
+  const activeViewId = appliedViewId ?? matchedViewId
+  const activeView = savedViews.find((v) => v.id === appliedViewId)
+  const viewDirty = !!activeView && activeView.isOwner !== false
+    && JSON.stringify({ filter, columns: visibleCols, frozen: frozenCount }) !== JSON.stringify({ filter: activeView.config.filter, columns: activeView.config.columns, frozen: (activeView.config as any).frozen ?? 0 })
+  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); applyCols(v.config.columns ?? allCols.map((c) => c.key), (v.config as any).frozen ?? 0); setSearch(""); setAppliedViewId(v.id) }
+  function applyDefault() { setFilter(emptyFilter()); applyCols(allCols.map((c) => c.key), 0); setSearch(""); setAppliedViewId(null) }
+  function updateActiveView() {
+    if (!appliedViewId) return
+    setSavingView(true)
+    startTransition(async () => {
+      await updateCustomObjectView(appliedViewId, { filter, columns: visibleCols, frozen: frozenCount } as any)
+      setSavingView(false); router.refresh()
+    })
+  }
   // Drag to reorder the view tabs (per-user order, persisted).
   const viewReorder = useCardReorder(savedViews, (v) => v.id, (ids) => startTransition(() => { reorderViews("CUSTOM_OBJECT", objectKey, ids) }))
   function saveView() {
@@ -310,10 +325,16 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
             )}
           </div>
         ))}
+        {viewDirty && (
+          <button onClick={updateActiveView} disabled={savingView}
+            className="h-8 px-3 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+            {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save changes
+          </button>
+        )}
         <div className="relative">
           <button onClick={() => setShowSaveForm((v) => !v)}
             className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 flex items-center gap-1.5">
-            <Plus className="h-3.5 w-3.5" /> Save view
+            <Plus className="h-3.5 w-3.5" /> {viewDirty ? "Save as new" : "Save view"}
           </button>
           {showSaveForm && (
             <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
