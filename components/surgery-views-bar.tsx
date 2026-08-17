@@ -167,7 +167,7 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
 
       {viewDirty && (
         <button onClick={handleUpdateView} disabled={saving || isPending}
-          className="h-8 px-3 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+          className="h-8 px-3 rounded-lg text-sm font-medium border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save changes
         </button>
       )}

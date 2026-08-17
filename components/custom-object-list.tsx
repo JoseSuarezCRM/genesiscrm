@@ -279,6 +279,12 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
           <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
         </button>
+        {viewDirty && (
+          <button onClick={updateActiveView} disabled={savingView} title={`Save changes to "${activeView?.name}"`}
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-blue-200 bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+            {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save changes
+          </button>
+        )}
         <button onClick={() => setExportOpen(true)} disabled={filtered.length === 0} title="Export current view to CSV"
           className="ml-auto inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50">
           <Download className="h-3.5 w-3.5" /> Export
@@ -325,12 +331,6 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
             )}
           </div>
         ))}
-        {viewDirty && (
-          <button onClick={updateActiveView} disabled={savingView}
-            className="h-8 px-3 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
-            {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save changes
-          </button>
-        )}
         <div className="relative">
           <button onClick={() => setShowSaveForm((v) => !v)}
             className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 flex items-center gap-1.5">
