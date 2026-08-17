@@ -13,6 +13,8 @@ import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
 import ColumnChooserModal from "@/components/ui/column-chooser"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
+import { OptionValue } from "@/components/option-value"
+import { formatNumber } from "@/lib/number-format"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
@@ -126,6 +128,7 @@ interface ActivityRow {
   nextStep: string | null; frontDesk: string | null; flyer: string | null; notes: string | null
   rating: number | null
   meetingRating: number | null
+  customProperties?: Record<string, any> | null
   createdBy: { name: string | null; email: string }
 }
 
@@ -143,6 +146,8 @@ interface SavedView {
     filterLocationMode: "any" | "none"
     filterProviderIds: string[]
     filterProviderMode: "any" | "none"
+    columns?: string[]
+    frozen?: number
   }
   visibility?: Visibility
   teamId?: string | null
@@ -159,6 +164,7 @@ interface Props {
   savedViews: SavedView[]
   shareUsers: ShareUser[]
   shareTeams: ShareTeam[]
+  customProps?: { id: string; name: string; type: string; optionLabels?: Record<string, string> | null; optionColors?: Record<string, string> | null; optionStyle?: string | null; numberFormat?: string | null }[]
 }
 
 // ─── Color palette ────────────────────────────────────────────────────────────
@@ -769,7 +775,10 @@ const ACTIVITY_COL_W: Record<string, number> = { date: 120, account: 200, locati
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
+  // Full catalog = native activity columns + every activity custom property.
+  const allActivityCols = [...ACTIVITY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const activityCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
@@ -1055,6 +1064,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     setFilterLocationMode(f.filterLocationMode ?? "any")
     setFilterProviderIds(f.filterProviderIds ?? [])
     setFilterProviderMode(f.filterProviderMode ?? "any")
+    if (f.columns) setVisibleCols(f.columns)
+    if (typeof f.frozen === "number") setFrozenCount(f.frozen)
     setActiveViewId(view.id)
   }
 
@@ -1096,13 +1107,14 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     filterPracticeIds, filterPracticeMode,
     filterLocationIds, filterLocationMode,
     filterProviderIds, filterProviderMode,
+    columns: visibleCols, frozen: frozenCount,
   }
 
   const editAccessView = savedViews.find(v => v.id === editAccessId) ?? null
 
   const activeView = savedViews.find(v => v.id === activeViewId)
   const sameSet = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every(x => b.includes(x))
-  const viewDirty = !!activeView && activeView.isOwner !== false && (
+  const viewDirty = !!activeView && (
     activeView.filters.search !== search ||
     activeView.filters.dateFrom !== dateFrom ||
     activeView.filters.dateTo !== dateTo ||
@@ -1112,7 +1124,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     !sameSet(activeView.filters.activeTagIds, activeTagIds) ||
     !sameSet(activeView.filters.filterPracticeIds, filterPracticeIds) ||
     !sameSet(activeView.filters.filterLocationIds, filterLocationIds) ||
-    !sameSet(activeView.filters.filterProviderIds, filterProviderIds)
+    !sameSet(activeView.filters.filterProviderIds, filterProviderIds) ||
+    !sameSet(activeView.filters.columns ?? DEFAULT_ACTIVITY_COLS, visibleCols) ||
+    (activeView.filters.frozen ?? 0) !== frozenCount
   )
 
   async function handleUpdateView() {
@@ -1258,7 +1272,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   // Render in chosen order, with the required "date" column first.
   const orderedActKeys = ["date", ...visibleCols.filter((k) => k !== "date")]
-  const cols = (orderedActKeys.map((k) => ACTIVITY_COLUMNS.find((c) => c.key === k)).filter(Boolean) as typeof ACTIVITY_COLUMNS)
+  const cols = (orderedActKeys.map((k) => allActivityCols.find((c) => c.key === k)).filter(Boolean) as typeof ACTIVITY_COLUMNS)
   const reorderableActCols = cols.filter((c) => c.key !== "date")
   const colReorder = useCardReorder(reorderableActCols, (c) => c.key, (ids) => setVisibleCols(["date", ...ids]))
   const orderedCols = [cols.find((c) => c.key === "date")!, ...colReorder.order].filter(Boolean) as typeof cols
@@ -1308,6 +1322,16 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   // One table cell's content for the given column.
   function renderCell(a: typeof filtered[number], key: string): React.ReactNode {
+    if (key.startsWith("cp_")) {
+      const id = key.slice(3)
+      const raw = (a as any).customProperties?.[id]
+      if (raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)) return <span className="text-zinc-400">—</span>
+      const def = activityCpById[id] as any
+      if (def?.type === "DROPDOWN" || def?.type === "MULTI_SELECT") return <OptionValue value={raw} optionLabels={def.optionLabels} optionColors={def.optionColors} optionStyle={def.optionStyle} />
+      if (Array.isArray(raw)) return <span className="text-zinc-500">{raw.join(", ")}</span>
+      if (def?.type === "NUMBER") return <span className="text-zinc-500">{formatNumber(raw, def.numberFormat)}</span>
+      return <span className="text-zinc-500">{String(raw)}</span>
+    }
     switch (key) {
       case "date": return <span className="whitespace-nowrap text-zinc-600">{format(activityDay(a.date), "MMM d, yyyy")}</span>
       case "account": return <span className="font-medium text-zinc-800">{a.practice?.name ?? "—"}</span>
@@ -2003,7 +2027,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       <ColumnChooserModal
         open={colModalOpen}
         onClose={() => setColModalOpen(false)}
-        columns={ACTIVITY_COLUMNS}
+        columns={allActivityCols}
         required={["date"]}
         selected={visibleCols}
         frozen={frozenCount}

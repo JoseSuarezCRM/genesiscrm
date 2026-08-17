@@ -13,6 +13,8 @@ import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import ColumnChooserModal from "@/components/ui/column-chooser"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
+import { OptionValue } from "@/components/option-value"
+import { formatNumber } from "@/lib/number-format"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
@@ -148,12 +150,25 @@ export default function LocationManager({ locations, practices, customPropertyDe
     else { setSortKey(key); setSortDir(key === "practice" || key === "name" ? "asc" : "desc") }
   }
 
+  // Full catalog = native columns + every location custom property.
+  const allLocCols: { key: string; label: string; sortable?: boolean; align?: "right" }[] = [...LOCATION_COLUMNS, ...customPropertyDefs.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const locCpById = Object.fromEntries(customPropertyDefs.map((p) => [p.id, p]))
   // Render in the user's chosen order (name is the fixed leading column, always first).
-  const cols = (visibleCols.map((k) => LOCATION_COLUMNS.find((c) => c.key === k)).filter(Boolean) as typeof LOCATION_COLUMNS)
+  const cols = (visibleCols.map((k) => allLocCols.find((c) => c.key === k)).filter(Boolean) as typeof allLocCols)
   const colReorder = useCardReorder(cols, (c) => c.key, (ids) => setVisibleCols(ids))
   const widthOf = (k: string) => colWidth(k) ?? LOCATION_COL_W[k] ?? 160
   const fmap = frozenMap(["name", ...colReorder.order.map((c) => c.key)], frozenCount, widthOf, 40)
   const cbFrozen = frozenCount > 0
+  function renderLocationCp(l: LocationRow, id: string) {
+    const raw = l.customProperties?.[id]
+    if (raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)) return <span className="text-slate-400">—</span>
+    const def = locCpById[id] as any
+    if (def?.type === "DROPDOWN" || def?.type === "MULTI_SELECT") return <OptionValue value={raw} optionLabels={def.optionLabels} optionColors={def.optionColors} optionStyle={def.optionStyle} />
+    if (Array.isArray(raw)) return <span className="text-slate-500">{raw.join(", ")}</span>
+    if (def?.type === "NUMBER") return <span className="text-slate-500">{formatNumber(raw, def.numberFormat)}</span>
+    if (def?.type === "DATE" || def?.type === "DATE_TIME") return <span className="text-slate-500">{fmtDate(raw)}</span>
+    return <span className="text-slate-500">{String(raw)}</span>
+  }
 
   // ── Selection ────────────────────────────────────────────────────────────────
   const allChecked = sorted.length > 0 && sorted.every((l) => selected.has(l.id))
@@ -308,6 +323,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                         {col.key === "activities" && l.activityCount}
                         {col.key === "owner" && <span className="text-slate-500">{l.ownerName || "—"}</span>}
                         {col.key === "created" && <span className="text-slate-500">{fmtDate(l.createdAt)}</span>}
+                        {col.key.startsWith("cp_") && renderLocationCp(l, col.key.slice(3))}
                       </td>
                     ))}
                     {canEdit && (
@@ -355,7 +371,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
       <ColumnChooserModal
         open={colModalOpen}
         onClose={() => setColModalOpen(false)}
-        columns={[{ key: "name", label: "Name" }, ...LOCATION_COLUMNS]}
+        columns={[{ key: "name", label: "Name" }, ...allLocCols]}
         required={["name"]}
         selected={visibleCols}
         frozen={frozenCount}

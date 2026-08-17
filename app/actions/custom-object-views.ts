@@ -56,6 +56,25 @@ export async function createCustomObjectView(objectKey: string, name: string, co
   return { success: true, id: view.id }
 }
 
+export async function updateCustomObjectView(id: string, config: CustomObjectViewConfig) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  const userId = (session.user as any).id
+  const view = await (prisma as any).customObjectView.findUnique({ where: { id } })
+  if (!view) return { error: "View not found" }
+  // The owner can always edit; anyone the view is shared with can edit it too
+  // (shared views are collaborative — saving updates it for everyone).
+  const teamIds = await myTeamIds(userId)
+  const canEdit = view.userId === userId
+    || view.visibility === "EVERYONE"
+    || (view.visibility === "TEAM" && teamIds.includes(view.teamId))
+    || (view.visibility === "CUSTOM" && (view.sharedUserIds ?? []).includes(userId))
+  if (!canEdit) return { error: "You don't have access to this view." }
+  await (prisma as any).customObjectView.update({ where: { id }, data: { config: config as any } })
+  revalidatePath(`/objects/${view.objectKey}`)
+  return { success: true }
+}
+
 export async function deleteCustomObjectView(id: string) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }

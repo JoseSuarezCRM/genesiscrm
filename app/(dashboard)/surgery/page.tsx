@@ -133,7 +133,7 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           </div>
         </div>
       ) : (
-        <SurgeryTable cases={cases as any[]} total={total} allMatchingIds={allMatchingIds} />
+        <SurgeryTable cases={cases as any[]} total={total} allMatchingIds={allMatchingIds} customProps={surgeryCustomProps as any} />
       )}
 
       {/* Pagination */}

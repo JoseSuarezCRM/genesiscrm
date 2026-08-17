@@ -11,6 +11,8 @@ import { useCardReorder } from "@/components/use-card-reorder"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/status-badge"
+import { OptionValue } from "@/components/option-value"
+import { formatNumber } from "@/lib/number-format"
 import { formatDate, formatPhone } from "@/lib/utils"
 import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
 import { bulkAddTag, bulkRemoveTag } from "@/app/actions/tags"
@@ -29,11 +31,38 @@ interface Tag {
   color: string
 }
 
+interface CustomPropertyDef {
+  id: string
+  name: string
+  type: string
+  optionLabels?: Record<string, string> | null
+  optionColors?: Record<string, string> | null
+  optionStyle?: string | null
+  numberFormat?: string | null
+}
+
 interface Referral {
   id: string
   patientFirstName: string
   patientLastName: string
   patientPhone: string | null
+  patientEmail: string | null
+  patientMrn: string | null
+  genesisMrn: string | null
+  patientDob: string | Date | null
+  referringDoctorName: string | null
+  referringNpi: string | null
+  referringPhone: string | null
+  referringAddress: string | null
+  insuranceProvider: string | null
+  insuranceMemberId: string | null
+  insuranceGroup: string | null
+  authStatus: string | null
+  imagingType: string | null
+  pipelineId: string | null
+  notes: string | null
+  assignedTo: { id: string; name: string | null; email: string } | null
+  customProperties: Record<string, any> | null
   referringPractice: { name: string } | null
   tags: { tag: Tag }[]
   referralDate: string | Date
@@ -46,25 +75,53 @@ interface Props {
   referrals: Referral[]
   pipelines: Pipeline[]
   allTags: Tag[]
+  customProps?: CustomPropertyDef[]
   listUrl: string
   total: number
   allMatchingIds: string[]
 }
 
-const REFERRAL_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
+// Every choosable referral column — special/computed + native fields (custom
+// properties are appended at runtime). Only server-supported keys are sortable.
+const STATIC_REFERRAL_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "patient", label: "Patient", sortable: true },
   { key: "phone", label: "Phone", sortable: true },
+  { key: "email", label: "Email" },
+  { key: "mrn", label: "Referring MRN" },
+  { key: "genesisMrn", label: "Genesis MRN" },
+  { key: "dob", label: "Date of Birth" },
   { key: "practice", label: "Referring Practice", sortable: true },
+  { key: "providerName", label: "Provider Name" },
+  { key: "npi", label: "Referring NPI" },
+  { key: "referringPhone", label: "Referring Phone" },
+  { key: "referringAddress", label: "Referring Address" },
+  { key: "insurance", label: "Insurance" },
+  { key: "insuranceMemberId", label: "Insurance Member ID" },
+  { key: "insuranceGroup", label: "Insurance Group" },
+  { key: "authStatus", label: "Auth Status" },
+  { key: "imagingType", label: "Imaging Type" },
+  { key: "pipeline", label: "Pipeline" },
+  { key: "assignedTo", label: "Assigned To" },
   { key: "tags", label: "Tags" },
   { key: "referralDate", label: "Referral Date", sortable: true },
   { key: "apptDate", label: "Appt Date", sortable: true },
   { key: "calls", label: "Calls", sortable: true },
+  { key: "notes", label: "Notes" },
   { key: "status", label: "Status", sortable: true },
 ]
-const DEFAULT_REFERRAL_COLS = REFERRAL_COLUMNS.map((c) => c.key)
-const REFERRAL_COL_W: Record<string, number> = { patient: 200, phone: 150, practice: 220, tags: 180, referralDate: 130, apptDate: 130, calls: 90, status: 150 }
+const DEFAULT_REFERRAL_COLS = ["patient", "phone", "practice", "tags", "referralDate", "apptDate", "calls", "status"]
+const REFERRAL_COL_W: Record<string, number> = {
+  patient: 200, phone: 150, email: 200, mrn: 140, genesisMrn: 140, dob: 130, practice: 220,
+  providerName: 180, npi: 140, referringPhone: 150, referringAddress: 220, insurance: 170,
+  insuranceMemberId: 170, insuranceGroup: 150, authStatus: 140, imagingType: 150, pipeline: 150,
+  assignedTo: 160, tags: 180, referralDate: 130, apptDate: 130, calls: 90, notes: 240, status: 150,
+}
 
-export default function ReferralTable({ referrals, pipelines, allTags, listUrl, total, allMatchingIds }: Props) {
+export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], listUrl, total, allMatchingIds }: Props) {
+  // Full column catalog = static columns + every referral custom property.
+  const REFERRAL_COLUMNS = [...STATIC_REFERRAL_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const cpDefById = Object.fromEntries(customProps.map((p) => [p.id, p]))
+  const pipelineNameById = Object.fromEntries(pipelines.map((p) => [p.id, p.name]))
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [allPagesSelected, setAllPagesSelected] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -209,22 +266,48 @@ export default function ReferralTable({ referrals, pipelines, allTags, listUrl, 
     })
   }
 
+  function renderCustomProp(r: Referral, id: string) {
+    const raw = r.customProperties?.[id]
+    if (raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)) return <span className="text-slate-300">—</span>
+    const def = cpDefById[id]
+    if (def?.type === "DROPDOWN" || def?.type === "MULTI_SELECT") return <OptionValue value={raw} optionLabels={(def as any).optionLabels} optionColors={(def as any).optionColors} optionStyle={(def as any).optionStyle} />
+    if (Array.isArray(raw)) return <span className="text-slate-600">{raw.join(", ")}</span>
+    if (def?.type === "NUMBER") return <span className="text-slate-600">{formatNumber(raw, (def as any).numberFormat)}</span>
+    if (def?.type === "DATE" || def?.type === "DATE_TIME") return <span className="text-slate-600">{formatDate(raw)}</span>
+    return <span className="text-slate-600">{String(raw)}</span>
+  }
+
+  const txt = (v: any) => <span className="text-slate-600">{v || "—"}</span>
+
   function renderReferralCell(r: Referral, key: string) {
+    if (key.startsWith("cp_")) return renderCustomProp(r, key.slice(3))
     switch (key) {
       case "patient":
         return <Link href={`/referrals/${r.id}?from=${encodeURIComponent(listUrl)}`} className="font-medium text-slate-900 hover:text-blue-600">{r.patientFirstName} {r.patientLastName}</Link>
-      case "phone":
-        return <span className="text-slate-600">{formatPhone(r.patientPhone)}</span>
-      case "practice":
-        return <span className="text-slate-600">{r.referringPractice?.name ?? "—"}</span>
+      case "phone": return <span className="text-slate-600">{formatPhone(r.patientPhone)}</span>
+      case "email": return txt(r.patientEmail)
+      case "mrn": return txt(r.patientMrn)
+      case "genesisMrn": return txt(r.genesisMrn)
+      case "dob": return <span className="text-slate-600">{r.patientDob ? formatDate(r.patientDob) : "—"}</span>
+      case "practice": return <span className="text-slate-600">{r.referringPractice?.name ?? "—"}</span>
+      case "providerName": return txt(r.referringDoctorName)
+      case "npi": return txt(r.referringNpi)
+      case "referringPhone": return <span className="text-slate-600">{formatPhone(r.referringPhone)}</span>
+      case "referringAddress": return txt(r.referringAddress)
+      case "insurance": return txt(r.insuranceProvider)
+      case "insuranceMemberId": return txt(r.insuranceMemberId)
+      case "insuranceGroup": return txt(r.insuranceGroup)
+      case "authStatus": return txt(r.authStatus)
+      case "imagingType": return txt(r.imagingType)
+      case "pipeline": return txt(r.pipelineId ? pipelineNameById[r.pipelineId] : null)
+      case "assignedTo": return txt(r.assignedTo?.name ?? r.assignedTo?.email)
+      case "notes": return txt(r.notes)
       case "tags":
         return r.tags.length > 0
           ? <div className="flex gap-1">{r.tags.map(({ tag }) => <span key={tag.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-white shrink-0" style={{ backgroundColor: tag.color }}>{tag.name}</span>)}</div>
           : <span className="text-slate-400">—</span>
-      case "referralDate":
-        return <span className="text-slate-600">{formatDate(r.referralDate)}</span>
-      case "apptDate":
-        return <span className="text-slate-600">{formatDate(r.appointmentDate)}</span>
+      case "referralDate": return <span className="text-slate-600">{formatDate(r.referralDate)}</span>
+      case "apptDate": return <span className="text-slate-600">{formatDate(r.appointmentDate)}</span>
       case "calls":
         return r._count.callAttempts > 0
           ? <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600"><Phone className="h-3 w-3" />{r._count.callAttempts}/3</span>

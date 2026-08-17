@@ -112,7 +112,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       : {}),
   }
 
-  const [referrals, total, allMatchingIds, practices, allTags, incompleteCount, allDoctors, pipelines] = await Promise.all([
+  const [referrals, total, allMatchingIds, practices, allTags, incompleteCount, allDoctors, pipelines, referralCustomProps] = await Promise.all([
     prisma.referral.findMany({
       where,
       take: PAGE_SIZE,
@@ -120,6 +120,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy,
       include: {
         referringPractice: true,
+        assignedTo: { select: { id: true, name: true, email: true } },
         tags: { include: { tag: true } },
         _count: { select: { callAttempts: true } },
       },
@@ -140,6 +141,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       include: { _count: { select: { referrals: true } } },
     }),
+    prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { createdAt: "asc" } }),
   ])
 
   return {
@@ -150,6 +152,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     allTags,
     allDoctors,
     pipelines,
+    referralCustomProps,
     page,
     incompleteCount,
     incompleteOnly,
@@ -177,6 +180,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     allTags,
     allDoctors,
     pipelines,
+    referralCustomProps,
     page,
     incompleteCount,
     incompleteOnly,
@@ -312,7 +316,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table (renders its own card + column chooser) */}
-      <ReferralTable referrals={referrals} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
+      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
 
       {/* Pagination */}
       {totalPages > 1 && (

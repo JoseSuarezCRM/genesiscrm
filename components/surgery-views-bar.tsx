@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Plus, Check, Loader2, X, Globe, Users, UserCog } from "lucide-react"
-import { createSurgeryView, deleteSurgeryView, type SurgeryViewConfig } from "@/app/actions/surgery-views"
+import { createSurgeryView, updateSurgeryView, deleteSurgeryView, type SurgeryViewConfig } from "@/app/actions/surgery-views"
 import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
@@ -32,24 +32,28 @@ function normalizeQuery(qs: string): string {
   return entries.map(([k, v]) => `${k}=${v}`).join("&")
 }
 
-function applyPrefs(columns: string[], viewMode: "cards" | "table") {
+function applyPrefs(columns: string[], viewMode: "cards" | "table", frozen = 0) {
   try {
     localStorage.setItem("surgeryCols", JSON.stringify(columns))
     localStorage.setItem("surgeryViewMode", viewMode)
+    localStorage.setItem("surgeryFrozen", String(frozen))
     window.dispatchEvent(new Event("surgery-view-applied"))
   } catch {}
 }
 
-function readPrefs(): { columns: string[]; viewMode: "cards" | "table" } {
+function readPrefs(): { columns: string[]; viewMode: "cards" | "table"; frozen: number } {
   let columns = DEFAULT_SURGERY_COLS
   let viewMode: "cards" | "table" = "table"
+  let frozen = 0
   try {
     const c = localStorage.getItem("surgeryCols")
     if (c) { const arr = JSON.parse(c); if (Array.isArray(arr) && arr.length) columns = arr }
     const v = localStorage.getItem("surgeryViewMode")
     if (v === "cards" || v === "table") viewMode = v
+    const f = localStorage.getItem("surgeryFrozen")
+    if (f != null) { const n = Number(f); if (!Number.isNaN(n)) frozen = n }
   } catch {}
-  return { columns, viewMode }
+  return { columns, viewMode, frozen }
 }
 
 export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props) {
@@ -66,13 +70,40 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
   // Drag to reorder the view tabs (per-user order, persisted).
   const reorder = useCardReorder(views, (v) => v.id, (ids) => startTransition(() => { reorderViews("SURGERY", "", ids) }))
 
+  // Current column/view/frozen prefs (in localStorage, written by the table). Re-read
+  // whenever a view is applied or the columns change, so we can offer "Save changes".
+  const [prefs, setPrefs] = useState<{ columns: string[]; viewMode: "cards" | "table"; frozen: number }>({ columns: DEFAULT_SURGERY_COLS, viewMode: "table", frozen: 0 })
+  useEffect(() => {
+    const load = () => setPrefs(readPrefs())
+    load()
+    window.addEventListener("surgery-view-applied", load)
+    window.addEventListener("surgery-prefs-changed", load)
+    return () => { window.removeEventListener("surgery-view-applied", load); window.removeEventListener("surgery-prefs-changed", load) }
+  }, [])
+
   const currentQuery = normalizeQuery(params.toString())
-  const activeViewId =
-    views.find((v) => normalizeQuery(v.config.query) === currentQuery)?.id ??
-    (currentQuery === "" ? "__default__" : null)
+  const activeView = views.find((v) => normalizeQuery(v.config.query) === currentQuery)
+  const activeViewId = activeView?.id ?? (currentQuery === "" ? "__default__" : null)
+  const sameOrder = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((x, i) => x === b[i])
+  const viewDirty = !!activeView && (
+    !sameOrder(activeView.config.columns ?? DEFAULT_SURGERY_COLS, prefs.columns) ||
+    (activeView.config.viewMode ?? "table") !== prefs.viewMode ||
+    ((activeView.config as any).frozen ?? 0) !== prefs.frozen
+  )
+
+  function handleUpdateView() {
+    if (!activeView) return
+    setSaving(true)
+    const config: SurgeryViewConfig = { query: currentQuery, columns: prefs.columns, viewMode: prefs.viewMode, frozen: prefs.frozen }
+    startTransition(async () => {
+      await updateSurgeryView(activeView.id, config)
+      setSaving(false)
+      router.refresh()
+    })
+  }
 
   function applyView(view: SavedView) {
-    applyPrefs(view.config.columns ?? DEFAULT_SURGERY_COLS, view.config.viewMode ?? "table")
+    applyPrefs(view.config.columns ?? DEFAULT_SURGERY_COLS, view.config.viewMode ?? "table", (view.config as any).frozen ?? 0)
     router.push(`${pathname}${view.config.query ? `?${view.config.query}` : ""}`)
   }
 
@@ -87,7 +118,7 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
     const prefs = readPrefs()
     const p = new URLSearchParams(params.toString())
     p.delete("page")
-    const config: SurgeryViewConfig = { query: p.toString(), columns: prefs.columns, viewMode: prefs.viewMode }
+    const config: SurgeryViewConfig = { query: p.toString(), columns: prefs.columns, viewMode: prefs.viewMode, frozen: prefs.frozen }
     startTransition(async () => {
       await createSurgeryView(newViewName.trim(), config, newViewAccess)
       setSaving(false)
@@ -134,10 +165,17 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
         </div>
       ))}
 
+      {viewDirty && (
+        <button onClick={handleUpdateView} disabled={saving || isPending}
+          className="h-8 px-3 rounded-lg text-sm font-medium border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5">
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save changes
+        </button>
+      )}
+
       <div className="relative">
         <button onClick={() => setShowSaveForm((v) => !v)}
           className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 transition-all flex items-center gap-1.5">
-          <Plus className="h-3.5 w-3.5" /> Save view
+          <Plus className="h-3.5 w-3.5" /> {viewDirty ? "Save as new" : "Save view"}
         </button>
         {showSaveForm && (
           <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
