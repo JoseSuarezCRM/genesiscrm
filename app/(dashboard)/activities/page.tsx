@@ -10,7 +10,7 @@ import { getViewShareOptions } from "@/app/actions/view-share-options"
 export default async function ActivitiesPage() {
   const session = await requireView("ACTIVITIES")
 
-  const [activities, practices, allTags, savedViews, shareOptions] = await Promise.all([
+  const [activities, practices, allTags, savedViews, shareOptions, activityCustomProps] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { date: "desc" },
       include: {
@@ -45,6 +45,7 @@ export default async function ActivitiesPage() {
     listActivityTags(),
     getActivityViews(),
     getViewShareOptions(),
+    prisma.customProperty.findMany({ where: { entityType: "ACTIVITY" }, orderBy: { createdAt: "asc" } }),
   ])
 
   const allDoctors = practices.flatMap((p) =>
@@ -78,6 +79,7 @@ export default async function ActivitiesPage() {
         shareTeams={shareOptions.teams as any}
         canManage={userCanLevel(session?.user as any, "ACTIVITIES", "EDIT")}
         canCreateTasks={userCanLevel(session?.user as any, "TASKS", "EDIT")}
+        customProps={activityCustomProps as any}
       />
     </div>
   )

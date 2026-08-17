@@ -12,6 +12,8 @@ import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import ColumnChooserModal from "@/components/ui/column-chooser"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
+import { OptionValue } from "@/components/option-value"
+import { formatNumber } from "@/lib/number-format"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
@@ -89,10 +91,13 @@ interface SurgeryCase {
   _count: { callAttempts: number; documents: number }
 }
 
+interface SurgeryCustomPropDef { id: string; name: string; type: string; optionLabels?: Record<string, string> | null; optionColors?: Record<string, string> | null; optionStyle?: string | null; numberFormat?: string | null }
+
 interface Props {
   cases: SurgeryCase[]
   total: number
   allMatchingIds: string[]
+  customProps?: SurgeryCustomPropDef[]
 }
 
 function fmt(d: string | Date | null | undefined) {
@@ -100,7 +105,10 @@ function fmt(d: string | Date | null | undefined) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
 }
 
-export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
+export default function SurgeryTable({ cases, total, allMatchingIds, customProps = [] }: Props) {
+  // Full catalog = native surgery columns + every surgery custom property.
+  const allSurgeryCols = [...SURGERY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const surgeryCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -192,7 +200,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
 
   // Render in the user's chosen order, with the required "patient" column first.
   const orderedKeys = ["patient", ...visibleCols.filter((k) => k !== "patient")]
-  const cols = orderedKeys.map((k) => SURGERY_COLUMNS.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string; sortable?: boolean }[]
+  const cols = orderedKeys.map((k) => allSurgeryCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string; sortable?: boolean }[]
   const reorderableCols = cols.filter((c) => c.key !== "patient")
   const colReorder = useCardReorder(reorderableCols, (c) => c.key, (ids) => setVisibleCols(["patient", ...ids]))
   const orderedCols = [cols.find((c) => c.key === "patient")!, ...colReorder.order].filter(Boolean) as typeof cols
@@ -226,6 +234,17 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
 
   // One table/card cell's content for a given column.
   function renderCell(c: SurgeryCase, key: string): React.ReactNode {
+    if (key.startsWith("cp_")) {
+      const id = key.slice(3)
+      const raw = (c as any).customProperties?.[id]
+      if (raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)) return <span className="text-slate-400">—</span>
+      const def = surgeryCpById[id] as any
+      if (def?.type === "DROPDOWN" || def?.type === "MULTI_SELECT") return <OptionValue value={raw} optionLabels={def.optionLabels} optionColors={def.optionColors} optionStyle={def.optionStyle} />
+      if (Array.isArray(raw)) return <span className="text-slate-500">{raw.join(", ")}</span>
+      if (def?.type === "NUMBER") return <span className="text-slate-500">{formatNumber(raw, def.numberFormat)}</span>
+      if (def?.type === "DATE" || def?.type === "DATE_TIME") return <span className="text-slate-500">{fmt(raw)}</span>
+      return <span className="text-slate-500">{String(raw)}</span>
+    }
     switch (key) {
       case "patient":
         return (
@@ -432,7 +451,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds }: Props) {
       <ColumnChooserModal
         open={colModalOpen}
         onClose={() => setColModalOpen(false)}
-        columns={SURGERY_COLUMNS}
+        columns={allSurgeryCols}
         required={["patient"]}
         selected={visibleCols}
         frozen={frozenCount}
