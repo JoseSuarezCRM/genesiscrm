@@ -4,7 +4,7 @@
 
 import { prisma } from "@/lib/prisma"
 
-export type ViewType = "SURGERY" | "ACTIVITY" | "PROVIDER" | "CUSTOM_OBJECT"
+export type ViewType = "SURGERY" | "ACTIVITY" | "PROVIDER" | "CUSTOM_OBJECT" | "TASK"
 
 // Re-sort `views` by the user's saved order: ids present in the saved list come
 // first (in that order); any others (new or newly-shared views) keep their
