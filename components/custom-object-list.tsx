@@ -27,6 +27,10 @@ import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { recordName, isPersonObject, personPartIds } from "@/lib/record-name"
 import { formatNumber } from "@/lib/number-format"
+import { EditableCell } from "@/components/ui/editable-cell"
+import { cpToFieldDef } from "@/lib/cp-field-def"
+import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
 
 interface RecordRow {
   id: string
@@ -396,20 +400,33 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                 {paged.map((r) => (
                   <tr key={r.id} className={cn("transition-colors", selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50")}>
                     <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
-                    {colReorder.order.map((c) => (
+                    {colReorder.order.map((c) => {
+                      const prop = otherProps.find((p) => p.id === c.key)
+                      const usesCell = c.key === "__owner" || !!prop
+                      return (
                       <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }}
-                        className={cn("px-3 py-2.5 truncate", c.key === "__id" ? "text-slate-400 font-mono text-xs" : "text-slate-600", frozenClass(fmap.get(c.key)))}>
+                        className={cn(usesCell ? "p-0 align-middle" : "px-3 py-2.5 truncate", c.key === "__id" ? "text-slate-400 font-mono text-xs" : "text-slate-600", frozenClass(fmap.get(c.key)))}>
                         {c.key === "__id" ? (r.recordNumber != null ? `#${r.recordNumber}` : "—")
                           : c.key === "__name" ? (
                             <Link href={`/objects/${objectKey}/${r.id}`} className="font-medium text-slate-900 hover:text-blue-600">
                               {recordName(properties, r.values, "") || (primary && displayValue(primary, r.values[primary.id], userMap)) || "Untitled"}
                             </Link>
                           )
-                          : c.key === "__owner" ? (r.ownerName ?? "—")
+                          : c.key === "__owner" ? (
+                            <EditableCell def={{ key: "__owner", label: ownerLabel, type: "user" }} value={r.ownerId}
+                              canEdit={canEdit} userMap={userMap} users={users}
+                              onSave={(uid) => setRecordOwner(`CO:${objectKey}`, r.id, (uid as string) || null)}
+                              onSaveOwner={(uid) => setRecordOwner(`CO:${objectKey}`, r.id, uid)} />
+                          )
                           : c.key === "__created" ? fmtDate(r.createdAt)
-                          : displayCell(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)}
+                          : prop ? (
+                            <EditableCell def={cpToFieldDef(prop, prop.id)} value={r.values[c.key]} values={r.values}
+                              canEdit={canEdit} userMap={userMap}
+                              onSave={(v) => updateRecordField(`CO:${objectKey}`, r.id, c.key, v)} />
+                          )
+                          : displayCell(prop!, r.values[c.key], userMap)}
                       </td>
-                    ))}
+                    )})}
                   </tr>
                 ))}
               </tbody>

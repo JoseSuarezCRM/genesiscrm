@@ -7,7 +7,7 @@ import {
   GLP1_OPTIONS, DME_OPTIONS, FACILITY_OPTIONS, PHYSICAL_THERAPY_OPTIONS, REFERRAL_PRESETS,
 } from "@/lib/surgery-procedures"
 
-export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime" | "select_or_other"
+export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime" | "select_or_other" | "checkbox"
 
 export interface RecordFieldDef {
   key: string

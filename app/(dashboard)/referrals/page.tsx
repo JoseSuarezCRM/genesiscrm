@@ -316,7 +316,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table (renders its own card + column chooser) */}
-      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} />
+      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} />
 
       {/* Pagination */}
       {totalPages > 1 && (

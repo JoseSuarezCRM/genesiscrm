@@ -14,6 +14,10 @@ import { StatusBadge } from "@/components/status-badge"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
 import { formatDate, formatPhone } from "@/lib/utils"
+import { EditableCell } from "@/components/ui/editable-cell"
+import { cpToFieldDef } from "@/lib/cp-field-def"
+import { updateRecordField } from "@/app/actions/record-fields"
+import { type RecordFieldDef } from "@/lib/record-field-catalog"
 import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
 import { bulkAddTag, bulkRemoveTag } from "@/app/actions/tags"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
@@ -79,6 +83,29 @@ interface Props {
   listUrl: string
   total: number
   allMatchingIds: string[]
+  canEdit?: boolean
+}
+
+// Editable native referral columns → the Prisma column to patch + its field type.
+// (Relations/computed/status keep their read-only renderers.)
+const REFERRAL_EDIT: Record<string, RecordFieldDef & { field: string; get: (r: Referral) => any }> = {
+  phone: { key: "phone", field: "patientPhone", label: "Phone", type: "phone", get: (r) => r.patientPhone },
+  email: { key: "email", field: "patientEmail", label: "Email", type: "email", get: (r) => r.patientEmail },
+  mrn: { key: "mrn", field: "patientMrn", label: "Referring MRN", type: "text", get: (r) => r.patientMrn },
+  genesisMrn: { key: "genesisMrn", field: "genesisMrn", label: "Genesis MRN", type: "text", get: (r) => r.genesisMrn },
+  dob: { key: "dob", field: "patientDob", label: "Date of Birth", type: "date", get: (r) => r.patientDob },
+  providerName: { key: "providerName", field: "referringDoctorName", label: "Provider Name", type: "text", get: (r) => r.referringDoctorName },
+  npi: { key: "npi", field: "referringNpi", label: "Referring NPI", type: "text", get: (r) => r.referringNpi },
+  referringPhone: { key: "referringPhone", field: "referringPhone", label: "Referring Phone", type: "phone", get: (r) => r.referringPhone },
+  referringAddress: { key: "referringAddress", field: "referringAddress", label: "Referring Address", type: "text", get: (r) => r.referringAddress },
+  insurance: { key: "insurance", field: "insuranceProvider", label: "Insurance", type: "text", get: (r) => r.insuranceProvider },
+  insuranceMemberId: { key: "insuranceMemberId", field: "insuranceMemberId", label: "Insurance Member ID", type: "text", get: (r) => r.insuranceMemberId },
+  insuranceGroup: { key: "insuranceGroup", field: "insuranceGroup", label: "Insurance Group", type: "text", get: (r) => r.insuranceGroup },
+  authStatus: { key: "authStatus", field: "authStatus", label: "Auth Status", type: "text", get: (r) => r.authStatus },
+  imagingType: { key: "imagingType", field: "imagingType", label: "Imaging Type", type: "text", get: (r) => r.imagingType },
+  notes: { key: "notes", field: "notes", label: "Notes", type: "long_text", get: (r) => r.notes },
+  referralDate: { key: "referralDate", field: "referralDate", label: "Referral Date", type: "date", get: (r) => r.referralDate },
+  apptDate: { key: "apptDate", field: "appointmentDate", label: "Appt Date", type: "date", get: (r) => r.appointmentDate },
 }
 
 // Every choosable referral column — special/computed + native fields (custom
@@ -117,7 +144,7 @@ const REFERRAL_COL_W: Record<string, number> = {
   assignedTo: 160, tags: 180, referralDate: 130, apptDate: 130, calls: 90, notes: 240, status: 150,
 }
 
-export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], listUrl, total, allMatchingIds }: Props) {
+export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], listUrl, total, allMatchingIds, canEdit = false }: Props) {
   // Full column catalog = static columns + every referral custom property.
   const REFERRAL_COLUMNS = [...STATIC_REFERRAL_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
   const cpDefById = Object.fromEntries(customProps.map((p) => [p.id, p]))
@@ -278,6 +305,18 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
   }
 
   const txt = (v: any) => <span className="text-slate-600">{v || "—"}</span>
+
+  // For an editable column, the descriptor + current value + Prisma field to patch.
+  function refEditable(r: Referral, key: string): { def: RecordFieldDef; value: any; field: string } | null {
+    if (key.startsWith("cp_")) {
+      const id = key.slice(3); const p = cpDefById[id]; if (!p) return null
+      return { def: cpToFieldDef(p, key), value: r.customProperties?.[id], field: key }
+    }
+    const m = REFERRAL_EDIT[key]
+    if (!m) return null
+    const { field, get, ...def } = m
+    return { def: def as RecordFieldDef, value: get(r), field }
+  }
 
   function renderReferralCell(r: Referral, key: string) {
     if (key.startsWith("cp_")) return renderCustomProp(r, key.slice(3))
@@ -555,11 +594,16 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
                       className="rounded border-slate-300 cursor-pointer"
                     />
                   </td>
-                  {orderedCols.map((c) => (
-                    <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get(c.key)))}>
-                      {renderReferralCell(r, c.key)}
+                  {orderedCols.map((c) => {
+                    const ed = canEdit ? refEditable(r, c.key) : null
+                    return (
+                    <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(c.key)))}>
+                      {ed
+                        ? <EditableCell def={ed.def} value={ed.value} values={r.customProperties ?? {}} canEdit={canEdit}
+                            onSave={(v) => updateRecordField("REFERRAL", r.id, ed.field, v)} />
+                        : renderReferralCell(r, c.key)}
                     </td>
-                  ))}
+                  )})}
                 </tr>
               ))
             )}
