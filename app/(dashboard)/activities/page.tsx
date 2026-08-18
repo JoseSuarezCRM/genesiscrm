@@ -74,6 +74,7 @@ export default async function ActivitiesPage() {
         allDoctors={allDoctors}
         allTags={allTags as any}
         currentUserId={session!.user.id}
+        currentUserName={session!.user.name || session!.user.email || undefined}
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}

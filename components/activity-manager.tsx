@@ -161,6 +161,7 @@ interface Props {
   allDoctors: Doctor[]
   allTags: TagObj[]
   currentUserId: string
+  currentUserName?: string
   savedViews: SavedView[]
   shareUsers: ShareUser[]
   shareTeams: ShareTeam[]
@@ -775,7 +776,7 @@ const ACTIVITY_COL_W: Record<string, number> = { date: 120, account: 200, locati
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, currentUserName, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
   // Full catalog = native activity columns + every activity custom property.
   const allActivityCols = [...ACTIVITY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
   const activityCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
@@ -1933,6 +1934,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                   <label className="text-sm font-medium text-slate-700">Assigned to</label>
                   <StyledSelect value={taskDraft.assignedToId} onChange={e => setTask("assignedToId", e.target.value)} className="w-full">
                     <option value="">— Unassigned —</option>
+                    <option value={currentUserId}>{currentUserName ? `${currentUserName} (You)` : "You"}</option>
                     {shareUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
                   </StyledSelect>
                 </div>

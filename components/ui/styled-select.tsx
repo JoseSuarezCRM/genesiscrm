@@ -75,6 +75,28 @@ export default function StyledSelect({ value, onChange, children, className, dis
     if (open) { setQuery(""); if (showSearch) requestAnimationFrame(() => searchRef.current?.focus()) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When portaled to <body>, the menu lives OUTSIDE a Radix modal Dialog's content.
+  // Radix's focus-trap would then steal focus back from the search input (can't type)
+  // and its scroll-lock (react-remove-scroll) would block the option list from
+  // scrolling. Both listen on `document` in the bubble phase, so stopping these
+  // native events at the menu keeps focus and scrolling working inside a dialog.
+  useEffect(() => {
+    if (!open) return
+    const el = menuRef.current
+    if (!el) return
+    const stop = (e: Event) => e.stopPropagation()
+    el.addEventListener("focusin", stop)
+    el.addEventListener("focusout", stop)
+    el.addEventListener("wheel", stop, { passive: false })
+    el.addEventListener("touchmove", stop, { passive: false })
+    return () => {
+      el.removeEventListener("focusin", stop)
+      el.removeEventListener("focusout", stop)
+      el.removeEventListener("wheel", stop)
+      el.removeEventListener("touchmove", stop)
+    }
+  }, [open])
+
   function place() {
     const r = ref.current?.getBoundingClientRect()
     if (!r) return
