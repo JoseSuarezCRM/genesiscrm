@@ -15,6 +15,10 @@ import { useCardReorder } from "@/components/use-card-reorder"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
+import { EditableCell } from "@/components/ui/editable-cell"
+import { cpToFieldDef } from "@/lib/cp-field-def"
+import { updateRecordField } from "@/app/actions/record-fields"
+import { type RecordFieldDef } from "@/lib/record-field-catalog"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
@@ -159,6 +163,22 @@ export default function LocationManager({ locations, practices, customPropertyDe
   const widthOf = (k: string) => colWidth(k) ?? LOCATION_COL_W[k] ?? 160
   const fmap = frozenMap(["name", ...colReorder.order.map((c) => c.key)], frozenCount, widthOf, 40)
   const cbFrozen = frozenCount > 0
+  // Editable native location columns → Prisma column + type (address/phone/fax).
+  const LOCATION_EDIT: Record<string, RecordFieldDef & { field: string; get: (l: LocationRow) => any }> = {
+    address: { key: "address", field: "address", label: "Address", type: "text", get: (l) => l.address },
+    phone: { key: "phone", field: "phone", label: "Phone", type: "phone", get: (l) => l.phone },
+    fax: { key: "fax", field: "fax", label: "Fax", type: "phone", get: (l) => l.fax },
+  }
+  function locEditable(l: LocationRow, key: string): { def: RecordFieldDef; value: any; field: string } | null {
+    if (key.startsWith("cp_")) {
+      const id = key.slice(3); const p = locCpById[id] as any; if (!p) return null
+      return { def: cpToFieldDef(p, key), value: l.customProperties?.[id], field: key }
+    }
+    const m = LOCATION_EDIT[key]
+    if (!m) return null
+    const { field, get, ...def } = m
+    return { def: def as RecordFieldDef, value: get(l), field }
+  }
   function renderLocationCp(l: LocationRow, id: string) {
     const raw = l.customProperties?.[id]
     if (raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)) return <span className="text-slate-400">—</span>
@@ -312,8 +332,14 @@ export default function LocationManager({ locations, practices, customPropertyDe
                         {l.name}
                       </Link>
                     </td>
-                    {colReorder.order.map((col) => (
-                      <td key={col.key} className={cn("px-3 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>
+                    {colReorder.order.map((col) => {
+                      const ed = canEdit ? locEditable(l, col.key) : null
+                      return (
+                      <td key={col.key} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>
+                        {ed
+                          ? <EditableCell def={ed.def} value={ed.value} values={l.customProperties ?? {}} canEdit={canEdit} align={col.align}
+                              onSave={(v) => updateRecordField("LOCATION", l.id, ed.field, v)} />
+                          : <>
                         {col.key === "practice" && <Link href={`/practices/${l.practiceId}`} className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200">{l.practiceName}</Link>}
                         {col.key === "address" && <span className="text-slate-500">{l.address || "—"}</span>}
                         {col.key === "phone" && <span className="text-slate-500">{l.phone || "—"}</span>}
@@ -324,8 +350,9 @@ export default function LocationManager({ locations, practices, customPropertyDe
                         {col.key === "owner" && <span className="text-slate-500">{l.ownerName || "—"}</span>}
                         {col.key === "created" && <span className="text-slate-500">{fmtDate(l.createdAt)}</span>}
                         {col.key.startsWith("cp_") && renderLocationCp(l, col.key.slice(3))}
+                          </>}
                       </td>
-                    ))}
+                    )})}
                     {canEdit && (
                       <td className="px-4 py-2.5 text-right">
                         <div className="inline-flex gap-1">

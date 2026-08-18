@@ -5,6 +5,10 @@ import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { formatNumber } from "@/lib/number-format"
+import { EditableCell } from "@/components/ui/editable-cell"
+import { cpToFieldDef } from "@/lib/cp-field-def"
+import { updateRecordField } from "@/app/actions/record-fields"
+import { RECORD_FIELDS, type RecordFieldDef } from "@/lib/record-field-catalog"
 import { useState, useTransition, useRef, useEffect, type ReactNode } from "react"
 import { OptionValue } from "@/components/option-value"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
@@ -538,6 +542,19 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const provColReorder = useCardReorder(provOrderedCols, (c) => c.key, (ids) => setVisibleCols(ids))
   const provFmap = frozenMap(["name", ...provColReorder.order.map((c) => c.key)], frozenCount, provWidthOf, 0)
   const PROV_CELL_CLASS: Record<string, string> = { npi: "text-slate-400 font-mono text-xs", referrals: "text-right text-slate-600 tabular-nums", email: "text-slate-500 truncate max-w-[200px]", locations: "text-slate-500 text-xs" }
+  // For an editable provider column: descriptor + value + field to patch. Native
+  // fields come from RECORD_FIELDS["PROVIDER"]; custom props use the "cp:" display
+  // key but save under "cp_<id>". Name link / relations / counts stay read-only.
+  const provEditable = (d: any, key: string): { def: RecordFieldDef; value: any; field: string } | null => {
+    if (key.startsWith("cp:")) {
+      const id = key.slice(3); const p = cpDefById[id] as any; if (!p) return null
+      return { def: cpToFieldDef(p, `cp_${id}`), value: (d.customProperties as any)?.[id], field: `cp_${id}` }
+    }
+    if (key === "name") return null
+    const f = (RECORD_FIELDS["PROVIDER"] ?? []).find((x) => x.key === key)
+    if (!f || f.readOnly) return null
+    return { def: f, value: d[key], field: key }
+  }
   const renderProviderCell = (d: any, key: string): ReactNode => {
     switch (key) {
       case "title": return d.title || "—"
@@ -844,11 +861,16 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                             {d.name}
                           </Link>
                         </td>
-                        {provColReorder.order.map((c) => (
-                          <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn("px-3 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
-                            {renderProviderCell(d, c.key)}
+                        {provColReorder.order.map((c) => {
+                          const ed = isAdmin ? provEditable(d, c.key) : null
+                          return (
+                          <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
+                            {ed
+                              ? <EditableCell def={ed.def} value={ed.value} values={(d.customProperties as any) ?? {}} canEdit={isAdmin}
+                                  onSave={(v) => updateRecordField("PROVIDER", d.id, ed.field, v)} />
+                              : renderProviderCell(d, c.key)}
                           </td>
-                        ))}
+                        )})}
                         {isAdmin && (
                           <td className="px-3 py-2.5">
                             <div className="flex gap-1 justify-end">

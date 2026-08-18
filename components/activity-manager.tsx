@@ -15,6 +15,10 @@ import ColumnChooserModal from "@/components/ui/column-chooser"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
+import { EditableCell } from "@/components/ui/editable-cell"
+import { cpToFieldDef } from "@/lib/cp-field-def"
+import { updateRecordField } from "@/app/actions/record-fields"
+import { type RecordFieldDef } from "@/lib/record-field-catalog"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
@@ -1322,6 +1326,26 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   }
 
   // One table cell's content for the given column.
+  // Editable native activity columns → the Prisma column + field type. Relations
+  // (account/location/providers/tags), the colored type/rating chips, and the
+  // creator stay read-only.
+  const ACTIVITY_EDIT: Record<string, RecordFieldDef & { field: string; get: (a: any) => any }> = {
+    date: { key: "date", field: "date", label: "Date", type: "date", get: (a) => a.date },
+    nextStep: { key: "nextStep", field: "nextStep", label: "Next Step", type: "text", get: (a) => a.nextStep },
+    frontDesk: { key: "frontDesk", field: "frontDesk", label: "Front Desk", type: "text", get: (a) => a.frontDesk },
+    notes: { key: "notes", field: "notes", label: "Notes", type: "long_text", get: (a) => a.notes },
+  }
+  function activEditable(a: any, key: string): { def: RecordFieldDef; value: any; field: string } | null {
+    if (key.startsWith("cp_")) {
+      const id = key.slice(3); const p = activityCpById[id] as any; if (!p) return null
+      return { def: cpToFieldDef(p, key), value: (a as any).customProperties?.[id], field: key }
+    }
+    const m = ACTIVITY_EDIT[key]
+    if (!m) return null
+    const { field, get, ...def } = m
+    return { def: def as RecordFieldDef, value: get(a), field }
+  }
+
   function renderCell(a: typeof filtered[number], key: string): React.ReactNode {
     if (key.startsWith("cp_")) {
       const id = key.slice(3)
@@ -1666,9 +1690,14 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                         {selectedIds.has(a.id) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                       </button>
                     </td>
-                    {orderedCols.map(col => (
-                      <td key={col.key} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{renderCell(a, col.key)}</td>
-                    ))}
+                    {orderedCols.map(col => {
+                      const ed = canManage ? activEditable(a, col.key) : null
+                      return (
+                      <td key={col.key} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{ed
+                        ? <EditableCell def={ed.def} value={ed.value} values={(a as any).customProperties ?? {}} canEdit={canManage}
+                            onSave={(v) => updateRecordField("ACTIVITY", a.id, ed.field, v)} />
+                        : renderCell(a, col.key)}</td>
+                    )})}
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       <div className="inline-flex gap-0.5">
                         <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600"><Pencil className="h-3.5 w-3.5" /></button>
