@@ -67,17 +67,20 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): Re
 // MULTI_SELECT editor: a compact trigger (like the single-select StyledSelect)
 // that opens a body-portaled panel — search header + checkbox list + footer — so
 // it never stretches the card. Commits the array on "Done" or click-away; Escape cancels.
-export function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: {
+export function MultiSelectField({ options, optionLabels, value, onCommit, onCancel, autoOpen = true }: {
   options: string[]
   optionLabels?: Record<string, string>
   value: any
   onCommit: (v: string[]) => void
   onCancel: () => void
+  // Inline click-to-edit opens immediately (default). A persistent form field
+  // passes false so it renders a closed trigger that opens on click.
+  autoOpen?: boolean
 }) {
   const initial = Array.isArray(value) ? value.map(String) : (value != null && value !== "" ? [String(value)] : [])
   const [sel, setSel] = useState<string[]>(initial)
   const [q, setQ] = useState("")
-  const [open, setOpen] = useState(true) // edit mode: open immediately, like StyledSelect autoOpen
+  const [open, setOpen] = useState(autoOpen)
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, width: 0, maxHeight: 288 })
   const selRef = useRef(sel); selRef.current = sel
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -119,6 +122,26 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
       window.removeEventListener("scroll", onMove, true)
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Inside a Radix modal Dialog the portaled panel would lose focus (search box
+  // untypable) and scroll to the dialog's trap/scroll-lock; stop these native
+  // events at the menu so it works (mirrors StyledSelect).
+  useEffect(() => {
+    if (!open) return
+    const el = menuRef.current
+    if (!el) return
+    const stop = (e: Event) => e.stopPropagation()
+    el.addEventListener("focusin", stop)
+    el.addEventListener("focusout", stop)
+    el.addEventListener("wheel", stop, { passive: false })
+    el.addEventListener("touchmove", stop, { passive: false })
+    return () => {
+      el.removeEventListener("focusin", stop)
+      el.removeEventListener("focusout", stop)
+      el.removeEventListener("wheel", stop)
+      el.removeEventListener("touchmove", stop)
+    }
+  }, [open])
 
   const toggle = (o: string) => setSel((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]))
   const query = q.trim().toLowerCase()

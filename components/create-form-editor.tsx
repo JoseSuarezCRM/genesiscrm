@@ -36,7 +36,9 @@ export default function CreateFormEditor({ objectType, catalog, initial, onClose
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader><DialogTitle>Edit create form</DialogTitle></DialogHeader>
         <p className="text-sm text-slate-500 -mt-2">Choose which fields appear when creating a record, their order, and which are required.</p>
         <div className="grid grid-cols-2 gap-4 min-h-0 flex-1">

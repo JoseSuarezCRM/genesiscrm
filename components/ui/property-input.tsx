@@ -3,7 +3,7 @@
 import StyledSelect from "@/components/ui/styled-select"
 import DatePicker from "@/components/ui/date-picker"
 import PhoneInput from "@/components/phone-input"
-import { cn } from "@/lib/utils"
+import { MultiSelectField } from "@/components/record-property-cards"
 import { type RecordFieldDef } from "@/lib/record-field-catalog"
 
 interface UserOpt { id: string; label: string }
@@ -42,19 +42,10 @@ export function PropertyInput({ def, value, onChange, users = [], values, autoFo
     <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
   )
   if (def.type === "select" && def.multi) return (
-    <div className="flex flex-wrap gap-1.5">
-      {effectiveOptions.map((o) => {
-        const arr: string[] = Array.isArray(value) ? value.map(String) : []
-        const on = arr.includes(o)
-        return <button key={o} type="button" onClick={() => onChange(on ? arr.filter((x) => x !== o) : [...arr, o])}
-          className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border", on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
-          {def.optionLabels?.[o] ?? o}
-        </button>
-      })}
-    </div>
+    <MultiSelectField autoOpen={false} options={effectiveOptions} optionLabels={def.optionLabels} value={value} onCommit={(v) => onChange(v)} onCancel={() => {}} />
   )
   if (def.type === "select") return (
-    <StyledSelect className={input} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
+    <StyledSelect searchable className={input} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
       <option value="">— Select —</option>
       {effectiveOptions.map((o) => <option key={o} value={o}>{def.optionLabels?.[o] ?? o}</option>)}
     </StyledSelect>
