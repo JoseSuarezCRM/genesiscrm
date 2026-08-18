@@ -15,6 +15,8 @@ export interface RecordFieldDef {
   type: RecordFieldType
   options?: string[]
   readOnly?: boolean
+  // Required at creation (used by the configurable create-record modal).
+  required?: boolean
   // For `select_or_other`: the option label that reveals a free-text box (the typed
   // value is stored in the same field), like Physical Therapy's "External".
   otherOption?: string

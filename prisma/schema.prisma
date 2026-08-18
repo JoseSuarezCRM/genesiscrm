@@ -1010,6 +1010,16 @@ model TaskView {
   @@index([userId])
 }
 
+// Which fields (and their order) appear in an object's "create record" modal.
+// objectType is a built-in entity type (REFERRAL, SURGERY, …) or "CO:<key>" for a
+// custom object. fields = [{ key, required? }]. No row = show the full catalog.
+model CreateFormConfig {
+  id         String   @id @default(cuid())
+  objectType String   @unique
+  fields     Json     @default("[]")
+  updatedAt  DateTime @default(now()) @updatedAt
+}
+
 // Per-user display order for the saved-view tabs on a list. One row per
 // (user, viewType, scopeKey); orderedIds are the view ids in the user's order.
 model UserViewOrder {

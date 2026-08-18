@@ -31,6 +31,9 @@ import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
+import CreateRecordModal from "@/components/create-record-modal"
+import { type CreateFormField } from "@/app/actions/create-form"
+import { type RecordFieldDef } from "@/lib/record-field-catalog"
 
 interface RecordRow {
   id: string
@@ -61,6 +64,8 @@ interface Props {
   serverTotal?: number
   serverPage?: number
   serverPageSize?: number
+  createFormConfig?: CreateFormField[] | null
+  isAdmin?: boolean
 }
 
 interface SavedView {
@@ -100,7 +105,7 @@ function displayCell(p: CustomObjectProperty | undefined, v: any, userMap: Recor
   return displayValue(p, v, userMap)
 }
 
-export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [], serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50 }: Props) {
+export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [], serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, createFormConfig = null, isAdmin = false }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const urlParams = useSearchParams()
@@ -470,10 +475,30 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
         </div>
       )}
 
-      {canEdit && addOpen && (
-        <AddRecordDialog objectKey={objectKey} singular={singular} ownerLabel={ownerLabel} properties={properties} users={users}
-          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); router.refresh() }} />
-      )}
+      {canEdit && addOpen && (() => {
+        // Catalog = every property (as a RecordFieldDef) + the owner field.
+        const catalog: RecordFieldDef[] = [
+          ...properties.map((p) => ({ ...cpToFieldDef(p, p.id), required: !!(p as any).required || !!p.primary })),
+          { key: "__owner", label: ownerLabel, type: "user" as const },
+        ]
+        return (
+          <CreateRecordModal
+            objectType={`CO:${objectKey}`}
+            title={`Add ${singular}`}
+            catalog={catalog}
+            config={createFormConfig}
+            users={users}
+            canEditForm={isAdmin}
+            onClose={() => setAddOpen(false)}
+            onSaved={() => { setAddOpen(false); router.refresh() }}
+            onConfigChanged={() => router.refresh()}
+            onSubmit={async (values) => {
+              const { __owner, ...propValues } = values
+              return await createCustomObjectRecord(objectKey, propValues, (__owner as string) || undefined) as any
+            }}
+          />
+        )
+      })()}
 
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={plural} defaultName={objectKey} getData={exportData} count={isServer ? serverTotal : undefined} />
 
@@ -490,94 +515,3 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   )
 }
 
-function AddRecordDialog({ objectKey, singular, ownerLabel, properties, users, onClose, onSaved }: {
-  objectKey: string; singular: string; ownerLabel: string; properties: CustomObjectProperty[]
-  users: { id: string; label: string }[]; onClose: () => void; onSaved: () => void
-}) {
-  const [values, setValues] = useState<Record<string, any>>({})
-  const [ownerId, setOwnerId] = useState("")
-  const [isPending, startTransition] = useTransition()
-  const [err, setErr] = useState("")
-
-  const inputCls = "h-9 w-full px-3 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-  const set = (id: string, v: any) => setValues((p) => ({ ...p, [id]: v }))
-
-  function save() {
-    setErr("")
-    startTransition(async () => {
-      const res = await createCustomObjectRecord(objectKey, values, ownerId || undefined)
-      if ((res as any)?.error) { setErr(typeof (res as any).error === "string" ? (res as any).error : "Could not create"); return }
-      onSaved()
-    })
-  }
-
-  // Dependent options: narrow a dropdown's options by the controlling field's value.
-  const optsFor = (p: any): string[] => {
-    const c = p?.conditional
-    if (!c) return p.options ?? []
-    const cv = String(values[c.controllingPropertyId] ?? "")
-    const allowed = c.rules?.[cv]
-    return allowed ? (p.options ?? []).filter((o: string) => allowed.includes(o)) : (p.options ?? [])
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Add {singular}</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          {properties.map((p) => (
-            <div key={p.id}>
-              <label className="text-xs font-medium text-slate-600 block mb-1">{p.name}{p.primary ? " *" : ""}</label>
-              {p.type === "LONG_TEXT" ? (
-                <textarea rows={3} className={inputCls + " resize-none py-2 h-auto"} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)} />
-              ) : p.type === "CHECKBOX" ? (
-                <input type="checkbox" checked={!!values[p.id]} onChange={(e) => set(p.id, e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
-              ) : p.type === "DATE" ? (
-                <input type="date" className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)} />
-              ) : p.type === "DATE_TIME" ? (
-                <input type="datetime-local" className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)} />
-              ) : p.type === "NUMBER" ? (
-                <input type="number" className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value === "" ? "" : Number(e.target.value))} />
-              ) : p.type === "DROPDOWN" ? (
-                <StyledSelect className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)}>
-                  <option value="">— Select —</option>
-                  {optsFor(p).map((o) => <option key={o} value={o}>{(p as any).optionLabels?.[o] ?? o}</option>)}
-                </StyledSelect>
-              ) : p.type === "MULTI_SELECT" ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {optsFor(p).map((o) => {
-                    const arr: string[] = Array.isArray(values[p.id]) ? values[p.id] : []
-                    const on = arr.includes(o)
-                    return <button key={o} type="button" onClick={() => set(p.id, on ? arr.filter((x) => x !== o) : [...arr, o])}
-                      className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border", on ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200")}>{(p as any).optionLabels?.[o] ?? o}</button>
-                  })}
-                </div>
-              ) : p.type === "USER" ? (
-                <StyledSelect className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)}>
-                  <option value="">— Select —</option>
-                  {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-                </StyledSelect>
-              ) : (
-                <input className={inputCls} value={values[p.id] ?? ""} onChange={(e) => set(p.id, e.target.value)} />
-              )}
-            </div>
-          ))}
-          <div>
-            <label className="text-xs font-medium text-slate-600 block mb-1">{ownerLabel}</label>
-            <StyledSelect className={inputCls} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-              <option value="">You (creator)</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-            </StyledSelect>
-          </div>
-          {err && <p className="text-xs text-red-600">{err}</p>}
-          <div className="flex gap-2 pt-1">
-            <button onClick={save} disabled={isPending} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5">
-              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Create
-            </button>
-            <button onClick={onClose} className="h-9 px-3 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
