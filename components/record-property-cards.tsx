@@ -16,6 +16,7 @@ import PhoneInput from "@/components/phone-input"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import { OptionValue } from "@/components/option-value"
 import StyledSelect from "@/components/ui/styled-select"
+import { useMenuFocusGuard } from "@/components/ui/use-menu-focus-guard"
 import DatePicker from "@/components/ui/date-picker"
 import { formatNumber } from "@/lib/number-format"
 import { cn } from "@/lib/utils"
@@ -124,20 +125,17 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Inside a Radix modal Dialog the portaled panel would lose focus (search box
-  // untypable) and scroll to the dialog's trap/scroll-lock; stop these native
-  // events at the menu so it works (mirrors StyledSelect).
+  // untypable) and its list wouldn't scroll. A capture-phase guard defeats the
+  // Dialog's focus trap; the menu-level wheel/touchmove stop keeps it scrollable.
+  useMenuFocusGuard(open, menuRef)
   useEffect(() => {
     if (!open) return
     const el = menuRef.current
     if (!el) return
     const stop = (e: Event) => e.stopPropagation()
-    el.addEventListener("focusin", stop)
-    el.addEventListener("focusout", stop)
     el.addEventListener("wheel", stop, { passive: false })
     el.addEventListener("touchmove", stop, { passive: false })
     return () => {
-      el.removeEventListener("focusin", stop)
-      el.removeEventListener("focusout", stop)
       el.removeEventListener("wheel", stop)
       el.removeEventListener("touchmove", stop)
     }

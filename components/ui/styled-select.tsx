@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { ChevronDown, Check, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useMenuFocusGuard } from "@/components/ui/use-menu-focus-guard"
 
 // Drop-in replacement for native <select> with the app's dropdown panel design.
 // Accepts <option> children like a native select and calls onChange with an
@@ -76,22 +77,18 @@ export default function StyledSelect({ value, onChange, children, className, dis
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // When portaled to <body>, the menu lives OUTSIDE a Radix modal Dialog's content.
-  // Radix's focus-trap would then steal focus back from the search input (can't type)
-  // and its scroll-lock (react-remove-scroll) would block the option list from
-  // scrolling. Both listen on `document` in the bubble phase, so stopping these
-  // native events at the menu keeps focus and scrolling working inside a dialog.
+  // A capture-phase guard keeps the search box typable (defeats the Dialog's focus
+  // trap — see useMenuFocusGuard); the menu-level wheel/touchmove stop keeps the
+  // option list scrollable under the Dialog's scroll-lock.
+  useMenuFocusGuard(open, menuRef)
   useEffect(() => {
     if (!open) return
     const el = menuRef.current
     if (!el) return
     const stop = (e: Event) => e.stopPropagation()
-    el.addEventListener("focusin", stop)
-    el.addEventListener("focusout", stop)
     el.addEventListener("wheel", stop, { passive: false })
     el.addEventListener("touchmove", stop, { passive: false })
     return () => {
-      el.removeEventListener("focusin", stop)
-      el.removeEventListener("focusout", stop)
       el.removeEventListener("wheel", stop)
       el.removeEventListener("touchmove", stop)
     }
