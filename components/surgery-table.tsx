@@ -108,7 +108,7 @@ interface Props {
 // Native surgery columns whose colored chips we keep read-only (status/language)
 // or which are the name link / computed counts. Everything else editable pulls its
 // descriptor from the shared RECORD_FIELDS["SURGERY"] catalog.
-const SURGERY_NO_INLINE = new Set(["patient", "status", "language", "calls", "docs", "expires"])
+const SURGERY_NO_INLINE = new Set(["patient", "calls", "docs", "expires"])
 
 function fmt(d: string | Date | null | undefined) {
   if (!d) return "—"
@@ -242,11 +242,26 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
   // Rows render in the server-provided order.
   const sorted = cases
 
-  // For an editable surgery column: descriptor + value + Prisma field to patch.
-  function surgEditable(c: SurgeryCase, key: string): { def: RecordFieldDef; value: any; field: string } | null {
+  // For an editable surgery column: descriptor + value + Prisma field (+ optional
+  // read node so the colored status/language chips keep their look).
+  function surgEditable(c: SurgeryCase, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode } | null {
     if (key.startsWith("cp_")) {
       const id = key.slice(3); const p = surgeryCpById[id] as any; if (!p) return null
       return { def: cpToFieldDef(p, key), value: (c as any).customProperties?.[id], field: key }
+    }
+    if (key === "status") {
+      return {
+        def: { key: "status", label: "Status", type: "select", options: Object.keys(SURGERY_STATUS_LABELS), optionLabels: SURGERY_STATUS_LABELS as any },
+        value: c.status, field: "status",
+        read: <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${STATUS_COLORS[c.status] ?? "bg-zinc-100 text-zinc-700"}`}>{SURGERY_STATUS_LABELS[c.status] ?? c.status}</span>,
+      }
+    }
+    if (key === "language") {
+      return {
+        def: { key: "language", label: "Language", type: "select", options: ["EN", "ES"], optionLabels: LANGUAGE_LABELS },
+        value: c.language ?? "EN", field: "language",
+        read: <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-50 text-violet-700">{LANGUAGE_LABELS[c.language ?? "EN"] ?? "English"}</span>,
+      }
     }
     if (SURGERY_NO_INLINE.has(key)) return null
     const f = (RECORD_FIELDS["SURGERY"] ?? []).find((x) => x.key === key)
@@ -426,7 +441,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
                       const ed = canEdit ? surgEditable(c, col.key) : null
                       return (
                       <td key={col.key} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))}>{ed
-                        ? <EditableCell def={ed.def} value={ed.value} values={(c as any).customProperties ?? {}} canEdit={canEdit}
+                        ? <EditableCell def={ed.def} value={ed.value} values={(c as any).customProperties ?? {}} canEdit={canEdit} renderRead={ed.read}
                             onSave={(v) => updateRecordField("SURGERY", c.id, ed.field, v)} />
                         : renderCell(c, col.key)}</td>
                     )})}

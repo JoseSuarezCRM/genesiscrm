@@ -1335,10 +1335,29 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     frontDesk: { key: "frontDesk", field: "frontDesk", label: "Front Desk", type: "text", get: (a) => a.frontDesk },
     notes: { key: "notes", field: "notes", label: "Notes", type: "long_text", get: (a) => a.notes },
   }
-  function activEditable(a: any, key: string): { def: RecordFieldDef; value: any; field: string } | null {
+  function activEditable(a: any, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode } | null {
     if (key.startsWith("cp_")) {
       const id = key.slice(3); const p = activityCpById[id] as any; if (!p) return null
       return { def: cpToFieldDef(p, key), value: (a as any).customProperties?.[id], field: key }
+    }
+    if (key === "type") {
+      const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
+      return {
+        def: { key: "type", label: "Type", type: "select", options: ACTIVITY_TYPES.map(x => x.value) },
+        value: a.flyer, field: "flyer",
+        read: a.flyer
+          ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t ? `${t.bg} ${t.color} ${t.border}` : "bg-zinc-100 text-zinc-600 border-zinc-200"}`}>{a.flyer}</span>
+          : <span className="text-zinc-400">—</span>,
+      }
+    }
+    if (key === "rating") {
+      return {
+        def: { key: "rating", label: "Rating", type: "select", coerce: "number", options: ["1", "2", "3"], optionLabels: { "1": ratingLabel(1) ?? "Low Value", "2": ratingLabel(2) ?? "Mid Value", "3": ratingLabel(3) ?? "High Value" } },
+        value: a.rating != null ? String(a.rating) : "", field: "rating",
+        read: a.rating
+          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200 whitespace-nowrap">{a.rating} · {ratingLabel(a.rating)}</span>
+          : <span className="text-zinc-400">—</span>,
+      }
     }
     const m = ACTIVITY_EDIT[key]
     if (!m) return null
@@ -1694,7 +1713,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                       const ed = canManage ? activEditable(a, col.key) : null
                       return (
                       <td key={col.key} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{ed
-                        ? <EditableCell def={ed.def} value={ed.value} values={(a as any).customProperties ?? {}} canEdit={canManage}
+                        ? <EditableCell def={ed.def} value={ed.value} values={(a as any).customProperties ?? {}} canEdit={canManage} renderRead={ed.read}
                             onSave={(v) => updateRecordField("ACTIVITY", a.id, ed.field, v)} />
                         : renderCell(a, col.key)}</td>
                     )})}

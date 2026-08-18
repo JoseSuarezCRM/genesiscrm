@@ -37,7 +37,7 @@ function displayValue(f: RecordFieldDef, v: any, userMap?: Record<string, string
  * (all of which portal to <body>, so they are never clipped by the cell).
  */
 export function EditableCell({
-  def, value, values, canEdit, align, userMap, users, onSave, onSaveOwner,
+  def, value, values, canEdit, align, userMap, users, onSave, onSaveOwner, renderRead,
 }: {
   def: RecordFieldDef
   value: any
@@ -48,6 +48,9 @@ export function EditableCell({
   users?: UserOpt[]
   onSave: (value: any) => Promise<{ error?: string } | { success?: true } | void>
   onSaveOwner?: (userId: string | null) => Promise<any>
+  // Custom read-mode node (e.g. a colored enum chip) shown when not editing;
+  // edit mode still renders the type-appropriate control from `def`.
+  renderRead?: ReactNode
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -107,7 +110,7 @@ export function EditableCell({
     if (doneRef.current) return
     let val: any = raw
     if ((def.type === "date" || def.type === "datetime") && raw) val = new Date(String(raw)).toISOString()
-    else if (def.type === "number") val = raw === "" || raw === null || raw === undefined ? null : Number(raw)
+    else if (def.type === "number" || def.coerce === "number") val = raw === "" || raw === null || raw === undefined ? null : Number(raw)
     else if (def.type === "checkbox") val = !!raw
     const prev = value ?? ""
     if (def.type !== "checkbox" && String(val ?? "") === String(prev ?? "")) { cancelEdit(); return }
@@ -137,7 +140,9 @@ export function EditableCell({
           empty && !readOnly ? "text-slate-300" : "text-slate-600",
         )}
       >
-        {def.type === "checkbox"
+        {renderRead && !optimistic
+          ? renderRead
+          : def.type === "checkbox"
           ? <span className="inline-flex items-center gap-1.5">{shown === true && <Check className="h-3.5 w-3.5 text-emerald-600" />}{displayValue(def, shown, userMap)}</span>
           : displayValue(def, shown, userMap)}
       </button>

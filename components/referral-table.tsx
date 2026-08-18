@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { StatusBadge } from "@/components/status-badge"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
-import { formatDate, formatPhone } from "@/lib/utils"
+import { formatDate, formatPhone, STATUS_LABELS } from "@/lib/utils"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
@@ -306,11 +306,18 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
 
   const txt = (v: any) => <span className="text-slate-600">{v || "—"}</span>
 
-  // For an editable column, the descriptor + current value + Prisma field to patch.
-  function refEditable(r: Referral, key: string): { def: RecordFieldDef; value: any; field: string } | null {
+  // For an editable column, the descriptor + current value + Prisma field to patch
+  // (+ an optional read node so colored chips keep their look while editing shows a dropdown).
+  function refEditable(r: Referral, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode } | null {
     if (key.startsWith("cp_")) {
       const id = key.slice(3); const p = cpDefById[id]; if (!p) return null
       return { def: cpToFieldDef(p, key), value: r.customProperties?.[id], field: key }
+    }
+    if (key === "status") {
+      return {
+        def: { key: "status", label: "Status", type: "select", options: Object.keys(STATUS_LABELS), optionLabels: STATUS_LABELS as any },
+        value: r.status, field: "status", read: <StatusBadge status={r.status as any} />,
+      }
     }
     const m = REFERRAL_EDIT[key]
     if (!m) return null
@@ -599,7 +606,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
                     return (
                     <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(c.key)))}>
                       {ed
-                        ? <EditableCell def={ed.def} value={ed.value} values={r.customProperties ?? {}} canEdit={canEdit}
+                        ? <EditableCell def={ed.def} value={ed.value} values={r.customProperties ?? {}} canEdit={canEdit} renderRead={ed.read}
                             onSave={(v) => updateRecordField("REFERRAL", r.id, ed.field, v)} />
                         : renderReferralCell(r, c.key)}
                     </td>
