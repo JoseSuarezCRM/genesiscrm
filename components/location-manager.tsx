@@ -18,6 +18,7 @@ import { formatNumber } from "@/lib/number-format"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
 import { type RecordFieldDef } from "@/lib/record-field-catalog"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
@@ -36,6 +37,7 @@ export interface LocationRow {
   address: string | null
   practiceId: string
   practiceName: string
+  ownerId?: string | null
   ownerName?: string | null
   createdAt: string | Date
   customProperties?: Record<string, any>
@@ -52,6 +54,7 @@ interface Props {
   customPropertyDefs?: CustomPropDef[]
   canEdit: boolean
   canDelete: boolean
+  users?: { id: string; label: string }[]
 }
 
 const LOCATION_COLUMNS: { key: string; label: string; sortable?: boolean; align?: "right" }[] = [
@@ -75,7 +78,8 @@ function fmtDate(d: string | Date | null | undefined) {
 
 type SortKey = "name" | "practice" | "providers" | "referrals" | "activities" | "owner" | "created"
 
-export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete }: Props) {
+export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete, users = [] }: Props) {
+  const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -169,7 +173,8 @@ export default function LocationManager({ locations, practices, customPropertyDe
     phone: { key: "phone", field: "phone", label: "Phone", type: "phone", get: (l) => l.phone },
     fax: { key: "fax", field: "fax", label: "Fax", type: "phone", get: (l) => l.fax },
   }
-  function locEditable(l: LocationRow, key: string): { def: RecordFieldDef; value: any; field: string } | null {
+  function locEditable(l: LocationRow, key: string): { def: RecordFieldDef; value: any; field: string; owner?: boolean } | null {
+    if (key === "owner") return { def: { key: "owner", label: "Location Owner", type: "user" }, value: l.ownerId ?? "", field: "ownerId", owner: true }
     if (key.startsWith("cp_")) {
       const id = key.slice(3); const p = locCpById[id] as any; if (!p) return null
       return { def: cpToFieldDef(p, key), value: l.customProperties?.[id], field: key }
@@ -338,7 +343,9 @@ export default function LocationManager({ locations, practices, customPropertyDe
                       <td key={col.key} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 text-slate-600 truncate", col.align === "right" && "text-right", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>
                         {ed
                           ? <EditableCell def={ed.def} value={ed.value} values={l.customProperties ?? {}} canEdit={canEdit} align={col.align}
-                              onSave={(v) => updateRecordField("LOCATION", l.id, ed.field, v)} />
+                              users={ed.owner ? users : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                              onSaveOwner={ed.owner ? (uid) => setRecordOwner("LOCATION", l.id, uid) : undefined}
+                              onSave={ed.owner ? ((uid) => setRecordOwner("LOCATION", l.id, uid as any)) : ((v) => updateRecordField("LOCATION", l.id, ed.field, v))} />
                           : <>
                         {col.key === "practice" && <Link href={`/practices/${l.practiceId}`} className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md hover:bg-slate-200">{l.practiceName}</Link>}
                         {col.key === "address" && <span className="text-slate-500">{l.address || "—"}</span>}

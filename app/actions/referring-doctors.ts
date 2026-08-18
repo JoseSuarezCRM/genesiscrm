@@ -251,6 +251,7 @@ export async function getLocations() {
     address: l.address,
     practiceId: l.practiceId,
     practiceName: l.practice.name,
+    ownerId: l.owner?.id ?? null,
     ownerName: l.owner?.name ?? l.owner?.email ?? null,
     createdAt: l.createdAt,
     customProperties: (l.customProperties as Record<string, any>) ?? {},

@@ -17,6 +17,7 @@ import { formatDate, formatPhone, STATUS_LABELS } from "@/lib/utils"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
 import { type RecordFieldDef } from "@/lib/record-field-catalog"
 import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referrals"
 import { bulkAddTag, bulkRemoveTag } from "@/app/actions/tags"
@@ -84,6 +85,7 @@ interface Props {
   total: number
   allMatchingIds: string[]
   canEdit?: boolean
+  users?: { id: string; label: string }[]
 }
 
 // Editable native referral columns → the Prisma column to patch + its field type.
@@ -144,7 +146,8 @@ const REFERRAL_COL_W: Record<string, number> = {
   assignedTo: 160, tags: 180, referralDate: 130, apptDate: 130, calls: 90, notes: 240, status: 150,
 }
 
-export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], listUrl, total, allMatchingIds, canEdit = false }: Props) {
+export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], listUrl, total, allMatchingIds, canEdit = false, users = [] }: Props) {
+  const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Full column catalog = static columns + every referral custom property.
   const REFERRAL_COLUMNS = [...STATIC_REFERRAL_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
   const cpDefById = Object.fromEntries(customProps.map((p) => [p.id, p]))
@@ -308,10 +311,13 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
 
   // For an editable column, the descriptor + current value + Prisma field to patch
   // (+ an optional read node so colored chips keep their look while editing shows a dropdown).
-  function refEditable(r: Referral, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode } | null {
+  function refEditable(r: Referral, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode; owner?: boolean } | null {
     if (key.startsWith("cp_")) {
       const id = key.slice(3); const p = cpDefById[id]; if (!p) return null
       return { def: cpToFieldDef(p, key), value: r.customProperties?.[id], field: key }
+    }
+    if (key === "assignedTo") {
+      return { def: { key: "assignedTo", label: "Assigned To", type: "user" }, value: r.assignedTo?.id ?? "", field: "assignedToId", owner: true }
     }
     if (key === "status") {
       return {
@@ -607,7 +613,9 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
                     <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(c.key)))}>
                       {ed
                         ? <EditableCell def={ed.def} value={ed.value} values={r.customProperties ?? {}} canEdit={canEdit} renderRead={ed.read}
-                            onSave={(v) => updateRecordField("REFERRAL", r.id, ed.field, v)} />
+                            users={ed.owner ? users : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                            onSaveOwner={ed.owner ? (uid) => setRecordOwner("REFERRAL", r.id, uid) : undefined}
+                            onSave={ed.owner ? ((uid) => setRecordOwner("REFERRAL", r.id, uid as any)) : ((v) => updateRecordField("REFERRAL", r.id, ed.field, v))} />
                         : renderReferralCell(r, c.key)}
                     </td>
                   )})}

@@ -17,6 +17,7 @@ import { formatNumber } from "@/lib/number-format"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
 import { RECORD_FIELDS, type RecordFieldDef } from "@/lib/record-field-catalog"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
@@ -58,6 +59,7 @@ const SURGERY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "physicalTherapy",  label: "Physical Therapy" },
   { key: "email",            label: "Email" },
   { key: "expires",          label: "Expires" },
+  { key: "owner",            label: "Owner" },
   { key: "calls",            label: "Calls" },
   { key: "docs",             label: "Docs" },
 ]
@@ -92,6 +94,8 @@ interface SurgeryCase {
   physicalTherapyDetail: string | null
   email: string | null
   expires: string | Date | null
+  ownerId?: string | null
+  owner?: { id: string; name: string | null; email: string } | null
   _count: { callAttempts: number; documents: number }
 }
 
@@ -103,6 +107,7 @@ interface Props {
   allMatchingIds: string[]
   customProps?: SurgeryCustomPropDef[]
   canEdit?: boolean
+  users?: { id: string; label: string }[]
 }
 
 // Native surgery columns whose colored chips we keep read-only (status/language)
@@ -115,7 +120,8 @@ function fmt(d: string | Date | null | undefined) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
 }
 
-export default function SurgeryTable({ cases, total, allMatchingIds, customProps = [], canEdit = false }: Props) {
+export default function SurgeryTable({ cases, total, allMatchingIds, customProps = [], canEdit = false, users = [] }: Props) {
+  const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Full catalog = native surgery columns + every surgery custom property.
   const allSurgeryCols = [...SURGERY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
   const surgeryCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
@@ -244,10 +250,13 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
 
   // For an editable surgery column: descriptor + value + Prisma field (+ optional
   // read node so the colored status/language chips keep their look).
-  function surgEditable(c: SurgeryCase, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode } | null {
+  function surgEditable(c: SurgeryCase, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode; owner?: boolean } | null {
     if (key.startsWith("cp_")) {
       const id = key.slice(3); const p = surgeryCpById[id] as any; if (!p) return null
       return { def: cpToFieldDef(p, key), value: (c as any).customProperties?.[id], field: key }
+    }
+    if (key === "owner") {
+      return { def: { key: "owner", label: "Case Owner", type: "user" }, value: c.ownerId ?? c.owner?.id ?? "", field: "ownerId", owner: true }
     }
     if (key === "status") {
       return {
@@ -317,6 +326,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
       case "physicalTherapy": return <span className="text-slate-600">{c.physicalTherapy ?? "—"}</span>
       case "email": return <span className="text-slate-600">{c.email ?? "—"}</span>
       case "expires": return <span className="text-slate-600">{fmt(c.expires)}</span>
+      case "owner": return <span className="text-slate-600">{ownerUserMap[c.ownerId ?? ""] ?? c.owner?.name ?? c.owner?.email ?? "—"}</span>
       case "calls":
         return c._count.callAttempts > 0 ? (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600"><Phone className="h-3 w-3" />{c._count.callAttempts}/4</span>
@@ -442,7 +452,9 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
                       return (
                       <td key={col.key} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))}>{ed
                         ? <EditableCell def={ed.def} value={ed.value} values={(c as any).customProperties ?? {}} canEdit={canEdit} renderRead={ed.read}
-                            onSave={(v) => updateRecordField("SURGERY", c.id, ed.field, v)} />
+                            users={ed.owner ? users : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                            onSaveOwner={ed.owner ? (uid) => setRecordOwner("SURGERY", c.id, uid) : undefined}
+                            onSave={ed.owner ? ((uid) => setRecordOwner("SURGERY", c.id, uid as any)) : ((v) => updateRecordField("SURGERY", c.id, ed.field, v))} />
                         : renderCell(c, col.key)}</td>
                     )})}
                   </tr>

@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
-import { getViewShareOptions } from "@/app/actions/view-share-options"
+import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-share-options"
+import { listCustomProperties } from "@/app/actions/custom-properties"
 import { userCan, userCanLevel } from "@/lib/permissions"
 
 export default async function PracticesPage({ searchParams }: { searchParams?: { sort?: string } }) {
@@ -18,10 +19,11 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
       ? ({ referrals: { _count: "desc" } } as const)
       : ({ name: "asc" } as const)
 
-  const [practices, savedViews, shareOptions] = await Promise.all([
+  const [practices, savedViews, shareOptions, practiceCustomPropertyDefs, assignableUsers] = await Promise.all([
     prisma.referringPractice.findMany({
       orderBy,
       include: {
+        owner: { select: { id: true, name: true, email: true } },
         _count: { select: { referrals: true } },
         locations: {
           orderBy: { referrals: { _count: "desc" } },
@@ -50,6 +52,8 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
     }),
     getProviderViews(),
     getViewShareOptions(),
+    listCustomProperties("PRACTICE"),
+    getAssignableUsers(),
   ])
 
   // A provider belongs to its own practice (the FK) — we do NOT pull in providers
@@ -78,6 +82,8 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}
+        practiceCustomPropertyDefs={practiceCustomPropertyDefs.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options, numberFormat: (p as any).numberFormat ?? null }))}
+        assignableUsers={assignableUsers}
         view="practices"
       />
     </div>

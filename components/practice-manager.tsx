@@ -8,6 +8,7 @@ import { formatNumber } from "@/lib/number-format"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
 import { RECORD_FIELDS, type RecordFieldDef } from "@/lib/record-field-catalog"
 import { useState, useTransition, useRef, useEffect, type ReactNode } from "react"
 import { OptionValue } from "@/components/option-value"
@@ -66,6 +67,9 @@ interface Props {
   shareUsers: ShareUser[]
   shareTeams: ShareTeam[]
   providerCustomPropertyDefs?: CustomPropDef[]
+  practiceCustomPropertyDefs?: CustomPropDef[]
+  // All active users incl. self — for the owner picker.
+  assignableUsers?: { id: string; label: string }[]
 }
 
 // ─── Provider table columns ─────────────────────────────────────────────────────
@@ -332,7 +336,7 @@ function SearchablePicker({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], view = "practices" }: Props & { view?: "practices" | "providers" }) {
+export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], practiceCustomPropertyDefs = [], assignableUsers = [], view = "practices" }: Props & { view?: "practices" | "providers" }) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
@@ -490,7 +494,10 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const providerPractices = Array.from(new Set(allProviders.map((d) => d.practiceName).filter(Boolean))).sort()
   const providerSpecialties = Array.from(new Set(allProviders.map((d) => (d as any).specialty as string).filter(Boolean))).sort()
   // Record Owner reads off the user list the view-sharing selector already has.
+  // Owner picker map (self-inclusive); falls back to shareUsers for the label.
+  const ownerUserMap = Object.fromEntries(assignableUsers.map((u) => [u.id, u.label]))
   const ownerLabel = (d: any) => {
+    if (ownerUserMap[d.ownerId]) return ownerUserMap[d.ownerId]
     const u = shareUsers.find((x) => x.id === d.ownerId)
     return u ? (u.name ?? u.email) : ""
   }
@@ -545,7 +552,8 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   // For an editable provider column: descriptor + value + field to patch. Native
   // fields come from RECORD_FIELDS["PROVIDER"]; custom props use the "cp:" display
   // key but save under "cp_<id>". Name link / relations / counts stay read-only.
-  const provEditable = (d: any, key: string): { def: RecordFieldDef; value: any; field: string } | null => {
+  const provEditable = (d: any, key: string): { def: RecordFieldDef; value: any; field: string; owner?: boolean } | null => {
+    if (key === "owner") return { def: { key: "owner", label: "Provider Owner", type: "user" }, value: d.ownerId, field: "ownerId", owner: true }
     if (key.startsWith("cp:")) {
       const id = key.slice(3); const p = cpDefById[id] as any; if (!p) return null
       return { def: cpToFieldDef(p, `cp_${id}`), value: (d.customProperties as any)?.[id], field: `cp_${id}` }
@@ -867,7 +875,9 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                           <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
                             {ed
                               ? <EditableCell def={ed.def} value={ed.value} values={(d.customProperties as any) ?? {}} canEdit={isAdmin}
-                                  onSave={(v) => updateRecordField("PROVIDER", d.id, ed.field, v)} />
+                                  users={ed.owner ? assignableUsers : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                                  onSaveOwner={ed.owner ? (uid) => setRecordOwner("PROVIDER", d.id, uid) : undefined}
+                                  onSave={ed.owner ? ((uid) => setRecordOwner("PROVIDER", d.id, uid as any)) : ((v) => updateRecordField("PROVIDER", d.id, ed.field, v))} />
                               : renderProviderCell(d, c.key)}
                           </td>
                         )})}

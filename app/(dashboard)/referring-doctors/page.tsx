@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
-import { getViewShareOptions } from "@/app/actions/view-share-options"
+import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-share-options"
 import { listCustomProperties } from "@/app/actions/custom-properties"
 import { userCan, userCanLevel } from "@/lib/permissions"
 
@@ -49,6 +49,7 @@ export default async function ReferringDoctorsPage() {
   ])
 
   const customPropertyDefs = await listCustomProperties("PROVIDER")
+  const assignableUsers = await getAssignableUsers()
 
   // Merge direct doctors + cross-org doctors (linked via locations), deduplicated
   const enriched = practices.map((p) => {
@@ -84,6 +85,7 @@ export default async function ReferringDoctorsPage() {
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}
         providerCustomPropertyDefs={customPropertyDefs.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options, numberFormat: (p as any).numberFormat ?? null }))}
+        assignableUsers={assignableUsers}
         view="providers"
       />
     </div>

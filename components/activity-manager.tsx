@@ -18,6 +18,7 @@ import { formatNumber } from "@/lib/number-format"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
 import { type RecordFieldDef } from "@/lib/record-field-catalog"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
@@ -133,6 +134,8 @@ interface ActivityRow {
   rating: number | null
   meetingRating: number | null
   customProperties?: Record<string, any> | null
+  ownerId?: string | null
+  owner?: { id: string; name: string | null; email: string } | null
   createdBy: { name: string | null; email: string }
 }
 
@@ -166,6 +169,7 @@ interface Props {
   allTags: TagObj[]
   currentUserId: string
   currentUserName?: string
+  assignableUsers?: { id: string; label: string }[]
   savedViews: SavedView[]
   shareUsers: ShareUser[]
   shareTeams: ShareTeam[]
@@ -773,6 +777,7 @@ const ACTIVITY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "frontDesk", label: "Front Desk" },
   { key: "tags",      label: "Tags" },
   { key: "notes",     label: "Notes" },
+  { key: "owner",     label: "Owner" },
   { key: "loggedBy",  label: "Logged By" },
 ]
 const DEFAULT_ACTIVITY_COLS = ["date", "account", "location", "providers", "type", "rating", "nextStep", "tags", "loggedBy"]
@@ -780,7 +785,8 @@ const ACTIVITY_COL_W: Record<string, number> = { date: 120, account: 200, locati
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, currentUserName, savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, currentUserName, assignableUsers = [], savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
+  const ownerUserMap = Object.fromEntries(assignableUsers.map((u) => [u.id, u.label]))
   // Full catalog = native activity columns + every activity custom property.
   const allActivityCols = [...ACTIVITY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
   const activityCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
@@ -1335,10 +1341,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     frontDesk: { key: "frontDesk", field: "frontDesk", label: "Front Desk", type: "text", get: (a) => a.frontDesk },
     notes: { key: "notes", field: "notes", label: "Notes", type: "long_text", get: (a) => a.notes },
   }
-  function activEditable(a: any, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode } | null {
+  function activEditable(a: any, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode; owner?: boolean } | null {
     if (key.startsWith("cp_")) {
       const id = key.slice(3); const p = activityCpById[id] as any; if (!p) return null
       return { def: cpToFieldDef(p, key), value: (a as any).customProperties?.[id], field: key }
+    }
+    if (key === "owner") {
+      return { def: { key: "owner", label: "Owner", type: "user" }, value: a.ownerId ?? a.owner?.id ?? "", field: "ownerId", owner: true }
     }
     if (key === "type") {
       const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
@@ -1394,6 +1403,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       case "frontDesk": return <span className="text-zinc-500">{a.frontDesk || "—"}</span>
       case "tags": return <span className="text-zinc-500">{a.tags.length ? a.tags.map(tg => tg.name).join(", ") : "—"}</span>
       case "notes": return <span className="text-zinc-500">{a.notes ? a.notes.replace(/\s+/g, " ").trim() : "—"}</span>
+      case "owner": return <span className="whitespace-nowrap text-zinc-500">{ownerUserMap[a.ownerId ?? ""] ?? a.owner?.name ?? a.owner?.email ?? "—"}</span>
       case "loggedBy": return <span className="whitespace-nowrap text-zinc-500">{a.createdBy.name ?? a.createdBy.email}</span>
       default: return null
     }
@@ -1714,7 +1724,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                       return (
                       <td key={col.key} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }}>{ed
                         ? <EditableCell def={ed.def} value={ed.value} values={(a as any).customProperties ?? {}} canEdit={canManage} renderRead={ed.read}
-                            onSave={(v) => updateRecordField("ACTIVITY", a.id, ed.field, v)} />
+                            users={ed.owner ? assignableUsers : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                            onSaveOwner={ed.owner ? (uid) => setRecordOwner("ACTIVITY", a.id, uid) : undefined}
+                            onSave={ed.owner ? ((uid) => setRecordOwner("ACTIVITY", a.id, uid as any)) : ((v) => updateRecordField("ACTIVITY", a.id, ed.field, v))} />
                         : renderCell(a, col.key)}</td>
                     )})}
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">

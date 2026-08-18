@@ -5,17 +5,18 @@ import { userCanLevel } from "@/lib/permissions"
 import ActivityManager from "@/components/activity-manager"
 import { listActivityTags } from "@/app/actions/tags"
 import { getActivityViews } from "@/app/actions/activity-views"
-import { getViewShareOptions } from "@/app/actions/view-share-options"
+import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-share-options"
 
 export default async function ActivitiesPage() {
   const session = await requireView("ACTIVITIES")
 
-  const [activities, practices, allTags, savedViews, shareOptions, activityCustomProps] = await Promise.all([
+  const [activities, practices, allTags, savedViews, shareOptions, activityCustomProps, assignableUsers] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { date: "desc" },
       include: {
         practice: { select: { id: true, name: true } },
         location: { select: { id: true, name: true, address: true } },
+        owner: { select: { id: true, name: true, email: true } },
         providers: {
           include: {
             doctor: { select: { id: true, name: true, title: true } },
@@ -46,6 +47,7 @@ export default async function ActivitiesPage() {
     getActivityViews(),
     getViewShareOptions(),
     prisma.customProperty.findMany({ where: { entityType: "ACTIVITY" }, orderBy: { createdAt: "asc" } }),
+    getAssignableUsers(),
   ])
 
   const allDoctors = practices.flatMap((p) =>
@@ -75,6 +77,7 @@ export default async function ActivitiesPage() {
         allTags={allTags as any}
         currentUserId={session!.user.id}
         currentUserName={session!.user.name || session!.user.email || undefined}
+        assignableUsers={assignableUsers}
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}

@@ -27,3 +27,16 @@ export async function getViewShareOptions() {
     teams,
   }
 }
+
+// All active users (INCLUDING self) as { id, label } — for owner/assignee pickers
+// where you can legitimately assign a record to yourself.
+export async function getAssignableUsers(): Promise<{ id: string; label: string }[]> {
+  const session = await auth()
+  if (!session?.user) return []
+  const users = await prisma.user.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: "asc" },
+  })
+  return users.map((u) => ({ id: u.id, label: u.name || u.email }))
+}

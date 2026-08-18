@@ -10,6 +10,7 @@ import { Plus } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
 import ReferralTable from "@/components/referral-table"
 import ReferralsExportButton from "@/components/referrals-export-button"
+import { getAssignableUsers } from "@/app/actions/view-share-options"
 
 interface PageProps {
   searchParams: {
@@ -172,6 +173,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
   const session = await requireView("REFERRALS")
   const canCreate = userCanLevel(session?.user as any, "REFERRALS", "EDIT")
   const canExport = userCan(session?.user as any, "EXPORT_DATA")
+  const assignableUsers = await getAssignableUsers()
   const {
     referrals,
     total,
@@ -316,7 +318,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table (renders its own card + column chooser) */}
-      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} />
+      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
 
       {/* Pagination */}
       {totalPages > 1 && (
