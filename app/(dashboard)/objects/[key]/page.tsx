@@ -8,6 +8,7 @@ import { CO_SERVER_THRESHOLD } from "@/lib/custom-object-config"
 import { getCustomObjectViews } from "@/app/actions/custom-object-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
 import CustomObjectList from "@/components/custom-object-list"
+import { getCreateForm } from "@/app/actions/create-form"
 
 interface Props {
   params: { key: string }
@@ -28,10 +29,11 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
   const totalRecords = await countCustomObjectRecords(params.key)
   const serverMode = totalRecords > CO_SERVER_THRESHOLD
 
-  const [users, savedViews, shareOptions] = await Promise.all([
+  const [users, savedViews, shareOptions, createFormConfig] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
     getCustomObjectViews(params.key),
     getViewShareOptions(),
+    getCreateForm(`CO:${params.key}`),
   ])
 
   const pageData = serverMode
@@ -65,6 +67,8 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
         serverTotal={pageData.total}
         serverPage={pageData.page}
         serverPageSize={pageData.pageSize}
+        createFormConfig={createFormConfig}
+        isAdmin={user?.role === "ADMIN"}
       />
     </div>
   )

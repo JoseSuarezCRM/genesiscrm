@@ -12,6 +12,7 @@ import SurgeryTable from "@/components/surgery-table"
 import SurgeryViewsBar from "@/components/surgery-views-bar"
 import { getSurgeryViews } from "@/app/actions/surgery-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
+import { getCreateForm } from "@/app/actions/create-form"
 import { decodeFilterParam } from "@/lib/filters"
 import { Stethoscope, ChevronLeft, ChevronRight } from "lucide-react"
 import { Suspense } from "react"
@@ -65,7 +66,13 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
     prisma.customProperty.findMany({ where: { entityType: "SURGERY" }, orderBy: { createdAt: "asc" } }),
   ])
 
-  const [savedViews, shareOptions] = await Promise.all([getSurgeryViews(), getViewShareOptions()])
+  const [savedViews, shareOptions, surgeryCreateForm] = await Promise.all([getSurgeryViews(), getViewShareOptions(), getCreateForm("SURGERY")])
+  const surgeryDialogProps = {
+    customProps: surgeryCustomProps as any,
+    createFormConfig: surgeryCreateForm,
+    users: filterUsers.map((u) => ({ id: u.id, label: u.name ?? u.email })),
+    isAdmin: (session.user as any)?.role === "ADMIN",
+  }
 
   const totalPages = Math.ceil(total / pageSize)
 
@@ -94,7 +101,7 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           <p className="text-sm text-slate-500">{total} case{total !== 1 ? "s" : ""}</p>
         </div>
         <div className="flex items-center gap-2">
-          {canManage && <SurgeryCreateDialog />}
+          {canManage && <SurgeryCreateDialog {...surgeryDialogProps} />}
           {canImport && <SurgeryImportDialog />}
         </div>
       </div>
@@ -128,12 +135,12 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
           <p className="text-slate-500 font-medium">No surgery cases yet</p>
           <p className="text-slate-400 text-sm">Add a case manually or import a CSV or XLSX file to get started.</p>
           <div className="flex items-center justify-center gap-2 pt-2">
-            {canManage && <SurgeryCreateDialog />}
+            {canManage && <SurgeryCreateDialog {...surgeryDialogProps} />}
             {canImport && <SurgeryImportDialog />}
           </div>
         </div>
       ) : (
-        <SurgeryTable cases={cases as any[]} total={total} allMatchingIds={allMatchingIds} customProps={surgeryCustomProps as any} />
+        <SurgeryTable cases={cases as any[]} total={total} allMatchingIds={allMatchingIds} customProps={surgeryCustomProps as any} canEdit={canManage} users={filterUsers.map((u) => ({ id: u.id, label: u.name ?? u.email }))} />
       )}
 
       {/* Pagination */}

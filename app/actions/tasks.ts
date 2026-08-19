@@ -164,6 +164,31 @@ export async function deleteTask(id: string) {
   return { success: true }
 }
 
+// ── Bulk actions (task table) ─────────────────────────────────────────────────
+export async function bulkDeleteTasks(ids: string[]) {
+  await requireDelete("TASKS")
+  if (!ids.length) return { success: true }
+  await (prisma as any).objectAssociation.deleteMany({
+    where: { OR: [{ fromType: "TASK", fromId: { in: ids } }, { toType: "TASK", toId: { in: ids } }] },
+  })
+  await prisma.task.deleteMany({ where: { id: { in: ids } } })
+  revalidatePath("/tasks")
+  return { success: true }
+}
+
+export async function bulkUpdateTasks(ids: string[], data: { status?: TaskStatus; priority?: TaskPriority; assignedToId?: string | null }) {
+  await requireAccess("TASKS", "EDIT")
+  const session = await auth()
+  if (!ids.length) return { success: true }
+  const patch: any = { updatedById: (session?.user as any)?.id ?? null }
+  if (data.status) patch.status = data.status
+  if (data.priority) patch.priority = data.priority
+  if (data.assignedToId !== undefined) patch.assignedToId = data.assignedToId || null
+  await prisma.task.updateMany({ where: { id: { in: ids } }, data: patch })
+  revalidatePath("/tasks")
+  return { success: true }
+}
+
 // ── Task queues ──────────────────────────────────────────────────────────────
 export async function listTaskQueues() {
   return prisma.taskQueue.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } })

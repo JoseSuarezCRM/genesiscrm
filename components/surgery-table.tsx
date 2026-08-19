@@ -14,6 +14,11 @@ import { useCardReorder } from "@/components/use-card-reorder"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
+import { EditableCell } from "@/components/ui/editable-cell"
+import { cpToFieldDef } from "@/lib/cp-field-def"
+import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
+import { RECORD_FIELDS, type RecordFieldDef } from "@/lib/record-field-catalog"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { bulkUpdateSurgeryCases, bulkDeleteSurgeryCases } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
@@ -54,6 +59,7 @@ const SURGERY_COLUMNS: { key: string; label: string; sortable?: boolean }[] = [
   { key: "physicalTherapy",  label: "Physical Therapy" },
   { key: "email",            label: "Email" },
   { key: "expires",          label: "Expires" },
+  { key: "owner",            label: "Owner" },
   { key: "calls",            label: "Calls" },
   { key: "docs",             label: "Docs" },
 ]
@@ -88,6 +94,8 @@ interface SurgeryCase {
   physicalTherapyDetail: string | null
   email: string | null
   expires: string | Date | null
+  ownerId?: string | null
+  owner?: { id: string; name: string | null; email: string } | null
   _count: { callAttempts: number; documents: number }
 }
 
@@ -98,14 +106,22 @@ interface Props {
   total: number
   allMatchingIds: string[]
   customProps?: SurgeryCustomPropDef[]
+  canEdit?: boolean
+  users?: { id: string; label: string }[]
 }
+
+// Native surgery columns whose colored chips we keep read-only (status/language)
+// or which are the name link / computed counts. Everything else editable pulls its
+// descriptor from the shared RECORD_FIELDS["SURGERY"] catalog.
+const SURGERY_NO_INLINE = new Set(["patient", "calls", "docs", "expires"])
 
 function fmt(d: string | Date | null | undefined) {
   if (!d) return "—"
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
 }
 
-export default function SurgeryTable({ cases, total, allMatchingIds, customProps = [] }: Props) {
+export default function SurgeryTable({ cases, total, allMatchingIds, customProps = [], canEdit = false, users = [] }: Props) {
+  const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Full catalog = native surgery columns + every surgery custom property.
   const allSurgeryCols = [...SURGERY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
   const surgeryCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
@@ -232,6 +248,36 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
   // Rows render in the server-provided order.
   const sorted = cases
 
+  // For an editable surgery column: descriptor + value + Prisma field (+ optional
+  // read node so the colored status/language chips keep their look).
+  function surgEditable(c: SurgeryCase, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode; owner?: boolean } | null {
+    if (key.startsWith("cp_")) {
+      const id = key.slice(3); const p = surgeryCpById[id] as any; if (!p) return null
+      return { def: cpToFieldDef(p, key), value: (c as any).customProperties?.[id], field: key }
+    }
+    if (key === "owner") {
+      return { def: { key: "owner", label: "Case Owner", type: "user" }, value: c.ownerId ?? c.owner?.id ?? "", field: "ownerId", owner: true }
+    }
+    if (key === "status") {
+      return {
+        def: { key: "status", label: "Status", type: "select", options: Object.keys(SURGERY_STATUS_LABELS), optionLabels: SURGERY_STATUS_LABELS as any },
+        value: c.status, field: "status",
+        read: <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${STATUS_COLORS[c.status] ?? "bg-zinc-100 text-zinc-700"}`}>{SURGERY_STATUS_LABELS[c.status] ?? c.status}</span>,
+      }
+    }
+    if (key === "language") {
+      return {
+        def: { key: "language", label: "Language", type: "select", options: ["EN", "ES"], optionLabels: LANGUAGE_LABELS },
+        value: c.language ?? "EN", field: "language",
+        read: <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-50 text-violet-700">{LANGUAGE_LABELS[c.language ?? "EN"] ?? "English"}</span>,
+      }
+    }
+    if (SURGERY_NO_INLINE.has(key)) return null
+    const f = (RECORD_FIELDS["SURGERY"] ?? []).find((x) => x.key === key)
+    if (!f || f.readOnly) return null
+    return { def: f, value: (c as any)[key], field: key }
+  }
+
   // One table/card cell's content for a given column.
   function renderCell(c: SurgeryCase, key: string): React.ReactNode {
     if (key.startsWith("cp_")) {
@@ -280,6 +326,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
       case "physicalTherapy": return <span className="text-slate-600">{c.physicalTherapy ?? "—"}</span>
       case "email": return <span className="text-slate-600">{c.email ?? "—"}</span>
       case "expires": return <span className="text-slate-600">{fmt(c.expires)}</span>
+      case "owner": return <span className="text-slate-600">{ownerUserMap[c.ownerId ?? ""] ?? c.owner?.name ?? c.owner?.email ?? "—"}</span>
       case "calls":
         return c._count.callAttempts > 0 ? (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600"><Phone className="h-3 w-3" />{c._count.callAttempts}/4</span>
@@ -400,9 +447,16 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
                     <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}>
                       <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleRow(c.id)} className="rounded border-slate-300 cursor-pointer" />
                     </td>
-                    {orderedCols.map((col) => (
-                      <td key={col.key} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }} className={cn("px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))}>{renderCell(c, col.key)}</td>
-                    ))}
+                    {orderedCols.map((col) => {
+                      const ed = canEdit ? surgEditable(c, col.key) : null
+                      return (
+                      <td key={col.key} style={{ maxWidth: widthOf(col.key), ...frozenCellStyle(fmap.get(col.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", frozenClass(fmap.get(col.key)))}>{ed
+                        ? <EditableCell def={ed.def} value={ed.value} values={(c as any).customProperties ?? {}} canEdit={canEdit} renderRead={ed.read}
+                            users={ed.owner ? users : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                            onSaveOwner={ed.owner ? (uid) => setRecordOwner("SURGERY", c.id, uid) : undefined}
+                            onSave={ed.owner ? ((uid) => setRecordOwner("SURGERY", c.id, uid as any)) : ((v) => updateRecordField("SURGERY", c.id, ed.field, v))} />
+                        : renderCell(c, col.key)}</td>
+                    )})}
                   </tr>
                 ))}
               </tbody>

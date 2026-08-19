@@ -7,7 +7,7 @@ import {
   GLP1_OPTIONS, DME_OPTIONS, FACILITY_OPTIONS, PHYSICAL_THERAPY_OPTIONS, REFERRAL_PRESETS,
 } from "@/lib/surgery-procedures"
 
-export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime" | "select_or_other"
+export type RecordFieldType = "text" | "email" | "phone" | "number" | "date" | "select" | "long_text" | "user" | "datetime" | "select_or_other" | "checkbox"
 
 export interface RecordFieldDef {
   key: string
@@ -15,6 +15,8 @@ export interface RecordFieldDef {
   type: RecordFieldType
   options?: string[]
   readOnly?: boolean
+  // Required at creation (used by the configurable create-record modal).
+  required?: boolean
   // For `select_or_other`: the option label that reveals a free-text box (the typed
   // value is stored in the same field), like Physical Therapy's "External".
   otherOption?: string
@@ -33,6 +35,9 @@ export interface RecordFieldDef {
   visibilityRule?: { controllingKey: string; equals: string[] } | null
   // NUMBER only: "currency" renders the value as USD currency; otherwise plain.
   numberFormat?: string | null
+  // Coerce the committed value before saving — e.g. a select whose values are
+  // numbers (activity rating is an Int column). "number" → Number(value).
+  coerce?: "number"
 }
 
 // Whether a property with a visibility rule should show, given the record's values.

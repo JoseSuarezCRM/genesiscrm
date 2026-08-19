@@ -16,6 +16,7 @@ import PhoneInput from "@/components/phone-input"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import { OptionValue } from "@/components/option-value"
 import StyledSelect from "@/components/ui/styled-select"
+import { useMenuFocusGuard } from "@/components/ui/use-menu-focus-guard"
 import DatePicker from "@/components/ui/date-picker"
 import { formatNumber } from "@/lib/number-format"
 import { cn } from "@/lib/utils"
@@ -67,17 +68,20 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): Re
 // MULTI_SELECT editor: a compact trigger (like the single-select StyledSelect)
 // that opens a body-portaled panel — search header + checkbox list + footer — so
 // it never stretches the card. Commits the array on "Done" or click-away; Escape cancels.
-export function MultiSelectField({ options, optionLabels, value, onCommit, onCancel }: {
+export function MultiSelectField({ options, optionLabels, value, onCommit, onCancel, autoOpen = true }: {
   options: string[]
   optionLabels?: Record<string, string>
   value: any
   onCommit: (v: string[]) => void
   onCancel: () => void
+  // Inline click-to-edit opens immediately (default). A persistent form field
+  // passes false so it renders a closed trigger that opens on click.
+  autoOpen?: boolean
 }) {
-  const initial = Array.isArray(value) ? value.map(String) : (value != null && value !== "" ? [String(value)] : [])
-  const [sel, setSel] = useState<string[]>(initial)
+  const toArray = (v: any) => Array.isArray(v) ? v.map(String) : (v != null && v !== "" ? [String(v)] : [])
+  const [sel, setSel] = useState<string[]>(() => toArray(value))
   const [q, setQ] = useState("")
-  const [open, setOpen] = useState(true) // edit mode: open immediately, like StyledSelect autoOpen
+  const [open, setOpen] = useState(autoOpen)
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, width: 0, maxHeight: 288 })
   const selRef = useRef(sel); selRef.current = sel
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -105,8 +109,9 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
       const t = e.target as Node
       if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return
       onCommit(selRef.current) // click-away commits (matches the old behaviour)
+      setOpen(false)
     }
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel() }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") { setSel(toArray(value)); onCancel(); setOpen(false) } }
     function onMove() { place() }
     document.addEventListener("mousedown", onDown)
     document.addEventListener("keydown", onKey)
@@ -119,6 +124,23 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
       window.removeEventListener("scroll", onMove, true)
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Inside a Radix modal Dialog the portaled panel would lose focus (search box
+  // untypable) and its list wouldn't scroll. A capture-phase guard defeats the
+  // Dialog's focus trap; the menu-level wheel/touchmove stop keeps it scrollable.
+  useMenuFocusGuard(open, menuRef)
+  useEffect(() => {
+    if (!open) return
+    const el = menuRef.current
+    if (!el) return
+    const stop = (e: Event) => e.stopPropagation()
+    el.addEventListener("wheel", stop, { passive: false })
+    el.addEventListener("touchmove", stop, { passive: false })
+    return () => {
+      el.removeEventListener("wheel", stop)
+      el.removeEventListener("touchmove", stop)
+    }
+  }, [open])
 
   const toggle = (o: string) => setSel((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]))
   const query = q.trim().toLowerCase()
@@ -179,8 +201,8 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
           <div className="shrink-0 flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
             <span className="text-[11px] text-slate-400">{sel.length} selected</span>
             <div className="flex gap-3">
-              <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-              <button type="button" onClick={() => onCommit(sel)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
+              <button type="button" onClick={() => { setSel(toArray(value)); onCancel(); setOpen(false) }} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+              <button type="button" onClick={() => { onCommit(sel); setOpen(false) }} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
             </div>
           </div>
         </div>,

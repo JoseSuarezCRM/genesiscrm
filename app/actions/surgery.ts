@@ -60,35 +60,26 @@ export async function getSurgeryCase(id: string) {
   })
 }
 
-export async function createSurgeryCase(data: {
-  patientName: string
-  mrn?: string | null
-  status?: string
-  orderingProvider?: string | null
-  diagnosis?: string | null
-  facility?: string | null
-  procedure?: string | null
-  surgeryDate?: string | null
-  language?: string | null
-  email?: string | null
-  notes?: string | null
-}) {
+export async function createSurgeryCase(data: Record<string, any> & { patientName: string }) {
   await requireAccess("SURGERY", "EDIT")
   const session = await auth()
   if (!session?.user) throw new Error("Unauthorized")
   if (!data.patientName?.trim()) return { error: "Patient name is required" }
 
-  const { surgeryDate, status, patientName, ...rest } = data
+  const { surgeryDate, status, patientName, customProperties, ownerId, ...rest } = data
+  // Empty strings from the create form → null for nullable columns.
+  const clean = Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, v === "" ? null : v]))
 
   const created = await (prisma as any).surgeryCase.create({
     data: {
-      ...rest,
+      ...clean,
       patientName: patientName.trim(),
       status: status || "NEW",
       surgeryDate: surgeryDate ? new Date(surgeryDate) : null,
+      customProperties: customProperties ?? {},
       creationDate: new Date(),
       createdById: session.user.id,
-      ownerId: session.user.id,
+      ownerId: ownerId || session.user.id,
     },
   })
 

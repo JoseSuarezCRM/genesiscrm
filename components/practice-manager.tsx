@@ -5,6 +5,15 @@ import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { formatNumber } from "@/lib/number-format"
+import { EditableCell } from "@/components/ui/editable-cell"
+import { cpToFieldDef } from "@/lib/cp-field-def"
+import { updateRecordField } from "@/app/actions/record-fields"
+import { setRecordOwner } from "@/app/actions/record-owner"
+import { RECORD_FIELDS, type RecordFieldDef } from "@/lib/record-field-catalog"
+import { useRouter } from "next/navigation"
+import CreateRecordModal from "@/components/create-record-modal"
+import { builtinCreateCatalog, splitCreateValues } from "@/lib/create-catalog"
+import { type CreateFormField } from "@/app/actions/create-form"
 import { useState, useTransition, useRef, useEffect, type ReactNode } from "react"
 import { OptionValue } from "@/components/option-value"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
@@ -25,7 +34,7 @@ import { Label } from "@/components/ui/label"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save, Globe, Users, UserCog, Lock, Download } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, ChevronRight, MapPin, User, Building2, ExternalLink, Merge, Search, X, Check, BarChart2, Columns3, ChevronDown, Save, Globe, Users, UserCog, Lock, Download, LayoutList, Table2 } from "lucide-react"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
@@ -62,6 +71,10 @@ interface Props {
   shareUsers: ShareUser[]
   shareTeams: ShareTeam[]
   providerCustomPropertyDefs?: CustomPropDef[]
+  practiceCustomPropertyDefs?: CustomPropDef[]
+  // All active users incl. self — for the owner picker.
+  assignableUsers?: { id: string; label: string }[]
+  createFormConfig?: CreateFormField[] | null
 }
 
 // ─── Provider table columns ─────────────────────────────────────────────────────
@@ -79,6 +92,18 @@ const PROVIDER_COLUMNS: { key: string; label: string }[] = [
 ]
 
 const DEFAULT_PROVIDER_COLUMNS = ["title", "practice", "npi", "referrals"]
+
+// Practice table columns (name is the fixed leading column; owner/created + custom
+// props are appended at runtime).
+const PRACTICE_COLUMNS: { key: string; label: string }[] = [
+  { key: "phone", label: "Phone" },
+  { key: "fax", label: "Fax" },
+  { key: "address", label: "Address" },
+  { key: "locations", label: "Locations" },
+  { key: "providers", label: "Providers" },
+  { key: "referrals", label: "Referrals" },
+]
+const DEFAULT_PRACTICE_COLUMNS = ["phone", "locations", "providers", "referrals", "owner"]
 
 // ─── Field wrapper ─────────────────────────────────────────────────────────────
 
@@ -328,7 +353,8 @@ function SearchablePicker({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], view = "practices" }: Props & { view?: "practices" | "providers" }) {
+export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], practiceCustomPropertyDefs = [], assignableUsers = [], createFormConfig = null, view = "practices" }: Props & { view?: "practices" | "providers" }) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
@@ -364,6 +390,19 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   }, [])
   useEffect(() => { try { localStorage.setItem("providerCols", JSON.stringify(visibleCols)) } catch {} }, [visibleCols])
   useEffect(() => { try { localStorage.setItem("providerFrozen", String(frozenCount)) } catch {} }, [frozenCount])
+
+  // Practice table columns + accordion/table view mode (persisted per user).
+  const [practiceVisibleCols, setPracticeVisibleCols] = useState<string[]>(DEFAULT_PRACTICE_COLUMNS)
+  const [practiceColModalOpen, setPracticeColModalOpen] = useState(false)
+  const [practiceViewMode, setPracticeViewMode] = useState<"accordion" | "table">("accordion")
+  useEffect(() => {
+    try {
+      const c = localStorage.getItem("practiceCols"); if (c) { const a = JSON.parse(c); if (Array.isArray(a) && a.length) setPracticeVisibleCols(a) }
+      const v = localStorage.getItem("practiceViewMode"); if (v === "accordion" || v === "table") setPracticeViewMode(v)
+    } catch {}
+  }, [])
+  useEffect(() => { try { localStorage.setItem("practiceCols", JSON.stringify(practiceVisibleCols)) } catch {} }, [practiceVisibleCols])
+  useEffect(() => { try { localStorage.setItem("practiceViewMode", practiceViewMode) } catch {} }, [practiceViewMode])
 
   function applyProviderView(view: SavedProviderView) {
     setVisibleCols(view.config.columns ?? DEFAULT_PROVIDER_COLUMNS)
@@ -486,7 +525,10 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const providerPractices = Array.from(new Set(allProviders.map((d) => d.practiceName).filter(Boolean))).sort()
   const providerSpecialties = Array.from(new Set(allProviders.map((d) => (d as any).specialty as string).filter(Boolean))).sort()
   // Record Owner reads off the user list the view-sharing selector already has.
+  // Owner picker map (self-inclusive); falls back to shareUsers for the label.
+  const ownerUserMap = Object.fromEntries(assignableUsers.map((u) => [u.id, u.label]))
   const ownerLabel = (d: any) => {
+    if (ownerUserMap[d.ownerId]) return ownerUserMap[d.ownerId]
     const u = shareUsers.find((x) => x.id === d.ownerId)
     return u ? (u.name ?? u.email) : ""
   }
@@ -538,6 +580,20 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   const provColReorder = useCardReorder(provOrderedCols, (c) => c.key, (ids) => setVisibleCols(ids))
   const provFmap = frozenMap(["name", ...provColReorder.order.map((c) => c.key)], frozenCount, provWidthOf, 0)
   const PROV_CELL_CLASS: Record<string, string> = { npi: "text-slate-400 font-mono text-xs", referrals: "text-right text-slate-600 tabular-nums", email: "text-slate-500 truncate max-w-[200px]", locations: "text-slate-500 text-xs" }
+  // For an editable provider column: descriptor + value + field to patch. Native
+  // fields come from RECORD_FIELDS["PROVIDER"]; custom props use the "cp:" display
+  // key but save under "cp_<id>". Name link / relations / counts stay read-only.
+  const provEditable = (d: any, key: string): { def: RecordFieldDef; value: any; field: string; owner?: boolean } | null => {
+    if (key === "owner") return { def: { key: "owner", label: "Provider Owner", type: "user" }, value: d.ownerId, field: "ownerId", owner: true }
+    if (key.startsWith("cp:")) {
+      const id = key.slice(3); const p = cpDefById[id] as any; if (!p) return null
+      return { def: cpToFieldDef(p, `cp_${id}`), value: (d.customProperties as any)?.[id], field: `cp_${id}` }
+    }
+    if (key === "name") return null
+    const f = (RECORD_FIELDS["PROVIDER"] ?? []).find((x) => x.key === key)
+    if (!f || f.readOnly) return null
+    return { def: f, value: d[key], field: key }
+  }
   const renderProviderCell = (d: any, key: string): ReactNode => {
     switch (key) {
       case "title": return d.title || "—"
@@ -553,6 +609,54 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
       case "created": return fmtProviderDate(d.createdAt)
       default: return cpValue(d, key)
     }
+  }
+
+  // ── Practice table columns (mirrors the provider table) ──
+  const PRACTICE_COL_W: Record<string, number> = { name: 240, phone: 150, fax: 150, address: 240, locations: 110, providers: 110, referrals: 110, owner: 160, created: 130 }
+  const practiceCpDefById = Object.fromEntries(practiceCustomPropertyDefs.map((p) => [p.id, p]))
+  const extraPracticeCols = [
+    { key: "owner", label: "Owner" },
+    { key: "created", label: "Created" },
+    ...practiceCustomPropertyDefs.map((p) => ({ key: `cp:${p.id}`, label: p.name })),
+  ]
+  const practiceColumns = [...PRACTICE_COLUMNS, ...extraPracticeCols]
+  const practiceWidthOf = (k: string) => colWidth(k) ?? PRACTICE_COL_W[k] ?? 160
+  const practiceOrderedCols = (practiceVisibleCols.map((k) => practiceColumns.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[])
+  const practiceColReorder = useCardReorder(practiceOrderedCols, (c) => c.key, (ids) => setPracticeVisibleCols(ids))
+  const practiceFmap = frozenMap(["name", ...practiceColReorder.order.map((c) => c.key)], 0, practiceWidthOf, 0)
+  const practiceCpValue = (p: any, key: string): ReactNode => {
+    const id = key.slice(3)
+    const raw = (p.customProperties as Record<string, any> | undefined)?.[id]
+    if (raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)) return "—"
+    const def = practiceCpDefById[id] as any
+    if (def?.type === "DROPDOWN" || def?.type === "MULTI_SELECT") return <OptionValue value={raw} optionLabels={def.optionLabels} optionColors={def.optionColors} optionStyle={def.optionStyle} />
+    if (Array.isArray(raw)) return raw.join(", ")
+    if (def?.type === "NUMBER") return formatNumber(raw, def.numberFormat)
+    return String(raw)
+  }
+  const renderPracticeCell = (p: any, key: string): ReactNode => {
+    switch (key) {
+      case "phone": return p.phone || "—"
+      case "fax": return p.fax || "—"
+      case "address": return p.address || "—"
+      case "locations": return p.locations.length
+      case "providers": return p.doctors.length
+      case "referrals": return p._count.referrals
+      case "owner": return ownerLabel(p) || "—"
+      case "created": return fmtProviderDate(p.createdAt)
+      default: return practiceCpValue(p, key)
+    }
+  }
+  const practiceEditable = (p: any, key: string): { def: RecordFieldDef; value: any; field: string; owner?: boolean } | null => {
+    if (key === "owner") return { def: { key: "owner", label: "Practice Owner", type: "user" }, value: p.ownerId, field: "ownerId", owner: true }
+    if (key.startsWith("cp:")) {
+      const id = key.slice(3); const def = practiceCpDefById[id] as any; if (!def) return null
+      return { def: cpToFieldDef(def, `cp_${id}`), value: (p.customProperties as any)?.[id], field: `cp_${id}` }
+    }
+    if (key === "name") return null
+    const f = (RECORD_FIELDS["PRACTICE"] ?? []).find((x) => x.key === key)
+    if (!f || f.readOnly) return null
+    return { def: f, value: p[key], field: key }
   }
 
   // Providers after search + advanced filters — used by both the table and the export.
@@ -584,19 +688,23 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
         )}
 
         {tab === "practices" && (
-          <Dialog open={addPracticeOpen} onOpenChange={setAddPracticeOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Add Practice</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add Referring Practice</DialogTitle></DialogHeader>
-              <PracticeForm
-                onSubmit={async (d) => { run(() => createPractice(d)); setAddPracticeOpen(false) }}
-                isPending={isPending}
+          <>
+            <Button onClick={() => setAddPracticeOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Practice</Button>
+            {addPracticeOpen && (
+              <CreateRecordModal
+                objectType="PRACTICE"
+                title="Add Referring Practice"
+                catalog={builtinCreateCatalog({ entityType: "PRACTICE", customProps: practiceCustomPropertyDefs as any, required: ["name"], ownerLabel: "Practice Owner" })}
+                config={createFormConfig}
+                users={assignableUsers}
+                canEditForm={isAdmin}
                 onClose={() => setAddPracticeOpen(false)}
+                onSaved={() => { setAddPracticeOpen(false); router.refresh() }}
+                onConfigChanged={() => router.refresh()}
+                onSubmit={async (values) => { const { native, customProperties, ownerId } = splitCreateValues(values); return await createPractice({ ...native, customProperties, ownerId }) as any }}
               />
-            </DialogContent>
-          </Dialog>
+            )}
+          </>
         )}
 
         {tab === "providers" && (
@@ -684,26 +792,29 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
               <Download className="h-3.5 w-3.5" /> Export
             </button>
             {isAdmin && (
-              <Dialog open={addProviderOpen} onOpenChange={setAddProviderOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Provider</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Add Provider</DialogTitle></DialogHeader>
-                  {practices.length === 0 ? (
-                    <p className="text-sm text-slate-500">Create a practice first before adding a provider.</p>
-                  ) : (
-                    <DoctorForm
-                      practiceId={practices[0].id}
-                      locations={[]}
-                      onSubmit={async (d) => { run(() => createDoctor(d)); setAddProviderOpen(false) }}
-                      isPending={isPending}
-                      onClose={() => setAddProviderOpen(false)}
-                      practices={practices}
-                    />
-                  )}
-                </DialogContent>
-              </Dialog>
+              <>
+                <Button size="sm" onClick={() => setAddProviderOpen(true)}><Plus className="h-4 w-4 mr-1.5" />Add Provider</Button>
+                {addProviderOpen && (
+                  <CreateRecordModal
+                    objectType="PROVIDER"
+                    title="Add Provider"
+                    catalog={builtinCreateCatalog({
+                      entityType: "PROVIDER",
+                      customProps: providerCustomPropertyDefs as any,
+                      extras: [{ key: "practiceId", label: "Practice", type: "select", options: practices.map((p) => p.id), optionLabels: Object.fromEntries(practices.map((p) => [p.id, p.name])) }],
+                      required: ["name", "practiceId"],
+                      ownerLabel: "Provider Owner",
+                    })}
+                    config={createFormConfig}
+                    users={assignableUsers}
+                    canEditForm={isAdmin}
+                    onClose={() => setAddProviderOpen(false)}
+                    onSaved={() => { setAddProviderOpen(false); router.refresh() }}
+                    onConfigChanged={() => router.refresh()}
+                    onSubmit={async (values) => { const { native, customProperties, ownerId } = splitCreateValues(values); return await createDoctor({ ...native, customProperties, ownerId }) as any }}
+                  />
+                )}
+              </>
             )}
           </div>
         )}
@@ -732,6 +843,28 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           <FilterBuilder fields={providerFilterFields} value={providerFilter} onChange={setProviderFilter} />
           {providerFiltersActive && (
             <span className="text-xs text-slate-400">{filteredProviders.length} of {allProviders.length}</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Practices toolbar: accordion/table toggle + Columns (table only) ── */}
+      {tab === "practices" && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="inline-flex items-center rounded-lg border border-zinc-200 bg-white p-0.5">
+            <button onClick={() => setPracticeViewMode("accordion")} title="Accordion"
+              className={cn("inline-flex items-center justify-center h-7 w-8 rounded-md", practiceViewMode === "accordion" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800")}>
+              <LayoutList className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => setPracticeViewMode("table")} title="Table"
+              className={cn("inline-flex items-center justify-center h-7 w-8 rounded-md", practiceViewMode === "table" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800")}>
+              <Table2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {practiceViewMode === "table" && (
+            <button onClick={() => setPracticeColModalOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
+              <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
+            </button>
           )}
         </div>
       )}
@@ -844,11 +977,18 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                             {d.name}
                           </Link>
                         </td>
-                        {provColReorder.order.map((c) => (
-                          <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn("px-3 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
-                            {renderProviderCell(d, c.key)}
+                        {provColReorder.order.map((c) => {
+                          const ed = isAdmin ? provEditable(d, c.key) : null
+                          return (
+                          <td key={c.key} style={{ maxWidth: provWidthOf(c.key), ...frozenCellStyle(provFmap.get(c.key)) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate", PROV_CELL_CLASS[c.key] ?? "text-slate-500", frozenClass(provFmap.get(c.key)))}>
+                            {ed
+                              ? <EditableCell def={ed.def} value={ed.value} values={(d.customProperties as any) ?? {}} canEdit={isAdmin}
+                                  users={ed.owner ? assignableUsers : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                                  onSaveOwner={ed.owner ? (uid) => setRecordOwner("PROVIDER", d.id, uid) : undefined}
+                                  onSave={ed.owner ? ((uid) => setRecordOwner("PROVIDER", d.id, uid as any)) : ((v) => updateRecordField("PROVIDER", d.id, ed.field, v))} />
+                              : renderProviderCell(d, c.key)}
                           </td>
-                        ))}
+                        )})}
                         {isAdmin && (
                           <td className="px-3 py-2.5">
                             <div className="flex gap-1 justify-end">
@@ -884,6 +1024,52 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
           if (filtered.length === 0) return (
             <div className="bg-white border rounded-lg px-6 py-10 text-center text-slate-400">
               {q ? `No results for "${search}"` : "No referring practices yet. Add one above."}
+            </div>
+          )
+          if (practiceViewMode === "table") return (
+            <div className="bg-white border rounded-lg overflow-hidden">
+              <div className="overflow-x-auto rounded-lg">
+                <table className="w-full text-sm table-fixed">
+                  <colgroup>
+                    <col style={{ width: practiceWidthOf("name") }} />
+                    {practiceColReorder.order.map((c) => <col key={c.key} style={{ width: practiceWidthOf(c.key) }} />)}
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <th style={frozenHeadStyle(practiceFmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden", frozenClass(practiceFmap.get("name"), "bg-slate-50"))}><span className="block truncate">Name</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      {practiceColReorder.order.map((c) => (
+                        <th key={c.key}
+                          {...practiceColReorder.handleProps(c.key)}
+                          {...practiceColReorder.cardProps(c.key)}
+                          className={cn("px-3 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", practiceColReorder.dragging === c.key ? "bg-slate-200/70" : "hover:bg-slate-100")}>
+                          <span className="block truncate">{c.label}</span><ColResizer onMouseDown={(e) => startResize(c.key, e)} />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filtered.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                        <td style={{ maxWidth: practiceWidthOf("name") }} className="px-3 py-2.5 truncate">
+                          <Link href={`/practices/${p.id}`} className="font-medium text-slate-900 hover:text-blue-600">{p.name}</Link>
+                        </td>
+                        {practiceColReorder.order.map((c) => {
+                          const ed = isAdmin ? practiceEditable(p, c.key) : null
+                          return (
+                          <td key={c.key} style={{ maxWidth: practiceWidthOf(c.key) }} className={cn(ed ? "p-0 align-middle" : "px-3 py-2.5 truncate text-slate-500")}>
+                            {ed
+                              ? <EditableCell def={ed.def} value={ed.value} values={(p.customProperties as any) ?? {}} canEdit={isAdmin}
+                                  users={ed.owner ? assignableUsers : undefined} userMap={ed.owner ? ownerUserMap : undefined}
+                                  onSaveOwner={ed.owner ? (uid) => setRecordOwner("PRACTICE", p.id, uid) : undefined}
+                                  onSave={ed.owner ? ((uid) => setRecordOwner("PRACTICE", p.id, uid as any)) : ((v) => updateRecordField("PRACTICE", p.id, ed.field, v))} />
+                              : renderPracticeCell(p, c.key)}
+                          </td>
+                        )})}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )
           return filtered.map((p) => {
@@ -1027,6 +1213,16 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
         selected={visibleCols}
         frozen={frozenCount}
         onApply={(sel, fr) => { setVisibleCols(sel.filter((k) => k !== "name")); setFrozenCount(fr) }}
+      />
+
+      <ColumnChooserModal
+        open={practiceColModalOpen}
+        onClose={() => setPracticeColModalOpen(false)}
+        columns={[{ key: "name", label: "Name" }, ...practiceColumns]}
+        required={["name"]}
+        selected={practiceVisibleCols}
+        frozen={0}
+        onApply={(sel) => setPracticeVisibleCols(sel.filter((k) => k !== "name"))}
       />
 
       <Dialog open={!!editPractice} onOpenChange={(o) => !o && setEditPractice(null)}>

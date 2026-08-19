@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { requireView } from "@/lib/auth-guard"
 import { getLocations } from "@/app/actions/referring-doctors"
 import { listCustomProperties } from "@/app/actions/custom-properties"
+import { getAssignableUsers } from "@/app/actions/view-share-options"
+import { getCreateForm } from "@/app/actions/create-form"
 import { userCanLevel, userCanDelete } from "@/lib/permissions"
 import LocationManager from "@/components/location-manager"
 
@@ -11,10 +13,12 @@ export default async function LocationsPage() {
   const canEdit = userCanLevel(user, "LOCATIONS", "EDIT") || userCanLevel(user, "PRACTICES", "EDIT")
   const canDelete = userCanDelete(user, "LOCATIONS") || userCanDelete(user, "PRACTICES")
 
-  const [locations, practices, customPropertyDefs] = await Promise.all([
+  const [locations, practices, customPropertyDefs, assignableUsers, createFormConfig] = await Promise.all([
     getLocations(),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     listCustomProperties("LOCATION"),
+    getAssignableUsers(),
+    getCreateForm("LOCATION"),
   ])
 
   return (
@@ -32,6 +36,9 @@ export default async function LocationsPage() {
         customPropertyDefs={customPropertyDefs as any}
         canEdit={canEdit}
         canDelete={canDelete}
+        users={assignableUsers}
+        createFormConfig={createFormConfig}
+        isAdmin={user?.role === "ADMIN"}
       />
     </div>
   )

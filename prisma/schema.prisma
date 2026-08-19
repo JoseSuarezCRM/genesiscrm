@@ -474,6 +474,7 @@ model User {
   activityViews         ActivityView[]
   providerViews         ProviderView[]
   surgeryViews          SurgeryView[]
+  taskViews             TaskView[]
   viewOrders            UserViewOrder[]
   savedReports          SavedReport[]        @relation("SavedReportCreatedBy")
   dashboards            Dashboard[]          @relation("DashboardCreatedBy")
@@ -498,6 +499,7 @@ model User {
   locationsUpdated      PracticeLocation[]   @relation("LocationUpdatedBy")
   surgeryCasesOwned     SurgeryCase[]        @relation("SurgeryCaseOwner")
   surgeryCasesUpdated   SurgeryCase[]        @relation("SurgeryCaseUpdatedBy")
+  activitiesOwned       Activity[]           @relation("ActivityOwner")
   activitiesUpdated     Activity[]           @relation("ActivityUpdatedBy")
   tasksUpdated          Task[]               @relation("TaskUpdatedBy")
 }
@@ -936,6 +938,8 @@ model Activity {
   rating      Int?               // clinic value: 1 Low / 2 Mid / 3 High
   meetingRating Int?             // meeting rating: 1 (lowest) … 5 (highest)
   customProperties Json          @default("{}") // custom property values
+  ownerId     String?
+  owner       User?              @relation("ActivityOwner", fields: [ownerId], references: [id])
   createdById String
   createdBy   User               @relation(fields: [createdById], references: [id])
   updatedById String?
@@ -990,6 +994,30 @@ model SurgeryView {
   createdAt     DateTime @default(now())
 
   @@index([userId])
+}
+
+model TaskView {
+  id            String   @id @default(cuid())
+  name          String
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  config        Json     // { filter, columns, frozen, viewMode }
+  visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
+  teamId        String?
+  sharedUserIds String[] @default([])
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Which fields (and their order) appear in an object's "create record" modal.
+// objectType is a built-in entity type (REFERRAL, SURGERY, …) or "CO:<key>" for a
+// custom object. fields = [{ key, required? }]. No row = show the full catalog.
+model CreateFormConfig {
+  id         String   @id @default(cuid())
+  objectType String   @unique
+  fields     Json     @default("[]")
+  updatedAt  DateTime @default(now()) @updatedAt
 }
 
 // Per-user display order for the saved-view tabs on a list. One row per
