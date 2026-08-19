@@ -1222,6 +1222,7 @@ model IntakeReferralResponse {
   intakeId          String   @unique
   clientId          String?
   clientName        String?  // patient name from IntakeQ (PHI) — for the submissions view
+  dateOfBirth       String?  // patient DOB "yyyy-MM-dd" from IntakeQ (PHI)
   questionnaireId   String?
   questionnaireName String?
   language          String?  // "EN" | "ES" | null

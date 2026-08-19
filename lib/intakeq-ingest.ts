@@ -15,6 +15,38 @@ function intakeClientName(intake: Record<string, any>): string | null {
   return joined || null
 }
 
+// The patient's date of birth as "yyyy-MM-dd". IntakeQ may send it as a Unix
+// timestamp (seconds or ms), an ISO/US date string, or only as a "Date of Birth"
+// answer in the questionnaire — so check the common client fields first, then the
+// questions. Defensive like intakeClientName since the payload shape varies.
+function intakeClientDob(intake: Record<string, any>): string | null {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const norm = (v: unknown): string | null => {
+    if (v == null || v === "") return null
+    if (typeof v === "number") {
+      const ms = v < 1e12 ? v * 1000 : v
+      const d = new Date(ms)
+      return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+    }
+    const str = String(v).trim()
+    if (/^\d{10,13}$/.test(str)) return norm(Number(str))
+    const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+    const us = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (us) return `${us[3]}-${pad(Number(us[1]))}-${pad(Number(us[2]))}`
+    const d = new Date(str)
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+  }
+  const direct = norm(
+    intake.ClientDateOfBirth ?? intake.DateOfBirth ?? intake.ClientDOB ??
+    intake.ClientBirthDate ?? intake?.Client?.DateOfBirth ?? intake?.Client?.DOB,
+  )
+  if (direct) return direct
+  const qs = Array.isArray(intake.Questions) ? intake.Questions : []
+  const q = qs.find((x: any) => /date of birth|(^|\W)dob(\W|$)|birth\s*date/i.test(String(x?.Text ?? "")))
+  return q?.Answer ? norm(q.Answer) : null
+}
+
 // Fetch one intake, categorize its referral answer, and upsert it (idempotent by
 // intakeId, so webhook re-deliveries and backfill overlap don't double-count).
 // Returns the stored category, or null if the intake isn't a target form.
@@ -28,6 +60,7 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
     : intake.DateCreated ? new Date(intake.DateCreated) : new Date()
 
   const clientName = intakeClientName(intake)
+  const dateOfBirth = intakeClientDob(intake)
 
   await (prisma as any).intakeReferralResponse.upsert({
     where: { intakeId },
@@ -35,6 +68,7 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
       intakeId,
       clientId: intake.ClientId != null ? String(intake.ClientId) : null,
       clientName,
+      dateOfBirth,
       questionnaireId: intake.QuestionnaireId ?? null,
       questionnaireName: intake.QuestionnaireName ?? null,
       language: parsed.language,
@@ -44,6 +78,8 @@ export async function ingestIntake(intakeId: string): Promise<string | null> {
     },
     update: {
       clientName,
+      // Only overwrite DOB when we found one (don't clobber a stored value with null).
+      ...(dateOfBirth ? { dateOfBirth } : {}),
       language: parsed.language,
       submittedAt,
       rawAnswer: parsed.rawAnswer,

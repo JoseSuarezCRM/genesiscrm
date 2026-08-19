@@ -418,6 +418,7 @@ export interface IntakeSubmission {
   id: string
   clientName: string | null
   clientId: string | null
+  dateOfBirth: string | null
   category: string
   language: string | null
   submittedAt: string
@@ -431,12 +432,13 @@ export async function getRecentIntakeSubmissions(limit = 50, offset = 0): Promis
     orderBy: { submittedAt: "desc" },
     take: Math.min(200, Math.max(1, limit)),
     skip: Math.max(0, offset),
-    select: { id: true, clientName: true, clientId: true, category: true, language: true, submittedAt: true },
+    select: { id: true, clientName: true, clientId: true, dateOfBirth: true, category: true, language: true, submittedAt: true },
   })
   return (rows as any[]).map((r) => ({
     id: r.id,
     clientName: r.clientName || null,
     clientId: r.clientId ?? null,
+    dateOfBirth: r.dateOfBirth ?? null,
     category: r.category,
     language: r.language ?? null,
     submittedAt: new Date(r.submittedAt).toISOString(),
