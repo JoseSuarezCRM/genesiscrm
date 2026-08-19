@@ -1376,6 +1376,16 @@ model SequenceStepRun {
 
 // ── Staff Scheduler ───────────────────────────────────────────────────────────
 
+// Org-wide saved state for the embedded "Operations Planner" scheduling dashboard.
+// A single "default" row holds the tool's exported JSON payload (autosaved).
+model SchedulingState {
+  id          String   @id @default(cuid())
+  key         String   @unique @default("default")
+  data        Json     @default("{}")
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
 enum StaffRole {
   XR_TECH
   MA

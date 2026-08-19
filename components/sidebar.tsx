@@ -43,8 +43,9 @@ const appointmentItems: NavItem[] = [
 ]
 
 const schedulingItems: NavItem[] = [
-  { href: "/scheduler",       label: "Weekly Schedule" },
-  { href: "/scheduler/staff", label: "Staff Roster" },
+  { href: "/scheduler",         label: "Weekly Schedule" },
+  { href: "/scheduler/staff",   label: "Staff Roster" },
+  { href: "/scheduler/planner", label: "Operations Planner" },
 ]
 
 const surgeryItems: NavItem[] = [
