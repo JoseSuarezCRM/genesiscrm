@@ -196,7 +196,7 @@ export function EditableCell({
       ) : def.type === "phone" ? (
         <PhoneInput value={String(draft ?? "")} onChange={setDraft} onCommit={(v) => commit(v)} />
       ) : def.type === "date" || def.type === "datetime" ? (
-        <DatePicker value={draft} withTime={def.type === "datetime"} onCommit={commit} onCancel={cancelEdit} />
+        <DatePicker value={draft} withTime={def.type === "datetime"} compactTrigger onCommit={commit} onCancel={cancelEdit} />
       ) : (
         <input
           type={def.type === "number" ? "number" : def.type === "email" ? "email" : "text"}

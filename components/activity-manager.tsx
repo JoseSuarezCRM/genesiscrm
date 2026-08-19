@@ -1336,7 +1336,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   // (account/location/providers/tags), the colored type/rating chips, and the
   // creator stay read-only.
   const ACTIVITY_EDIT: Record<string, RecordFieldDef & { field: string; get: (a: any) => any }> = {
-    date: { key: "date", field: "date", label: "Date", type: "date", get: (a) => a.date },
+    date: { key: "date", field: "date", label: "Date", type: "datetime", get: (a) => a.date },
     nextStep: { key: "nextStep", field: "nextStep", label: "Next Step", type: "text", get: (a) => a.nextStep },
     frontDesk: { key: "frontDesk", field: "frontDesk", label: "Front Desk", type: "text", get: (a) => a.frontDesk },
     notes: { key: "notes", field: "notes", label: "Notes", type: "long_text", get: (a) => a.notes },
