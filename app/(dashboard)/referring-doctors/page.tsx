@@ -4,6 +4,7 @@ import { requireView } from "@/lib/auth-guard"
 import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-share-options"
+import { getCreateForm } from "@/app/actions/create-form"
 import { listCustomProperties } from "@/app/actions/custom-properties"
 import { userCan, userCanLevel } from "@/lib/permissions"
 
@@ -50,6 +51,7 @@ export default async function ReferringDoctorsPage() {
 
   const customPropertyDefs = await listCustomProperties("PROVIDER")
   const assignableUsers = await getAssignableUsers()
+  const createFormConfig = await getCreateForm("PROVIDER")
 
   // Merge direct doctors + cross-org doctors (linked via locations), deduplicated
   const enriched = practices.map((p) => {
@@ -86,6 +88,7 @@ export default async function ReferringDoctorsPage() {
         shareTeams={shareOptions.teams as any}
         providerCustomPropertyDefs={customPropertyDefs.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options, numberFormat: (p as any).numberFormat ?? null }))}
         assignableUsers={assignableUsers}
+        createFormConfig={createFormConfig}
         view="providers"
       />
     </div>

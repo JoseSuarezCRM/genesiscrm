@@ -20,6 +20,9 @@ import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
 import { type RecordFieldDef } from "@/lib/record-field-catalog"
+import CreateRecordModal from "@/components/create-record-modal"
+import { builtinCreateCatalog, splitCreateValues } from "@/lib/create-catalog"
+import { type CreateFormField } from "@/app/actions/create-form"
 import { createLocation, updateLocation, deleteLocation, bulkDeleteLocations } from "@/app/actions/referring-doctors"
 import StyledSelect from "@/components/ui/styled-select"
 import ExportDialog from "@/components/ui/export-dialog"
@@ -55,6 +58,8 @@ interface Props {
   canEdit: boolean
   canDelete: boolean
   users?: { id: string; label: string }[]
+  createFormConfig?: CreateFormField[] | null
+  isAdmin?: boolean
 }
 
 const LOCATION_COLUMNS: { key: string; label: string; sortable?: boolean; align?: "right" }[] = [
@@ -78,7 +83,7 @@ function fmtDate(d: string | Date | null | undefined) {
 
 type SortKey = "name" | "practice" | "providers" | "referrals" | "activities" | "owner" | "created"
 
-export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete, users = [] }: Props) {
+export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete, users = [], createFormConfig = null, isAdmin = false }: Props) {
   const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -414,14 +419,29 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
       {canEdit && (
         <>
-          <Dialog open={addOpen} onOpenChange={(o) => !o && setAddOpen(false)}>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add Location</DialogTitle></DialogHeader>
-              <LocationForm practices={practices} isPending={isPending}
-                onSubmit={async (d) => { startTransition(async () => { const r = await createLocation(d); if ((r as any)?.error) alert(typeof (r as any).error === "string" ? (r as any).error : "Could not create location"); else { setAddOpen(false); router.refresh() } }) }}
-                onClose={() => setAddOpen(false)} />
-            </DialogContent>
-          </Dialog>
+          {addOpen && (
+            <CreateRecordModal
+              objectType="LOCATION"
+              title="Add Location"
+              catalog={builtinCreateCatalog({
+                entityType: "LOCATION",
+                customProps: customPropertyDefs as any,
+                extras: [{ key: "practiceId", label: "Practice", type: "select", options: practices.map((p) => p.id), optionLabels: Object.fromEntries(practices.map((p) => [p.id, p.name])) }],
+                required: ["name", "practiceId"],
+                ownerLabel: "Location Owner",
+              })}
+              config={createFormConfig}
+              users={users}
+              canEditForm={isAdmin}
+              onClose={() => setAddOpen(false)}
+              onSaved={() => { setAddOpen(false); router.refresh() }}
+              onConfigChanged={() => router.refresh()}
+              onSubmit={async (values) => {
+                const { native, customProperties, ownerId } = splitCreateValues(values)
+                return await createLocation({ ...native, customProperties, ownerId }) as any
+              }}
+            />
+          )}
 
           <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
             <DialogContent>

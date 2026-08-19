@@ -5,6 +5,7 @@ import PracticeManager from "@/components/practice-manager"
 import { getProviderViews } from "@/app/actions/provider-views"
 import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-share-options"
 import { listCustomProperties } from "@/app/actions/custom-properties"
+import { getCreateForm } from "@/app/actions/create-form"
 import { userCan, userCanLevel } from "@/lib/permissions"
 
 export default async function PracticesPage({ searchParams }: { searchParams?: { sort?: string } }) {
@@ -19,7 +20,7 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
       ? ({ referrals: { _count: "desc" } } as const)
       : ({ name: "asc" } as const)
 
-  const [practices, savedViews, shareOptions, practiceCustomPropertyDefs, assignableUsers] = await Promise.all([
+  const [practices, savedViews, shareOptions, practiceCustomPropertyDefs, assignableUsers, createFormConfig] = await Promise.all([
     prisma.referringPractice.findMany({
       orderBy,
       include: {
@@ -54,6 +55,7 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
     getViewShareOptions(),
     listCustomProperties("PRACTICE"),
     getAssignableUsers(),
+    getCreateForm("PRACTICE"),
   ])
 
   // A provider belongs to its own practice (the FK) — we do NOT pull in providers
@@ -84,6 +86,7 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
         shareTeams={shareOptions.teams as any}
         practiceCustomPropertyDefs={practiceCustomPropertyDefs.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options, numberFormat: (p as any).numberFormat ?? null }))}
         assignableUsers={assignableUsers}
+        createFormConfig={createFormConfig}
         view="practices"
       />
     </div>

@@ -21,6 +21,8 @@ const PracticeSchema = z.object({
   phone: z.string().optional(),
   fax: z.string().optional(),
   address: z.string().optional(),
+  customProperties: z.record(z.any()).optional(),
+  ownerId: z.string().optional(),
 })
 
 export async function createPractice(data: unknown) {
@@ -40,7 +42,8 @@ export async function createPractice(data: unknown) {
       phone: parsed.data.phone || null,
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
-      ownerId: (session?.user as any)?.id ?? null,
+      customProperties: parsed.data.customProperties ?? {},
+      ownerId: parsed.data.ownerId || (session?.user as any)?.id || null,
       createdById: (session?.user as any)?.id ?? null,
     },
   })
@@ -107,6 +110,8 @@ const LocationSchema = z.object({
   fax: z.string().optional(),
   address: z.string().optional(),
   practiceId: z.string().min(1, "Practice is required"),
+  customProperties: z.record(z.any()).optional(),
+  ownerId: z.string().optional(),
 })
 
 export async function createLocation(data: unknown) {
@@ -143,7 +148,8 @@ export async function createLocation(data: unknown) {
       fax: parsed.data.fax || null,
       address: parsed.data.address || null,
       practiceId: parsed.data.practiceId,
-      ownerId: (session?.user as any)?.id ?? null,
+      customProperties: parsed.data.customProperties ?? {},
+      ownerId: parsed.data.ownerId || (session?.user as any)?.id || null,
       createdById: (session?.user as any)?.id ?? null,
     },
   })
@@ -368,6 +374,8 @@ const DoctorSchema = z.object({
   contactType: z.enum(["PROVIDER", "STAFF"]).optional().default("PROVIDER"),
   practiceId: z.string().min(1, "Practice is required"),
   locationIds: z.array(z.string()).optional(),
+  customProperties: z.record(z.any()).optional(),
+  ownerId: z.string().optional(),
 })
 
 export async function createDoctor(data: unknown) {
@@ -376,7 +384,7 @@ export async function createDoctor(data: unknown) {
   const parsed = DoctorSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { locationIds = [], ...rest } = parsed.data
+  const { locationIds = [], customProperties, ownerId, ...rest } = parsed.data
 
   // Normalize before dedup — handles "Last, First" vs "First Last" variations
   const normalizedName = toProperCase(rest.name)
@@ -399,7 +407,8 @@ export async function createDoctor(data: unknown) {
       email: rest.email || null,
       contactType: rest.contactType,
       practiceId: rest.practiceId,
-      ownerId: (session?.user as any)?.id ?? null,
+      customProperties: customProperties ?? {},
+      ownerId: ownerId || (session?.user as any)?.id || null,
       createdById: (session?.user as any)?.id ?? null,
       locations: {
         create: locationIds.map((locationId) => ({ locationId })),

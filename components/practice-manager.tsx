@@ -10,6 +10,10 @@ import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
 import { RECORD_FIELDS, type RecordFieldDef } from "@/lib/record-field-catalog"
+import { useRouter } from "next/navigation"
+import CreateRecordModal from "@/components/create-record-modal"
+import { builtinCreateCatalog, splitCreateValues } from "@/lib/create-catalog"
+import { type CreateFormField } from "@/app/actions/create-form"
 import { useState, useTransition, useRef, useEffect, type ReactNode } from "react"
 import { OptionValue } from "@/components/option-value"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
@@ -70,6 +74,7 @@ interface Props {
   practiceCustomPropertyDefs?: CustomPropDef[]
   // All active users incl. self — for the owner picker.
   assignableUsers?: { id: string; label: string }[]
+  createFormConfig?: CreateFormField[] | null
 }
 
 // ─── Provider table columns ─────────────────────────────────────────────────────
@@ -348,7 +353,8 @@ function SearchablePicker({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], practiceCustomPropertyDefs = [], assignableUsers = [], view = "practices" }: Props & { view?: "practices" | "providers" }) {
+export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], practiceCustomPropertyDefs = [], assignableUsers = [], createFormConfig = null, view = "practices" }: Props & { view?: "practices" | "providers" }) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [expandedPractice, setExpandedPractice] = useState<string | null>(null)
@@ -682,19 +688,23 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
         )}
 
         {tab === "practices" && (
-          <Dialog open={addPracticeOpen} onOpenChange={setAddPracticeOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Add Practice</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add Referring Practice</DialogTitle></DialogHeader>
-              <PracticeForm
-                onSubmit={async (d) => { run(() => createPractice(d)); setAddPracticeOpen(false) }}
-                isPending={isPending}
+          <>
+            <Button onClick={() => setAddPracticeOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Practice</Button>
+            {addPracticeOpen && (
+              <CreateRecordModal
+                objectType="PRACTICE"
+                title="Add Referring Practice"
+                catalog={builtinCreateCatalog({ entityType: "PRACTICE", customProps: practiceCustomPropertyDefs as any, required: ["name"], ownerLabel: "Practice Owner" })}
+                config={createFormConfig}
+                users={assignableUsers}
+                canEditForm={isAdmin}
                 onClose={() => setAddPracticeOpen(false)}
+                onSaved={() => { setAddPracticeOpen(false); router.refresh() }}
+                onConfigChanged={() => router.refresh()}
+                onSubmit={async (values) => { const { native, customProperties, ownerId } = splitCreateValues(values); return await createPractice({ ...native, customProperties, ownerId }) as any }}
               />
-            </DialogContent>
-          </Dialog>
+            )}
+          </>
         )}
 
         {tab === "providers" && (
@@ -782,26 +792,29 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
               <Download className="h-3.5 w-3.5" /> Export
             </button>
             {isAdmin && (
-              <Dialog open={addProviderOpen} onOpenChange={setAddProviderOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Provider</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Add Provider</DialogTitle></DialogHeader>
-                  {practices.length === 0 ? (
-                    <p className="text-sm text-slate-500">Create a practice first before adding a provider.</p>
-                  ) : (
-                    <DoctorForm
-                      practiceId={practices[0].id}
-                      locations={[]}
-                      onSubmit={async (d) => { run(() => createDoctor(d)); setAddProviderOpen(false) }}
-                      isPending={isPending}
-                      onClose={() => setAddProviderOpen(false)}
-                      practices={practices}
-                    />
-                  )}
-                </DialogContent>
-              </Dialog>
+              <>
+                <Button size="sm" onClick={() => setAddProviderOpen(true)}><Plus className="h-4 w-4 mr-1.5" />Add Provider</Button>
+                {addProviderOpen && (
+                  <CreateRecordModal
+                    objectType="PROVIDER"
+                    title="Add Provider"
+                    catalog={builtinCreateCatalog({
+                      entityType: "PROVIDER",
+                      customProps: providerCustomPropertyDefs as any,
+                      extras: [{ key: "practiceId", label: "Practice", type: "select", options: practices.map((p) => p.id), optionLabels: Object.fromEntries(practices.map((p) => [p.id, p.name])) }],
+                      required: ["name", "practiceId"],
+                      ownerLabel: "Provider Owner",
+                    })}
+                    config={createFormConfig}
+                    users={assignableUsers}
+                    canEditForm={isAdmin}
+                    onClose={() => setAddProviderOpen(false)}
+                    onSaved={() => { setAddProviderOpen(false); router.refresh() }}
+                    onConfigChanged={() => router.refresh()}
+                    onSubmit={async (values) => { const { native, customProperties, ownerId } = splitCreateValues(values); return await createDoctor({ ...native, customProperties, ownerId }) as any }}
+                  />
+                )}
+              </>
             )}
           </div>
         )}
