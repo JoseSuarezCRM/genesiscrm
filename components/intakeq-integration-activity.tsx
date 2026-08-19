@@ -16,6 +16,14 @@ function submittedLabel(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
 }
 
+// DOB is a plain "yyyy-MM-dd" calendar date — format in UTC so it never shifts.
+function dobLabel(ymd: string | null): string {
+  if (!ymd) return "—"
+  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return ymd
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+}
+
 export default function IntakeqIntegrationActivity({ activity, submissions }: { activity: IntegrationActivity; submissions: IntakeSubmission[] }) {
   const max = Math.max(1, ...activity.perDay.map((d) => d.calls))
 
@@ -80,6 +88,7 @@ export default function IntakeqIntegrationActivity({ activity, submissions }: { 
                 <thead>
                   <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
                     <th className="px-4 py-2 font-medium">Name</th>
+                    <th className="px-4 py-2 font-medium whitespace-nowrap">Date of birth</th>
                     <th className="px-4 py-2 font-medium">Referral source</th>
                     <th className="px-4 py-2 font-medium whitespace-nowrap">Submitted</th>
                   </tr>
@@ -91,6 +100,7 @@ export default function IntakeqIntegrationActivity({ activity, submissions }: { 
                         {s.clientName ?? (s.clientId ? <span className="text-slate-500">Client #{s.clientId}</span> : <span className="text-slate-400">—</span>)}
                         {s.language && <span className="ml-1.5 text-[10px] text-slate-400">{s.language}</span>}
                       </td>
+                      <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{dobLabel(s.dateOfBirth)}</td>
                       <td className="px-4 py-2 text-slate-600">{s.category}</td>
                       <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{submittedLabel(s.submittedAt)}</td>
                     </tr>

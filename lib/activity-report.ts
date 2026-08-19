@@ -2,6 +2,7 @@
 // visits/calls). Inline styles + table layout so it renders in every mail client.
 
 import { ratingLabel } from "@/lib/activity-ratings"
+import { fmtActivityWhen } from "@/lib/activity-time"
 
 export interface ReportActivity {
   id: string
@@ -53,6 +54,7 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
     ? (() => { const lo = fmtDate(new Date(Math.min(...dates))); const hi = fmtDate(new Date(Math.max(...dates))); return lo === hi ? lo : `${lo} – ${hi}` })()
     : "—"
   const practices = new Set(activities.map((a) => a.practice?.name).filter(Boolean))
+  const locations = new Set(activities.map((a) => a.location?.name).filter(Boolean))
   const providers = new Set(activities.flatMap((a) => a.providers.map((p) => p.doctor.name)))
 
   // Average meeting rating across activities that have one.
@@ -85,7 +87,7 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
         <tr>
           <td style="color:${INK};font-size:15px;font-weight:700;">${esc(a.practice?.name || "Activity")}</td>
-          <td style="color:${MUTED};font-size:12px;text-align:right;white-space:nowrap;">${esc(fmtDate(a.date))}</td>
+          <td style="color:${MUTED};font-size:12px;text-align:right;white-space:nowrap;">${esc(fmtActivityWhen(a.date))}</td>
         </tr>
       </table>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px;">
@@ -121,7 +123,8 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:2px solid ${INK};">
               ${summaryRow("Total activities", String(activities.length))}
               ${summaryRow("Date range", rangeLabel)}
-              ${summaryRow("Practices visited", String(practices.size))}
+              ${summaryRow("Unique practices visited", String(practices.size))}
+              ${summaryRow("Unique locations visited", String(locations.size))}
               ${summaryRow("Providers seen", String(providers.size))}
               ${avgMeetingRating ? summaryRow("Avg. meeting rating", `${avgMeetingRating} / 5`) : ""}
             </table>

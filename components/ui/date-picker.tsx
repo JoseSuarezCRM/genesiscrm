@@ -20,6 +20,9 @@ interface Props {
   onCancel: () => void
   /** Open the calendar as soon as it mounts (inline click-to-edit). Default true. */
   autoOpen?: boolean
+  /** Hide the inline time box in the trigger (set time in the panel instead) —
+   *  keeps the trigger compact inside a narrow table cell. */
+  compactTrigger?: boolean
 }
 
 const pad = (n: number) => String(n).padStart(2, "0")
@@ -65,7 +68,7 @@ function parseTypedDate(s: string): Date | null {
   return d
 }
 
-export default function DatePicker({ value, withTime, onCommit, onCancel, autoOpen = true }: Props) {
+export default function DatePicker({ value, withTime, onCommit, onCancel, autoOpen = true, compactTrigger }: Props) {
   const initial = parseValue(value, withTime)
   const [selected, setSelected] = useState<Date | null>(initial)
   const [time, setTime] = useState<string>(initial && withTime ? `${pad(initial.getHours())}:${pad(initial.getMinutes())}` : "09:00")
@@ -184,7 +187,7 @@ export default function DatePicker({ value, withTime, onCommit, onCancel, autoOp
           inputMode="numeric"
           className="flex-1 min-w-0 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
         />
-        {withTime && (
+        {withTime && !compactTrigger && (
           <input
             type="time"
             value={time}

@@ -24,6 +24,7 @@ import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUs
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
 import { ACTIVITY_RATINGS, MEETING_RATINGS, ratingLabel } from "@/lib/activity-ratings"
+import { fmtActivityWhen, fmtActivityTime, activityLocalDate, hasActivityTime } from "@/lib/activity-time"
 import { OPTION_COLORS, hexToChipStyle } from "@/lib/option-colors"
 import { ColorPicker } from "@/components/ui/color-picker"
 import { showToast } from "@/components/toast"
@@ -736,7 +737,7 @@ function emptyForm() {
   return {
     practiceId: "", locationId: "", providerIds: [] as string[],
     tagIds: [] as string[], selectedTags: [] as TagObj[],
-    nextStep: "", date: format(new Date(), "yyyy-MM-dd"),
+    nextStep: "", date: new Date().toISOString(),
     frontDesk: "", flyer: "", notes: "", rating: "", meetingRating: "",
   }
 }
@@ -761,8 +762,7 @@ const ACTIVITY_TYPES: { value: string; color: string; bg: string; border: string
 // Activity dates are date-only values stored as UTC midnight; read them in UTC
 // so the calendar day doesn't shift back in local timezones
 function activityDay(date: string | Date) {
-  const d = new Date(date)
-  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  return activityLocalDate(date)
 }
 
 // Table columns for the activities table view.
@@ -964,7 +964,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       practiceId: a.practice?.id ?? "", locationId: a.location?.id ?? "",
       providerIds: a.providers.map(p => p.doctor.id),
       tagIds: a.tags.map(t => t.id), selectedTags: a.tags,
-      nextStep: a.nextStep ?? "", date: format(activityDay(a.date), "yyyy-MM-dd"),
+      nextStep: a.nextStep ?? "", date: typeof a.date === "string" ? a.date : new Date(a.date).toISOString(),
       frontDesk: a.frontDesk ?? "", flyer: a.flyer ?? "", notes: a.notes ?? "",
       rating: a.rating != null ? String(a.rating) : "",
       meetingRating: a.meetingRating != null ? String(a.meetingRating) : "",
@@ -1336,7 +1336,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   // (account/location/providers/tags), the colored type/rating chips, and the
   // creator stay read-only.
   const ACTIVITY_EDIT: Record<string, RecordFieldDef & { field: string; get: (a: any) => any }> = {
-    date: { key: "date", field: "date", label: "Date", type: "date", get: (a) => a.date },
+    date: { key: "date", field: "date", label: "Date", type: "datetime", get: (a) => a.date },
     nextStep: { key: "nextStep", field: "nextStep", label: "Next Step", type: "text", get: (a) => a.nextStep },
     frontDesk: { key: "frontDesk", field: "frontDesk", label: "Front Desk", type: "text", get: (a) => a.frontDesk },
     notes: { key: "notes", field: "notes", label: "Notes", type: "long_text", get: (a) => a.notes },
@@ -1386,7 +1386,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       return <span className="text-zinc-500">{String(raw)}</span>
     }
     switch (key) {
-      case "date": return <span className="whitespace-nowrap text-zinc-600">{format(activityDay(a.date), "MMM d, yyyy")}</span>
+      case "date": return <span className="whitespace-nowrap text-zinc-600">{fmtActivityWhen(a.date)}</span>
       case "account": return <span className="font-medium text-zinc-800">{a.practice?.name ?? "—"}</span>
       case "location": return <span className="text-zinc-500">{a.location?.name ?? "—"}</span>
       case "providers": return <span className="text-zinc-600">{a.providers.length ? a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join(", ") : "—"}</span>
@@ -1749,6 +1749,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{format(activityDay(a.date), "MMM")}</p>
                 <p className="text-2xl font-bold text-slate-800 leading-none">{format(activityDay(a.date), "d")}</p>
                 <p className="text-xs text-slate-400">{format(activityDay(a.date), "yyyy")}</p>
+                {hasActivityTime(a.date) && <p className="text-[11px] text-slate-400 mt-0.5 whitespace-nowrap">{fmtActivityTime(a.date)}</p>}
               </div>
 
               <div className="flex-1 min-w-0 space-y-1.5">
@@ -1910,8 +1911,8 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               <Input value={form.nextStep} onChange={e => set("nextStep", e.target.value)} placeholder="e.g. Follow up in 2 weeks" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Date</label>
-              <Input type="date" value={form.date} onChange={e => set("date", e.target.value)} />
+              <label className="text-sm font-medium text-slate-700">Date &amp; Time</label>
+              <DatePicker withTime autoOpen={false} value={form.date} onCommit={v => set("date", v)} onCancel={() => {}} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Activity Type</label>
