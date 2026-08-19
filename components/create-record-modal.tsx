@@ -15,12 +15,15 @@ import { isPropertyVisible } from "@/lib/record-field-catalog"
 // field-picker editor. `specialFields` lets an object inject a bespoke widget for a
 // given field key (e.g. an association picker) instead of the generic input.
 export default function CreateRecordModal({
-  objectType, title, catalog, config, users = [], canEditForm = false, specialFields = {}, onSubmit, onClose, onSaved, onConfigChanged,
+  objectType, title, catalog, config, defaultConfig, users = [], canEditForm = false, specialFields = {}, onSubmit, onClose, onSaved, onConfigChanged,
 }: {
   objectType: string
   title: string
   catalog: RecordFieldDef[]
   config: CreateFormField[] | null
+  // Curated field list shown when no saved config exists yet (still overridable
+  // by the gear). Falls back to the full catalog when omitted.
+  defaultConfig?: CreateFormField[]
   users?: { id: string; label: string }[]
   canEditForm?: boolean
   specialFields?: Record<string, (value: any, set: (v: any) => void, values: Record<string, any>) => ReactNode>
@@ -40,9 +43,10 @@ export default function CreateRecordModal({
   const set = (k: string, v: any) => setValues((p) => ({ ...p, [k]: v }))
 
   const byKey = Object.fromEntries(catalog.map((c) => [c.key, c]))
-  // Shown fields: the config's order (filtered to still-valid keys), else the whole catalog.
-  const shown: { def: RecordFieldDef; required: boolean }[] = (config && config.length > 0)
-    ? config.filter((f) => byKey[f.key]).map((f) => ({ def: byKey[f.key], required: !!f.required }))
+  // Shown fields: the saved config's order, else a curated default, else the whole catalog.
+  const effective = (config && config.length > 0) ? config : (defaultConfig && defaultConfig.length > 0 ? defaultConfig : null)
+  const shown: { def: RecordFieldDef; required: boolean }[] = effective
+    ? effective.filter((f) => byKey[f.key]).map((f) => ({ def: byKey[f.key], required: !!f.required }))
     : catalog.map((c) => ({ def: c, required: !!c.required }))
   // Respect visibility rules (a field only shows when its controlling value matches).
   const visible = shown.filter(({ def }) => isPropertyVisible(def.visibilityRule, values))
