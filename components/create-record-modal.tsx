@@ -65,7 +65,12 @@ export default function CreateRecordModal({
       <Dialog open onOpenChange={(o) => !o && onClose()}>
         <DialogContent className="max-h-[90vh] overflow-y-auto"
           onOpenAutoFocus={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}>
+          onInteractOutside={(e) => {
+            // Interacting with a portaled dropdown keeps the dialog open; a true
+            // overlay click closes it.
+            const t = (e.detail as any)?.originalEvent?.target as HTMLElement | null
+            if (t?.closest?.("[data-select-menu-open]")) e.preventDefault()
+          }}>
           <DialogHeader>
             <div className="flex items-center justify-between gap-2 pr-6">
               <DialogTitle>{title}</DialogTitle>

@@ -78,8 +78,8 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
   // passes false so it renders a closed trigger that opens on click.
   autoOpen?: boolean
 }) {
-  const initial = Array.isArray(value) ? value.map(String) : (value != null && value !== "" ? [String(value)] : [])
-  const [sel, setSel] = useState<string[]>(initial)
+  const toArray = (v: any) => Array.isArray(v) ? v.map(String) : (v != null && v !== "" ? [String(v)] : [])
+  const [sel, setSel] = useState<string[]>(() => toArray(value))
   const [q, setQ] = useState("")
   const [open, setOpen] = useState(autoOpen)
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>({ left: 0, width: 0, maxHeight: 288 })
@@ -109,8 +109,9 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
       const t = e.target as Node
       if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return
       onCommit(selRef.current) // click-away commits (matches the old behaviour)
+      setOpen(false)
     }
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel() }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") { setSel(toArray(value)); onCancel(); setOpen(false) } }
     function onMove() { place() }
     document.addEventListener("mousedown", onDown)
     document.addEventListener("keydown", onKey)
@@ -200,8 +201,8 @@ export function MultiSelectField({ options, optionLabels, value, onCommit, onCan
           <div className="shrink-0 flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
             <span className="text-[11px] text-slate-400">{sel.length} selected</span>
             <div className="flex gap-3">
-              <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-              <button type="button" onClick={() => onCommit(sel)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
+              <button type="button" onClick={() => { setSel(toArray(value)); onCancel(); setOpen(false) }} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+              <button type="button" onClick={() => { onCommit(sel); setOpen(false) }} className="text-xs font-medium text-blue-600 hover:text-blue-700">Done</button>
             </div>
           </div>
         </div>,
