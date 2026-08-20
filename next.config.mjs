@@ -44,6 +44,11 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+  // Bake the current deploy's id into the client bundle so a running app can tell
+  // when a newer version has been deployed (see components/update-banner.tsx).
+  env: {
+    NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA || process.env.BUILD_ID || "dev",
+  },
   experimental: {
     // ssh2 (under ssh2-sftp-client) uses native/dynamic requires — don't bundle it,
     // require it at runtime on the server instead.
