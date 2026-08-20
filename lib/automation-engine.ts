@@ -618,15 +618,37 @@ async function runSingleAction(
       return "Email not sent: no recipient resolved (the enrolled record has no email, or the chosen recipient is empty)."
     }
 
-    // Generate + attach document templates for the enrolled record.
+    // Generate + attach document templates for the enrolled record. Each generated
+    // PDF is also saved onto the record (RecordAttachment) so it stays viewable — in
+    // the Attachments card and, via savedDocs below, on the timeline email entry.
     const docIds = Array.isArray(cfg.documentTemplateIds) ? (cfg.documentTemplateIds as string[]) : []
     const docRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
+    const savedDocs: { name: string; url: string }[] = []
     if (docIds.length && docRef) {
       const { generateDocumentPdf } = await import("@/lib/document-pdf")
       for (const tid of docIds) {
         try {
           const doc = await generateDocumentPdf(tid, docRef.type, docRef.id)
-          if (!("error" in doc)) emailAttachments.push({ name: doc.filename, contentType: "application/pdf", contentBase64: doc.buffer.toString("base64") })
+          if ("error" in doc) continue
+          emailAttachments.push({ name: doc.filename, contentType: "application/pdf", contentBase64: doc.buffer.toString("base64") })
+          // Persist the generated PDF to the record (best-effort — never blocks the send).
+          if (process.env.BLOB_READ_WRITE_TOKEN) {
+            try {
+              const { put } = await import("@vercel/blob")
+              const safe = (doc.filename || "document.pdf").replace(/[^a-zA-Z0-9._-]/g, "_")
+              const key = `record-attachments/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
+              const blob = await put(key, doc.buffer, { access: "private", contentType: "application/pdf" })
+              const row = await (prisma as any).recordAttachment.create({
+                data: {
+                  recordType: docRef.type, recordId: docRef.id, name: doc.filename,
+                  blobUrl: blob.url, contentType: "application/pdf", size: doc.buffer.length,
+                  createdById: triggeredByUserId ?? null,
+                },
+                select: { id: true },
+              })
+              savedDocs.push({ name: doc.filename, url: `/api/record-attachments/${row.id}` })
+            } catch { /* save failed — still send with the attachment */ }
+          }
         } catch { /* skip a failing document, still send the email */ }
       }
     }
@@ -652,6 +674,7 @@ async function runSingleAction(
             subject, body: bodyText, success: true,
             direction: "OUTBOUND", fromEmail: fromAddr, mailbox: fromAddr,
             sentById: triggeredByUserId ?? null, // null on cron/delayed resume — column is nullable
+            attachments: savedDocs, // generated PDFs saved on the record, shown on the timeline entry
           },
           select: { id: true },
         })
