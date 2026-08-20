@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Trash2, Reply, Loader2, Send } from "lucide-react"
+import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Trash2, Reply, Loader2, Send, Paperclip } from "lucide-react"
 import { deleteRecordNote, deleteRecordEmail, deleteRecordSms, replyToEmailThread, type ActivityItem, type ActivityKind } from "@/app/actions/record-activity"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import { cn } from "@/lib/utils"
@@ -155,6 +155,17 @@ export default function RecordActivityFeed({ recordType, recordId, items, users 
                       <span className="text-xs text-slate-400 shrink-0">{fmt(item.date)}</span>
                     </div>
                     {item.body && <ActivityBody body={item.body} />}
+                    {item.kind === "EMAIL" && !!item.attachments?.length && (
+                      <div className="mt-1.5 flex flex-col gap-1">
+                        {item.attachments.map((att, i) => (
+                          <a key={i} href={att.url} target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-blue-600 w-fit">
+                            <Paperclip className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{att.name}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-xs text-slate-400 mt-1">{item.by ? `by ${item.by}` : ""}</p>
                     {item.kind === "EMAIL" && item.canReply && canEdit && (
                       <EmailReply recordType={recordType} recordId={recordId} emailId={item.id} />

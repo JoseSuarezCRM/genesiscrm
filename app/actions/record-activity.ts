@@ -30,6 +30,8 @@ export interface ActivityItem {
   by: string | null
   /** EMAIL items in a tracked Graph thread can be replied to from the app. */
   canReply?: boolean
+  /** Files sent with an EMAIL, saved on the record and downloadable from the feed. */
+  attachments?: { name: string; url: string }[]
 }
 
 // Permission object key that gates editing a record of a given type.
@@ -167,7 +169,8 @@ export async function listRecordActivities(recordType: string, recordId: string)
     for (const e of sent) {
       const inbound = (e as any).direction === "INBOUND"
       const by = inbound ? ((e as any).fromEmail ?? "them") : (e.sentBy?.name ?? e.sentBy?.email ?? null)
-      items.push({ id: e.id, kind: "EMAIL", title: inbound ? `↩ ${e.subject}` : e.subject, body: stripHtml(e.body), date: e.sentAt, by, canReply: !!(e as any).conversationId })
+      const atts = Array.isArray((e as any).attachments) ? ((e as any).attachments as { name: string; url: string }[]) : []
+      items.push({ id: e.id, kind: "EMAIL", title: inbound ? `↩ ${e.subject}` : e.subject, body: stripHtml(e.body), date: e.sentAt, by, canReply: !!(e as any).conversationId, attachments: atts })
     }
   }
   const e164 = phones.map(toE164).filter(Boolean) as string[]

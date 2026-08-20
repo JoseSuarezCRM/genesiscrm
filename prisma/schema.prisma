@@ -1055,6 +1055,9 @@ model DirectEmail {
   graphMessageId    String?  // Graph message id (to reply in-thread)
   sentById String?
   sentBy   User?    @relation(fields: [sentById], references: [id])
+  // Files sent with the email that are viewable from the record's timeline:
+  // array of { name, url } where url serves the saved RecordAttachment.
+  attachments Json  @default("[]")
 
   @@index([sentAt])
   @@index([conversationId])
