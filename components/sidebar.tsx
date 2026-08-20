@@ -18,6 +18,7 @@ import {
   UserCog,
   Box,
   Workflow,
+  LayoutDashboard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { userCanLevel } from "@/lib/permissions"
@@ -45,7 +46,16 @@ const appointmentItems: NavItem[] = [
 const schedulingItems: NavItem[] = [
   { href: "/scheduler",         label: "Weekly Schedule" },
   { href: "/scheduler/staff",   label: "Staff Roster" },
-  { href: "/scheduler/planner", label: "Operations Planner" },
+]
+
+const schedulingV2Items: NavItem[] = [
+  { href: "/scheduling-v2",                 label: "Overview" },
+  { href: "/scheduling-v2/roster",          label: "Roster" },
+  { href: "/scheduling-v2/master-schedule", label: "Master Schedule" },
+  { href: "/scheduling-v2/schedule-builder", label: "Schedule Builder" },
+  { href: "/scheduling-v2/interns",         label: "Intern / MA / FD Hub" },
+  { href: "/scheduling-v2/xrt",             label: "XRT Hub" },
+  { href: "/scheduling-v2/growth",          label: "Growth" },
 ]
 
 const surgeryItems: NavItem[] = [
@@ -75,6 +85,7 @@ const sections = [
   { key: "NAV_REFERRALS",    title: "Referrals",    icon: Users,         items: referralItems },
   { key: "NAV_APPOINTMENTS", title: "Appointments", icon: ClipboardList, items: appointmentItems },
   { key: "NAV_SCHEDULING",   title: "Scheduling",   icon: CalendarRange, items: schedulingItems },
+  { key: "NAV_SCHEDULING",   title: "Scheduling v2", icon: LayoutDashboard, items: schedulingV2Items },
   { key: "NAV_SURGERY",      title: "Surgery",      icon: Stethoscope,   items: surgeryItems },
   { key: "NAV_COMMUNICATIONS", title: "Communications", icon: MessageCircle, items: communicationsItems },
   { key: "NAV_AUTOMATIONS",  title: "Automations",  icon: Workflow,      items: automationItems },
