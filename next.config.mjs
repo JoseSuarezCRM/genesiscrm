@@ -74,24 +74,11 @@ const nextConfig = {
           : h
       )
 
-    // Operations Planner dashboard: framed same-origin inside the app (see
-    // components/scheduling-planner.tsx), so it must allow SAMEORIGIN/'self' framing —
-    // but NOT external embedding. DENY/'none' would block even our own iframe.
-    const plannerHeaders = securityHeaders.map((h) =>
-      h.key === "X-Frame-Options"
-        ? { ...h, value: "SAMEORIGIN" }
-        : h.key === "Content-Security-Policy"
-          ? { ...h, value: h.value.replace("frame-ancestors 'none'", "frame-ancestors 'self'") }
-          : h
-    )
-
     return [
       // /refer must be embeddable — no X-Frame-Options, open frame-ancestors
       { source: "/refer", headers: embedHeaders },
-      // The planner dashboard must be framable same-origin
-      { source: "/scheduling-planner.html", headers: plannerHeaders },
-      // All other routes get full security headers (excludes /refer and the planner file)
-      { source: "/((?!refer$|scheduling-planner\\.html$).*)", headers: securityHeaders },
+      // All other routes get full security headers (excludes /refer)
+      { source: "/((?!refer$).*)", headers: securityHeaders },
     ]
   },
 }
