@@ -14,6 +14,7 @@ export interface ActiveXRT {
   dayAvail: Record<string, string>
   role: string
   lastResort: boolean
+  lastDay: string
 }
 
 export function xrtGetXrClinics(data: SchedulingData): string[] {
@@ -26,7 +27,7 @@ export function xrtGetActiveXRTs(data: SchedulingData, weekStart: Date): ActiveX
     if (s.role !== "XR Tech") return
     const ld = s.lastDay ? new Date(s.lastDay + "T00:00:00") : null
     if (ld && ld < weekStart) return
-    active.push({ name: s.name, init: s.init || s.name, key: s.init || s.name, avail: s.avail, dayAvail: (s.dayAvail as any) || {}, role: s.role, lastResort: !!s.lastResort })
+    active.push({ name: s.name, init: s.init || s.name, key: s.init || s.name, avail: s.avail, dayAvail: (s.dayAvail as any) || {}, role: s.role, lastResort: !!s.lastResort, lastDay: s.lastDay || "" })
   })
   active.sort((a, b) => (a.lastResort ? 1 : 0) - (b.lastResort ? 1 : 0))
   return active
