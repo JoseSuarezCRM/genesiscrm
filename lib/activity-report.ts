@@ -96,7 +96,7 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
         ${detailRow("Providers", providerNames(a) || null)}
         ${detailRow("Next step", a.nextStep)}
         ${detailRow("Front desk", a.frontDesk)}
-        ${detailRow("Clinic Value", a.rating != null ? `${a.rating} / ${RATING_MAX}` : null)}
+        ${detailRow("Clinic Value", a.rating != null ? String(a.rating) : null)}
         ${detailRow("Meeting Rating", a.meetingRating != null ? `${a.meetingRating} / ${RATING_MAX}` : null)}
         ${detailRow("Notes", a.notes)}
       </table>
