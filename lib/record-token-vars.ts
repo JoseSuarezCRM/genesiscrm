@@ -16,7 +16,20 @@ export function snakeToken(key: string): string {
 }
 
 function fmtDate(d: string | Date | null | undefined): string {
-  return d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" }) : ""
+  if (!d) return ""
+  const dt = new Date(d)
+  if (isNaN(dt.getTime())) return ""
+  // Date-only values (DOB, DOI, Date of Lien, Initial DOS) are stored as UTC
+  // midnight; format those in UTC so the calendar day doesn't shift back in the
+  // clinic tz. Values with a real time render in America/Chicago. Mirrors
+  // formatDate() in lib/utils.ts so tokens match the record card.
+  const isDateOnly =
+    dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 &&
+    dt.getUTCSeconds() === 0 && dt.getUTCMilliseconds() === 0
+  return dt.toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    timeZone: isDateOnly ? "UTC" : "America/Chicago",
+  })
 }
 
 function tokenValueForDisplay(v: any): string {
