@@ -5,6 +5,7 @@ import Sidebar from "@/components/sidebar"
 import SessionWatcher from "@/components/session-watcher"
 import TopToolbar from "@/components/top-toolbar"
 import ToastHost from "@/components/toast"
+import UpdateBanner from "@/components/update-banner"
 import NavHistoryTracker from "@/components/nav-history-tracker"
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog"
 
@@ -49,6 +50,7 @@ export default async function DashboardLayout({
       </div>
       <SessionWatcher />
       <ToastHost />
+      <UpdateBanner />
       <ConfirmDialogHost />
       <NavHistoryTracker />
     </div>
