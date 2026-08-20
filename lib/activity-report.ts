@@ -1,7 +1,6 @@
 // Pretty, email-safe HTML report for a set of activities (referring-practice
 // visits/calls). Inline styles + table layout so it renders in every mail client.
 
-import { RATING_MAX } from "@/lib/activity-ratings"
 import { fmtActivityWhen } from "@/lib/activity-time"
 
 export interface ReportActivity {
@@ -97,7 +96,7 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
         ${detailRow("Next step", a.nextStep)}
         ${detailRow("Front desk", a.frontDesk)}
         ${detailRow("Clinic Value", a.rating != null ? String(a.rating) : null)}
-        ${detailRow("Meeting Rating", a.meetingRating != null ? `${a.meetingRating} / ${RATING_MAX}` : null)}
+        ${detailRow("Meeting Rating", a.meetingRating != null ? String(a.meetingRating) : null)}
         ${detailRow("Notes", a.notes)}
       </table>
       ${a.tags.length ? `<div style="margin-top:10px;">${a.tags.map((t) => chip(t.name, t.color)).join("")}</div>` : ""}
@@ -126,7 +125,7 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
               ${summaryRow("Unique practices visited", String(practices.size))}
               ${summaryRow("Unique locations visited", String(locations.size))}
               ${summaryRow("Providers seen", String(providers.size))}
-              ${avgMeetingRating ? summaryRow("Avg. meeting rating", `${avgMeetingRating} / ${RATING_MAX}`) : ""}
+              ${avgMeetingRating ? summaryRow("Avg. meeting rating", String(avgMeetingRating)) : ""}
             </table>
             ${topTags.length ? `<div style="margin-top:14px;text-align:center;">${topTags.map(([n, c]) => chip(`${n} · ${c}`)).join("")}</div>` : ""}
           </td></tr>
