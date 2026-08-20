@@ -23,7 +23,7 @@ import { type RecordFieldDef } from "@/lib/record-field-catalog"
 import { ViewAccessSelector, type Visibility, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { upsertActivityTag, updateTagColor } from "@/app/actions/tags"
 import { emailActivityReport } from "@/app/actions/activity-report"
-import { ACTIVITY_RATINGS, MEETING_RATINGS, ratingLabel } from "@/lib/activity-ratings"
+import { ACTIVITY_RATINGS, MEETING_RATINGS, RATING_MAX } from "@/lib/activity-ratings"
 import { fmtActivityWhen, fmtActivityTime, activityLocalDate, hasActivityTime } from "@/lib/activity-time"
 import { OPTION_COLORS, hexToChipStyle } from "@/lib/option-colors"
 import { ColorPicker } from "@/components/ui/color-picker"
@@ -1244,7 +1244,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       a.location?.name ?? "",
       a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join("; "),
       a.flyer ?? "",
-      a.rating ? `${a.rating} - ${ratingLabel(a.rating)}` : "",
+      a.rating ? `${a.rating} / ${RATING_MAX}` : "",
       a.nextStep ?? "",
       a.frontDesk ?? "",
       a.tags.map(t => t.name).join("; "),
@@ -1361,10 +1361,10 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     }
     if (key === "rating") {
       return {
-        def: { key: "rating", label: "Rating", type: "select", coerce: "number", options: ["1", "2", "3"], optionLabels: { "1": ratingLabel(1) ?? "Low Value", "2": ratingLabel(2) ?? "Mid Value", "3": ratingLabel(3) ?? "High Value" } },
+        def: { key: "rating", label: "Rating", type: "select", coerce: "number", options: ACTIVITY_RATINGS.map(String), optionLabels: Object.fromEntries(ACTIVITY_RATINGS.map((v) => [String(v), `${v} / ${RATING_MAX}`])) },
         value: a.rating != null ? String(a.rating) : "", field: "rating",
         read: a.rating
-          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200 whitespace-nowrap">{a.rating} · {ratingLabel(a.rating)}</span>
+          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200 whitespace-nowrap">{a.rating} / {RATING_MAX}</span>
           : <span className="text-zinc-400">—</span>,
       }
     }
@@ -1397,7 +1397,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
           : <span className="text-zinc-400">—</span>
       }
       case "rating": return a.rating
-        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200 whitespace-nowrap">{a.rating} · {ratingLabel(a.rating)}</span>
+        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200 whitespace-nowrap">{a.rating} / {RATING_MAX}</span>
         : <span className="text-zinc-400">—</span>
       case "nextStep": return <span className="text-zinc-500">{a.nextStep || "—"}</span>
       case "frontDesk": return <span className="text-zinc-500">{a.frontDesk || "—"}</span>
@@ -1778,7 +1778,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 )}
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-slate-500">
-                  {a.rating != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.rating} · {ratingLabel(a.rating)}</span>}
+                  {a.rating != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.rating} / {RATING_MAX}</span>}
                   {a.nextStep && <span><span className="font-medium text-slate-600">Next:</span> {a.nextStep}</span>}
                   {a.frontDesk && <span><span className="font-medium text-slate-600">Front desk:</span> {a.frontDesk}</span>}
                   {a.flyer && (() => {
@@ -1934,26 +1934,26 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Clinic Value (can change)</label>
+              <label className="text-sm font-medium text-slate-700">Clinic Value (1 lowest, 6 highest)</label>
               <div className="flex flex-wrap gap-2">
-                {ACTIVITY_RATINGS.map(r => (
+                {ACTIVITY_RATINGS.map(v => (
                   <button
-                    key={r.value}
+                    key={v}
                     type="button"
-                    onClick={() => set("rating", form.rating === String(r.value) ? "" : String(r.value))}
-                    className={`h-9 px-3.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-all ${
-                      form.rating === String(r.value)
+                    onClick={() => set("rating", form.rating === String(v) ? "" : String(v))}
+                    className={`h-9 w-9 rounded-lg border text-sm font-medium transition-all ${
+                      form.rating === String(v)
                         ? "bg-zinc-900 text-white border-zinc-900"
                         : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
                     }`}
                   >
-                    {r.value} - {r.label}
+                    {v}
                   </button>
                 ))}
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Meeting Rating (1 lowest, 5 highest)</label>
+              <label className="text-sm font-medium text-slate-700">Meeting Rating (1 lowest, 6 highest)</label>
               <div className="flex flex-wrap gap-2">
                 {MEETING_RATINGS.map(v => (
                   <button

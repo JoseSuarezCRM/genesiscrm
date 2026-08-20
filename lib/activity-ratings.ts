@@ -2,22 +2,18 @@
 // Plain module (not "use server") so both the client engagement bar and the
 // server actions can import these sync helpers.
 
-export const ACTIVITY_RATINGS: { value: number; label: string }[] = [
-  { value: 1, label: "Low Value" },
-  { value: 2, label: "Mid Value" },
-  { value: 3, label: "High Value" },
-]
+// Clinic Value: a plain 1 (lowest) … 6 (highest) numeric scale.
+export const ACTIVITY_RATINGS: number[] = [1, 2, 3, 4, 5, 6]
 
-export function ratingLabel(rating?: number | null): string | null {
-  return ACTIVITY_RATINGS.find((r) => r.value === Number(rating))?.label ?? null
-}
-
-// Meeting rating: a simple 1 (lowest) … 5 (highest) scale, separate from the
+// Meeting rating: a plain 1 (lowest) … 6 (highest) scale, separate from the
 // clinic value above.
-export const MEETING_RATINGS: number[] = [1, 2, 3, 4, 5]
+export const MEETING_RATINGS: number[] = [1, 2, 3, 4, 5, 6]
+
+// Highest value on either scale (both share the same 1..6 range).
+export const RATING_MAX = 6
 
 // Normalize an incoming rating to { rating } for meta, or nothing when unset/invalid.
 export function ratingMeta(rating?: number): { rating: number } | undefined {
   const r = Number(rating)
-  return r >= 1 && r <= 3 ? { rating: r } : undefined
+  return r >= 1 && r <= RATING_MAX ? { rating: r } : undefined
 }

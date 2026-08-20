@@ -16,8 +16,8 @@ const ActivitySchema = z.object({
   frontDesk: z.string().optional(),
   flyer: z.string().optional(),
   notes: z.string().optional(),
-  rating: z.coerce.number().int().min(1).max(3).nullable().optional(),
-  meetingRating: z.coerce.number().int().min(1).max(5).nullable().optional(),
+  rating: z.coerce.number().int().min(1).max(6).nullable().optional(),
+  meetingRating: z.coerce.number().int().min(1).max(6).nullable().optional(),
 })
 
 export async function createActivity(data: unknown) {
