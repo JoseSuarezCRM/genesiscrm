@@ -89,6 +89,41 @@ export async function listReportObjects(): Promise<{ key: string; label: string 
   return [...builtins, ...custom.map((c: any) => ({ key: `CO:${c.key}`, label: c.plural }))]
 }
 
+// USER isn't in RECORD_FIELDS — a minimal reportable field set for owner joins.
+const USER_FIELDS: ReportField[] = [
+  { key: "name", label: "Name", type: "text", source: "USER", column: "name" },
+  { key: "email", label: "Email", type: "text", source: "USER", column: "email" },
+]
+
+async function baseFieldsFor(objectKey: string): Promise<ReportField[]> {
+  if (objectKey === "USER") return USER_FIELDS
+  return reportFieldsFor(objectKey)
+}
+
+// Fields of a joined source, re-tagged so `source` is the association path (unique
+// per report), `joinPath` traverses the relation, and the key is prefixed to stay
+// unique across sources. column/jsonBag are preserved for reading the value.
+export async function joinedFieldsForSource(primary: string, joinPath: string): Promise<ReportField[]> {
+  const assoc = REPORT_OBJECTS[primary]?.associations.find((a) => a.path === joinPath)
+  if (!assoc) return []
+  const tf = await baseFieldsFor(assoc.target)
+  return tf.map((f) => ({ ...f, key: `${joinPath}.${f.key}`, source: joinPath, joinPath }))
+}
+
+// Everything the builder needs for a primary object: its own fields + each joinable
+// source (with the joined fields ready to add as dimensions/measures/columns).
+export async function reportSchema(primary: string): Promise<{
+  fields: ReportField[]
+  associations: { path: string; target: string; label: string; fields: ReportField[] }[]
+}> {
+  const fields = await reportFieldsFor(primary)
+  const assocs = REPORT_OBJECTS[primary]?.associations ?? []
+  const associations = await Promise.all(assocs.map(async (a) => ({
+    path: a.path, target: a.target, label: a.label, fields: await joinedFieldsForSource(primary, a.path),
+  })))
+  return { fields, associations }
+}
+
 export function reportObjectLabel(key: string): string {
   return REPORT_OBJECTS[key]?.label ?? (key.startsWith("CO:") ? key.slice(3) : key)
 }

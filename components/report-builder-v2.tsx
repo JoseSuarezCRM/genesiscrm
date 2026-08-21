@@ -5,7 +5,7 @@ import { Search, Plus, X, Loader2, Save, BarChart3, Table2, Hash } from "lucide-
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
 import FilterBuilder from "@/components/ui/filter-builder"
-import { getReportFields, runReportPreview } from "@/app/actions/report-builder"
+import { getReportSchema, runReportPreview } from "@/app/actions/report-builder"
 import { createSavedReport } from "@/app/actions/saved-reports"
 import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
 import type { ReportConfig, ReportField, ReportResult, Aggregation, DateFrequency, VizType } from "@/lib/reporting/types"
@@ -23,19 +23,23 @@ const PALETTE = ["#6366f1", "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#0ea5e9
 
 export default function ReportBuilderV2({ objects }: { objects: { key: string; label: string }[] }) {
   const [config, setConfig] = useState<ReportConfig>({ ...EMPTY_REPORT, primary: objects[0]?.key ?? "REFERRAL" })
-  const [fields, setFields] = useState<ReportField[]>([])
+  const [schema, setSchema] = useState<{ fields: ReportField[]; associations: { path: string; target: string; label: string; fields: ReportField[] }[] }>({ fields: [], associations: [] })
   const [result, setResult] = useState<ReportResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState("")
   const [tab, setTab] = useState<"configure" | "filters">("configure")
   const [name, setName] = useState("")
   const [saved, setSaved] = useState(false)
+
+  const primaryFields = schema.fields
+  const activeAssocs = schema.associations.filter((a) => config.sources.some((s) => s.joinPath === a.path))
+  const fields = useMemo(() => [...primaryFields, ...activeAssocs.flatMap((a) => a.fields)], [primaryFields, activeAssocs])
   const byKey = useMemo(() => Object.fromEntries(fields.map((f) => [f.key, f])), [fields])
 
-  // Load fields when the primary object changes.
+  // Load the schema (fields + joinable sources) when the primary object changes.
   useEffect(() => {
     let alive = true
-    getReportFields(config.primary).then((f) => { if (alive) setFields(f) }).catch(() => {})
+    getReportSchema(config.primary).then((s) => { if (alive) setSchema(s) }).catch(() => {})
     return () => { alive = false }
   }, [config.primary])
 
@@ -51,16 +55,27 @@ export default function ReportBuilderV2({ objects }: { objects: { key: string; l
   }, [config])
 
   const set = (patch: Partial<ReportConfig>) => setConfig((c) => ({ ...c, ...patch }))
+  // Filters translate on primary fields only (joins aren't traversable server-side).
   const filterFields: FilterField[] = useMemo(
-    () => fields.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, getValue: () => null })),
-    [fields],
+    () => primaryFields.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, getValue: () => null })),
+    [primaryFields],
   )
+  const toggleSource = (a: { path: string; target: string; label: string }) => setConfig((c) => {
+    const on = c.sources.some((s) => s.joinPath === a.path)
+    return on
+      ? { ...c, sources: c.sources.filter((s) => s.joinPath !== a.path) }
+      : { ...c, sources: [...c.sources, { objectKey: a.target, joinPath: a.path, label: a.label }] }
+  })
 
   const addColumn = (f: ReportField) => { if (!config.columns.some((c) => c.key === f.key)) set({ columns: [...config.columns, { source: f.source, key: f.key }] }) }
   const addDimension = (f: ReportField) => { if (!config.dimensions.some((d) => d.key === f.key)) set({ dimensions: [...config.dimensions, { source: f.source, key: f.key, dateFrequency: f.type === "date" ? "month" : undefined }] }) }
   const addMeasure = (f: ReportField) => { if (!config.measures.some((m) => m.key === f.key)) set({ measures: [...config.measures, { source: f.source, key: f.key, agg: f.type === "number" ? "sum" : "distinct_count" }] }) }
 
-  const shown = query.trim() ? fields.filter((f) => f.label.toLowerCase().includes(query.toLowerCase())) : fields
+  const filt = (arr: ReportField[]) => query.trim() ? arr.filter((f) => f.label.toLowerCase().includes(query.toLowerCase())) : arr
+  const fieldGroups: { label: string; fields: ReportField[] }[] = [
+    { label: reportLabel(objects, config.primary) + " (primary)", fields: filt(primaryFields) },
+    ...activeAssocs.map((a) => ({ label: a.label, fields: filt(a.fields) })),
+  ]
 
   async function save() {
     if (!name.trim()) return
@@ -72,7 +87,7 @@ export default function ReportBuilderV2({ objects }: { objects: { key: string; l
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <div className="flex items-center gap-3 border-b border-zinc-200 bg-white px-5 py-3">
-        <StyledSelect value={config.primary} onChange={(e) => set({ primary: e.target.value, columns: [], dimensions: [], measures: [{ source: e.target.value, key: "*", agg: "count" }], filters: null })} className="min-w-[180px]">
+        <StyledSelect value={config.primary} onChange={(e) => set({ primary: e.target.value, sources: [], columns: [], dimensions: [], breakdown: null, measures: [{ source: e.target.value, key: "*", agg: "count" }], filters: null })} className="min-w-[180px]">
           {objects.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
         </StyledSelect>
         <StyledSelect value={config.viz} onChange={(e) => set({ viz: e.target.value as VizType })} className="min-w-[150px]">
@@ -89,22 +104,42 @@ export default function ReportBuilderV2({ objects }: { objects: { key: string; l
       <div className="flex min-h-0 flex-1">
         {/* Fields */}
         <div className="w-72 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3">
+          {/* Data sources: primary + joinable objects */}
+          {schema.associations.length > 0 && (
+            <div className="mb-3 rounded-lg border border-zinc-100 p-2">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Data sources</p>
+              {schema.associations.map((a) => {
+                const on = config.sources.some((s) => s.joinPath === a.path)
+                return (
+                  <label key={a.path} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-zinc-50">
+                    <input type="checkbox" checked={on} onChange={() => toggleSource(a)} />
+                    <span className="text-zinc-700">{a.label}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
           <div className="relative mb-2">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search fields…" className="w-full rounded-lg border border-zinc-200 pl-8 pr-2 py-1.5 text-sm outline-none focus:border-zinc-400" />
           </div>
-          <div className="space-y-0.5">
-            {shown.map((f) => (
-              <div key={f.key} className="group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-zinc-50">
-                <span className="flex-1 truncate text-zinc-700" title={f.label}>{f.label}</span>
-                <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
-                  <button title="Add as column" onClick={() => addColumn(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">COL</button>
-                  <button title="Add as dimension" onClick={() => addDimension(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">DIM</button>
-                  <button title="Add as measure" onClick={() => addMeasure(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">MSR</button>
-                </div>
+          {fieldGroups.map((grp) => grp.fields.length > 0 && (
+            <div key={grp.label} className="mb-2">
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{grp.label}</p>
+              <div className="space-y-0.5">
+                {grp.fields.map((f) => (
+                  <div key={f.key} className="group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-zinc-50">
+                    <span className="flex-1 truncate text-zinc-700" title={f.label}>{f.label}</span>
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
+                      <button title="Add as column" onClick={() => addColumn(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">COL</button>
+                      <button title="Add as dimension" onClick={() => addDimension(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">DIM</button>
+                      <button title="Add as measure" onClick={() => addMeasure(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">MSR</button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
 
         {/* Configure / Filters */}
@@ -179,6 +214,9 @@ export default function ReportBuilderV2({ objects }: { objects: { key: string; l
   )
 }
 
+function reportLabel(objects: { key: string; label: string }[], key: string): string {
+  return objects.find((o) => o.key === key)?.label ?? key
+}
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return <div><p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p><div className="space-y-1.5">{children}</div></div>
 }

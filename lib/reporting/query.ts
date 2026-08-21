@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { delegateFor } from "@/lib/automation-records"
 import { filterStateToWhere } from "@/lib/filter-to-prisma"
 import type { FilterField } from "@/lib/filters"
-import { reportFieldsFor, REPORT_OBJECTS } from "./objects"
+import { reportFieldsFor, joinedFieldsForSource, REPORT_OBJECTS } from "./objects"
 import type {
   ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series,
 } from "./types"
@@ -21,8 +21,10 @@ function toFilterFields(fields: ReportField[]): FilterField[] {
 }
 
 function readValue(row: any, field: ReportField): unknown {
-  if (field.jsonBag) return row?.[field.jsonBag]?.[field.column]
-  return row?.[field.column]
+  const base = field.joinPath ? row?.[field.joinPath] : row
+  if (base == null) return null
+  if (field.jsonBag) return base?.[field.jsonBag]?.[field.column]
+  return base?.[field.column]
 }
 
 function toDate(v: unknown): Date | null {
@@ -70,11 +72,14 @@ function aggregate(rows: any[], measure: Measure, field: ReportField | null): nu
 export async function runReport(config: ReportConfig): Promise<ReportResult> {
   const primary = config.primary
   const fields = await reportFieldsFor(primary)
-  const byKey = Object.fromEntries(fields.map((f) => [f.key, f]))
+  const joined = (await Promise.all((config.sources ?? []).map((s) => joinedFieldsForSource(primary, s.joinPath)))).flat()
+  const allFields = [...fields, ...joined]
+  const byKey = Object.fromEntries(allFields.map((f) => [f.key, f]))
   const model = delegateFor(primary)
   if (!model) return { viz: config.viz, columns: [], rows: [], total: 0 }
 
-  // Build the where from the advanced filter, scoped to the object.
+  // Filters only translate on primary (scalar) fields — joins can't be traversed by
+  // filter-to-prisma, so joined fields are available for grouping/measures, not filters.
   const advanced = filterStateToWhere(config.filters ?? null, toFilterFields(fields))
   let where: Record<string, unknown> = advanced
   if (primary.startsWith("CO:")) {
@@ -82,7 +87,9 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     where = def ? { AND: [{ objectDefId: def.id }, advanced] } : advanced
   }
 
-  const rows: any[] = await model.findMany({ where, take: ROW_CAP }).catch(() => [])
+  // Include each active joined source's relation so its fields are readable per row.
+  const include = Object.fromEntries((config.sources ?? []).map((s) => [s.joinPath, true]))
+  const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: ROW_CAP }).catch(() => [])
   const total = rows.length
   const capped = total >= ROW_CAP
 

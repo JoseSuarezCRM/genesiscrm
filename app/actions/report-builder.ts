@@ -2,7 +2,7 @@
 
 import { requireAccess } from "@/lib/auth-guard"
 import { runReport } from "@/lib/reporting/query"
-import { reportFieldsFor, listReportObjects, reportPermKey } from "@/lib/reporting/objects"
+import { reportFieldsFor, reportSchema, listReportObjects, reportPermKey } from "@/lib/reporting/objects"
 import type { ReportConfig, ReportField, ReportResult } from "@/lib/reporting/types"
 
 // The objects a user can report on (built-ins + custom objects).
@@ -16,6 +16,13 @@ export async function getReportFields(objectKey: string): Promise<ReportField[]>
   await requireAccess("REPORTS", "VIEW")
   await requireAccess(reportPermKey(objectKey), "VIEW")
   return reportFieldsFor(objectKey)
+}
+
+// The object's own fields + its joinable sources (with joined fields ready to add).
+export async function getReportSchema(objectKey: string) {
+  await requireAccess("REPORTS", "VIEW")
+  await requireAccess(reportPermKey(objectKey), "VIEW")
+  return reportSchema(objectKey)
 }
 
 // Run a report config and return its result (gated by view access to the object).

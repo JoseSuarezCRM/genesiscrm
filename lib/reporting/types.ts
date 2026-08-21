@@ -13,6 +13,7 @@ export interface ReportField {
   source: string       // object key this field belongs to (primary or a joined source)
   column: string       // DB column / JSON key used to read the value
   jsonBag?: string     // set when the value lives in a JSON bag (customProperties/values)
+  joinPath?: string    // set for a joined source: the Prisma relation on the primary row
   options?: { value: string; label: string }[]
 }
 
