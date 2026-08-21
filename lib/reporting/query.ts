@@ -1,0 +1,174 @@
+// Report query engine: turns a ReportConfig into a ReportResult. Prisma isn't a
+// generic query engine, so we fetch the primary object's rows (filtered) and
+// aggregate in memory. Cross-object joins and pivot are layered on in later phases.
+import { prisma } from "@/lib/prisma"
+import { delegateFor } from "@/lib/automation-records"
+import { filterStateToWhere } from "@/lib/filter-to-prisma"
+import type { FilterField } from "@/lib/filters"
+import { reportFieldsFor, REPORT_OBJECTS } from "./objects"
+import type {
+  ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series,
+} from "./types"
+
+const ROW_CAP = 10000
+
+// Map the report field list to FilterField[] so filterStateToWhere can build a where.
+function toFilterFields(fields: ReportField[]): FilterField[] {
+  return fields.map((f) => ({
+    key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag,
+    options: f.options, getValue: () => null,
+  }))
+}
+
+function readValue(row: any, field: ReportField): unknown {
+  if (field.jsonBag) return row?.[field.jsonBag]?.[field.column]
+  return row?.[field.column]
+}
+
+function toDate(v: unknown): Date | null {
+  if (!v) return null
+  const d = new Date(v as any)
+  return isNaN(d.getTime()) ? null : d
+}
+
+// A group key + display label for a dimension value (with date bucketing).
+function dimKeyLabel(row: any, dim: Dimension, field: ReportField): { key: string; label: string } {
+  const raw = readValue(row, field)
+  if (field.type === "date" || dim.dateFrequency) {
+    const d = toDate(raw)
+    if (!d) return { key: "∅", label: "(No value)" }
+    const y = d.getUTCFullYear(), m = d.getUTCMonth()
+    const freq = dim.dateFrequency ?? "day"
+    if (freq === "year") return { key: `${y}`, label: `${y}` }
+    if (freq === "quarter") { const q = Math.floor(m / 3) + 1; return { key: `${y}-Q${q}`, label: `Q${q} ${y}` } }
+    if (freq === "month") return { key: `${y}-${String(m + 1).padStart(2, "0")}`, label: d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) }
+    if (freq === "week") { const day = d.getUTCDate(); const wk = Math.ceil(day / 7); return { key: `${y}-${m}-w${wk}`, label: d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) } }
+    const key = d.toISOString().slice(0, 10)
+    return { key, label: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) }
+  }
+  if (raw == null || raw === "") return { key: "∅", label: "(No value)" }
+  if (Array.isArray(raw)) { const s = raw.filter(Boolean).join(", "); return { key: s || "∅", label: s || "(No value)" } }
+  const s = String(raw)
+  const label = field.options?.find((o) => o.value === s)?.label ?? s
+  return { key: s, label }
+}
+
+function aggregate(rows: any[], measure: Measure, field: ReportField | null): number {
+  if (measure.agg === "count") return rows.length
+  if (!field) return rows.length
+  const vals = rows.map((r) => readValue(r, field)).filter((v) => v != null && v !== "")
+  if (measure.agg === "distinct_count") return new Set(vals.map((v) => String(v))).size
+  const nums = vals.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
+  if (nums.length === 0) return 0
+  if (measure.agg === "sum") return nums.reduce((a, b) => a + b, 0)
+  if (measure.agg === "avg") return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100
+  if (measure.agg === "min") return Math.min(...nums)
+  if (measure.agg === "max") return Math.max(...nums)
+  return 0
+}
+
+export async function runReport(config: ReportConfig): Promise<ReportResult> {
+  const primary = config.primary
+  const fields = await reportFieldsFor(primary)
+  const byKey = Object.fromEntries(fields.map((f) => [f.key, f]))
+  const model = delegateFor(primary)
+  if (!model) return { viz: config.viz, columns: [], rows: [], total: 0 }
+
+  // Build the where from the advanced filter, scoped to the object.
+  const advanced = filterStateToWhere(config.filters ?? null, toFilterFields(fields))
+  let where: Record<string, unknown> = advanced
+  if (primary.startsWith("CO:")) {
+    const def = await (prisma as any).customObjectDef.findUnique({ where: { key: primary.slice(3) }, select: { id: true } }).catch(() => null)
+    where = def ? { AND: [{ objectDefId: def.id }, advanced] } : advanced
+  }
+
+  const rows: any[] = await model.findMany({ where, take: ROW_CAP }).catch(() => [])
+  const total = rows.length
+  const capped = total >= ROW_CAP
+
+  const measures = config.measures.length ? config.measures : [{ source: primary, key: "*", agg: "count" as const }]
+  const measureField = (m: Measure) => (m.key === "*" ? null : byKey[m.key] ?? null)
+  const measureLabel = (m: Measure) => m.label ?? (m.key === "*" ? "Count" : `${m.agg} ${byKey[m.key]?.label ?? m.key}`)
+
+  // KPI — a single measure, no dimension.
+  if (config.viz === "kpi") {
+    return { viz: "kpi", columns: [], rows: [], kpi: aggregate(rows, measures[0], measureField(measures[0])), total, capped }
+  }
+
+  const dims = config.dimensions.map((d) => ({ d, f: byKey[d.key] })).filter((x) => x.f)
+
+  // Unsummarized table: raw rows for the chosen columns (or a sensible default).
+  if (config.viz === "table" && dims.length === 0) {
+    const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
+    const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
+    const out = rows.slice(0, 500).map((r) => cols.map((f) => {
+      const v = readValue(r, f)
+      if (v == null) return null
+      if (f.type === "date") { const d = toDate(v); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : String(v) }
+      if (Array.isArray(v)) return v.join(", ")
+      return typeof v === "number" ? v : String(v)
+    }))
+    return { viz: "table", columns, rows: out, total, capped }
+  }
+
+  // Grouped: one primary dimension (first), optional breakdown → series/rows.
+  const dim = dims[0]
+  const breakdownField = config.breakdown ? byKey[config.breakdown.key] : null
+
+  // Bucket rows by the primary dimension.
+  const groups = new Map<string, { label: string; rows: any[] }>()
+  const order: string[] = []
+  for (const r of rows) {
+    const { key, label } = dimKeyLabel(r, dim.d, dim.f)
+    if (!groups.has(key)) { groups.set(key, { label, rows: [] }); order.push(key) }
+    groups.get(key)!.rows.push(r)
+  }
+
+  // Breakdown series (or a single series over the first measure).
+  const series: Series[] = []
+  if (breakdownField && config.breakdown) {
+    const bdValues = new Map<string, string>() // key -> label
+    for (const r of rows) { const { key, label } = dimKeyLabel(r, config.breakdown, breakdownField); if (!bdValues.has(key)) bdValues.set(key, label) }
+    for (const [bk, bl] of Array.from(bdValues)) {
+      series.push({
+        name: bl,
+        points: order.map((gk) => {
+          const g = groups.get(gk)!
+          const sub = g.rows.filter((r) => dimKeyLabel(r, config.breakdown!, breakdownField).key === bk)
+          return { key: gk, label: g.label, value: aggregate(sub, measures[0], measureField(measures[0])) }
+        }),
+      })
+    }
+  } else {
+    for (const m of measures) {
+      series.push({ name: measureLabel(m), points: order.map((gk) => ({ key: gk, label: groups.get(gk)!.label, value: aggregate(groups.get(gk)!.rows, m, measureField(m)) })) })
+    }
+  }
+
+  // Sort groups (by first series value or by label).
+  if (config.sort) {
+    const by = config.sort.by, dir = config.sort.dir === "asc" ? 1 : -1
+    const primarySeries = series[0]
+    const idxOrder = order.map((k, i) => ({ k, i }))
+    idxOrder.sort((a, b) => {
+      if (by === "label") return dir * groups.get(a.k)!.label.localeCompare(groups.get(b.k)!.label)
+      return dir * ((primarySeries.points[a.i]?.value ?? 0) - (primarySeries.points[b.i]?.value ?? 0))
+    })
+    const perm = idxOrder.map((x) => x.i)
+    order.splice(0, order.length, ...idxOrder.map((x) => x.k))
+    for (const s of series) s.points = perm.map((i) => s.points[i])
+  }
+  if (config.limit && config.limit > 0) {
+    order.splice(config.limit)
+    for (const s of series) s.points = s.points.slice(0, config.limit)
+  }
+
+  // Summarized table columns = dimension + each series.
+  const columns: ResultColumn[] = [{ key: "__dim", label: dim.f.label, type: dim.f.type }, ...series.map((s) => ({ key: s.name, label: s.name, type: "number" as const }))]
+  const tableRows: (string | number | null)[][] = order.map((gk) => {
+    const label = groups.get(gk)!.label
+    return [label, ...series.map((s) => s.points.find((p) => p.key === gk)?.value ?? 0)]
+  })
+
+  return { viz: config.viz, columns, rows: tableRows, series, total, capped }
+}

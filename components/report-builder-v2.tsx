@@ -1,0 +1,268 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Search, Plus, X, Loader2, Save, BarChart3, Table2, Hash } from "lucide-react"
+import { cn } from "@/lib/utils"
+import StyledSelect from "@/components/ui/styled-select"
+import FilterBuilder from "@/components/ui/filter-builder"
+import { getReportFields, runReportPreview } from "@/app/actions/report-builder"
+import { createSavedReport } from "@/app/actions/saved-reports"
+import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
+import type { ReportConfig, ReportField, ReportResult, Aggregation, DateFrequency, VizType } from "@/lib/reporting/types"
+import { EMPTY_REPORT } from "@/lib/reporting/types"
+
+const VIZ_OPTIONS: { value: VizType; label: string }[] = [
+  { value: "table", label: "Table" }, { value: "kpi", label: "KPI" },
+  { value: "vbar", label: "Vertical bar" }, { value: "hbar", label: "Horizontal bar" },
+  { value: "line", label: "Line" }, { value: "area", label: "Area" },
+  { value: "pie", label: "Pie" }, { value: "donut", label: "Donut" },
+]
+const AGGS: Aggregation[] = ["count", "distinct_count", "sum", "avg", "min", "max"]
+const FREQS: DateFrequency[] = ["day", "week", "month", "quarter", "year"]
+const PALETTE = ["#6366f1", "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#0ea5e9", "#84cc16", "#f59e0b"]
+
+export default function ReportBuilderV2({ objects }: { objects: { key: string; label: string }[] }) {
+  const [config, setConfig] = useState<ReportConfig>({ ...EMPTY_REPORT, primary: objects[0]?.key ?? "REFERRAL" })
+  const [fields, setFields] = useState<ReportField[]>([])
+  const [result, setResult] = useState<ReportResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [query, setQuery] = useState("")
+  const [tab, setTab] = useState<"configure" | "filters">("configure")
+  const [name, setName] = useState("")
+  const [saved, setSaved] = useState(false)
+  const byKey = useMemo(() => Object.fromEntries(fields.map((f) => [f.key, f])), [fields])
+
+  // Load fields when the primary object changes.
+  useEffect(() => {
+    let alive = true
+    getReportFields(config.primary).then((f) => { if (alive) setFields(f) }).catch(() => {})
+    return () => { alive = false }
+  }, [config.primary])
+
+  // Debounced preview.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current)
+    setLoading(true)
+    timer.current = setTimeout(async () => {
+      try { setResult(await runReportPreview(config)) } catch { setResult(null) } finally { setLoading(false) }
+    }, 400)
+    return () => { if (timer.current) clearTimeout(timer.current) }
+  }, [config])
+
+  const set = (patch: Partial<ReportConfig>) => setConfig((c) => ({ ...c, ...patch }))
+  const filterFields: FilterField[] = useMemo(
+    () => fields.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, getValue: () => null })),
+    [fields],
+  )
+
+  const addColumn = (f: ReportField) => { if (!config.columns.some((c) => c.key === f.key)) set({ columns: [...config.columns, { source: f.source, key: f.key }] }) }
+  const addDimension = (f: ReportField) => { if (!config.dimensions.some((d) => d.key === f.key)) set({ dimensions: [...config.dimensions, { source: f.source, key: f.key, dateFrequency: f.type === "date" ? "month" : undefined }] }) }
+  const addMeasure = (f: ReportField) => { if (!config.measures.some((m) => m.key === f.key)) set({ measures: [...config.measures, { source: f.source, key: f.key, agg: f.type === "number" ? "sum" : "distinct_count" }] }) }
+
+  const shown = query.trim() ? fields.filter((f) => f.label.toLowerCase().includes(query.toLowerCase())) : fields
+
+  async function save() {
+    if (!name.trim()) return
+    await createSavedReport(name.trim(), { v: 2, ...config } as any)
+    setSaved(true); setTimeout(() => setSaved(false), 2500)
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 border-b border-zinc-200 bg-white px-5 py-3">
+        <StyledSelect value={config.primary} onChange={(e) => set({ primary: e.target.value, columns: [], dimensions: [], measures: [{ source: e.target.value, key: "*", agg: "count" }], filters: null })} className="min-w-[180px]">
+          {objects.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </StyledSelect>
+        <StyledSelect value={config.viz} onChange={(e) => set({ viz: e.target.value as VizType })} className="min-w-[150px]">
+          {VIZ_OPTIONS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+        </StyledSelect>
+        <div className="ml-auto flex items-center gap-2">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Report name…" className="h-9 w-52 rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400" />
+          <button onClick={save} disabled={!name.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {saved ? "Saved ✓" : <><Save className="h-3.5 w-3.5" /> Save</>}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        {/* Fields */}
+        <div className="w-72 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3">
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search fields…" className="w-full rounded-lg border border-zinc-200 pl-8 pr-2 py-1.5 text-sm outline-none focus:border-zinc-400" />
+          </div>
+          <div className="space-y-0.5">
+            {shown.map((f) => (
+              <div key={f.key} className="group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-zinc-50">
+                <span className="flex-1 truncate text-zinc-700" title={f.label}>{f.label}</span>
+                <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
+                  <button title="Add as column" onClick={() => addColumn(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">COL</button>
+                  <button title="Add as dimension" onClick={() => addDimension(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">DIM</button>
+                  <button title="Add as measure" onClick={() => addMeasure(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">MSR</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Configure / Filters */}
+        <div className="w-80 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white">
+          <div className="flex gap-1 border-b border-zinc-100 px-3 pt-3">
+            {(["configure", "filters"] as const).map((t) => (
+              <button key={t} onClick={() => setTab(t)} className={cn("rounded-t-lg border-b-2 px-3 py-1.5 text-sm font-medium capitalize", tab === t ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800")}>{t}</button>
+            ))}
+          </div>
+          {tab === "configure" ? (
+            <div className="space-y-4 p-4">
+              <Section title="Measures">
+                {(config.measures.length ? config.measures : []).map((m, i) => (
+                  <Chip key={i} label={m.key === "*" ? "Count" : byKey[m.key]?.label ?? m.key} onRemove={() => set({ measures: config.measures.filter((_, j) => j !== i) })}>
+                    {m.key !== "*" && (
+                      <StyledSelect value={m.agg} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, agg: e.target.value as Aggregation } : x) })} className="h-6 text-xs">
+                        {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </StyledSelect>
+                    )}
+                  </Chip>
+                ))}
+                {!config.measures.some((m) => m.key === "*") && <button onClick={() => set({ measures: [...config.measures, { source: config.primary, key: "*", agg: "count" }] })} className="text-xs text-blue-600 hover:underline">+ Count</button>}
+              </Section>
+              <Section title="Dimensions (group / x-axis)">
+                {config.dimensions.map((d, i) => (
+                  <Chip key={i} label={byKey[d.key]?.label ?? d.key} onRemove={() => set({ dimensions: config.dimensions.filter((_, j) => j !== i) })}>
+                    {byKey[d.key]?.type === "date" && (
+                      <StyledSelect value={d.dateFrequency ?? "month"} onChange={(e) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, dateFrequency: e.target.value as DateFrequency } : x) })} className="h-6 text-xs">
+                        {FREQS.map((fr) => <option key={fr} value={fr}>{fr}</option>)}
+                      </StyledSelect>
+                    )}
+                  </Chip>
+                ))}
+                {config.dimensions.length === 0 && <p className="text-xs text-zinc-400">Add a field as a dimension to group/chart.</p>}
+              </Section>
+              <Section title="Break down by">
+                {config.breakdown ? <Chip label={byKey[config.breakdown.key]?.label ?? config.breakdown.key} onRemove={() => set({ breakdown: null })} /> : <p className="text-xs text-zinc-400">Optional second dimension (stack/compare).</p>}
+                {!config.breakdown && config.dimensions.length > 0 && (
+                  <StyledSelect value="" onChange={(e) => e.target.value && set({ breakdown: { source: byKey[e.target.value].source, key: e.target.value } })} className="h-7 text-xs">
+                    <option value="">+ Add breakdown…</option>
+                    {fields.filter((f) => f.type === "select" || f.type === "text").map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                  </StyledSelect>
+                )}
+              </Section>
+              {config.viz === "table" && (
+                <Section title="Columns">
+                  {config.columns.map((c, i) => <Chip key={i} label={byKey[c.key]?.label ?? c.key} onRemove={() => set({ columns: config.columns.filter((_, j) => j !== i) })} />)}
+                  {config.columns.length === 0 && <p className="text-xs text-zinc-400">No columns — showing default fields.</p>}
+                </Section>
+              )}
+              <Section title="Sort & limit">
+                <div className="flex items-center gap-2">
+                  <StyledSelect value={config.sort?.dir ?? "desc"} onChange={(e) => set({ sort: { by: config.sort?.by ?? "value", dir: e.target.value as any } })} className="h-7 text-xs">
+                    <option value="desc">Descending</option><option value="asc">Ascending</option>
+                  </StyledSelect>
+                  <input type="number" min={1} placeholder="Limit" value={config.limit ?? ""} onChange={(e) => set({ limit: e.target.value ? +e.target.value : null })} className="h-7 w-20 rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-zinc-400" />
+                </div>
+              </Section>
+            </div>
+          ) : (
+            <div className="p-4"><FilterBuilder fields={filterFields} value={config.filters ?? emptyFilter()} onChange={(v) => set({ filters: v })} /></div>
+          )}
+        </div>
+
+        {/* Preview */}
+        <div className="min-w-0 flex-1 overflow-auto bg-zinc-50 p-6">
+          {loading && <div className="mb-3 flex items-center gap-1.5 text-xs text-zinc-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…</div>}
+          {!result ? <Empty /> : <Preview result={result} />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return <div><p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p><div className="space-y-1.5">{children}</div></div>
+}
+function Chip({ label, onRemove, children }: { label: string; onRemove: () => void; children?: React.ReactNode }) {
+  return <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm"><span className="flex-1 truncate text-zinc-700">{label}</span>{children}<button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button></div>
+}
+function Empty() {
+  return <div className="flex h-full items-center justify-center text-center"><div><BarChart3 className="mx-auto h-10 w-10 text-zinc-300" /><p className="mt-2 text-sm text-zinc-500">Add measures and a dimension to build your report.</p></div></div>
+}
+
+function Preview({ result }: { result: ReportResult }) {
+  if (result.viz === "kpi") return <div className="flex h-full flex-col items-center justify-center"><Hash className="h-6 w-6 text-zinc-300" /><div className="mt-2 text-5xl font-bold text-zinc-900">{(result.kpi ?? 0).toLocaleString()}</div><p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p></div>
+
+  const series = result.series ?? []
+  if (["vbar", "hbar", "line", "area", "pie", "donut"].includes(result.viz) && series.length) {
+    return <div className="rounded-xl border border-zinc-200 bg-white p-5"><Chart result={result} /><DataTable result={result} /></div>
+  }
+  return <div className="rounded-xl border border-zinc-200 bg-white p-5"><DataTable result={result} /></div>
+}
+
+function DataTable({ result }: { result: ReportResult }) {
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead><tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">{result.columns.map((c) => <th key={c.key} className="px-3 py-2 font-semibold">{c.label}</th>)}</tr></thead>
+        <tbody>{result.rows.map((r, i) => <tr key={i} className="border-b border-zinc-100 hover:bg-zinc-50">{r.map((v, j) => <td key={j} className="px-3 py-2 text-zinc-700">{v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? v.toLocaleString() : v}</td>)}</tr>)}</tbody>
+      </table>
+      {result.capped && <p className="mt-2 text-xs text-amber-600">Showing the first {result.total.toLocaleString()} records.</p>}
+    </div>
+  )
+}
+
+// Simple SVG chart for bar/line/area/pie off the engine's series.
+function Chart({ result }: { result: ReportResult }) {
+  const series = result.series ?? []
+  const labels = series[0]?.points.map((p) => p.label) ?? []
+  const max = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value)))
+  const W = 640, H = 260, padL = 40, padB = 60, padT = 10, cW = W - padL - 10, cH = H - padT - padB
+
+  if (result.viz === "pie" || result.viz === "donut") {
+    const pts = (series[0]?.points ?? [])
+    const totalV = Math.max(1, pts.reduce((a, p) => a + p.value, 0))
+    let a0 = -Math.PI / 2
+    const cx = 130, cy = 130, r = 110, ri = result.viz === "donut" ? 55 : 0
+    return (
+      <div className="flex flex-wrap items-center gap-6">
+        <svg viewBox="0 0 260 260" className="h-56 w-56">
+          {pts.map((p, i) => {
+            const a1 = a0 + (p.value / totalV) * Math.PI * 2
+            const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1)
+            const large = a1 - a0 > Math.PI ? 1 : 0
+            const d = ri > 0
+              ? `M ${cx + ri * Math.cos(a0)} ${cy + ri * Math.sin(a0)} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${cx + ri * Math.cos(a1)} ${cy + ri * Math.sin(a1)} A ${ri} ${ri} 0 ${large} 0 ${cx + ri * Math.cos(a0)} ${cy + ri * Math.sin(a0)} Z`
+              : `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
+            a0 = a1
+            return <path key={i} d={d} fill={PALETTE[i % PALETTE.length]} />
+          })}
+        </svg>
+        <div className="space-y-1 text-sm">{pts.map((p, i) => <div key={i} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{p.label}<span className="text-zinc-400">{p.value.toLocaleString()}</span></div>)}</div>
+      </div>
+    )
+  }
+
+  const n = labels.length || 1
+  const bw = cW / n
+  return (
+    <div>
+      {series.length > 1 && <div className="mb-2 flex flex-wrap gap-3 text-xs">{series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{s.name}</span>)}</div>}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+        {[0, 0.5, 1].map((t) => <line key={t} x1={padL} x2={W - 10} y1={padT + cH - t * cH} y2={padT + cH - t * cH} stroke="#eee" />)}
+        {result.viz === "line" || result.viz === "area" ? (
+          series.map((s, si) => {
+            const pts = s.points.map((p, i) => `${padL + bw * i + bw / 2},${padT + cH - (p.value / max) * cH}`).join(" ")
+            return <g key={si}>{result.viz === "area" && <polygon points={`${padL + bw / 2},${padT + cH} ${pts} ${padL + bw * (n - 1) + bw / 2},${padT + cH}`} fill={PALETTE[si % PALETTE.length] + "33"} />}<polyline points={pts} fill="none" stroke={PALETTE[si % PALETTE.length]} strokeWidth={2} /></g>
+          })
+        ) : (
+          labels.map((_, i) => series.map((s, si) => {
+            const v = s.points[i]?.value ?? 0
+            const groupW = bw / series.length
+            return <rect key={si} x={padL + bw * i + groupW * si + 2} y={padT + cH - (v / max) * cH} width={Math.max(1, groupW - 4)} height={(v / max) * cH} fill={PALETTE[si % PALETTE.length]} rx={2} />
+          }))
+        )}
+        {labels.map((l, i) => <text key={i} x={padL + bw * i + bw / 2} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#888">{l.length > 10 ? l.slice(0, 9) + "…" : l}</text>)}
+      </svg>
+    </div>
+  )
+}

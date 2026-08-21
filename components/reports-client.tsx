@@ -276,6 +276,9 @@ export default function ReportsClient({
             <Link href="/reports/builder" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all">
               Custom Report
             </Link>
+            <Link href="/reports/builder-v2" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-blue-200 bg-blue-50 rounded-lg text-blue-700 hover:border-blue-400 transition-all">
+              Report Builder (beta)
+            </Link>
             <Link href="/reports/dashboard" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all">
               Dashboard
             </Link>
