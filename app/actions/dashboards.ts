@@ -12,9 +12,12 @@ export interface DashboardSummary {
   updatedAt: Date
 }
 
+export type DashboardLayout = Record<string, { x: number; y: number; w: number; h: number }>
+
 export interface DashboardDetail {
   id: string
   name: string
+  layout: DashboardLayout | null
   createdAt: Date
   updatedAt: Date
   reports: {
@@ -142,4 +145,15 @@ export async function removeReportFromDashboard(dashboardId: string, savedReport
   })
 
   revalidatePath(`/reports/dashboard/${dashboardId}`)
+}
+
+// Persist the grid geometry (drag/resize). No revalidate — the client owns state.
+export async function saveDashboardLayout(dashboardId: string, layout: DashboardLayout): Promise<void> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  await (prisma as any).dashboard.updateMany({
+    where: { id: dashboardId, createdById: session.user.id },
+    data: { layout },
+  })
 }

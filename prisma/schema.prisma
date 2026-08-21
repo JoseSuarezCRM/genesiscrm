@@ -1559,6 +1559,7 @@ model SavedReport {
 model Dashboard {
   id          String            @id @default(cuid())
   name        String
+  layout      Json?             // react-grid-layout: { [savedReportId]: {x,y,w,h} }
   createdById String
   createdBy   User              @relation("DashboardCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   reports     DashboardReport[]

@@ -1,8 +1,11 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import RGL, { WidthProvider, type Layout } from "react-grid-layout"
+import "react-grid-layout/css/styles.css"
+import "react-resizable/css/styles.css"
 import {
   ChevronLeft,
   LayoutDashboard,
@@ -14,22 +17,52 @@ import {
   Check,
   RefreshCw,
   Loader2,
+  GripVertical,
 } from "lucide-react"
 import {
   addReportToDashboard,
   removeReportFromDashboard,
   renameDashboard,
+  saveDashboardLayout,
   type DashboardDetail,
+  type DashboardLayout,
 } from "@/app/actions/dashboards"
 import type { SavedReport } from "@/app/actions/saved-reports"
 import { runReportPreview } from "@/app/actions/report-builder"
 import { ReportView } from "@/components/report-view"
 import type { ReportConfig, ReportResult } from "@/lib/reporting/types"
 
+const GridLayout = WidthProvider(RGL)
+const GRID_COLS = 12
+
 // v2 configs are tagged `{ v: 2, primary, measures[], ... }`; v1 is the referrals
 // grouping shape `{ groupBy, range, ... }`.
 function isV2Config(cfg: any): boolean {
   return !!cfg && (cfg.v === 2 || (typeof cfg.primary === "string" && Array.isArray(cfg.measures)))
+}
+
+// Sensible default tile size per report shape (in grid units, 12-col).
+function defaultSize(cfg: any): { w: number; h: number } {
+  if (isV2Config(cfg)) {
+    if (cfg.viz === "kpi") return { w: 3, h: 5 }
+    if (cfg.viz === "table" || cfg.viz === "pivot") return { w: 8, h: 9 }
+    return { w: 6, h: 9 } // charts
+  }
+  return { w: 4, h: 5 } // v1 link-out cards
+}
+
+// Build the RGL layout: saved geometry when present, else flow left→right.
+function buildLayout(reports: DashboardDetail["reports"], saved: DashboardLayout | null): Layout[] {
+  let cx = 0, cy = 0, rowH = 0
+  return reports.map((entry) => {
+    const { w, h } = defaultSize(entry.savedReport.config)
+    const s = saved?.[entry.savedReportId]
+    if (s) return { i: entry.savedReportId, x: s.x, y: s.y, w: s.w, h: s.h, minW: 2, minH: 3 }
+    if (cx + w > GRID_COLS) { cx = 0; cy += rowH; rowH = 0 }
+    const item = { i: entry.savedReportId, x: cx, y: cy, w, h, minW: 2, minH: 3 }
+    cx += w; rowH = Math.max(rowH, h)
+    return item
+  })
 }
 
 const GROUP_LABELS: Record<string, string> = {
@@ -68,7 +101,6 @@ function V2ReportCard({
   const [loading, setLoading] = useState(true)
   const [nonce, setNonce] = useState(0)
   const cfg = entry.savedReport.config as unknown as ReportConfig
-  const wide = cfg.viz !== "kpi"
 
   useEffect(() => {
     let alive = true
@@ -86,18 +118,21 @@ function V2ReportCard({
   }
 
   return (
-    <div className={`bg-white border rounded-xl p-5 flex flex-col gap-3 min-h-[280px] ${removing ? "opacity-50" : ""} ${wide ? "sm:col-span-2" : ""}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <Link href={`/reports/builder-v2?report=${entry.savedReportId}`} className="text-sm font-semibold text-slate-900 truncate hover:text-blue-700">{entry.savedReport.name}</Link>
-          <p className="text-xs text-slate-400 mt-0.5">{reportObjectName(cfg)}</p>
+    <div className={`h-full bg-white border rounded-xl flex flex-col overflow-hidden ${removing ? "opacity-50" : ""}`}>
+      <div className="flex items-start justify-between gap-2 p-4 pb-2">
+        <div className="flex min-w-0 flex-1 items-start gap-1.5">
+          <span className="card-drag mt-0.5 cursor-move text-zinc-300 hover:text-zinc-500"><GripVertical className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <Link href={`/reports/builder-v2?report=${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
+            <p className="text-xs text-slate-400 mt-0.5">{reportObjectName(cfg)}</p>
+          </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={() => setNonce((n) => n + 1)} className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-all" title="Refresh"><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></button>
           <button onClick={handleRemove} disabled={removing} className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all" title="Remove from dashboard"><X className="h-3.5 w-3.5" /></button>
         </div>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
         {loading && !result ? <div className="flex h-full items-center justify-center text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Running…</div>
           : result ? <ReportView result={result} style={cfg.style as any} /> : <p className="text-sm text-zinc-400 py-8 text-center">Couldn’t load this report.</p>}
       </div>
@@ -134,13 +169,16 @@ function ReportCard({
   }
 
   return (
-    <div className={`bg-white border rounded-xl p-5 flex flex-col gap-3 hover:border-zinc-300 transition-all ${removing ? "opacity-50" : ""}`}>
+    <div className={`h-full bg-white border rounded-xl p-5 flex flex-col gap-3 overflow-auto hover:border-zinc-300 transition-all ${removing ? "opacity-50" : ""}`}>
       <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate">{entry.savedReport.name}</p>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Added {new Date(entry.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-          </p>
+        <div className="flex min-w-0 flex-1 items-start gap-1.5">
+          <span className="card-drag mt-0.5 cursor-move text-zinc-300 hover:text-zinc-500"><GripVertical className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 truncate">{entry.savedReport.name}</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Added {new Date(entry.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            </p>
+          </div>
         </div>
         <button
           onClick={handleRemove}
@@ -272,6 +310,22 @@ export default function DashboardDetailClient({
 
   const alreadyAdded = new Set(dashboard.reports.map((r) => r.savedReportId))
 
+  // Grid layout (drag/resize) — seeded from saved geometry, persisted on change.
+  const [layout, setLayout] = useState<Layout[]>(() => buildLayout(dashboard.reports, dashboard.layout))
+  useEffect(() => { setLayout(buildLayout(dashboard.reports, dashboard.layout)) }, [dashboard.reports, dashboard.layout])
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didMount = useRef(false)
+  function onLayoutChange(next: Layout[]) {
+    setLayout(next)
+    if (!didMount.current) { didMount.current = true; return } // skip RGL's mount emit
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      const map: DashboardLayout = {}
+      next.forEach((l) => { map[l.i] = { x: l.x, y: l.y, w: l.w, h: l.h } })
+      saveDashboardLayout(dashboard.id, map).catch(() => {})
+    }, 600)
+  }
+
   function handleRename() {
     if (!name.trim() || name.trim() === dashboard.name) { setEditingName(false); return }
     startRename(async () => {
@@ -350,13 +404,23 @@ export default function DashboardDetailClient({
         </div>
       )}
 
-      {/* Report grid */}
+      {/* Report grid — drag by the handle, resize from the bottom-right corner */}
       {dashboard.reports.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 auto-rows-min">
+        <GridLayout
+          className="layout"
+          layout={layout}
+          cols={GRID_COLS}
+          rowHeight={40}
+          margin={[16, 16]}
+          draggableHandle=".card-drag"
+          onLayoutChange={onLayoutChange}
+        >
           {dashboard.reports.map((entry) => (
-            <ReportCard key={entry.savedReportId} entry={entry} dashboardId={dashboard.id} />
+            <div key={entry.savedReportId} className="overflow-hidden">
+              <ReportCard entry={entry} dashboardId={dashboard.id} />
+            </div>
           ))}
-        </div>
+        </GridLayout>
       )}
 
       {/* Add report picker modal */}
