@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -12,6 +12,8 @@ import {
   X,
   BookmarkX,
   Check,
+  RefreshCw,
+  Loader2,
 } from "lucide-react"
 import {
   addReportToDashboard,
@@ -20,6 +22,15 @@ import {
   type DashboardDetail,
 } from "@/app/actions/dashboards"
 import type { SavedReport } from "@/app/actions/saved-reports"
+import { runReportPreview } from "@/app/actions/report-builder"
+import { ReportView } from "@/components/report-view"
+import type { ReportConfig, ReportResult } from "@/lib/reporting/types"
+
+// v2 configs are tagged `{ v: 2, primary, measures[], ... }`; v1 is the referrals
+// grouping shape `{ groupBy, range, ... }`.
+function isV2Config(cfg: any): boolean {
+  return !!cfg && (cfg.v === 2 || (typeof cfg.primary === "string" && Array.isArray(cfg.measures)))
+}
 
 const GROUP_LABELS: Record<string, string> = {
   practice: "Practice", pipeline: "Pipeline", status: "Status",
@@ -43,6 +54,63 @@ function buildBuilderUrl(cfg: any): string {
   return `/reports/builder?${p.toString()}`
 }
 
+// Live v2 card: runs the report engine and renders the chart/table/KPI inline.
+function V2ReportCard({
+  entry,
+  dashboardId,
+}: {
+  entry: DashboardDetail["reports"][number]
+  dashboardId: string
+}) {
+  const router = useRouter()
+  const [removing, startRemove] = useTransition()
+  const [result, setResult] = useState<ReportResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [nonce, setNonce] = useState(0)
+  const cfg = entry.savedReport.config as unknown as ReportConfig
+  const wide = cfg.viz !== "kpi"
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    runReportPreview(cfg).then((r) => { if (alive) setResult(r) }).catch(() => { if (alive) setResult(null) }).finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry.savedReportId, nonce])
+
+  function handleRemove() {
+    startRemove(async () => {
+      await removeReportFromDashboard(dashboardId, entry.savedReportId)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className={`bg-white border rounded-xl p-5 flex flex-col gap-3 min-h-[280px] ${removing ? "opacity-50" : ""} ${wide ? "sm:col-span-2" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <Link href={`/reports/builder-v2?report=${entry.savedReportId}`} className="text-sm font-semibold text-slate-900 truncate hover:text-blue-700">{entry.savedReport.name}</Link>
+          <p className="text-xs text-slate-400 mt-0.5">{reportObjectName(cfg)}</p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => setNonce((n) => n + 1)} className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-all" title="Refresh"><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></button>
+          <button onClick={handleRemove} disabled={removing} className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all" title="Remove from dashboard"><X className="h-3.5 w-3.5" /></button>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1">
+        {loading && !result ? <div className="flex h-full items-center justify-center text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Running…</div>
+          : result ? <ReportView result={result} style={cfg.style as any} /> : <p className="text-sm text-zinc-400 py-8 text-center">Couldn’t load this report.</p>}
+      </div>
+    </div>
+  )
+}
+
+function reportObjectName(cfg: ReportConfig): string {
+  const m = cfg.measures?.[0]
+  const agg = m ? (m.key === "*" ? "Count" : `${m.agg} of ${m.key}`) : "—"
+  return `${cfg.primary} · ${agg}`
+}
+
 function ReportCard({
   entry,
   dashboardId,
@@ -53,6 +121,7 @@ function ReportCard({
   const router = useRouter()
   const [removing, startRemove] = useTransition()
   const cfg = entry.savedReport.config as any
+  if (isV2Config(cfg)) return <V2ReportCard entry={entry} dashboardId={dashboardId} />
   const href = buildBuilderUrl(cfg)
   const filterCount = (cfg.practiceIds?.length ?? 0) + (cfg.pipelineIds?.length ?? 0) +
     (cfg.statusIds?.length ?? 0) + (cfg.doctorIds?.length ?? 0)
@@ -162,7 +231,7 @@ function AddReportPicker({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-800 truncate">{r.name}</p>
                     <p className="text-xs text-slate-400">
-                      {GROUP_LABELS[cfg?.groupBy] ?? cfg?.groupBy} · {RANGE_LABELS[cfg?.range] ?? cfg?.range}
+                      {isV2Config(cfg) ? reportObjectName(cfg as ReportConfig) : `${GROUP_LABELS[cfg?.groupBy] ?? cfg?.groupBy} · ${RANGE_LABELS[cfg?.range] ?? cfg?.range}`}
                     </p>
                   </div>
                   <button
@@ -283,7 +352,7 @@ export default function DashboardDetailClient({
 
       {/* Report grid */}
       {dashboard.reports.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 auto-rows-min">
           {dashboard.reports.map((entry) => (
             <ReportCard key={entry.savedReportId} entry={entry} dashboardId={dashboard.id} />
           ))}
