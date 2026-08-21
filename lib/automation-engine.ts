@@ -1805,10 +1805,17 @@ export async function searchObjectRecords(
   for (const r of records) {
     const id = r.id as string
     const label = await genericRecordLabel(objectType, id, r)
-    if (!q || label.toLowerCase().includes(q)) out.push({ id, label })
-    if (out.length >= limit) break
+    // Match across every identifying field (MRN, procedure, email, custom-property
+    // values, …) — loadAllRecords flattens custom-object values onto the record —
+    // not just the display label, so searches by more than the name work.
+    const hay = (
+      label + " " +
+      Object.values(r).filter((v) => typeof v === "string" || typeof v === "number").join(" ")
+    ).toLowerCase()
+    if (!q || hay.includes(q)) out.push({ id, label })
   }
-  return out
+  out.sort((a, b) => a.label.localeCompare(b.label))
+  return out.slice(0, limit)
 }
 
 // Records of an object matching an ad-hoc criteria group set — the manual-enroll
