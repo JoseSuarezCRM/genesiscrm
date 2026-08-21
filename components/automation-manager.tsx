@@ -12,8 +12,11 @@ import {
   runScheduledAutomationsAction,
   countWorkflowMatches,
   enrollExistingForAutomation,
+  manualEnroll,
+  searchEnrollRecords,
+  previewCriteriaMatches,
 } from "@/app/actions/automations"
-import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal, CornerUpLeft } from "lucide-react"
+import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal, CornerUpLeft, UserPlus, Loader2, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import DatePicker from "@/components/ui/date-picker"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
@@ -2368,6 +2371,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   )
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [triggerOpen, setTriggerOpen] = useState(false)
+  const [enrollOpen, setEnrollOpen] = useState(false)
   const [error, setError] = useState("")
   // Enrollment: how many existing records currently match, + whether to run on them now.
   const [enrollExisting, setEnrollExisting] = useState(false)
@@ -2417,6 +2421,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const objectEntity = OBJECT_CUSTOM_ENTITY[objectKey]
   const rawCustoms = objectEntity ? customPropsByEntity[objectEntity] ?? [] : []
   const customDefs = rawCustoms.map(customPropertyToDef)
+  const editorCriteriaData: CriteriaData = { users, practices, locations, tags, pipelines, customDefs, propDefs }
   const objectActions = actionsForObject(objectKey)
   const objectTokens = tokensForObject(objectKey)
   // Fields menu for message bodies + the "from a property" recipient list: native
@@ -2524,6 +2529,12 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
             <span className={cn("w-2 h-2 rounded-full", editing.isActive ? "bg-emerald-400" : "bg-slate-500")} />
             {editing.isActive ? "ON" : "OFF"}
           </span>
+        )}
+        {editing && (
+          <button onClick={() => setEnrollOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-slate-700 hover:bg-slate-600 text-white shrink-0">
+            <UserPlus className="h-3.5 w-3.5" /> Manually enroll
+          </button>
         )}
         {editing && (
           <Link href={`/automations/${editing.id}/logs`}
@@ -2641,6 +2652,166 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           gotoTargets={Object.values(graph.nodes).filter(n => n.kind !== "goto" && n.id !== editingNode.id).map(n => ({ id: n.id, label: nodeSummary(n) }))}
         />
       )}
+      {enrollOpen && editing && (
+        <ManualEnrollDialog
+          automationId={editing.id}
+          objectLabel={objectDef.label}
+          criteriaData={editorCriteriaData}
+          onClose={() => setEnrollOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Manual enrollment: run this workflow now on chosen records — individually picked
+// or everything matching an ad-hoc filter — independent of the trigger criteria.
+function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }: {
+  automationId: string
+  objectLabel: string
+  criteriaData: CriteriaData
+  onClose: () => void
+}) {
+  const [mode, setMode] = useState<"individual" | "filter">("individual")
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState<{ id: string; label: string }[]>([])
+  const [searching, setSearching] = useState(false)
+  const [selected, setSelected] = useState<Record<string, string>>({}) // id -> label
+  const [groups, setGroups] = useState<ConditionGroup[]>([])
+  const [preview, setPreview] = useState<{ records: { id: string; label: string }[]; count: number; capped: boolean } | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [enrolling, setEnrolling] = useState(false)
+  const [done, setDone] = useState<string | null>(null)
+
+  // Debounced record search for the individual picker.
+  useEffect(() => {
+    if (mode !== "individual") return
+    let cancel = false
+    setSearching(true)
+    const t = setTimeout(async () => {
+      try {
+        const r = await searchEnrollRecords(automationId, query)
+        if (!cancel) setResults(r)
+      } catch { if (!cancel) setResults([]) }
+      finally { if (!cancel) setSearching(false) }
+    }, 300)
+    return () => { cancel = true; clearTimeout(t) }
+  }, [automationId, query, mode])
+
+  const selectedIds = Object.keys(selected)
+  const toggle = (id: string, label: string) =>
+    setSelected(prev => { const n = { ...prev }; if (n[id]) delete n[id]; else n[id] = label; return n })
+
+  const runPreview = async () => {
+    setPreviewing(true)
+    try { setPreview(await previewCriteriaMatches(automationId, groups)) }
+    catch { setPreview({ records: [], count: 0, capped: false }) }
+    finally { setPreviewing(false) }
+  }
+
+  const doEnroll = async (ids: string[]) => {
+    if (!ids.length) return
+    setEnrolling(true)
+    try {
+      const r = await manualEnroll(automationId, ids)
+      setDone(`Enrolled ${r.ran} record${r.ran === 1 ? "" : "s"} into this workflow.${r.capped ? " (Capped at the first 2,000.)" : ""}`)
+    } catch {
+      setDone("Enrollment failed. Please try again.")
+    } finally { setEnrolling(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 animate-overlay-in" onMouseDown={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-900">Manually enroll {objectLabel.toLowerCase()}</h3>
+            <p className="text-xs text-zinc-500">Runs the workflow now on the records you choose, regardless of the trigger criteria.</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+        </div>
+
+        {done ? (
+          <div className="p-6 flex flex-col items-center gap-4 text-center">
+            <p className="text-sm text-zinc-700">{done}</p>
+            <button onClick={onClose} className="px-4 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800">Close</button>
+          </div>
+        ) : (
+          <>
+            <div className="px-5 pt-4">
+              <div className="flex gap-2 text-sm">
+                <button onClick={() => setMode("individual")}
+                  className={cn("px-3 py-1.5 rounded-lg border", mode === "individual" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 text-zinc-600 hover:border-zinc-300")}>
+                  Choose individual records
+                </button>
+                <button onClick={() => setMode("filter")}
+                  className={cn("px-3 py-1.5 rounded-lg border", mode === "filter" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 text-zinc-600 hover:border-zinc-300")}>
+                  Custom filter
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {mode === "individual" ? (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+                    <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search records…"
+                      className="w-full rounded-lg border border-zinc-200 pl-8 pr-3 py-2 text-sm outline-none focus:border-zinc-400" />
+                  </div>
+                  <div className="border border-zinc-100 rounded-lg divide-y divide-zinc-100 max-h-64 overflow-y-auto">
+                    {searching ? (
+                      <div className="flex justify-center py-6 text-zinc-300"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                    ) : results.length === 0 ? (
+                      <p className="text-sm text-zinc-400 px-3 py-6 text-center">No matching records.</p>
+                    ) : results.map(r => (
+                      <label key={r.id} className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-zinc-50 cursor-pointer">
+                        <input type="checkbox" checked={!!selected[r.id]} onChange={() => toggle(r.id, r.label)} />
+                        <span className="truncate">{r.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {selectedIds.length > 0 && <p className="text-xs text-zinc-500">{selectedIds.length} selected</p>}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Enroll records that meet these conditions</p>
+                  <CriteriaGroupsBuilder groups={groups} onChange={setGroups} data={criteriaData} />
+                  <button onClick={runPreview} disabled={previewing}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 disabled:opacity-60">
+                    {previewing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />} Preview matches
+                  </button>
+                  {preview && (
+                    <div className="text-sm text-zinc-600">
+                      <p className="font-medium text-zinc-800">{preview.count} record{preview.count === 1 ? "" : "s"} match{preview.count === 1 ? "es" : ""}{preview.capped ? " (showing first 2,000)" : ""}.</p>
+                      {preview.records.length > 0 && (
+                        <div className="mt-1.5 border border-zinc-100 rounded-lg divide-y divide-zinc-100 max-h-40 overflow-y-auto">
+                          {preview.records.slice(0, 100).map(r => <div key={r.id} className="px-3 py-1.5 text-sm truncate">{r.label}</div>)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t">
+              <button onClick={onClose} className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
+              {mode === "individual" ? (
+                <button onClick={() => doEnroll(selectedIds)} disabled={enrolling || selectedIds.length === 0}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">
+                  {enrolling && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Enroll {selectedIds.length || ""}
+                </button>
+              ) : (
+                <button onClick={() => doEnroll((preview?.records ?? []).map(r => r.id))} disabled={enrolling || !preview || preview.count === 0}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">
+                  {enrolling && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Enroll {preview?.count ? `all ${Math.min(preview.count, 2000)}` : ""}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

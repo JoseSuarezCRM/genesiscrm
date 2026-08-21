@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { AutomationTrigger, AutomationAction } from "@prisma/client"
-import { runScheduledTriggers, countMatchingRecords, enrollExistingRecords } from "@/lib/automation-engine"
+import { runScheduledTriggers, countMatchingRecords, enrollExistingRecords, manualEnrollRecords, searchObjectRecords, matchRecordsByGroups } from "@/lib/automation-engine"
 
 export async function createAutomation(data: {
   name: string
@@ -58,6 +58,34 @@ export async function countWorkflowMatches(input: {
 export async function enrollExistingForAutomation(automationId: string): Promise<{ matched: number; ran: number; capped: boolean }> {
   await requireAccess("AUTOMATIONS", "EDIT")
   return enrollExistingRecords(automationId)
+}
+
+// ─── Manual enrollment ────────────────────────────────────────────────────────
+
+async function automationObjectType(automationId: string): Promise<string> {
+  const a = await prisma.automation.findUnique({ where: { id: automationId }, select: { triggerConfig: true } })
+  return ((a?.triggerConfig as any)?.objectType as string) || "REFERRAL"
+}
+
+// Run the workflow now on an explicit set of records (individual picks or a filter's matches).
+export async function manualEnroll(automationId: string, recordIds: string[]): Promise<{ ran: number; capped: boolean }> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  if (!Array.isArray(recordIds) || !recordIds.length) return { ran: 0, capped: false }
+  return manualEnrollRecords(automationId, recordIds)
+}
+
+// Search the workflow object's records by label — for the individual-record picker.
+export async function searchEnrollRecords(automationId: string, query: string): Promise<{ id: string; label: string }[]> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  const objectType = await automationObjectType(automationId)
+  return searchObjectRecords(objectType, query ?? "")
+}
+
+// Preview which records match an ad-hoc criteria group set — for the custom-filter mode.
+export async function previewCriteriaMatches(automationId: string, groups: any[]): Promise<{ records: { id: string; label: string }[]; count: number; capped: boolean }> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  const objectType = await automationObjectType(automationId)
+  return matchRecordsByGroups(objectType, (groups ?? []) as any)
 }
 
 export async function updateAutomation(id: string, data: {

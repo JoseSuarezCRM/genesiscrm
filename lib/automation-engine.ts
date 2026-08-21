@@ -727,10 +727,20 @@ async function runSingleAction(
     const organizer = from.fromEmail ?? senderEmail(from.senderKey)
     const uid = `${referralId ?? "rec"}-${start.getTime()}-${Math.random().toString(36).slice(2, 8)}@genesisortho.com`
 
+    // A calendar invite can't be sent to its own organizer — Microsoft strips the
+    // sender from the recipients and rejects the send with a cryptic "contains no
+    // recipients" error. Drop the organizer/sender address and fail clearly if that
+    // leaves no one (e.g. sender = "record owner" and the recipient is that same user).
+    const selfAddrs = new Set([organizer, from.fromEmail].filter(Boolean).map((a) => (a as string).toLowerCase()))
+    const sendTo = inviteTo.filter((e) => !selfAddrs.has(e.toLowerCase()))
+    if (!sendTo.length) {
+      return `Meeting invite not sent: the only recipient is the sender/organizer (${organizer}). Choose a different sender or recipient.`
+    }
+
     const ics = buildIcs({
       uid, start, end, title, description, location,
       organizer: { email: organizer, name: "Genesis Ortho" },
-      attendees: inviteTo.map((e) => ({ email: e })),
+      attendees: sendTo.map((e) => ({ email: e })),
     })
 
     const when = start.toLocaleString("en-US", {
@@ -746,9 +756,9 @@ async function runSingleAction(
     ].filter(Boolean).join("")
     const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">${inner}</div>`
 
-    const result = await sendCalendarInvite(inviteTo, title, html, ics, from.senderKey, from.fromEmail)
+    const result = await sendCalendarInvite(sendTo, title, html, ics, from.senderKey, from.fromEmail)
     if (!result.success) {
-      return `Meeting invite failed to ${inviteTo.join(", ")}: ${result.error ?? "unknown error"}`
+      return `Meeting invite failed to ${sendTo.join(", ")}: ${result.error ?? "unknown error"}`
     }
   }
 
@@ -1749,6 +1759,74 @@ export async function enrollExistingRecords(automationId: string): Promise<{ mat
     } catch { /* skip a single failing record, keep going */ }
   }
   return { matched: matching.length, ran, capped }
+}
+
+// ─── Manual enrollment ────────────────────────────────────────────────────────
+
+// Run the full workflow now on an explicit set of records, independent of the
+// trigger's enrollment criteria (HubSpot-style manual enrollment).
+export async function manualEnrollRecords(
+  automationId: string,
+  recordIds: string[],
+): Promise<{ ran: number; capped: boolean }> {
+  const auto = await prisma.automation.findUnique({ where: { id: automationId } })
+  if (!auto) return { ran: 0, capped: false }
+  const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
+  const objectType = (cfg.objectType as string) || "REFERRAL"
+  const capped = recordIds.length > ENROLL_CAP
+  const batch = recordIds.slice(0, ENROLL_CAP)
+  let ran = 0
+  for (const id of batch) {
+    try {
+      const record = await loadRecord(objectType, id)
+      if (!record) continue
+      const label = await genericRecordLabel(objectType, id, record)
+      const vars: TemplateVars = { record_name: label } as TemplateVars
+      const ref: RecordRef = { type: objectType, id }
+      const log = await executeAction(auto, null, vars, undefined, record, ref)
+      await prisma.automationRun.create({
+        data: { automationId: auto.id, ...runData(log, objectType, id, `Manually enrolled record: ${label}`) },
+      }).catch(() => {})
+      ran++
+    } catch { /* skip a single failing record, keep going */ }
+  }
+  return { ran, capped }
+}
+
+// Search an object's records by display label — powers the manual-enroll picker.
+export async function searchObjectRecords(
+  objectType: string,
+  query: string,
+  limit = 50,
+): Promise<{ id: string; label: string }[]> {
+  const records = await loadAllRecords(objectType)
+  const q = query.trim().toLowerCase()
+  const out: { id: string; label: string }[] = []
+  for (const r of records) {
+    const id = r.id as string
+    const label = await genericRecordLabel(objectType, id, r)
+    if (!q || label.toLowerCase().includes(q)) out.push({ id, label })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+// Records of an object matching an ad-hoc criteria group set — the manual-enroll
+// "custom filter" mode. Reuses the same evaluator as trigger enrollment criteria.
+export async function matchRecordsByGroups(
+  objectType: string,
+  groups: ConditionGroup[],
+): Promise<{ records: { id: string; label: string }[]; count: number; capped: boolean }> {
+  const records = await loadAllRecords(objectType)
+  const matching = records.filter((r) => checkConditions(r, { conditionGroups: groups } as any))
+  const capped = matching.length > ENROLL_CAP
+  const batch = matching.slice(0, ENROLL_CAP)
+  const out: { id: string; label: string }[] = []
+  for (const r of batch) {
+    const id = r.id as string
+    out.push({ id, label: await genericRecordLabel(objectType, id, r) })
+  }
+  return { records: out, count: matching.length, capped }
 }
 
 export async function runTrigger_RecordOwnerChanged(
