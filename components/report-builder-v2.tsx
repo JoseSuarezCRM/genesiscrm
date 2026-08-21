@@ -16,6 +16,7 @@ const VIZ_OPTIONS: { value: VizType; label: string }[] = [
   { value: "vbar", label: "Vertical bar" }, { value: "hbar", label: "Horizontal bar" },
   { value: "line", label: "Line" }, { value: "area", label: "Area" },
   { value: "pie", label: "Pie" }, { value: "donut", label: "Donut" },
+  { value: "pivot", label: "Pivot table" },
 ]
 const AGGS: Aggregation[] = ["count", "distinct_count", "sum", "avg", "min", "max"]
 const FREQS: DateFrequency[] = ["day", "week", "month", "quarter", "year"]
@@ -230,6 +231,8 @@ function Empty() {
 function Preview({ result }: { result: ReportResult }) {
   if (result.viz === "kpi") return <div className="flex h-full flex-col items-center justify-center"><Hash className="h-6 w-6 text-zinc-300" /><div className="mt-2 text-5xl font-bold text-zinc-900">{(result.kpi ?? 0).toLocaleString()}</div><p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p></div>
 
+  if (result.viz === "pivot" && result.pivot) return <div className="rounded-xl border border-zinc-200 bg-white p-5"><PivotTable pivot={result.pivot} /></div>
+
   const series = result.series ?? []
   if (["vbar", "hbar", "line", "area", "pie", "donut"].includes(result.viz) && series.length) {
     return <div className="rounded-xl border border-zinc-200 bg-white p-5"><Chart result={result} /><DataTable result={result} /></div>
@@ -249,11 +252,46 @@ function DataTable({ result }: { result: ReportResult }) {
   )
 }
 
+function PivotTable({ pivot }: { pivot: NonNullable<ReportResult["pivot"]> }) {
+  const nCols = pivot.colLabels.length
+  const rowTotals = pivot.cells.map((row) => row.reduce((a: number, v) => a + (v ?? 0), 0))
+  const colTotals = pivot.colLabels.map((_, j) => pivot.cells.reduce((a: number, row) => a + (row[j] ?? 0), 0))
+  const grand = colTotals.reduce((a: number, v) => a + v, 0)
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b-2 border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
+            <th className="px-3 py-2 font-semibold" />
+            {pivot.colLabels.map((c, j) => <th key={j} className="px-3 py-2 text-right font-semibold">{c}</th>)}
+            {nCols > 1 && <th className="px-3 py-2 text-right font-semibold">Total</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {pivot.rowLabels.map((rl, i) => (
+            <tr key={i} className="border-b border-zinc-100 hover:bg-zinc-50">
+              <td className="px-3 py-2 font-medium text-zinc-700">{rl}</td>
+              {pivot.cells[i].map((v, j) => <td key={j} className="px-3 py-2 text-right text-zinc-700">{(v ?? 0).toLocaleString()}</td>)}
+              {nCols > 1 && <td className="px-3 py-2 text-right font-semibold text-zinc-900">{rowTotals[i].toLocaleString()}</td>}
+            </tr>
+          ))}
+          <tr className="border-t-2 border-zinc-200 font-semibold text-zinc-900">
+            <td className="px-3 py-2">Total</td>
+            {colTotals.map((v, j) => <td key={j} className="px-3 py-2 text-right">{v.toLocaleString()}</td>)}
+            {nCols > 1 && <td className="px-3 py-2 text-right">{grand.toLocaleString()}</td>}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // Simple SVG chart for bar/line/area/pie off the engine's series.
 function Chart({ result }: { result: ReportResult }) {
   const series = result.series ?? []
   const labels = series[0]?.points.map((p) => p.label) ?? []
   const max = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value)))
+  const stackMax = Math.max(1, ...labels.map((_, i) => series.reduce((a, s) => a + (s.points[i]?.value ?? 0), 0)))
   const W = 640, H = 260, padL = 40, padB = 60, padT = 10, cW = W - padL - 10, cH = H - padT - padB
 
   if (result.viz === "pie" || result.viz === "donut") {
@@ -318,6 +356,18 @@ function Chart({ result }: { result: ReportResult }) {
           series.map((s, si) => {
             const pts = s.points.map((p, i) => `${padL + bw * i + bw / 2},${padT + cH - (p.value / max) * cH}`).join(" ")
             return <g key={si}>{result.viz === "area" && <polygon points={`${padL + bw / 2},${padT + cH} ${pts} ${padL + bw * (n - 1) + bw / 2},${padT + cH}`} fill={PALETTE[si % PALETTE.length] + "33"} />}<polyline points={pts} fill="none" stroke={PALETTE[si % PALETTE.length]} strokeWidth={2} /></g>
+          })
+        ) : result.stacked ? (
+          // Stacked bars (breakdown composition): max is the tallest stack.
+          labels.map((_, i) => {
+            let running = 0
+            return series.map((s, si) => {
+              const v = s.points[i]?.value ?? 0
+              const h = (v / stackMax) * cH
+              const y = padT + cH - running - h
+              running += h
+              return <rect key={si} x={padL + bw * i + bw * 0.15} y={y} width={bw * 0.7} height={Math.max(0, h)} fill={PALETTE[si % PALETTE.length]} />
+            })
           })
         ) : (
           labels.map((_, i) => series.map((s, si) => {

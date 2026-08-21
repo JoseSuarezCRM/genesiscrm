@@ -122,13 +122,33 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   const dim = dims[0]
   const breakdownField = config.breakdown ? byKey[config.breakdown.key] : null
 
-  // Bucket rows by the primary dimension.
+  // Bucket rows by the primary dimension (a single "All" group when none is set).
   const groups = new Map<string, { label: string; rows: any[] }>()
   const order: string[] = []
   for (const r of rows) {
-    const { key, label } = dimKeyLabel(r, dim.d, dim.f)
+    const { key, label } = dim ? dimKeyLabel(r, dim.d, dim.f) : { key: "all", label: "All" }
     if (!groups.has(key)) { groups.set(key, { label, rows: [] }); order.push(key) }
     groups.get(key)!.rows.push(r)
+  }
+
+  // Pivot: rows = primary dimension, columns = breakdown (or a single value column).
+  if (config.viz === "pivot") {
+    const m0 = measures[0], mf0 = measureField(m0)
+    let colKeys: string[] = ["__v"], colLabels: string[] = [measureLabel(m0)]
+    if (breakdownField && config.breakdown) {
+      const bd = new Map<string, string>()
+      for (const r of rows) { const { key, label } = dimKeyLabel(r, config.breakdown, breakdownField); if (!bd.has(key)) bd.set(key, label) }
+      colKeys = Array.from(bd.keys()); colLabels = Array.from(bd.values())
+    }
+    const cells = order.map((gk) => colKeys.map((ck) => {
+      const gr = groups.get(gk)!.rows
+      const sub = ck === "__v" ? gr : gr.filter((r) => dimKeyLabel(r, config.breakdown!, breakdownField!).key === ck)
+      return aggregate(sub, m0, mf0)
+    }))
+    return {
+      viz: "pivot", columns: [], rows: [], total, capped,
+      pivot: { rowLabels: order.map((k) => groups.get(k)!.label), colLabels, cells, rowKeys: order, colKeys },
+    }
   }
 
   // Breakdown series (or a single series over the first measure).
@@ -171,11 +191,11 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   }
 
   // Summarized table columns = dimension + each series.
-  const columns: ResultColumn[] = [{ key: "__dim", label: dim.f.label, type: dim.f.type }, ...series.map((s) => ({ key: s.name, label: s.name, type: "number" as const }))]
+  const columns: ResultColumn[] = [{ key: "__dim", label: dim ? dim.f.label : "All", type: dim ? dim.f.type : "text" }, ...series.map((s) => ({ key: s.name, label: s.name, type: "number" as const }))]
   const tableRows: (string | number | null)[][] = order.map((gk) => {
     const label = groups.get(gk)!.label
     return [label, ...series.map((s) => s.points.find((p) => p.key === gk)?.value ?? 0)]
   })
 
-  return { viz: config.viz, columns, rows: tableRows, series, total, capped }
+  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown) }
 }

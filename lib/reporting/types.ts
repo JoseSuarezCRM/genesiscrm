@@ -74,6 +74,7 @@ export interface ReportResult {
   pivot?: { rowLabels: string[]; colLabels: string[]; cells: (number | null)[][]; rowKeys: string[]; colKeys: string[] }
   total: number               // total matching primary records
   capped?: boolean
+  stacked?: boolean           // series form a composition (from a breakdown) → stack
 }
 
 export const EMPTY_REPORT: ReportConfig = {
