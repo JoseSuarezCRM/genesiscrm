@@ -11,6 +11,7 @@ import { walkGraph, delayMs, type AutomationGraph, type DelayUnit } from "@/lib/
 import { findProcedureLocation } from "@/lib/surgery-procedures"
 import { type RecordRef, loadRecord, loadAllRecords, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner, createRecordFor } from "@/lib/automation-records"
 import { ensureAssociationDef, ensureAssociation } from "@/lib/object-associations"
+import { workflowObjectFor } from "@/lib/workflow-objects"
 
 // A record created by a workflow can fire its own "record created" workflows; cap
 // the chain so a misconfigured loop stops instead of running away.
@@ -1737,7 +1738,7 @@ export async function enrollExistingRecords(automationId: string): Promise<{ mat
   const auto = await prisma.automation.findUnique({ where: { id: automationId } })
   if (!auto) return { matched: 0, ran: 0, capped: false }
   const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
-  const objectType = (cfg.objectType as string) || "REFERRAL"
+  const objectType = workflowObjectFor(auto.triggerType as string, cfg.objectType as string | undefined).key
 
   const records = await loadAllRecords(objectType)
   const matching = records.filter((r) => recordMatchesConfig(r, auto.triggerType as string, cfg))
@@ -1772,7 +1773,7 @@ export async function manualEnrollRecords(
   const auto = await prisma.automation.findUnique({ where: { id: automationId } })
   if (!auto) return { ran: 0, capped: false }
   const cfg = (auto.triggerConfig ?? {}) as Record<string, unknown>
-  const objectType = (cfg.objectType as string) || "REFERRAL"
+  const objectType = workflowObjectFor(auto.triggerType as string, cfg.objectType as string | undefined).key
   const capped = recordIds.length > ENROLL_CAP
   const batch = recordIds.slice(0, ENROLL_CAP)
   let ran = 0
