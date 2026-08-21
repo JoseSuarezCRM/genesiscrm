@@ -475,6 +475,7 @@ model User {
   providerViews         ProviderView[]
   surgeryViews          SurgeryView[]
   taskViews             TaskView[]
+  referralViews         ReferralView[]
   viewOrders            UserViewOrder[]
   savedReports          SavedReport[]        @relation("SavedReportCreatedBy")
   dashboards            Dashboard[]          @relation("DashboardCreatedBy")
@@ -1002,6 +1003,20 @@ model TaskView {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   config        Json     // { filter, columns, frozen, viewMode }
+  visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
+  teamId        String?
+  sharedUserIds String[] @default([])
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model ReferralView {
+  id            String   @id @default(cuid())
+  name          String
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  config        Json     // { query, columns }
   visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[] @default([])

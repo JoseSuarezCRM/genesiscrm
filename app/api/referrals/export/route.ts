@@ -5,6 +5,9 @@ import { createAuditLog } from "@/lib/audit"
 import { STATUS_LABELS } from "@/lib/utils"
 import { userCan } from "@/lib/permissions"
 import { ReferralStatus, AuditAction } from "@prisma/client"
+import { buildReferralWhere } from "@/lib/referral-query"
+import { referralFilterFields } from "@/lib/referral-filter-fields"
+import { decodeFilterParam } from "@/lib/filters"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -32,22 +35,20 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get("from")
   const to = searchParams.get("to")
 
+  // Same where-builder as the list, so the export honors quick filters, the
+  // advanced FilterBuilder (`filter` param), and the active saved view.
+  const referralCustomProps = await prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { createdAt: "asc" } })
+  const filterFields = referralFilterFields({
+    customProps: referralCustomProps.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })),
+  })
+  const where = buildReferralWhere({
+    statuses, statusMode, practiceIds, practiceMode, doctorIds, doctorMode,
+    tagIds, tagMode, from: from ?? undefined, to: to ?? undefined,
+    pipelineId, filter: decodeFilterParam(searchParams.get("filter")),
+  }, filterFields) as any
+
   const referrals = await (prisma as any).referral.findMany({
-    where: {
-      ...(pipelineId ? { pipelineId } : {}),
-      ...(statuses.length > 0 ? { status: statusMode === "none" ? { notIn: statuses } : { in: statuses } } : {}),
-      ...(practiceIds.length > 0 ? { referringPracticeId: practiceMode === "none" ? { notIn: practiceIds } : { in: practiceIds } } : {}),
-      ...(doctorIds.length > 0 ? { referringDoctorId: doctorMode === "none" ? { notIn: doctorIds } : { in: doctorIds } } : {}),
-      ...(tagIds.length > 0 ? { tags: tagMode === "none" ? { none: { tagId: { in: tagIds } } } : { some: { tagId: { in: tagIds } } } } : {}),
-      ...(from || to
-        ? {
-            referralDate: {
-              ...(from ? { gte: new Date(from) } : {}),
-              ...(to ? { lte: new Date(to) } : {}),
-            },
-          }
-        : {}),
-    },
+    where,
     include: {
       referringPractice: true,
       pipeline: { select: { name: true } },

@@ -1,8 +1,11 @@
 "use client"
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Search, ChevronDown, X, Check, AlertCircle, Calendar } from "lucide-react"
+import FilterBuilder from "@/components/ui/filter-builder"
+import { decodeFilterParam, emptyFilter, activeConditionCount, type FilterState, type CustomPropDef } from "@/lib/filters"
+import { referralFilterFields } from "@/lib/referral-filter-fields"
 
 const STATUS_OPTIONS = [
   { id: "NEW", label: "New" },
@@ -37,6 +40,11 @@ interface ReferralFiltersProps {
   currentFrom?: string
   currentTo?: string
   incompleteOnly: boolean
+  // Advanced FilterBuilder inputs (serializable — fields are built client-side).
+  users?: { id: string; label: string }[]
+  pipelines?: { id: string; label: string }[]
+  locations?: { id: string; label: string }[]
+  customPropertyDefs?: CustomPropDef[]
 }
 
 // ─── Multi-select dropdown ────────────────────────────────────────────────────
@@ -318,10 +326,40 @@ export default function ReferralFilters({
   currentFrom,
   currentTo,
   incompleteOnly,
+  users = [],
+  pipelines = [],
+  locations = [],
+  customPropertyDefs = [],
 }: ReferralFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
+
+  // Native fields + relational selects + every referral custom property become
+  // advanced FilterBuilder criteria (Tags stay an inline filter — no m2m support).
+  const fields = useMemo(
+    () => referralFilterFields({ users, practices, doctors, locations, pipelines, customProps: customPropertyDefs }),
+    [users, practices, doctors, locations, pipelines, customPropertyDefs],
+  )
+
+  // Advanced filter state — held locally for responsive editing, synced (debounced)
+  // to the `filter` URL param since referral filtering runs server-side.
+  const filterParam = params.get("filter")
+  const [filterState, setFilterState] = useState<FilterState>(() => decodeFilterParam(filterParam) ?? emptyFilter())
+  const filterDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { setFilterState(decodeFilterParam(filterParam) ?? emptyFilter()) }, [filterParam])
+  const advancedActive = activeConditionCount(filterState, fields) > 0
+  const onFilterChange = (next: FilterState) => {
+    setFilterState(next)
+    if (filterDebounce.current) clearTimeout(filterDebounce.current)
+    filterDebounce.current = setTimeout(() => {
+      const p = new URLSearchParams(params.toString())
+      if (activeConditionCount(next, fields) > 0) p.set("filter", JSON.stringify(next))
+      else p.delete("filter")
+      p.delete("page")
+      router.push(`${pathname}?${p.toString()}`)
+    }, 400)
+  }
 
   // Debounced search
   const [searchValue, setSearchValue] = useState(currentSearch ?? "")
@@ -425,6 +463,7 @@ export default function ReferralFilters({
 
   const clearAll = () => {
     setSearchValue("")
+    setFilterState(emptyFilter())
     navigate(new URLSearchParams())
   }
 
@@ -458,7 +497,7 @@ export default function ReferralFilters({
   ]
 
   const hasActiveFilters =
-    chips.length > 0 || currentFrom || currentTo || !!currentSearch || incompleteOnly
+    chips.length > 0 || currentFrom || currentTo || !!currentSearch || incompleteOnly || advancedActive
 
   return (
     <div className="space-y-2.5">
@@ -522,6 +561,9 @@ export default function ReferralFilters({
             onModeChange={setTagMode}
           />
         )}
+
+        {/* Advanced filter (all native fields + custom properties) */}
+        <FilterBuilder fields={fields} value={filterState} onChange={onFilterChange} />
 
         {/* Date range */}
         <DateRangeFilter from={currentFrom} to={currentTo} onApply={setDateRange} />
