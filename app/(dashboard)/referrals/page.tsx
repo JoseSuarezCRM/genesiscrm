@@ -10,7 +10,12 @@ import { Plus } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
 import ReferralTable from "@/components/referral-table"
 import ReferralsExportButton from "@/components/referrals-export-button"
-import { getAssignableUsers } from "@/app/actions/view-share-options"
+import ReferralViewsBar from "@/components/referral-views-bar"
+import { getAssignableUsers, getViewShareOptions } from "@/app/actions/view-share-options"
+import { getReferralViews } from "@/app/actions/referral-views"
+import { buildReferralWhere } from "@/lib/referral-query"
+import { referralFilterFields } from "@/lib/referral-filter-fields"
+import { decodeFilterParam } from "@/lib/filters"
 
 interface PageProps {
   searchParams: {
@@ -30,6 +35,7 @@ interface PageProps {
     pipeline?: string
     sort?: string
     dir?: string
+    filter?: string
   }
 }
 
@@ -72,48 +78,21 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
   const search = searchParams.search?.trim()
   const incompleteOnly = searchParams.incomplete === "1"
   const pipelineId = searchParams.pipeline ?? null
+  const advancedFilter = decodeFilterParam(searchParams.filter)
 
-  const where = {
-    ...(pipelineId ? { pipelineId } : {}),
-    ...(incompleteOnly
-      ? {
-          OR: [
-            { referringPracticeId: null },
-            { referringLocationId: null },
-            { referringDoctorId: null },
-          ],
-        }
-      : {}),
-    ...(statuses.length > 0 ? { status: statusMode === "none" ? { notIn: statuses } : { in: statuses } } : {}),
-    ...(practiceIds.length > 0 ? { referringPracticeId: practiceMode === "none" ? { notIn: practiceIds } : { in: practiceIds } } : {}),
-    ...(doctorIds.length > 0 ? { referringDoctorId: doctorMode === "none" ? { notIn: doctorIds } : { in: doctorIds } } : {}),
-    ...(searchParams.from || searchParams.to
-      ? {
-          referralDate: {
-            ...(searchParams.from ? { gte: new Date(searchParams.from) } : {}),
-            ...(searchParams.to ? { lte: new Date(searchParams.to) } : {}),
-          },
-        }
-      : {}),
-    ...(search
-      ? {
-          OR: [
-            { patientFirstName: { contains: search, mode: "insensitive" as const } },
-            { patientLastName: { contains: search, mode: "insensitive" as const } },
-            { referringDoctorName: { contains: search, mode: "insensitive" as const } },
-            { referringPractice: { name: { contains: search, mode: "insensitive" as const } } },
-            { genesisMrn: { contains: search, mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-    ...(tagIds.length > 0
-      ? { tags: tagMode === "none"
-          ? { none: { tagId: { in: tagIds } } }
-          : { some: { tagId: { in: tagIds } } } }
-      : {}),
-  }
+  // Custom props are needed up-front so advanced-filter conditions on them translate.
+  const referralCustomProps = await prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { createdAt: "asc" } })
+  const filterFields = referralFilterFields({
+    customProps: referralCustomProps.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })),
+  })
 
-  const [referrals, total, allMatchingIds, practices, allTags, incompleteCount, allDoctors, pipelines, referralCustomProps] = await Promise.all([
+  const where = buildReferralWhere({
+    search, statuses, statusMode, practiceIds, practiceMode, doctorIds, doctorMode,
+    tagIds, tagMode, from: searchParams.from, to: searchParams.to,
+    incompleteOnly, pipelineId, filter: advancedFilter,
+  }, filterFields) as any
+
+  const [referrals, total, allMatchingIds, practices, allTags, incompleteCount, allDoctors, pipelines] = await Promise.all([
     prisma.referral.findMany({
       where,
       take: PAGE_SIZE,
@@ -142,7 +121,6 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       include: { _count: { select: { referrals: true } } },
     }),
-    prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { createdAt: "asc" } }),
   ])
 
   return {
@@ -174,6 +152,11 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
   const canCreate = userCanLevel(session?.user as any, "REFERRALS", "EDIT")
   const canExport = userCan(session?.user as any, "EXPORT_DATA")
   const assignableUsers = await getAssignableUsers()
+  const [savedViews, shareOptions, filterLocations] = await Promise.all([
+    getReferralViews(),
+    getViewShareOptions(),
+    prisma.practiceLocation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ])
   const {
     referrals,
     total,
@@ -219,6 +202,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
   if (pipelineId) exportParams.set("pipeline", pipelineId)
   if (searchParams.from) exportParams.set("from", searchParams.from)
   if (searchParams.to) exportParams.set("to", searchParams.to)
+  if (searchParams.filter) exportParams.set("filter", searchParams.filter)
 
   // Build a tab href that resets page but keeps other filters
   function pipelineTabHref(id: string | null) {
@@ -290,6 +274,11 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         </div>
       )}
 
+      {/* Saved views */}
+      <Suspense fallback={null}>
+        <ReferralViewsBar views={savedViews as any} shareUsers={shareOptions.users as any} shareTeams={shareOptions.teams as any} />
+      </Suspense>
+
       {/* Filters */}
       <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm">
         <Suspense fallback={null}>
@@ -313,6 +302,10 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
             currentFrom={searchParams.from}
             currentTo={searchParams.to}
             incompleteOnly={incompleteOnly}
+            users={assignableUsers}
+            pipelines={(pipelines as any[]).map((p) => ({ id: p.id, label: p.name }))}
+            locations={filterLocations.map((l) => ({ id: l.id, label: l.name }))}
+            customPropertyDefs={(referralCustomProps as any[]).map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options }))}
           />
         </Suspense>
       </div>

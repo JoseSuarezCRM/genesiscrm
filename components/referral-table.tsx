@@ -138,7 +138,7 @@ const STATIC_REFERRAL_COLUMNS: { key: string; label: string; sortable?: boolean 
   { key: "notes", label: "Notes" },
   { key: "status", label: "Status", sortable: true },
 ]
-const DEFAULT_REFERRAL_COLS = ["patient", "phone", "practice", "tags", "referralDate", "apptDate", "calls", "status"]
+export const DEFAULT_REFERRAL_COLS = ["patient", "phone", "practice", "tags", "referralDate", "apptDate", "calls", "status"]
 const REFERRAL_COL_W: Record<string, number> = {
   patient: 200, phone: 150, email: 200, mrn: 140, genesisMrn: 140, dob: 130, practice: 220,
   providerName: 180, npi: 140, referringPhone: 150, referringAddress: 220, insurance: 170,
@@ -166,6 +166,18 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
   const headerCheckRef = useRef<HTMLInputElement>(null)
   const { colWidth, startResize } = useColumnResize("referralColWidths")
   const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs("referralCols", DEFAULT_REFERRAL_COLS)
+  // Re-apply column prefs when a saved view is applied (the views bar writes them
+  // to localStorage and dispatches this event before navigating).
+  useEffect(() => {
+    const onApplied = () => {
+      try {
+        const r = JSON.parse(localStorage.getItem("referralCols") || "null")
+        if (r && Array.isArray(r.columns)) applyCols(r.columns, typeof r.frozen === "number" ? r.frozen : 0)
+      } catch {}
+    }
+    window.addEventListener("referral-view-applied", onApplied)
+    return () => window.removeEventListener("referral-view-applied", onApplied)
+  }, [applyCols])
   const [colModalOpen, setColModalOpen] = useState(false)
   // Render in the user's chosen order, with the required "patient" column first.
   const orderedKeys = ["patient", ...visibleCols.filter((k) => k !== "patient")]
