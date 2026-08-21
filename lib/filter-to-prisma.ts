@@ -55,6 +55,18 @@ function conditionToWhere(cond: Condition, field: FilterField): Record<string, u
   const op = cond.operator
   const v = cond.value
 
+  // Many-to-many relation (e.g. tags): map the `select` operators to some/none.
+  if (field.relationSome) {
+    const { relation, key } = field.relationSome
+    if (op === "is_known") return { [relation]: { some: {} } }
+    if (op === "is_unknown") return { [relation]: { none: {} } }
+    const arr = Array.isArray(v) ? v : v ? [v] : []
+    if (arr.length === 0) return null
+    if (op === "is_any_of") return { [relation]: { some: { [key]: { in: arr } } } }
+    if (op === "is_none_of") return { [relation]: { none: { [key]: { in: arr } } } }
+    return null
+  }
+
   if (op === "is_known") {
     return field.type === "text"
       ? { AND: [{ [col]: { not: null } }, { [col]: { not: "" } }] }

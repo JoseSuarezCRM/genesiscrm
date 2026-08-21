@@ -25,6 +25,9 @@ export interface FilterField {
   // When the value lives inside a JSON bag (custom properties), this is the bag's
   // column and `column` is the key within it.
   jsonBag?: string
+  // For a many-to-many relation (e.g. tags): server-side translation maps the
+  // `select` operators to Prisma `{ [relation]: { some|none: { [key]: { in } } } }`.
+  relationSome?: { relation: string; key: string }
 }
 
 export interface Operator {

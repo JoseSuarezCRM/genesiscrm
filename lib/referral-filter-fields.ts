@@ -48,6 +48,7 @@ export function referralFilterFields(opts?: {
   doctors?: { id: string; label: string }[]
   locations?: { id: string; label: string }[]
   pipelines?: { id: string; label: string }[]
+  tags?: { id: string; label: string }[]
   customProps?: CustomPropDef[]
 }): FilterField[] {
   const sel = (key: string, label: string, column: string, items?: { id: string; label: string }[]): FilterField => ({
@@ -61,6 +62,12 @@ export function referralFilterFields(opts?: {
     sel("referringLocationId", "Referring location", "referringLocationId", opts?.locations),
     sel("pipelineId", "Pipeline", "pipelineId", opts?.pipelines),
     sel("assignedToId", "Referral Owner", "assignedToId", opts?.users),
+    {
+      key: "tags", label: "Tags", type: "select", column: "tags",
+      options: (opts?.tags ?? []).map((t) => ({ value: t.id, label: t.label })),
+      relationSome: { relation: "tags", key: "tagId" },
+      getValue: (row: any) => (row?.tags ?? []).map((t: any) => t.tagId ?? t.tag?.id).filter(Boolean),
+    },
     ...customPropertyFilterFields(opts?.customProps ?? []),
   ]
 }
