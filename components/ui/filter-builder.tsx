@@ -86,7 +86,16 @@ function CombinatorToggle({ value, onChange }: { value: Combinator; onChange: (c
 
 export default function FilterBuilder({ fields, value, onChange }: Props) {
   const [open, setOpen] = useState(false)
+  // Flip the panel to right-aligned when left-aligned would overflow the viewport
+  // (the Filter button often sits on the right of a toolbar).
+  const [alignRight, setAlignRight] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open || !ref.current) return
+    const rect = ref.current.getBoundingClientRect()
+    const panelW = Math.min(740, window.innerWidth * 0.94)
+    setAlignRight(rect.left + panelW > window.innerWidth - 8)
+  }, [open])
   useEffect(() => {
     if (!open) return
     function onDoc(e: MouseEvent) {
@@ -145,7 +154,7 @@ export default function FilterBuilder({ fields, value, onChange }: Props) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-11 z-50 w-[740px] max-w-[94vw] bg-white border border-slate-200 rounded-xl shadow-2xl p-5">
+        <div className={cn("absolute top-11 z-50 w-[740px] max-w-[94vw] max-h-[75vh] overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-2xl p-5", alignRight ? "right-0" : "left-0")}>
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-slate-800">Filters</p>
             {count > 0 && (
