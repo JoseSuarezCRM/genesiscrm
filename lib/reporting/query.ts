@@ -69,29 +69,54 @@ function aggregate(rows: any[], measure: Measure, field: ReportField | null): nu
   return 0
 }
 
-export async function runReport(config: ReportConfig): Promise<ReportResult> {
+function formatCell(v: unknown, f: ReportField): string | number | null {
+  if (v == null) return null
+  if (f.type === "date") { const d = toDate(v); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : String(v) }
+  if (Array.isArray(v)) return v.join(", ")
+  return typeof v === "number" ? v : String(v)
+}
+
+// Load the primary object's rows (filtered + joined) — shared by runReport + drill.
+async function loadReportRows(config: ReportConfig): Promise<{ rows: any[]; fields: ReportField[]; byKey: Record<string, ReportField>; total: number; capped: boolean }> {
   const primary = config.primary
   const fields = await reportFieldsFor(primary)
   const joined = (await Promise.all((config.sources ?? []).map((s) => joinedFieldsForSource(primary, s.joinPath)))).flat()
-  const allFields = [...fields, ...joined]
-  const byKey = Object.fromEntries(allFields.map((f) => [f.key, f]))
+  const byKey = Object.fromEntries([...fields, ...joined].map((f) => [f.key, f]))
   const model = delegateFor(primary)
-  if (!model) return { viz: config.viz, columns: [], rows: [], total: 0 }
-
-  // Filters only translate on primary (scalar) fields — joins can't be traversed by
-  // filter-to-prisma, so joined fields are available for grouping/measures, not filters.
+  if (!model) return { rows: [], fields, byKey, total: 0, capped: false }
+  // Filters only translate on primary (scalar) fields — joins aren't traversable by
+  // filter-to-prisma, so joined fields are for grouping/measures, not filters.
   const advanced = filterStateToWhere(config.filters ?? null, toFilterFields(fields))
   let where: Record<string, unknown> = advanced
   if (primary.startsWith("CO:")) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: primary.slice(3) }, select: { id: true } }).catch(() => null)
     where = def ? { AND: [{ objectDefId: def.id }, advanced] } : advanced
   }
-
-  // Include each active joined source's relation so its fields are readable per row.
   const include = Object.fromEntries((config.sources ?? []).map((s) => [s.joinPath, true]))
   const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: ROW_CAP }).catch(() => [])
-  const total = rows.length
-  const capped = total >= ROW_CAP
+  return { rows, fields, byKey, total: rows.length, capped: rows.length >= ROW_CAP }
+}
+
+// The underlying primary records behind a chart bar / summarized row / pivot cell.
+export async function drillReport(config: ReportConfig, dimKey: string, breakdownKey?: string | null): Promise<ReportResult> {
+  const { rows, fields, byKey } = await loadReportRows(config)
+  const dim = config.dimensions[0] ? { d: config.dimensions[0], f: byKey[config.dimensions[0].key] } : null
+  const bd = config.breakdown ? byKey[config.breakdown.key] : null
+  const matched = rows.filter((r) => {
+    if (dim && dim.f && dimKeyLabel(r, dim.d, dim.f).key !== dimKey) return false
+    if (breakdownKey != null && bd && config.breakdown && dimKeyLabel(r, config.breakdown, bd).key !== breakdownKey) return false
+    return true
+  })
+  const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
+  const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
+  const out = matched.slice(0, 1000).map((r) => cols.map((f) => formatCell(readValue(r, f), f)))
+  return { viz: "table", columns, rows: out, total: matched.length, capped: matched.length > 1000 }
+}
+
+export async function runReport(config: ReportConfig): Promise<ReportResult> {
+  const primary = config.primary
+  const { rows, fields, byKey, total, capped } = await loadReportRows(config)
+  if (!delegateFor(primary)) return { viz: config.viz, columns: [], rows: [], total: 0 }
 
   const measures = config.measures.length ? config.measures : [{ source: primary, key: "*", agg: "count" as const }]
   const measureField = (m: Measure) => (m.key === "*" ? null : byKey[m.key] ?? null)
@@ -197,5 +222,5 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     return [label, ...series.map((s) => s.points.find((p) => p.key === gk)?.value ?? 0)]
   })
 
-  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown) }
+  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order }
 }

@@ -75,6 +75,7 @@ export interface ReportResult {
   total: number               // total matching primary records
   capped?: boolean
   stacked?: boolean           // series form a composition (from a breakdown) → stack
+  rowKeys?: string[]          // dimension group keys aligned with `rows` (for drill-into)
 }
 
 export const EMPTY_REPORT: ReportConfig = {
