@@ -254,6 +254,18 @@ export default function ReportsClient({
   const pipelineParams = pipelineIds.map((id) => `&pipeline=${id}`).join("")
   const referralsBase = `/referrals?from=${rangeFromStr}&to=${rangeToStr}${practiceParams}${doctorParams}${pipelineParams}`
 
+  // Drill into the referrals filtered by an insurance — carried via the advanced
+  // `filter` param the referrals list decodes (insuranceProvider is a filter field).
+  const insuranceHref = (name: string) => {
+    const state = {
+      combinator: "AND",
+      groups: [{ id: "g1", combinator: "AND", conditions: [
+        { id: "c1", field: "insuranceProvider", operator: "is", value: name },
+      ] }],
+    }
+    return `${referralsBase}&filter=${encodeURIComponent(JSON.stringify(state))}`
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header + range selector */}
@@ -501,8 +513,8 @@ export default function ReportsClient({
             <h2 className="text-sm font-semibold text-slate-700 mb-4">Insurance Breakdown</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {insuranceData.map((ins) => (
-                <div key={ins.name} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-600 w-40 shrink-0 truncate">{ins.name}</span>
+                <Link key={ins.name} href={insuranceHref(ins.name)} className="flex items-center gap-3 group">
+                  <span className="text-xs text-slate-600 w-40 shrink-0 truncate group-hover:text-blue-600">{ins.name}</span>
                   <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
                     <div
                       className="h-5 bg-teal-500 rounded-full flex items-center px-2"
@@ -511,7 +523,8 @@ export default function ReportsClient({
                       {ins.count > 0 && <span className="text-xs text-white font-medium">{ins.count}</span>}
                     </div>
                   </div>
-                </div>
+                  <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                </Link>
               ))}
             </div>
           </div>
