@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { AutomationTrigger, AutomationAction } from "@prisma/client"
 import { runScheduledTriggers, countMatchingRecords, enrollExistingRecords, manualEnrollRecords, searchObjectRecords, matchRecordsByGroups } from "@/lib/automation-engine"
+import { workflowObjectFor } from "@/lib/workflow-objects"
 
 export async function createAutomation(data: {
   name: string
@@ -63,8 +64,11 @@ export async function enrollExistingForAutomation(automationId: string): Promise
 // ─── Manual enrollment ────────────────────────────────────────────────────────
 
 async function automationObjectType(automationId: string): Promise<string> {
-  const a = await prisma.automation.findUnique({ where: { id: automationId }, select: { triggerConfig: true } })
-  return ((a?.triggerConfig as any)?.objectType as string) || "REFERRAL"
+  const a = await prisma.automation.findUnique({ where: { id: automationId }, select: { triggerType: true, triggerConfig: true } })
+  if (!a) return "REFERRAL"
+  // Object comes from triggerConfig.objectType for generic triggers, else from the
+  // trigger type itself (e.g. SURGERY_STATUS_CHANGED → SURGERY).
+  return workflowObjectFor(a.triggerType as string, (a.triggerConfig as any)?.objectType).key
 }
 
 // Run the workflow now on an explicit set of records (individual picks or a filter's matches).
