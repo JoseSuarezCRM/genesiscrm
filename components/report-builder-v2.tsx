@@ -281,6 +281,33 @@ function Chart({ result }: { result: ReportResult }) {
   }
 
   const n = labels.length || 1
+
+  // Horizontal bar — category rows top-to-bottom, bars growing left→right.
+  if (result.viz === "hbar") {
+    const rowH = 26, gap = 8, chartW = 560, labelW = 130
+    return (
+      <div>
+        {series.length > 1 && <div className="mb-2 flex flex-wrap gap-3 text-xs">{series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{s.name}</span>)}</div>}
+        <svg viewBox={`0 0 ${labelW + chartW + 50} ${(rowH + gap) * n + 10}`} className="w-full">
+          {labels.map((l, i) => {
+            const y = i * (rowH + gap) + 5
+            const sh = rowH / series.length
+            return (
+              <g key={i}>
+                <text x={labelW - 8} y={y + rowH / 2} textAnchor="end" dominantBaseline="middle" fontSize={11} fill="#555">{l.length > 18 ? l.slice(0, 17) + "…" : l}</text>
+                {series.map((s, si) => {
+                  const v = s.points[i]?.value ?? 0
+                  const w = (v / max) * chartW
+                  return <g key={si}><rect x={labelW} y={y + sh * si} width={Math.max(0, w)} height={Math.max(1, sh - 2)} fill={PALETTE[si % PALETTE.length]} rx={2} /><text x={labelW + w + 4} y={y + sh * si + sh / 2} dominantBaseline="middle" fontSize={10} fill="#888">{v.toLocaleString()}</text></g>
+                })}
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+    )
+  }
+
   const bw = cW / n
   return (
     <div>
