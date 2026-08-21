@@ -126,7 +126,9 @@ function conditionToWhere(cond: Condition, field: FilterField): Record<string, u
       if (Number.isNaN(d.getTime())) return null
       switch (op) {
         case "after": return { [col]: { gt: d } }
+        case "on_or_after": return { [col]: { gte: d } }
         case "before": return { [col]: { lt: d } }
+        case "on_or_before": return { [col]: { lte: d } }
         case "on": {
           const start = new Date(d); start.setHours(0, 0, 0, 0)
           const end = new Date(start); end.setDate(end.getDate() + 1)

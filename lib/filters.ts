@@ -70,7 +70,9 @@ export const OPERATORS: Record<FieldType, Operator[]> = {
   ],
   date: [
     { value: "after", label: "is after" },
+    { value: "on_or_after", label: "is on or after" },
     { value: "before", label: "is before" },
+    { value: "on_or_before", label: "is on or before" },
     { value: "on", label: "is on" },
     { value: "is_known", label: "is known", noValue: true },
     { value: "is_unknown", label: "is unknown", noValue: true },
@@ -211,7 +213,9 @@ function evalCondition(row: any, cond: Condition, fields: FilterField[]): boolea
       if (Number.isNaN(a)) return false
       switch (cond.operator) {
         case "after": return a > b
+        case "on_or_after": return a >= b
         case "before": return a < b
+        case "on_or_before": return a <= b
         case "on": {
           const da = new Date(a), db = new Date(b)
           return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate()

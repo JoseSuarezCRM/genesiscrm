@@ -77,6 +77,42 @@ export default function ReferralFilters({
     [users, practices, doctors, locations, pipelines, tags, customPropertyDefs],
   )
 
+  // Legacy quick-filter params (status/practice/doctor/tag/date) can arrive from
+  // report drill-ins, bookmarks, or older saved views. Fold them into the advanced
+  // `filter` on landing so the Filter button reflects them (visible + editable +
+  // clearable), then strip the quick params. Runs once.
+  const normalizedRef = useRef(false)
+  useEffect(() => {
+    if (normalizedRef.current) return
+    const sp = new URLSearchParams(params.toString())
+    const status = sp.getAll("status"), practice = sp.getAll("practice")
+    const doctor = sp.getAll("doctor"), tag = sp.getAll("tag")
+    const from = sp.get("from"), to = sp.get("to")
+    if (!(status.length || practice.length || doctor.length || tag.length || from || to)) return
+    normalizedRef.current = true
+    const cid = () => "c" + Math.random().toString(36).slice(2, 8)
+    const conds: any[] = []
+    const addSel = (field: string, ids: string[], mode: string | null) => {
+      if (ids.length) conds.push({ id: cid(), field, operator: mode === "none" ? "is_none_of" : "is_any_of", value: ids })
+    }
+    addSel("status", status, sp.get("statusMode"))
+    addSel("referringPracticeId", practice, sp.get("practiceMode"))
+    addSel("referringDoctorId", doctor, sp.get("doctorMode"))
+    addSel("tags", tag, sp.get("tagMode"))
+    if (from) conds.push({ id: cid(), field: "referralDate", operator: "on_or_after", value: from })
+    if (to) conds.push({ id: cid(), field: "referralDate", operator: "on_or_before", value: to })
+    const existing = decodeFilterParam(sp.get("filter"))
+    const groups = existing?.groups ? [...existing.groups] : []
+    groups.push({ id: "g" + Math.random().toString(36).slice(2, 8), combinator: "AND", conditions: conds })
+    const next = { combinator: existing?.combinator ?? "AND", groups }
+    const p = new URLSearchParams(params.toString())
+    for (const k of ["status", "statusMode", "practice", "practiceMode", "doctor", "doctorMode", "tag", "tagMode", "from", "to"]) p.delete(k)
+    p.set("filter", JSON.stringify(next))
+    p.delete("page")
+    router.replace(`${pathname}?${p.toString()}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Advanced filter state — held locally for responsive editing, synced (debounced)
   // to the `filter` URL param since referral filtering runs server-side.
   const filterParam = params.get("filter")
