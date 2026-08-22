@@ -24,15 +24,35 @@ export function fmtNum(v: number, vf?: ValueFormat): string {
 // preview and dashboard cards. Pass onDrill to make bars/rows/cells click into records.
 export function ReportView({ result, style, onDrill }: { result: ReportResult; style?: ReportStyle; onDrill?: DrillFn }) {
   const st = style ?? {}
-  if (result.viz === "kpi") return <div className="flex h-full flex-col items-center justify-center"><Hash className="h-6 w-6 text-zinc-300" /><div className="mt-2 text-5xl font-bold text-zinc-900">{fmtNum(result.kpi ?? 0, result.valueFormat)}</div><p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p></div>
+  if (result.viz === "kpi") return (
+    <div className="flex h-full flex-col items-center justify-center">
+      <Hash className="h-6 w-6 text-zinc-300" />
+      <div className="mt-2 text-5xl font-bold text-zinc-900">{fmtNum(result.kpi ?? 0, result.valueFormat)}</div>
+      <p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p>
+      {result.comparison && <DeltaBadge c={result.comparison} vf={result.valueFormat} />}
+    </div>
+  )
 
-  if (result.viz === "pivot" && result.pivot) return <PivotTable pivot={result.pivot} onDrill={onDrill} valueFormat={result.valueFormat} />
+  if (result.viz === "pivot" && result.pivot) return <div><CompareCaption result={result} /><PivotTable pivot={result.pivot} onDrill={onDrill} valueFormat={result.valueFormat} /></div>
 
   const series = result.series ?? []
   if (["vbar", "hbar", "line", "area", "pie", "donut"].includes(result.viz) && series.length) {
-    return <div><Chart result={result} style={st} onDrill={onDrill} /><DataTable result={result} onDrill={onDrill} /></div>
+    return <div><CompareCaption result={result} /><Chart result={result} style={st} onDrill={onDrill} /><DataTable result={result} onDrill={onDrill} /></div>
   }
-  return <DataTable result={result} onDrill={onDrill} />
+  return <div><CompareCaption result={result} /><DataTable result={result} onDrill={onDrill} /></div>
+}
+
+function deltaColor(d: number | null): string {
+  if (d == null || d === 0) return "text-zinc-400"
+  return d > 0 ? "text-green-600" : "text-red-600"
+}
+function DeltaBadge({ c, vf }: { c: NonNullable<ReportResult["comparison"]>; vf?: ValueFormat }) {
+  return <p className={cn("mt-1 text-sm font-medium", deltaColor(c.delta))}>{c.delta == null ? "—" : `${c.delta > 0 ? "▲" : c.delta < 0 ? "▼" : ""} ${Math.abs(c.delta)}%`} <span className="text-zinc-400 font-normal">vs prev {fmtNum(c.prev, vf)}</span></p>
+}
+function CompareCaption({ result }: { result: ReportResult }) {
+  if (!result.comparison) return null
+  const c = result.comparison
+  return <p className={cn("mb-2 text-xs font-medium", deltaColor(c.delta))}>{c.delta == null ? "—" : `${c.delta > 0 ? "▲" : c.delta < 0 ? "▼" : ""} ${Math.abs(c.delta)}%`} <span className="text-zinc-400 font-normal">vs previous period ({fmtNum(c.prev, result.valueFormat)})</span></p>
 }
 
 export function DataTable({ result, onDrill }: { result: ReportResult; onDrill?: DrillFn }) {

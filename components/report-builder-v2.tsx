@@ -24,6 +24,12 @@ const VIZ_OPTIONS: { value: VizType; label: string }[] = [
 const AGGS: Aggregation[] = ["count", "distinct_count", "sum", "avg", "min", "max"]
 const FREQS: DateFrequency[] = ["day", "week", "month", "quarter", "year"]
 const FORMATS = [{ value: "number", label: "1,234" }, { value: "currency", label: "$" }, { value: "percent", label: "%" }]
+const DATE_PRESETS = [
+  { value: "last_7", label: "Last 7 days" }, { value: "last_30", label: "Last 30 days" },
+  { value: "last_90", label: "Last 90 days" }, { value: "this_month", label: "This month" },
+  { value: "last_month", label: "Last month" }, { value: "this_quarter", label: "This quarter" },
+  { value: "this_year", label: "This year" }, { value: "custom", label: "Custom range" },
+]
 
 export default function ReportBuilderV2({ objects, initial }: { objects: { key: string; label: string }[]; initial?: { id: string; name: string; config: any } | null }) {
   const [config, setConfig] = useState<ReportConfig>(initial ? sanitizeConfig(initial.config) : { ...EMPTY_REPORT, primary: objects[0]?.key ?? "REFERRAL" })
@@ -80,6 +86,7 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
     () => fields.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, relationPath: f.joinPath, getValue: () => null })),
     [fields],
   )
+  const dateFields = useMemo(() => primaryFields.filter((f) => f.type === "date"), [primaryFields])
   const toggleSource = (a: { path: string; target: string; label: string }) => setConfig((c) => {
     const on = c.sources.some((s) => s.joinPath === a.path)
     return on
@@ -323,6 +330,28 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
                   <input type="number" min={1} placeholder="Limit" value={config.limit ?? ""} onChange={(e) => set({ limit: e.target.value ? +e.target.value : null })} className="h-7 w-20 rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-zinc-400" />
                 </div>
               </Section>
+              <Section title="Date range">
+                <StyledSelect value={config.dateRange?.field ?? ""} onChange={(e) => set({ dateRange: e.target.value ? { field: e.target.value, preset: config.dateRange?.preset ?? "last_30", from: config.dateRange?.from, to: config.dateRange?.to } : null, compare: e.target.value ? config.compare : false })} className="h-7 text-xs">
+                  <option value="">No date range</option>
+                  {dateFields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                </StyledSelect>
+                {config.dateRange?.field && (
+                  <>
+                    <StyledSelect value={config.dateRange.preset} onChange={(e) => set({ dateRange: { ...config.dateRange!, preset: e.target.value as any } })} className="h-7 text-xs">
+                      {DATE_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </StyledSelect>
+                    {config.dateRange.preset === "custom" && (
+                      <div className="flex items-center gap-1.5">
+                        <input type="date" value={config.dateRange.from ?? ""} onChange={(e) => set({ dateRange: { ...config.dateRange!, from: e.target.value } })} className="h-7 flex-1 rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-zinc-400" />
+                        <input type="date" value={config.dateRange.to ?? ""} onChange={(e) => set({ dateRange: { ...config.dateRange!, to: e.target.value } })} className="h-7 flex-1 rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-zinc-400" />
+                      </div>
+                    )}
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
+                      <input type="checkbox" checked={!!config.compare} onChange={(e) => set({ compare: e.target.checked })} /> Compare vs previous period
+                    </label>
+                  </>
+                )}
+              </Section>
             </div>
           ) : (
             <div className="p-4"><FilterBuilder fields={filterFields} value={config.filters ?? emptyFilter()} onChange={(v) => set({ filters: v })} /></div>
@@ -371,6 +400,9 @@ function sanitizeConfig(cfg: any): ReportConfig {
     filters: cfg?.filters ?? null,
     sort: cfg?.sort ?? { by: "value", dir: "desc" },
     limit: cfg?.limit ?? null,
+    tableMode: cfg?.tableMode ?? undefined,
+    dateRange: cfg?.dateRange ?? null,
+    compare: cfg?.compare ?? false,
     style: cfg?.style ?? undefined,
   }
 }

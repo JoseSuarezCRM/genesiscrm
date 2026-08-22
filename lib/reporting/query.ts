@@ -12,6 +12,35 @@ import type {
 
 const ROW_CAP = 10000
 
+// Resolve a date-range preset (or custom from/to) to a [start, end] window.
+function resolveWindow(dr: NonNullable<ReportConfig["dateRange"]>): { start: Date; end: Date } | null {
+  const now = new Date()
+  const y = now.getFullYear(), m = now.getMonth()
+  const end = now
+  if (dr.preset === "all") return null
+  if (dr.preset === "custom") {
+    if (!dr.from || !dr.to) return null
+    return { start: new Date(dr.from), end: new Date(dr.to + "T23:59:59") }
+  }
+  const days = (n: number) => new Date(now.getTime() - n * 864e5)
+  switch (dr.preset) {
+    case "last_7": return { start: days(7), end }
+    case "last_30": return { start: days(30), end }
+    case "last_90": return { start: days(90), end }
+    case "this_month": return { start: new Date(y, m, 1), end }
+    case "last_month": return { start: new Date(y, m - 1, 1), end: new Date(y, m, 0, 23, 59, 59) }
+    case "this_quarter": return { start: new Date(y, Math.floor(m / 3) * 3, 1), end }
+    case "this_year": case "ytd": return { start: new Date(y, 0, 1), end }
+  }
+  return null
+}
+
+// The equal-length period immediately before a window (for comparison).
+function previousWindow(w: { start: Date; end: Date }): { start: Date; end: Date } {
+  const span = w.end.getTime() - w.start.getTime()
+  return { start: new Date(w.start.getTime() - span), end: new Date(w.start.getTime() - 1) }
+}
+
 // Map the report field list to FilterField[] so filterStateToWhere can build a where.
 // Joined fields (joinPath set) carry relationPath so the filter nests under the relation.
 function toFilterFields(fields: ReportField[]): FilterField[] {
@@ -78,7 +107,8 @@ function formatCell(v: unknown, f: ReportField): string | number | null {
 }
 
 // Load the primary object's rows (filtered + joined) — shared by runReport + drill.
-async function loadReportRows(config: ReportConfig): Promise<{ rows: any[]; fields: ReportField[]; byKey: Record<string, ReportField>; total: number; capped: boolean }> {
+// `window` overrides the configured date range (used for the comparison pass).
+async function loadReportRows(config: ReportConfig, window?: { start: Date; end: Date }): Promise<{ rows: any[]; fields: ReportField[]; byKey: Record<string, ReportField>; total: number; capped: boolean }> {
   const primary = config.primary
   const fields = await reportFieldsFor(primary)
   const joined = (await Promise.all((config.sources ?? []).map((s) => joinedFieldsForSource(primary, s.joinPath)))).flat()
@@ -89,10 +119,18 @@ async function loadReportRows(config: ReportConfig): Promise<{ rows: any[]; fiel
   // Filters translate on primary scalar fields + joined single-FK fields (nested
   // via relationPath). m2m/relation traversal beyond that isn't supported.
   const advanced = filterStateToWhere(config.filters ?? null, toFilterFields(allFields))
-  let where: Record<string, unknown> = advanced
+  const clauses: Record<string, unknown>[] = [advanced]
+  // Date-range window on the chosen (primary) date field.
+  const dr = config.dateRange
+  if (dr?.field) {
+    const df = byKey[dr.field]
+    const win = window ?? resolveWindow(dr)
+    if (df && !df.joinPath && win) clauses.push({ [df.column]: { gte: win.start, lte: win.end } })
+  }
+  let where: Record<string, unknown> = clauses.length > 1 ? { AND: clauses } : advanced
   if (primary.startsWith("CO:")) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: primary.slice(3) }, select: { id: true } }).catch(() => null)
-    where = def ? { AND: [{ objectDefId: def.id }, advanced] } : advanced
+    where = def ? { AND: [{ objectDefId: def.id }, ...clauses] } : where
   }
   const include = Object.fromEntries((config.sources ?? []).map((s) => [s.joinPath, true]))
   const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: ROW_CAP }).catch(() => [])
@@ -134,9 +172,21 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   const measureLabel = (m: Measure) => m.label ?? (m.key === "*" ? "Count" : `${m.agg} ${byKey[m.key]?.label ?? m.key}`)
   const valueFormat = measures[0]?.format ? { format: measures[0].format!, decimals: measures[0].decimals } : undefined
 
+  // Comparison vs the previous period (overall primary-measure total).
+  let comparison: { prev: number; delta: number | null } | undefined
+  if (config.compare && config.dateRange?.field) {
+    const win = resolveWindow(config.dateRange)
+    if (win) {
+      const prev = await loadReportRows(config, previousWindow(win))
+      const prevTotal = aggregate(prev.rows, measures[0], measures[0].key === "*" ? null : prev.byKey[measures[0].key] ?? null)
+      const curTotal = aggregate(rows, measures[0], measureField(measures[0]))
+      comparison = { prev: prevTotal, delta: prevTotal === 0 ? null : Math.round(((curTotal - prevTotal) / prevTotal) * 1000) / 10 }
+    }
+  }
+
   // KPI — a single measure, no dimension.
   if (config.viz === "kpi") {
-    return { viz: "kpi", columns: [], rows: [], kpi: aggregate(rows, measures[0], measureField(measures[0])), total, capped, valueFormat }
+    return { viz: "kpi", columns: [], rows: [], kpi: aggregate(rows, measures[0], measureField(measures[0])), total, capped, valueFormat, comparison }
   }
 
   const dims = config.dimensions.map((d) => ({ d, f: byKey[d.key] })).filter((x) => x.f)
@@ -183,7 +233,7 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
       return aggregate(sub, m0, mf0)
     }))
     return {
-      viz: "pivot", columns: [], rows: [], total, capped, valueFormat,
+      viz: "pivot", columns: [], rows: [], total, capped, valueFormat, comparison,
       pivot: { rowLabels: order.map((k) => groups.get(k)!.label), colLabels, cells, rowKeys: order, colKeys },
     }
   }
@@ -234,5 +284,5 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     return [label, ...series.map((s) => s.points.find((p) => p.key === gk)?.value ?? 0)]
   })
 
-  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order, valueFormat }
+  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order, valueFormat, comparison }
 }

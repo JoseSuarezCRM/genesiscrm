@@ -60,8 +60,14 @@ export interface ReportConfig {
   sort?: { by: "value" | "label"; dir: "asc" | "desc" } | null
   limit?: number | null
   tableMode?: "summarized" | "unsummarized" // table viz: grouped rows vs raw records
+  dateRange?: { field: string; preset: DateRangePreset; from?: string; to?: string } | null
+  compare?: boolean            // compare the primary measure vs the previous period
   style?: Record<string, unknown>
 }
+
+export type DateRangePreset =
+  | "all" | "last_7" | "last_30" | "last_90" | "this_month" | "last_month"
+  | "this_quarter" | "this_year" | "ytd" | "custom"
 
 // ── Results ────────────────────────────────────────────────────────────────
 export interface ResultColumn { key: string; label: string; type: ReportFieldType }
@@ -82,6 +88,7 @@ export interface ReportResult {
   stacked?: boolean           // series form a composition (from a breakdown) → stack
   rowKeys?: string[]          // dimension group keys aligned with `rows` (for drill-into)
   valueFormat?: { format: ValueFormat; decimals?: number } // how to render measure values
+  comparison?: { prev: number; delta: number | null } // primary measure vs previous period
 }
 
 export const EMPTY_REPORT: ReportConfig = {
