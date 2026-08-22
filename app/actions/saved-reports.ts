@@ -62,6 +62,25 @@ export async function createSavedReport(
   return report
 }
 
+export async function updateSavedReport(
+  id: string,
+  name: string,
+  config: SavedReportConfig,
+): Promise<{ id: string }> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  await (prisma as any).savedReport.updateMany({
+    where: { id, createdById: session.user.id },
+    data: { name, config },
+  })
+
+  revalidatePath("/reports/builder")
+  revalidatePath("/reports/builder/classic")
+  revalidatePath("/reports/dashboard")
+  return { id }
+}
+
 export async function deleteSavedReport(id: string): Promise<void> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")

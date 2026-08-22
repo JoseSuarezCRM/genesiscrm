@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { getReportSchema, runReportPreview, drillIntoReport } from "@/app/actions/report-builder"
-import { createSavedReport } from "@/app/actions/saved-reports"
+import { createSavedReport, updateSavedReport } from "@/app/actions/saved-reports"
 import { getDashboards, addReportToDashboard, createDashboard, type DashboardSummary } from "@/app/actions/dashboards"
 import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
 import type { ReportConfig, ReportField, ReportResult, Aggregation, DateFrequency, VizType } from "@/lib/reporting/types"
@@ -94,16 +94,25 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
     ...activeAssocs.map((a) => ({ label: a.label, fields: filt(a.fields) })),
   ]
 
-  // Save (once) and return the SavedReport id so it can be added to a dashboard.
-  async function ensureSaved(): Promise<string | null> {
+  // Save the report, returning its id. Updates the loaded report in place when one
+  // is open; creates a new one otherwise (or when forceNew — "Save as new").
+  async function ensureSaved(forceNew = false): Promise<string | null> {
     if (!name.trim()) return null
-    if (savedId) return savedId
+    if (savedId && !forceNew) {
+      await updateSavedReport(savedId, name.trim(), { v: 2, ...config } as any)
+      return savedId
+    }
     const { id } = await createSavedReport(name.trim(), { v: 2, ...config } as any)
     setSavedId(id)
     return id
   }
   async function save() {
     const id = await ensureSaved()
+    if (!id) return
+    setSaved(true); setTimeout(() => setSaved(false), 2500)
+  }
+  async function saveAsNew() {
+    const id = await ensureSaved(true)
     if (!id) return
     setSaved(true); setTimeout(() => setSaved(false), 2500)
   }
@@ -125,10 +134,6 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
     await addReportToDashboard(dashboardId, id)
     setNewDash(""); setDashboards(await getDashboards()); setAddedTo(dashboardId)
   }
-  // Editing the config after a save should create a new report on next save
-  // (skip the first run so an opened report keeps its id until actually edited).
-  const configDirty = useRef(false)
-  useEffect(() => { if (configDirty.current) setSavedId(null); else configDirty.current = true }, [config])
 
   return (
     <div className="flex h-full flex-col">
@@ -143,8 +148,13 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
         <div className="ml-auto flex items-center gap-2">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Report name…" className="h-9 w-52 rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400" />
           <button onClick={save} disabled={!name.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            {saved ? "Saved ✓" : <><Save className="h-3.5 w-3.5" /> Save</>}
+            {saved ? "Saved ✓" : <><Save className="h-3.5 w-3.5" /> {savedId ? "Update" : "Save"}</>}
           </button>
+          {savedId && (
+            <button onClick={saveAsNew} disabled={!name.trim()} title="Save as a new report" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400 disabled:opacity-50">
+              Save as new
+            </button>
+          )}
           <button onClick={openDashboards} disabled={!name.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400 disabled:opacity-50">
             <LayoutDashboard className="h-3.5 w-3.5" /> Add to dashboard
           </button>
