@@ -23,14 +23,50 @@ export const REPORT_OBJECTS: Record<string, ReportObjectMeta> = {
       { path: "referringDoctor", target: "PROVIDER", label: "Referring provider" },
       { path: "referringLocation", target: "LOCATION", label: "Referring location" },
       { path: "assignedTo", target: "USER", label: "Owner" },
+      { path: "createdBy", target: "USER", label: "Created by" },
     ],
   },
-  SURGERY: { key: "SURGERY", label: "Surgery Cases", createdAtField: "creationDate", associations: [] },
-  PROVIDER: { key: "PROVIDER", label: "Providers", createdAtField: "createdAt", associations: [] },
-  PRACTICE: { key: "PRACTICE", label: "Practices", createdAtField: "createdAt", associations: [] },
-  LOCATION: { key: "LOCATION", label: "Locations", createdAtField: "createdAt", associations: [] },
-  ACTIVITY: { key: "ACTIVITY", label: "Activities", createdAtField: "createdAt", associations: [] },
-  TASK: { key: "TASK", label: "Tasks", createdAtField: "createdAt", associations: [] },
+  SURGERY: {
+    key: "SURGERY", label: "Surgery Cases", createdAtField: "creationDate",
+    associations: [
+      { path: "owner", target: "USER", label: "Owner" },
+    ],
+  },
+  PROVIDER: {
+    key: "PROVIDER", label: "Providers", createdAtField: "createdAt",
+    associations: [
+      { path: "practice", target: "PRACTICE", label: "Practice" },
+      { path: "owner", target: "USER", label: "Owner" },
+    ],
+  },
+  PRACTICE: {
+    key: "PRACTICE", label: "Practices", createdAtField: "createdAt",
+    associations: [
+      { path: "owner", target: "USER", label: "Owner" },
+    ],
+  },
+  LOCATION: {
+    key: "LOCATION", label: "Locations", createdAtField: "createdAt",
+    associations: [
+      { path: "practice", target: "PRACTICE", label: "Practice" },
+      { path: "owner", target: "USER", label: "Owner" },
+    ],
+  },
+  ACTIVITY: {
+    key: "ACTIVITY", label: "Activities", createdAtField: "createdAt",
+    associations: [
+      { path: "practice", target: "PRACTICE", label: "Practice" },
+      { path: "location", target: "LOCATION", label: "Location" },
+      { path: "owner", target: "USER", label: "Owner" },
+    ],
+  },
+  TASK: {
+    key: "TASK", label: "Tasks", createdAtField: "createdAt",
+    associations: [
+      { path: "referral", target: "REFERRAL", label: "Referral" },
+      { path: "assignedTo", target: "USER", label: "Assigned to" },
+    ],
+  },
 }
 
 const NATIVE_TYPE: Record<RecordFieldType, ReportFieldType> = {
