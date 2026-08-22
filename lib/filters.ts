@@ -28,6 +28,9 @@ export interface FilterField {
   // For a many-to-many relation (e.g. tags): server-side translation maps the
   // `select` operators to Prisma `{ [relation]: { some|none: { [key]: { in } } } }`.
   relationSome?: { relation: string; key: string }
+  // Set for a joined single-FK field: the Prisma relation to nest the condition
+  // under (e.g. "referringPractice"). See lib/filter-to-prisma conditionToWhere.
+  relationPath?: string
 }
 
 export interface Operator {

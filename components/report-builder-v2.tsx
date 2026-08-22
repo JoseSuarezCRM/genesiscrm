@@ -74,10 +74,10 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
   }, [config])
 
   const set = (patch: Partial<ReportConfig>) => setConfig((c) => ({ ...c, ...patch }))
-  // Filters translate on primary fields only (joins aren't traversable server-side).
+  // Filters translate on primary fields + joined single-FK fields (relationPath).
   const filterFields: FilterField[] = useMemo(
-    () => primaryFields.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, getValue: () => null })),
-    [primaryFields],
+    () => fields.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, relationPath: f.joinPath, getValue: () => null })),
+    [fields],
   )
   const toggleSource = (a: { path: string; target: string; label: string }) => setConfig((c) => {
     const on = c.sources.some((s) => s.joinPath === a.path)

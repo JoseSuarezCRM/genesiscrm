@@ -13,10 +13,11 @@ import type {
 const ROW_CAP = 10000
 
 // Map the report field list to FilterField[] so filterStateToWhere can build a where.
+// Joined fields (joinPath set) carry relationPath so the filter nests under the relation.
 function toFilterFields(fields: ReportField[]): FilterField[] {
   return fields.map((f) => ({
     key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag,
-    options: f.options, getValue: () => null,
+    options: f.options, relationPath: f.joinPath, getValue: () => null,
   }))
 }
 
@@ -81,12 +82,13 @@ async function loadReportRows(config: ReportConfig): Promise<{ rows: any[]; fiel
   const primary = config.primary
   const fields = await reportFieldsFor(primary)
   const joined = (await Promise.all((config.sources ?? []).map((s) => joinedFieldsForSource(primary, s.joinPath)))).flat()
-  const byKey = Object.fromEntries([...fields, ...joined].map((f) => [f.key, f]))
+  const allFields = [...fields, ...joined]
+  const byKey = Object.fromEntries(allFields.map((f) => [f.key, f]))
   const model = delegateFor(primary)
   if (!model) return { rows: [], fields, byKey, total: 0, capped: false }
-  // Filters only translate on primary (scalar) fields — joins aren't traversable by
-  // filter-to-prisma, so joined fields are for grouping/measures, not filters.
-  const advanced = filterStateToWhere(config.filters ?? null, toFilterFields(fields))
+  // Filters translate on primary scalar fields + joined single-FK fields (nested
+  // via relationPath). m2m/relation traversal beyond that isn't supported.
+  const advanced = filterStateToWhere(config.filters ?? null, toFilterFields(allFields))
   let where: Record<string, unknown> = advanced
   if (primary.startsWith("CO:")) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: primary.slice(3) }, select: { id: true } }).catch(() => null)
