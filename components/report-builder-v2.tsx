@@ -23,6 +23,7 @@ const VIZ_OPTIONS: { value: VizType; label: string }[] = [
 ]
 const AGGS: Aggregation[] = ["count", "distinct_count", "sum", "avg", "min", "max"]
 const FREQS: DateFrequency[] = ["day", "week", "month", "quarter", "year"]
+const FORMATS = [{ value: "number", label: "1,234" }, { value: "currency", label: "$" }, { value: "percent", label: "%" }]
 
 export default function ReportBuilderV2({ objects, initial }: { objects: { key: string; label: string }[]; initial?: { id: string; name: string; config: any } | null }) {
   const [config, setConfig] = useState<ReportConfig>(initial ? sanitizeConfig(initial.config) : { ...EMPTY_REPORT, primary: objects[0]?.key ?? "REFERRAL" })
@@ -270,6 +271,11 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
                         {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
                       </StyledSelect>
                     )}
+                    {i === 0 && (
+                      <StyledSelect value={m.format ?? "number"} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, format: e.target.value === "number" ? undefined : (e.target.value as any) } : x) })} className="h-6 text-xs">
+                        {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </StyledSelect>
+                    )}
                   </Chip>
                 ))}
                 {!config.measures.some((m) => m.key === "*") && <button onClick={() => set({ measures: [...config.measures, { source: config.primary, key: "*", agg: "count" }] })} className="text-xs text-blue-600 hover:underline">+ Count</button>}
@@ -297,6 +303,14 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
               </Section>
               {config.viz === "table" && (
                 <Section title="Columns">
+                  {config.dimensions.length > 0 && (
+                    <div className="mb-1.5 inline-flex rounded-lg border border-zinc-200 p-0.5 text-xs">
+                      {(["summarized", "unsummarized"] as const).map((mode) => (
+                        <button key={mode} onClick={() => set({ tableMode: mode })}
+                          className={cn("rounded-md px-2 py-1 capitalize", (config.tableMode ?? "summarized") === mode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:text-zinc-900")}>{mode}</button>
+                      ))}
+                    </div>
+                  )}
                   {config.columns.map((c, i) => <Chip key={i} label={byKey[c.key]?.label ?? c.key} onRemove={() => set({ columns: config.columns.filter((_, j) => j !== i) })} />)}
                   {config.columns.length === 0 && <p className="text-xs text-zinc-400">No columns — showing default fields.</p>}
                 </Section>

@@ -28,9 +28,13 @@ export interface FieldRef {
   key: string
 }
 
+export type ValueFormat = "number" | "currency" | "percent"
+
 export interface Measure extends FieldRef {
   agg: Aggregation
   label?: string
+  format?: ValueFormat
+  decimals?: number
 }
 
 export interface Dimension extends FieldRef {
@@ -55,6 +59,7 @@ export interface ReportConfig {
   filters?: FilterState | null
   sort?: { by: "value" | "label"; dir: "asc" | "desc" } | null
   limit?: number | null
+  tableMode?: "summarized" | "unsummarized" // table viz: grouped rows vs raw records
   style?: Record<string, unknown>
 }
 
@@ -76,6 +81,7 @@ export interface ReportResult {
   capped?: boolean
   stacked?: boolean           // series form a composition (from a breakdown) → stack
   rowKeys?: string[]          // dimension group keys aligned with `rows` (for drill-into)
+  valueFormat?: { format: ValueFormat; decimals?: number } // how to render measure values
 }
 
 export const EMPTY_REPORT: ReportConfig = {

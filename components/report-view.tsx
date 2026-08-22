@@ -8,14 +8,25 @@ export const PALETTE = ["#6366f1", "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "
 
 export type DrillFn = (dimKey: string, bdKey: string | null, title: string) => void
 export type ReportStyle = { dataLabels?: boolean; stacked?: boolean }
+type ValueFormat = { format: "number" | "currency" | "percent"; decimals?: number }
+
+// Render a measure value per its format (currency/percent/decimals).
+export function fmtNum(v: number, vf?: ValueFormat): string {
+  if (!vf) return v.toLocaleString()
+  const d = vf.decimals ?? (vf.format === "currency" ? 2 : 0)
+  const n = v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
+  if (vf.format === "currency") return "$" + n
+  if (vf.format === "percent") return n + "%"
+  return n
+}
 
 // Renders a ReportResult (KPI / pivot / chart+table / table). Shared by the builder
 // preview and dashboard cards. Pass onDrill to make bars/rows/cells click into records.
 export function ReportView({ result, style, onDrill }: { result: ReportResult; style?: ReportStyle; onDrill?: DrillFn }) {
   const st = style ?? {}
-  if (result.viz === "kpi") return <div className="flex h-full flex-col items-center justify-center"><Hash className="h-6 w-6 text-zinc-300" /><div className="mt-2 text-5xl font-bold text-zinc-900">{(result.kpi ?? 0).toLocaleString()}</div><p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p></div>
+  if (result.viz === "kpi") return <div className="flex h-full flex-col items-center justify-center"><Hash className="h-6 w-6 text-zinc-300" /><div className="mt-2 text-5xl font-bold text-zinc-900">{fmtNum(result.kpi ?? 0, result.valueFormat)}</div><p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p></div>
 
-  if (result.viz === "pivot" && result.pivot) return <PivotTable pivot={result.pivot} onDrill={onDrill} />
+  if (result.viz === "pivot" && result.pivot) return <PivotTable pivot={result.pivot} onDrill={onDrill} valueFormat={result.valueFormat} />
 
   const series = result.series ?? []
   if (["vbar", "hbar", "line", "area", "pie", "donut"].includes(result.viz) && series.length) {
@@ -34,7 +45,7 @@ export function DataTable({ result, onDrill }: { result: ReportResult; onDrill?:
         <tbody>{result.rows.map((r, i) => (
           <tr key={i} onClick={drillable ? () => onDrill!(result.rowKeys![i], null, String(r[0] ?? "Records")) : undefined}
             className={cn("border-b border-zinc-100", drillable ? "cursor-pointer hover:bg-blue-50" : "hover:bg-zinc-50")}>
-            {r.map((v, j) => <td key={j} className="px-3 py-2 text-zinc-700">{v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? v.toLocaleString() : v}</td>)}
+            {r.map((v, j) => <td key={j} className="px-3 py-2 text-zinc-700">{v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : v.toLocaleString()) : v}</td>)}
           </tr>
         ))}</tbody>
       </table>
@@ -43,11 +54,12 @@ export function DataTable({ result, onDrill }: { result: ReportResult; onDrill?:
   )
 }
 
-export function PivotTable({ pivot, onDrill }: { pivot: NonNullable<ReportResult["pivot"]>; onDrill?: DrillFn }) {
+export function PivotTable({ pivot, onDrill, valueFormat }: { pivot: NonNullable<ReportResult["pivot"]>; onDrill?: DrillFn; valueFormat?: ValueFormat }) {
   const nCols = pivot.colLabels.length
   const rowTotals = pivot.cells.map((row) => row.reduce((a: number, v) => a + (v ?? 0), 0))
   const colTotals = pivot.colLabels.map((_, j) => pivot.cells.reduce((a: number, row) => a + (row[j] ?? 0), 0))
   const grand = colTotals.reduce((a: number, v) => a + v, 0)
+  const f = (v: number) => fmtNum(v, valueFormat)
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
@@ -64,15 +76,15 @@ export function PivotTable({ pivot, onDrill }: { pivot: NonNullable<ReportResult
               <td className="px-3 py-2 font-medium text-zinc-700">{rl}</td>
               {pivot.cells[i].map((v, j) => (
                 <td key={j} onClick={onDrill && (v ?? 0) > 0 ? () => onDrill(pivot.rowKeys[i], pivot.colKeys[j], `${rl} · ${pivot.colLabels[j]}`) : undefined}
-                  className={cn("px-3 py-2 text-right text-zinc-700", onDrill && (v ?? 0) > 0 && "cursor-pointer hover:bg-blue-50")}>{(v ?? 0).toLocaleString()}</td>
+                  className={cn("px-3 py-2 text-right text-zinc-700", onDrill && (v ?? 0) > 0 && "cursor-pointer hover:bg-blue-50")}>{f(v ?? 0)}</td>
               ))}
-              {nCols > 1 && <td className="px-3 py-2 text-right font-semibold text-zinc-900">{rowTotals[i].toLocaleString()}</td>}
+              {nCols > 1 && <td className="px-3 py-2 text-right font-semibold text-zinc-900">{f(rowTotals[i])}</td>}
             </tr>
           ))}
           <tr className="border-t-2 border-zinc-200 font-semibold text-zinc-900">
             <td className="px-3 py-2">Total</td>
-            {colTotals.map((v, j) => <td key={j} className="px-3 py-2 text-right">{v.toLocaleString()}</td>)}
-            {nCols > 1 && <td className="px-3 py-2 text-right">{grand.toLocaleString()}</td>}
+            {colTotals.map((v, j) => <td key={j} className="px-3 py-2 text-right">{f(v)}</td>)}
+            {nCols > 1 && <td className="px-3 py-2 text-right">{f(grand)}</td>}
           </tr>
         </tbody>
       </table>
@@ -83,6 +95,7 @@ export function PivotTable({ pivot, onDrill }: { pivot: NonNullable<ReportResult
 // Simple SVG chart for bar/line/area/pie off the engine's series.
 export function Chart({ result, style, onDrill }: { result: ReportResult; style: ReportStyle; onDrill?: DrillFn }) {
   const series = result.series ?? []
+  const vf = result.valueFormat
   const labels = series[0]?.points.map((p) => p.label) ?? []
   const keys = series[0]?.points.map((p) => p.key) ?? []
   const stacked = result.stacked || !!style.stacked
@@ -110,7 +123,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
             return <path key={i} d={d} fill={PALETTE[i % PALETTE.length]} onClick={onDrill ? () => onDrill(p.key, null, p.label) : undefined} className={onDrill ? "cursor-pointer" : undefined} />
           })}
         </svg>
-        <div className="space-y-1 text-sm">{pts.map((p, i) => <div key={i} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{p.label}<span className="text-zinc-400">{p.value.toLocaleString()}</span></div>)}</div>
+        <div className="space-y-1 text-sm">{pts.map((p, i) => <div key={i} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{p.label}<span className="text-zinc-400">{fmtNum(p.value, vf)}</span></div>)}</div>
       </div>
     )
   }
@@ -134,7 +147,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
                 {series.map((s, si) => {
                   const v = s.points[i]?.value ?? 0
                   const w = (v / max) * chartW
-                  return <g key={si}><rect x={labelW} y={y + sh * si} width={Math.max(0, w)} height={Math.max(1, sh - 2)} fill={PALETTE[si % PALETTE.length]} rx={2} /><text x={labelW + w + 4} y={y + sh * si + sh / 2} dominantBaseline="middle" fontSize={10} fill="#888">{v.toLocaleString()}</text></g>
+                  return <g key={si}><rect x={labelW} y={y + sh * si} width={Math.max(0, w)} height={Math.max(1, sh - 2)} fill={PALETTE[si % PALETTE.length]} rx={2} /><text x={labelW + w + 4} y={y + sh * si + sh / 2} dominantBaseline="middle" fontSize={10} fill="#888">{fmtNum(v, vf)}</text></g>
                 })}
               </g>
             )
@@ -169,7 +182,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
                   running += h
                   return <rect key={si} x={padL + bw * i + bw * 0.15} y={y} width={bw * 0.7} height={Math.max(0, h)} fill={PALETTE[si % PALETTE.length]} />
                 })}
-                {style.dataLabels && total > 0 && <text x={padL + bw * i + bw / 2} y={padT + cH - (total / stackMax) * cH - 3} textAnchor="middle" fontSize={9} fill="#666">{total.toLocaleString()}</text>}
+                {style.dataLabels && total > 0 && <text x={padL + bw * i + bw / 2} y={padT + cH - (total / stackMax) * cH - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(total, vf)}</text>}
               </g>
             )
           })
@@ -183,7 +196,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
                 return (
                   <g key={si}>
                     <rect x={padL + bw * i + groupW * si + 2} y={padT + cH - bh} width={Math.max(1, groupW - 4)} height={bh} fill={PALETTE[si % PALETTE.length]} rx={2} />
-                    {style.dataLabels && v > 0 && <text x={padL + bw * i + groupW * si + groupW / 2} y={padT + cH - bh - 3} textAnchor="middle" fontSize={9} fill="#666">{v.toLocaleString()}</text>}
+                    {style.dataLabels && v > 0 && <text x={padL + bw * i + groupW * si + groupW / 2} y={padT + cH - bh - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(v, vf)}</text>}
                   </g>
                 )
               })}

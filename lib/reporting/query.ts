@@ -132,16 +132,17 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   const measures = config.measures.length ? config.measures : [{ source: primary, key: "*", agg: "count" as const }]
   const measureField = (m: Measure) => (m.key === "*" ? null : byKey[m.key] ?? null)
   const measureLabel = (m: Measure) => m.label ?? (m.key === "*" ? "Count" : `${m.agg} ${byKey[m.key]?.label ?? m.key}`)
+  const valueFormat = measures[0]?.format ? { format: measures[0].format!, decimals: measures[0].decimals } : undefined
 
   // KPI — a single measure, no dimension.
   if (config.viz === "kpi") {
-    return { viz: "kpi", columns: [], rows: [], kpi: aggregate(rows, measures[0], measureField(measures[0])), total, capped }
+    return { viz: "kpi", columns: [], rows: [], kpi: aggregate(rows, measures[0], measureField(measures[0])), total, capped, valueFormat }
   }
 
   const dims = config.dimensions.map((d) => ({ d, f: byKey[d.key] })).filter((x) => x.f)
 
   // Unsummarized table: raw rows for the chosen columns (or a sensible default).
-  if (config.viz === "table" && dims.length === 0) {
+  if (config.viz === "table" && (dims.length === 0 || config.tableMode === "unsummarized")) {
     const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
     const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
     const out = rows.slice(0, 500).map((r) => cols.map((f) => {
@@ -182,7 +183,7 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
       return aggregate(sub, m0, mf0)
     }))
     return {
-      viz: "pivot", columns: [], rows: [], total, capped,
+      viz: "pivot", columns: [], rows: [], total, capped, valueFormat,
       pivot: { rowLabels: order.map((k) => groups.get(k)!.label), colLabels, cells, rowKeys: order, colKeys },
     }
   }
@@ -233,5 +234,5 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     return [label, ...series.map((s) => s.points.find((p) => p.key === gk)?.value ?? 0)]
   })
 
-  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order }
+  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order, valueFormat }
 }
