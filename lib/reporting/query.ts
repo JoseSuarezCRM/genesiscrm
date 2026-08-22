@@ -113,6 +113,15 @@ export async function drillReport(config: ReportConfig, dimKey: string, breakdow
   return { viz: "table", columns, rows: out, total: matched.length, capped: matched.length > 1000 }
 }
 
+// Flat, unsummarized rows for CSV export (chosen columns, or all primary fields).
+export async function exportReportRows(config: ReportConfig): Promise<{ headers: string[]; rows: (string | number | null)[][] }> {
+  const { rows, fields, byKey } = await loadReportRows(config)
+  const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields) as ReportField[]
+  const headers = cols.map((f) => f.label)
+  const out = rows.map((r) => cols.map((f) => formatCell(readValue(r, f), f)))
+  return { headers, rows: out }
+}
+
 export async function runReport(config: ReportConfig): Promise<ReportResult> {
   const primary = config.primary
   const { rows, fields, byKey, total, capped } = await loadReportRows(config)

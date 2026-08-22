@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard } from "lucide-react"
+import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
 import FilterBuilder from "@/components/ui/filter-builder"
-import { getReportSchema, runReportPreview, drillIntoReport } from "@/app/actions/report-builder"
+import { getReportSchema, runReportPreview, drillIntoReport, getReportRows } from "@/app/actions/report-builder"
+import ExportDialog from "@/components/ui/export-dialog"
 import { createSavedReport, updateSavedReport } from "@/app/actions/saved-reports"
 import { getDashboards, addReportToDashboard, createDashboard, type DashboardSummary } from "@/app/actions/dashboards"
 import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
@@ -38,6 +39,7 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
   const [newDash, setNewDash] = useState("")
   const [addedTo, setAddedTo] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
 
   // Drill into the records behind a bar / summarized row / pivot cell.
   async function onDrill(dimKey: string, bdKey: string | null, title: string) {
@@ -155,11 +157,23 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
               Save as new
             </button>
           )}
+          <button onClick={() => setExportOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
+            <Download className="h-3.5 w-3.5" /> Export
+          </button>
           <button onClick={openDashboards} disabled={!name.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400 disabled:opacity-50">
             <LayoutDashboard className="h-3.5 w-3.5" /> Add to dashboard
           </button>
         </div>
       </div>
+
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        subject={reportLabel(objects, config.primary).toLowerCase()}
+        defaultName={name.trim() || "report"}
+        count={result?.total}
+        getData={async () => getReportRows(config)}
+      />
 
       {/* Add-to-dashboard modal */}
       {dashOpen && (

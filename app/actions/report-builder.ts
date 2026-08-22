@@ -1,7 +1,7 @@
 "use server"
 
 import { requireAccess } from "@/lib/auth-guard"
-import { runReport, drillReport } from "@/lib/reporting/query"
+import { runReport, drillReport, exportReportRows } from "@/lib/reporting/query"
 import { reportFieldsFor, reportSchema, listReportObjects, reportPermKey } from "@/lib/reporting/objects"
 import type { ReportConfig, ReportField, ReportResult } from "@/lib/reporting/types"
 
@@ -37,4 +37,11 @@ export async function drillIntoReport(config: ReportConfig, dimKey: string, brea
   await requireAccess("REPORTS", "VIEW")
   await requireAccess(reportPermKey(config.primary), "VIEW")
   return drillReport(config, dimKey, breakdownKey)
+}
+
+// Full unsummarized rows for CSV export.
+export async function getReportRows(config: ReportConfig): Promise<{ headers: string[]; rows: (string | number | null)[][] }> {
+  await requireAccess("REPORTS", "VIEW")
+  await requireAccess(reportPermKey(config.primary), "VIEW")
+  return exportReportRows(config)
 }

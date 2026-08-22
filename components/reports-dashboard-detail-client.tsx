@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Loader2,
   GripVertical,
+  Download,
 } from "lucide-react"
 import {
   addReportToDashboard,
@@ -28,8 +29,9 @@ import {
   type DashboardLayout,
 } from "@/app/actions/dashboards"
 import type { SavedReport } from "@/app/actions/saved-reports"
-import { runReportPreview } from "@/app/actions/report-builder"
+import { runReportPreview, getReportRows } from "@/app/actions/report-builder"
 import { ReportView } from "@/components/report-view"
+import ExportDialog from "@/components/ui/export-dialog"
 import type { ReportConfig, ReportResult } from "@/lib/reporting/types"
 
 const GridLayout = WidthProvider(RGL)
@@ -100,6 +102,7 @@ function V2ReportCard({
   const [result, setResult] = useState<ReportResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [nonce, setNonce] = useState(0)
+  const [exportOpen, setExportOpen] = useState(false)
   const cfg = entry.savedReport.config as unknown as ReportConfig
 
   useEffect(() => {
@@ -128,10 +131,12 @@ function V2ReportCard({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => setExportOpen(true)} className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-all" title="Export CSV"><Download className="h-3.5 w-3.5" /></button>
           <button onClick={() => setNonce((n) => n + 1)} className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-all" title="Refresh"><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></button>
           <button onClick={handleRemove} disabled={removing} className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all" title="Remove from dashboard"><X className="h-3.5 w-3.5" /></button>
         </div>
       </div>
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={String(cfg.primary).toLowerCase()} defaultName={entry.savedReport.name} count={result?.total} getData={async () => getReportRows(cfg)} />
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
         {loading && !result ? <div className="flex h-full items-center justify-center text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Running…</div>
           : result ? <ReportView result={result} style={cfg.style as any} /> : <p className="text-sm text-zinc-400 py-8 text-center">Couldn’t load this report.</p>}
