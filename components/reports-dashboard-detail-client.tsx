@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import RGL, { WidthProvider, type Layout } from "react-grid-layout"
@@ -19,20 +19,52 @@ import {
   Loader2,
   GripVertical,
   Download,
+  Filter,
 } from "lucide-react"
 import {
   addReportToDashboard,
   removeReportFromDashboard,
   renameDashboard,
   saveDashboardLayout,
+  saveDashboardDateRange,
+  saveCardFilters,
   type DashboardDetail,
   type DashboardLayout,
+  type DashboardDateRange,
 } from "@/app/actions/dashboards"
 import type { SavedReport } from "@/app/actions/saved-reports"
-import { runReportPreview, getReportRows } from "@/app/actions/report-builder"
+import { cn } from "@/lib/utils"
+import { runReportPreview, getReportRows, getReportFields } from "@/app/actions/report-builder"
 import { ReportView } from "@/components/report-view"
 import ExportDialog from "@/components/ui/export-dialog"
+import FilterBuilder from "@/components/ui/filter-builder"
+import StyledSelect from "@/components/ui/styled-select"
+import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
 import type { ReportConfig, ReportResult } from "@/lib/reporting/types"
+
+// Dashboard-level date range cascades onto each card's date field.
+const CREATED_FIELD: Record<string, string> = { REFERRAL: "createdAt", PROVIDER: "createdAt", PRACTICE: "createdAt", LOCATION: "createdAt", ACTIVITY: "createdAt", TASK: "createdAt", SURGERY: "creationDate" }
+const createdFieldFor = (primary: string) => (primary.startsWith("CO:") ? "createdAt" : CREATED_FIELD[primary] ?? "createdAt")
+
+const DASH_DATE_PRESETS = [
+  { value: "all", label: "All time" }, { value: "last_7", label: "Last 7 days" },
+  { value: "last_30", label: "Last 30 days" }, { value: "last_90", label: "Last 90 days" },
+  { value: "this_month", label: "This month" }, { value: "last_month", label: "Last month" },
+  { value: "this_quarter", label: "This quarter" }, { value: "this_year", label: "This year" },
+]
+
+function mergeFilters(a: any, b: any): FilterState | null {
+  const groups = [...(a?.groups ?? []), ...(b?.groups ?? [])]
+  if (groups.length === 0) return null
+  return { combinator: "AND", groups }
+}
+function mergeConfig(cfg: ReportConfig, dashDate: DashboardDateRange | null, cardFilters: any): ReportConfig {
+  let dateRange = cfg.dateRange
+  if (dashDate && dashDate.preset && dashDate.preset !== "all") {
+    dateRange = { field: cfg.dateRange?.field ?? createdFieldFor(cfg.primary), preset: dashDate.preset as any, from: dashDate.from, to: dashDate.to }
+  }
+  return { ...cfg, dateRange, filters: mergeFilters(cfg.filters, cardFilters) }
+}
 
 const GridLayout = WidthProvider(RGL)
 const GRID_COLS = 12
@@ -93,9 +125,11 @@ function buildBuilderUrl(cfg: any): string {
 function V2ReportCard({
   entry,
   dashboardId,
+  dashDate,
 }: {
   entry: DashboardDetail["reports"][number]
   dashboardId: string
+  dashDate: DashboardDateRange | null
 }) {
   const router = useRouter()
   const [removing, startRemove] = useTransition()
@@ -103,15 +137,32 @@ function V2ReportCard({
   const [loading, setLoading] = useState(true)
   const [nonce, setNonce] = useState(0)
   const [exportOpen, setExportOpen] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [cardFilters, setCardFilters] = useState<any>(entry.filters ?? null)
+  const [filterFields, setFilterFields] = useState<FilterField[] | null>(null)
   const cfg = entry.savedReport.config as unknown as ReportConfig
+  const runCfg = useMemo(() => mergeConfig(cfg, dashDate, cardFilters), [cfg, dashDate, cardFilters])
+  const cardFilterCount = (cardFilters?.groups ?? []).reduce((n: number, g: any) => n + (g.conditions?.length ?? 0), 0)
 
   useEffect(() => {
     let alive = true
     setLoading(true)
-    runReportPreview(cfg).then((r) => { if (alive) setResult(r) }).catch(() => { if (alive) setResult(null) }).finally(() => { if (alive) setLoading(false) })
+    runReportPreview(runCfg).then((r) => { if (alive) setResult(r) }).catch(() => { if (alive) setResult(null) }).finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry.savedReportId, nonce])
+  }, [entry.savedReportId, nonce, runCfg])
+
+  async function openFilters() {
+    setFilterOpen(true)
+    if (!filterFields) {
+      const fs = await getReportFields(cfg.primary).catch(() => [])
+      setFilterFields(fs.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, getValue: () => null })))
+    }
+  }
+  function applyCardFilters(v: FilterState) {
+    setCardFilters(v)
+    saveCardFilters(dashboardId, entry.savedReportId, v).catch(() => {})
+  }
 
   function handleRemove() {
     startRemove(async () => {
@@ -131,12 +182,22 @@ function V2ReportCard({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button onClick={openFilters} className={cn("relative p-1.5 rounded-lg transition-all", cardFilterCount > 0 ? "text-blue-600 hover:bg-blue-50" : "text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100")} title="Filter this card"><Filter className="h-3.5 w-3.5" />{cardFilterCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[8px] font-bold text-white">{cardFilterCount}</span>}</button>
           <button onClick={() => setExportOpen(true)} className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-all" title="Export CSV"><Download className="h-3.5 w-3.5" /></button>
           <button onClick={() => setNonce((n) => n + 1)} className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-all" title="Refresh"><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></button>
           <button onClick={handleRemove} disabled={removing} className="p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all" title="Remove from dashboard"><X className="h-3.5 w-3.5" /></button>
         </div>
       </div>
-      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={String(cfg.primary).toLowerCase()} defaultName={entry.savedReport.name} count={result?.total} getData={async () => getReportRows(cfg)} />
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={String(cfg.primary).toLowerCase()} defaultName={entry.savedReport.name} count={result?.total} getData={async () => getReportRows(runCfg)} />
+      {filterOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6" onClick={() => setFilterOpen(false)}>
+          <div className="w-full max-w-lg space-y-3 rounded-xl border border-zinc-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><p className="text-sm font-semibold text-zinc-900">Filter “{entry.savedReport.name}”</p><button onClick={() => setFilterOpen(false)} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button></div>
+            {filterFields ? <FilterBuilder fields={filterFields} value={cardFilters ?? emptyFilter()} onChange={applyCardFilters} /> : <p className="py-6 text-center text-sm text-zinc-400"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></p>}
+            <p className="text-xs text-zinc-400">Applies only to this card, on top of the report’s own filters.</p>
+          </div>
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
         {loading && !result ? <div className="flex h-full items-center justify-center text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Running…</div>
           : result ? <ReportView result={result} style={cfg.style as any} /> : <p className="text-sm text-zinc-400 py-8 text-center">Couldn’t load this report.</p>}
@@ -154,14 +215,16 @@ function reportObjectName(cfg: ReportConfig): string {
 function ReportCard({
   entry,
   dashboardId,
+  dashDate,
 }: {
   entry: DashboardDetail["reports"][number]
   dashboardId: string
+  dashDate: DashboardDateRange | null
 }) {
   const router = useRouter()
   const [removing, startRemove] = useTransition()
   const cfg = entry.savedReport.config as any
-  if (isV2Config(cfg)) return <V2ReportCard entry={entry} dashboardId={dashboardId} />
+  if (isV2Config(cfg)) return <V2ReportCard entry={entry} dashboardId={dashboardId} dashDate={dashDate} />
   const href = buildBuilderUrl(cfg)
   const filterCount = (cfg.practiceIds?.length ?? 0) + (cfg.pipelineIds?.length ?? 0) +
     (cfg.statusIds?.length ?? 0) + (cfg.doctorIds?.length ?? 0)
@@ -313,6 +376,14 @@ export default function DashboardDetailClient({
   const [, startRename] = useTransition()
   const [pickerOpen, setPickerOpen] = useState(false)
 
+  // Dashboard-level quick date filter — cascades onto every v2 card.
+  const [dashDate, setDashDate] = useState<DashboardDateRange | null>(dashboard.dateRange ?? null)
+  function changeDashDate(preset: string) {
+    const next = preset === "all" ? null : { preset }
+    setDashDate(next)
+    saveDashboardDateRange(dashboard.id, next).catch(() => {})
+  }
+
   const alreadyAdded = new Set(dashboard.reports.map((r) => r.savedReportId))
 
   // Grid layout (drag/resize) — seeded from saved geometry, persisted on change.
@@ -376,6 +447,9 @@ export default function DashboardDetailClient({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <StyledSelect value={dashDate?.preset ?? "all"} onChange={(e) => changeDashDate(e.target.value)} className="h-9 min-w-[150px] text-sm">
+            {DASH_DATE_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </StyledSelect>
           <Link
             href="/reports/builder"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
@@ -422,7 +496,7 @@ export default function DashboardDetailClient({
         >
           {dashboard.reports.map((entry) => (
             <div key={entry.savedReportId} className="overflow-hidden">
-              <ReportCard entry={entry} dashboardId={dashboard.id} />
+              <ReportCard entry={entry} dashboardId={dashboard.id} dashDate={dashDate} />
             </div>
           ))}
         </GridLayout>

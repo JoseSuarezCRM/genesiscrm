@@ -13,16 +13,19 @@ export interface DashboardSummary {
 }
 
 export type DashboardLayout = Record<string, { x: number; y: number; w: number; h: number }>
+export type DashboardDateRange = { preset: string; from?: string; to?: string }
 
 export interface DashboardDetail {
   id: string
   name: string
   layout: DashboardLayout | null
+  dateRange: DashboardDateRange | null
   createdAt: Date
   updatedAt: Date
   reports: {
     savedReportId: string
     order: number
+    filters: any | null
     addedAt: Date
     savedReport: {
       id: string
@@ -62,7 +65,8 @@ export async function getDashboard(id: string): Promise<DashboardDetail | null> 
     include: {
       reports: {
         orderBy: { order: "asc" },
-        include: {
+        select: {
+          savedReportId: true, order: true, filters: true, addedAt: true,
           savedReport: {
             select: { id: true, name: true, config: true, isPinned: true, createdAt: true },
           },
@@ -155,5 +159,27 @@ export async function saveDashboardLayout(dashboardId: string, layout: Dashboard
   await (prisma as any).dashboard.updateMany({
     where: { id: dashboardId, createdById: session.user.id },
     data: { layout },
+  })
+}
+
+// Dashboard-level quick date filter (cascades to every card at render).
+export async function saveDashboardDateRange(dashboardId: string, dateRange: DashboardDateRange | null): Promise<void> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  await (prisma as any).dashboard.updateMany({
+    where: { id: dashboardId, createdById: session.user.id },
+    data: { dateRange },
+  })
+}
+
+// Per-card FilterState merged into that card's report at render.
+export async function saveCardFilters(dashboardId: string, savedReportId: string, filters: any | null): Promise<void> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const dash = await (prisma as any).dashboard.findFirst({ where: { id: dashboardId, createdById: session.user.id }, select: { id: true } })
+  if (!dash) throw new Error("Dashboard not found")
+  await (prisma as any).dashboardReport.updateMany({
+    where: { dashboardId, savedReportId },
+    data: { filters },
   })
 }
