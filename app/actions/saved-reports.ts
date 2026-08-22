@@ -57,6 +57,7 @@ export async function createSavedReport(
   })
 
   revalidatePath("/reports/builder")
+  revalidatePath("/reports/builder/classic")
   revalidatePath("/reports/dashboard")
   return report
 }
@@ -70,6 +71,7 @@ export async function deleteSavedReport(id: string): Promise<void> {
   })
 
   revalidatePath("/reports/builder")
+  revalidatePath("/reports/builder/classic")
   revalidatePath("/reports/dashboard")
 }
 
@@ -83,6 +85,7 @@ export async function togglePinSavedReport(id: string, isPinned: boolean): Promi
   })
 
   revalidatePath("/reports/builder")
+  revalidatePath("/reports/builder/classic")
   revalidatePath("/reports/dashboard")
 }
 
@@ -96,5 +99,6 @@ export async function renameSavedReport(id: string, name: string): Promise<void>
   })
 
   revalidatePath("/reports/builder")
+  revalidatePath("/reports/builder/classic")
   revalidatePath("/reports/dashboard")
 }

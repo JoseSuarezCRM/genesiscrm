@@ -84,7 +84,7 @@ function buildBuilderUrl(cfg: any): string {
   cfg.pipelineIds?.forEach((id: string) => p.append("pipelineId", id))
   cfg.statusIds?.forEach((id: string) => p.append("statusId", id))
   cfg.doctorIds?.forEach((id: string) => p.append("doctorId", id))
-  return `/reports/builder?${p.toString()}`
+  return `/reports/builder/classic?${p.toString()}`
 }
 
 // Live v2 card: runs the report engine and renders the chart/table/KPI inline.
@@ -123,7 +123,7 @@ function V2ReportCard({
         <div className="flex min-w-0 flex-1 items-start gap-1.5">
           <span className="card-drag mt-0.5 cursor-move text-zinc-300 hover:text-zinc-500"><GripVertical className="h-4 w-4" /></span>
           <div className="min-w-0">
-            <Link href={`/reports/builder-v2?report=${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
+            <Link href={`/reports/builder?report=${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
             <p className="text-xs text-slate-400 mt-0.5">{reportObjectName(cfg)}</p>
           </div>
         </div>
