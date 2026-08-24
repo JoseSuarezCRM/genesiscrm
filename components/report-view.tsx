@@ -6,9 +6,24 @@ import { cn } from "@/lib/utils"
 import type { ReportResult } from "@/lib/reporting/types"
 
 export const PALETTE = ["#6366f1", "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#0ea5e9", "#84cc16", "#f59e0b"]
+export const PALETTES: Record<string, string[]> = {
+  default: PALETTE,
+  cool: ["#6366f1", "#0ea5e9", "#14b8a6", "#8b5cf6", "#3b82f6", "#06b6d4", "#22d3ee", "#a78bfa"],
+  warm: ["#f97316", "#ef4444", "#ec4899", "#f59e0b", "#e11d48", "#fb7185", "#f472b6", "#fbbf24"],
+  mono: ["#334155", "#475569", "#64748b", "#94a3b8", "#1e293b", "#0f172a", "#cbd5e1", "#7c8798"],
+}
 
 export type DrillFn = (dimKey: string, bdKey: string | null, title: string) => void
-export type ReportStyle = { dataLabels?: boolean; stacked?: boolean }
+export type ReportStyle = {
+  dataLabels?: boolean
+  stacked?: boolean
+  legend?: boolean
+  legendPos?: "top" | "right" | "bottom"
+  gridlines?: boolean
+  axisTitles?: boolean
+  palette?: string
+  yMax?: number | null
+}
 type ValueFormat = { format: "number" | "currency" | "percent"; decimals?: number }
 
 // Render a measure value per its format (currency/percent/decimals).
@@ -135,12 +150,20 @@ export function PivotTable({ pivot, onDrill, valueFormat }: { pivot: NonNullable
 export function Chart({ result, style, onDrill }: { result: ReportResult; style: ReportStyle; onDrill?: DrillFn }) {
   const series = result.series ?? []
   const vf = result.valueFormat
+  const palette = PALETTES[style.palette ?? "default"] ?? PALETTE
+  const showLegend = style.legend !== false
+  const legendPos = style.legendPos ?? "top"
+  const showGrid = style.gridlines !== false
+  const showAxis = style.axisTitles !== false
   const labels = series[0]?.points.map((p) => p.label) ?? []
   const keys = series[0]?.points.map((p) => p.key) ?? []
   const stacked = result.stacked || !!style.stacked
   const labelClick = (i: number) => onDrill && keys[i] != null ? () => onDrill(keys[i], null, labels[i]) : undefined
-  const max = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value)))
-  const stackMax = Math.max(1, ...labels.map((_, i) => series.reduce((a, s) => a + (s.points[i]?.value ?? 0), 0)))
+  const dataMax = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value)))
+  const stackDataMax = Math.max(1, ...labels.map((_, i) => series.reduce((a, s) => a + (s.points[i]?.value ?? 0), 0)))
+  const yMax = style.yMax && style.yMax > 0 ? style.yMax : null
+  const max = yMax ?? dataMax
+  const stackMax = yMax ?? stackDataMax
   const W = 640, H = 280, padL = 64, padB = 68, padT = 10, cW = W - padL - 10, cH = H - padT - padB
   const xTitle = result.axis?.x, yTitle = result.axis?.y
 
@@ -160,10 +183,10 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
               ? `M ${cx + ri * Math.cos(a0)} ${cy + ri * Math.sin(a0)} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${cx + ri * Math.cos(a1)} ${cy + ri * Math.sin(a1)} A ${ri} ${ri} 0 ${large} 0 ${cx + ri * Math.cos(a0)} ${cy + ri * Math.sin(a0)} Z`
               : `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
             a0 = a1
-            return <path key={i} d={d} fill={PALETTE[i % PALETTE.length]} onClick={onDrill ? () => onDrill(p.key, null, p.label) : undefined} className={onDrill ? "cursor-pointer" : undefined} />
+            return <path key={i} d={d} fill={palette[i % palette.length]} onClick={onDrill ? () => onDrill(p.key, null, p.label) : undefined} className={onDrill ? "cursor-pointer" : undefined} />
           })}
         </svg>
-        <div className="space-y-1 text-sm">{pts.map((p, i) => <div key={i} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{p.label}<span className="text-zinc-400">{fmtNum(p.value, vf)}</span></div>)}</div>
+        {showLegend && <div className="space-y-1 text-sm">{pts.map((p, i) => <div key={i} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: palette[i % palette.length] }} />{p.label}<span className="text-zinc-400">{fmtNum(p.value, vf)}</span></div>)}</div>}
       </div>
     )
   }
@@ -175,11 +198,13 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
     const rowH = 26, gap = 8, chartW = 560, labelW = 130
     return (
       <div>
-        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-zinc-500">
-          <span>{result.axis?.x}</span>
-          <span>{result.axis?.y}</span>
-        </div>
-        {series.length > 1 && <div className="mb-2 flex flex-wrap gap-3 text-xs">{series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{s.name}</span>)}</div>}
+        {showAxis && (result.axis?.x || result.axis?.y) && (
+          <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-zinc-500">
+            <span>{result.axis?.x}</span>
+            <span>{result.axis?.y}</span>
+          </div>
+        )}
+        {showLegend && series.length > 1 && <div className="mb-2 flex flex-wrap gap-3 text-xs">{series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: palette[i % palette.length] }} />{s.name}</span>)}</div>}
         <svg viewBox={`0 0 ${labelW + chartW + 50} ${(rowH + gap) * n + 10}`} className="w-full">
           {labels.map((l, i) => {
             const y = i * (rowH + gap) + 5
@@ -191,7 +216,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
                 {series.map((s, si) => {
                   const v = s.points[i]?.value ?? 0
                   const w = (v / max) * chartW
-                  return <g key={si}><rect x={labelW} y={y + sh * si} width={Math.max(0, w)} height={Math.max(1, sh - 2)} fill={PALETTE[si % PALETTE.length]} rx={2} /><text x={labelW + w + 4} y={y + sh * si + sh / 2} dominantBaseline="middle" fontSize={10} fill="#888">{fmtNum(v, vf)}</text></g>
+                  return <g key={si}><rect x={labelW} y={y + sh * si} width={Math.max(0, w)} height={Math.max(1, sh - 2)} fill={palette[si % palette.length]} rx={2} /><text x={labelW + w + 4} y={y + sh * si + sh / 2} dominantBaseline="middle" fontSize={10} fill="#888">{fmtNum(v, vf)}</text></g>
                 })}
               </g>
             )
@@ -202,22 +227,25 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
   }
 
   const bw = cW / n
-  return (
-    <div>
-      {series.length > 1 && <div className="mb-2 flex flex-wrap gap-3 text-xs">{series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{s.name}</span>)}</div>}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-        {[0, 0.5, 1].map((t) => (
-          <g key={t}>
-            <line x1={padL} x2={W - 10} y1={padT + cH - t * cH} y2={padT + cH - t * cH} stroke="#eee" />
-            <text x={padL - 6} y={padT + cH - t * cH} textAnchor="end" dominantBaseline="middle" fontSize={9} fill="#aaa">{fmtNum(max * t, vf)}</text>
-          </g>
-        ))}
-        {yTitle && <text x={12} y={padT + cH / 2} transform={`rotate(-90 12 ${padT + cH / 2})`} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{yTitle}</text>}
-        {xTitle && <text x={padL + cW / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{xTitle}</text>}
+  const legendEl = showLegend && series.length > 1 ? (
+    <div className={cn("flex gap-x-3 gap-y-1 text-xs", legendPos === "right" ? "flex-col" : "flex-wrap")}>
+      {series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: palette[i % palette.length] }} />{s.name}</span>)}
+    </div>
+  ) : null
+  const chartSvg = (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+      {showGrid && [0, 0.5, 1].map((t) => (
+        <g key={t}>
+          <line x1={padL} x2={W - 10} y1={padT + cH - t * cH} y2={padT + cH - t * cH} stroke="#eee" />
+          <text x={padL - 6} y={padT + cH - t * cH} textAnchor="end" dominantBaseline="middle" fontSize={9} fill="#aaa">{fmtNum(max * t, vf)}</text>
+        </g>
+      ))}
+      {showAxis && yTitle && <text x={12} y={padT + cH / 2} transform={`rotate(-90 12 ${padT + cH / 2})`} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{yTitle}</text>}
+      {showAxis && xTitle && <text x={padL + cW / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{xTitle}</text>}
         {result.viz === "line" || result.viz === "area" ? (
           series.map((s, si) => {
             const pts = s.points.map((p, i) => `${padL + bw * i + bw / 2},${padT + cH - (p.value / max) * cH}`).join(" ")
-            return <g key={si}>{result.viz === "area" && <polygon points={`${padL + bw / 2},${padT + cH} ${pts} ${padL + bw * (n - 1) + bw / 2},${padT + cH}`} fill={PALETTE[si % PALETTE.length] + "33"} />}<polyline points={pts} fill="none" stroke={PALETTE[si % PALETTE.length]} strokeWidth={2} /></g>
+            return <g key={si}>{result.viz === "area" && <polygon points={`${padL + bw / 2},${padT + cH} ${pts} ${padL + bw * (n - 1) + bw / 2},${padT + cH}`} fill={palette[si % palette.length] + "33"} />}<polyline points={pts} fill="none" stroke={palette[si % palette.length]} strokeWidth={2} /></g>
           })
         ) : stacked ? (
           // Stacked bars (breakdown composition): max is the tallest stack.
@@ -231,7 +259,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
                   const h = (v / stackMax) * cH
                   const y = padT + cH - running - h
                   running += h
-                  return <rect key={si} x={padL + bw * i + bw * 0.15} y={y} width={bw * 0.7} height={Math.max(0, h)} fill={PALETTE[si % PALETTE.length]} />
+                  return <rect key={si} x={padL + bw * i + bw * 0.15} y={y} width={bw * 0.7} height={Math.max(0, h)} fill={palette[si % palette.length]} />
                 })}
                 {style.dataLabels && total > 0 && <text x={padL + bw * i + bw / 2} y={padT + cH - (total / stackMax) * cH - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(total, vf)}</text>}
               </g>
@@ -246,7 +274,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
                 const bh = (v / max) * cH
                 return (
                   <g key={si}>
-                    <rect x={padL + bw * i + groupW * si + 2} y={padT + cH - bh} width={Math.max(1, groupW - 4)} height={bh} fill={PALETTE[si % PALETTE.length]} rx={2} />
+                    <rect x={padL + bw * i + groupW * si + 2} y={padT + cH - bh} width={Math.max(1, groupW - 4)} height={bh} fill={palette[si % palette.length]} rx={2} />
                     {style.dataLabels && v > 0 && <text x={padL + bw * i + groupW * si + groupW / 2} y={padT + cH - bh - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(v, vf)}</text>}
                   </g>
                 )
@@ -254,8 +282,15 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
             </g>
           ))
         )}
-        {labels.map((l, i) => <text key={i} x={padL + bw * i + bw / 2} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#888">{l.length > 10 ? l.slice(0, 9) + "…" : l}</text>)}
-      </svg>
+      {labels.map((l, i) => <text key={i} x={padL + bw * i + bw / 2} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#888">{l.length > 10 ? l.slice(0, 9) + "…" : l}</text>)}
+    </svg>
+  )
+  return (
+    <div className={cn(legendPos === "right" && "flex items-start gap-4")}>
+      {legendEl && legendPos === "top" && <div className="mb-2">{legendEl}</div>}
+      <div className="min-w-0 flex-1">{chartSvg}</div>
+      {legendEl && legendPos === "right" && <div className="shrink-0 pt-2">{legendEl}</div>}
+      {legendEl && legendPos === "bottom" && <div className="mt-2">{legendEl}</div>}
     </div>
   )
 }

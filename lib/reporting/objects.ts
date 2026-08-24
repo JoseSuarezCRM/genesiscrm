@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma"
 import { RECORD_FIELDS, type RecordFieldType } from "@/lib/record-field-catalog"
 import { recordPermKey } from "@/lib/record-perm-key"
+import { STATUS_LABELS } from "@/lib/utils"
 import type { ReportField, ReportFieldType } from "./types"
 
 export interface ReportObjectMeta {
@@ -105,11 +106,21 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
   const userAssocs = (meta?.associations ?? []).filter((a) => a.target === "USER")
   const userPaths = new Set(userAssocs.map((a) => a.path))
 
+  // Dynamic-option lookups: some select fields store an id/code, not a label.
+  // Resolve their options so dimensions/breakdowns/legends show names, not ids.
+  const dynamicOptions: Record<string, { value: string; label: string }[]> = {}
+  if (objectKey === "REFERRAL") {
+    const pipelines = await prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } }).catch(() => [])
+    dynamicOptions.pipelineId = pipelines.map((p) => ({ value: p.id, label: p.name }))
+    dynamicOptions.status = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label: String(label) }))
+  }
+
   for (const f of (RECORD_FIELDS[objectKey] ?? [])) {
     if (userPaths.has(f.key)) continue // drop the raw FK-id field (e.g. assignedTo) in favor of the name field
+    const dyn = dynamicOptions[f.key]
     fields.push({
-      key: f.key, label: f.label, type: NATIVE_TYPE[f.type] ?? "text", source: objectKey, column: f.key,
-      options: f.options?.map((o) => ({ value: o, label: (f.optionLabels?.[o]) ?? o })),
+      key: f.key, label: f.label, type: dyn ? "select" : NATIVE_TYPE[f.type] ?? "text", source: objectKey, column: f.key,
+      options: dyn ?? f.options?.map((o) => ({ value: o, label: (f.optionLabels?.[o]) ?? o })),
     })
   }
 
@@ -122,7 +133,7 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
     fields.push({
       key: `cp_${cp.id}`, label: cp.name, type: CP_TYPE[cp.type as string] ?? "text", source: objectKey,
       column: cp.id, jsonBag: "customProperties",
-      options: (cp.options ?? []).map((o) => ({ value: o, label: o })),
+      options: (cp.options ?? []).map((o) => ({ value: o, label: ((cp as any).optionLabels?.[o]) ?? o })),
     })
   }
   return fields

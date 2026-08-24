@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users, GripVertical, Pencil } from "lucide-react"
+import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users, GripVertical, Pencil, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
 import { FilterEditor } from "@/components/ui/filter-builder"
@@ -13,7 +13,7 @@ import { getDashboards, addReportToDashboard, createDashboard, type DashboardSum
 import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
 import type { ReportConfig, ReportField, ReportResult, Aggregation, DateFrequency, VizType } from "@/lib/reporting/types"
 import { EMPTY_REPORT } from "@/lib/reporting/types"
-import { ReportView, DataTable } from "@/components/report-view"
+import { ReportView, DataTable, type ReportStyle } from "@/components/report-view"
 
 const VIZ_OPTIONS: { value: VizType; label: string }[] = [
   { value: "table", label: "Table" }, { value: "kpi", label: "KPI" },
@@ -65,7 +65,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
     try { setDrill({ title, result: await drillIntoReport(config, dimKey, bdKey), loading: false }) }
     catch { setDrill({ title, result: null, loading: false }) }
   }
-  const style = (config.style ?? {}) as { dataLabels?: boolean; stacked?: boolean }
+  const style = (config.style ?? {}) as ReportStyle
   const setStyle = (patch: Record<string, unknown>) => set({ style: { ...(config.style ?? {}), ...patch } })
 
   const primaryFields = schema.fields
@@ -322,6 +322,33 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
                 </label>
                 <p className="text-xs text-zinc-400">Data labels apply to bar/line charts. Stacking applies to bar charts with a break-down.</p>
               </Section>
+              <Section title="Legend">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                  <input type="checkbox" checked={style.legend !== false} onChange={(e) => setStyle({ legend: e.target.checked })} /> Show legend
+                </label>
+                {style.legend !== false && (
+                  <StyledSelect value={style.legendPos ?? "top"} onChange={(e) => setStyle({ legendPos: e.target.value as any })} className="h-7 text-xs">
+                    <option value="top">Top</option><option value="right">Right</option><option value="bottom">Bottom</option>
+                  </StyledSelect>
+                )}
+              </Section>
+              <Section title="Axes">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                  <input type="checkbox" checked={style.gridlines !== false} onChange={(e) => setStyle({ gridlines: e.target.checked })} /> Show gridlines
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                  <input type="checkbox" checked={style.axisTitles !== false} onChange={(e) => setStyle({ axisTitles: e.target.checked })} /> Show axis titles
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500">Y-axis max</span>
+                  <input type="number" min={0} placeholder="Auto" value={style.yMax ?? ""} onChange={(e) => setStyle({ yMax: e.target.value ? +e.target.value : null })} className="h-7 w-24 rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-zinc-400" />
+                </div>
+              </Section>
+              <Section title="Colors">
+                <StyledSelect value={style.palette ?? "default"} onChange={(e) => setStyle({ palette: e.target.value })} className="h-7 text-xs">
+                  <option value="default">Default</option><option value="cool">Cool</option><option value="warm">Warm</option><option value="mono">Mono</option>
+                </StyledSelect>
+              </Section>
             </div>
           ) : tab === "configure" ? (
             <div className="space-y-4 p-4">
@@ -535,15 +562,22 @@ function EditableChip({ label, onRename, onRemove, children }: { label: string; 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(label)
   const commit = () => { setEditing(false); onRename(draft.trim() || null) }
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm">
-      {editing ? (
+  if (editing) {
+    // Full-width input (child selects hidden) so the name is actually editable.
+    return (
+      <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm">
         <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setDraft(label) } }}
-          className="min-w-0 flex-1 rounded border border-zinc-300 px-1 py-0.5 text-sm outline-none focus:border-zinc-500" />
-      ) : (
-        <span className="flex-1 truncate text-zinc-700" title={label}>{label}</span>
-      )}
+          placeholder="Display name…"
+          className="min-w-0 flex-1 rounded border border-zinc-300 px-1.5 py-0.5 text-sm outline-none focus:border-zinc-500" />
+        <button onMouseDown={(e) => { e.preventDefault(); commit() }} className="text-emerald-600 hover:text-emerald-700" title="Save"><Check className="h-3.5 w-3.5" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); setEditing(false); setDraft(label) }} className="text-zinc-400 hover:text-zinc-700" title="Cancel"><X className="h-3.5 w-3.5" /></button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm">
+      <span className="flex-1 truncate text-zinc-700" title={label}>{label}</span>
       {children}
       <button onClick={() => { setDraft(label); setEditing(true) }} className="text-zinc-400 hover:text-zinc-700" title="Rename"><Pencil className="h-3 w-3" /></button>
       <button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
