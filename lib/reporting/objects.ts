@@ -100,11 +100,21 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
   fields.push({ key: "__id", label: "Record ID", type: "text", source: objectKey, column: "id" })
   if (meta) fields.push({ key: meta.createdAtField, label: "Created", type: "date", source: objectKey, column: meta.createdAtField })
 
+  // USER associations (Owner / Created by / Assigned to) are surfaced as inline
+  // name fields on the object itself, not as joinable "data sources".
+  const userAssocs = (meta?.associations ?? []).filter((a) => a.target === "USER")
+  const userPaths = new Set(userAssocs.map((a) => a.path))
+
   for (const f of (RECORD_FIELDS[objectKey] ?? [])) {
+    if (userPaths.has(f.key)) continue // drop the raw FK-id field (e.g. assignedTo) in favor of the name field
     fields.push({
       key: f.key, label: f.label, type: NATIVE_TYPE[f.type] ?? "text", source: objectKey, column: f.key,
       options: f.options?.map((o) => ({ value: o, label: (f.optionLabels?.[o]) ?? o })),
     })
+  }
+
+  for (const a of userAssocs) {
+    fields.push({ key: `${a.path}.name`, label: a.label, type: "text", source: objectKey, column: "name", joinPath: a.path })
   }
 
   const cps = await prisma.customProperty.findMany({ where: { entityType: objectKey as any }, orderBy: { createdAt: "asc" } }).catch(() => [])
@@ -153,7 +163,8 @@ export async function reportSchema(primary: string): Promise<{
   associations: { path: string; target: string; label: string; fields: ReportField[] }[]
 }> {
   const fields = await reportFieldsFor(primary)
-  const assocs = REPORT_OBJECTS[primary]?.associations ?? []
+  // USER associations (Owner / Created by) are inline fields, not data sources.
+  const assocs = (REPORT_OBJECTS[primary]?.associations ?? []).filter((a) => a.target !== "USER")
   const associations = await Promise.all(assocs.map(async (a) => ({
     path: a.path, target: a.target, label: a.label, fields: await joinedFieldsForSource(primary, a.path),
   })))

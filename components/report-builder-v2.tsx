@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users } from "lucide-react"
+import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
 import FilterBuilder from "@/components/ui/filter-builder"
@@ -54,6 +54,10 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
     teamId: initial?.teamId ?? null,
     sharedUserIds: initial?.sharedUserIds ?? [],
   })
+  // HubSpot-style data section beneath the chart: Unsummarized / Summarized tabs.
+  const [dataTab, setDataTab] = useState<"unsummarized" | "summarized">("unsummarized")
+  const [dataResult, setDataResult] = useState<ReportResult | null>(null)
+  const [dataLoading, setDataLoading] = useState(false)
 
   // Drill into the records behind a bar / summarized row / pivot cell.
   async function onDrill(dimKey: string, bdKey: string | null, title: string) {
@@ -87,6 +91,19 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [config])
 
+  // Debounced data section (the active Unsummarized/Summarized table) — always a
+  // table, driven by tableMode, independent of the selected visualization.
+  const dataTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (dataTimer.current) clearTimeout(dataTimer.current)
+    setDataLoading(true)
+    dataTimer.current = setTimeout(async () => {
+      try { setDataResult(await runReportPreview({ ...config, viz: "table", tableMode: dataTab } as ReportConfig)) }
+      catch { setDataResult(null) } finally { setDataLoading(false) }
+    }, 400)
+    return () => { if (dataTimer.current) clearTimeout(dataTimer.current) }
+  }, [config, dataTab])
+
   const set = (patch: Partial<ReportConfig>) => setConfig((c) => ({ ...c, ...patch }))
   // Filters translate on primary fields + joined single-FK fields (relationPath).
   const filterFields: FilterField[] = useMemo(
@@ -104,6 +121,14 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
   const addColumn = (f: ReportField) => { if (!config.columns.some((c) => c.key === f.key)) set({ columns: [...config.columns, { source: f.source, key: f.key }] }) }
   const addDimension = (f: ReportField) => { if (!config.dimensions.some((d) => d.key === f.key)) set({ dimensions: [...config.dimensions, { source: f.source, key: f.key, dateFrequency: f.type === "date" ? "month" : undefined }] }) }
   const addMeasure = (f: ReportField) => { if (!config.measures.some((m) => m.key === f.key)) set({ measures: [...config.measures, { source: f.source, key: f.key, agg: f.type === "number" ? "sum" : "distinct_count" }] }) }
+  const setBreakdownField = (f: ReportField) => set({ breakdown: { source: f.source, key: f.key } })
+  // Resolve a dropped field key (from the field list) and hand it to an add fn.
+  const onDropField = (add: (f: ReportField) => void) => (e: React.DragEvent) => {
+    e.preventDefault()
+    const key = e.dataTransfer.getData("field")
+    const f = byKey[key]
+    if (f) add(f)
+  }
 
   const filt = (arr: ReportField[]) => query.trim() ? arr.filter((f) => f.label.toLowerCase().includes(query.toLowerCase())) : arr
   const fieldGroups: { label: string; fields: ReportField[] }[] = [
@@ -259,7 +284,13 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
               <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{grp.label}</p>
               <div className="space-y-0.5">
                 {grp.fields.map((f) => (
-                  <div key={f.key} className="group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-zinc-50">
+                  <div
+                    key={f.key}
+                    draggable
+                    onDragStart={(e) => { e.dataTransfer.setData("field", f.key); e.dataTransfer.effectAllowed = "copy" }}
+                    className="group flex cursor-grab items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-zinc-50 active:cursor-grabbing"
+                  >
+                    <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-300 group-hover:text-zinc-400" />
                     <span className="flex-1 truncate text-zinc-700" title={f.label}>{f.label}</span>
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
                       <button title="Add as column" onClick={() => addColumn(f)} className="rounded px-1 text-[10px] font-semibold text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700">COL</button>
@@ -295,36 +326,41 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
           ) : tab === "configure" ? (
             <div className="space-y-4 p-4">
               <Section title="Measures">
-                {(config.measures.length ? config.measures : []).map((m, i) => (
-                  <Chip key={i} label={m.key === "*" ? "Count" : byKey[m.key]?.label ?? m.key} onRemove={() => set({ measures: config.measures.filter((_, j) => j !== i) })}>
-                    {m.key !== "*" && (
-                      <StyledSelect value={m.agg} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, agg: e.target.value as Aggregation } : x) })} className="h-6 text-xs">
-                        {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
-                      </StyledSelect>
-                    )}
-                    {i === 0 && (
-                      <StyledSelect value={m.format ?? "number"} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, format: e.target.value === "number" ? undefined : (e.target.value as any) } : x) })} className="h-6 text-xs">
-                        {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                      </StyledSelect>
-                    )}
-                  </Chip>
-                ))}
-                {!config.measures.some((m) => m.key === "*") && <button onClick={() => set({ measures: [...config.measures, { source: config.primary, key: "*", agg: "count" }] })} className="text-xs text-blue-600 hover:underline">+ Count</button>}
+                <DropZone onDropField={onDropField(addMeasure)}>
+                  {config.measures.map((m, i) => (
+                    <Chip key={i} label={m.key === "*" ? "Count" : byKey[m.key]?.label ?? m.key} onRemove={() => set({ measures: config.measures.filter((_, j) => j !== i) })}>
+                      {m.key !== "*" && (
+                        <StyledSelect value={m.agg} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, agg: e.target.value as Aggregation } : x) })} className="h-6 text-xs">
+                          {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
+                        </StyledSelect>
+                      )}
+                      {i === 0 && (
+                        <StyledSelect value={m.format ?? "number"} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, format: e.target.value === "number" ? undefined : (e.target.value as any) } : x) })} className="h-6 text-xs">
+                          {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                        </StyledSelect>
+                      )}
+                    </Chip>
+                  ))}
+                  {!config.measures.some((m) => m.key === "*") && <button onClick={() => set({ measures: [...config.measures, { source: config.primary, key: "*", agg: "count" }] })} className="text-xs text-blue-600 hover:underline">+ Count</button>}
+                </DropZone>
               </Section>
               <Section title="Dimensions (group / x-axis)">
-                {config.dimensions.map((d, i) => (
-                  <Chip key={i} label={byKey[d.key]?.label ?? d.key} onRemove={() => set({ dimensions: config.dimensions.filter((_, j) => j !== i) })}>
-                    {byKey[d.key]?.type === "date" && (
-                      <StyledSelect value={d.dateFrequency ?? "month"} onChange={(e) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, dateFrequency: e.target.value as DateFrequency } : x) })} className="h-6 text-xs">
-                        {FREQS.map((fr) => <option key={fr} value={fr}>{fr}</option>)}
-                      </StyledSelect>
-                    )}
-                  </Chip>
-                ))}
-                {config.dimensions.length === 0 && <p className="text-xs text-zinc-400">Add a field as a dimension to group/chart.</p>}
+                <DropZone onDropField={onDropField(addDimension)} empty={<p className="text-xs text-zinc-400">Drag a field here to group / chart.</p>}>
+                  {config.dimensions.map((d, i) => (
+                    <Chip key={i} label={byKey[d.key]?.label ?? d.key} onRemove={() => set({ dimensions: config.dimensions.filter((_, j) => j !== i) })}>
+                      {byKey[d.key]?.type === "date" && (
+                        <StyledSelect value={d.dateFrequency ?? "month"} onChange={(e) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, dateFrequency: e.target.value as DateFrequency } : x) })} className="h-6 text-xs">
+                          {FREQS.map((fr) => <option key={fr} value={fr}>{fr}</option>)}
+                        </StyledSelect>
+                      )}
+                    </Chip>
+                  ))}
+                </DropZone>
               </Section>
               <Section title="Break down by">
-                {config.breakdown ? <Chip label={byKey[config.breakdown.key]?.label ?? config.breakdown.key} onRemove={() => set({ breakdown: null })} /> : <p className="text-xs text-zinc-400">Optional second dimension (stack/compare).</p>}
+                <DropZone onDropField={onDropField(setBreakdownField)} empty={<p className="text-xs text-zinc-400">Optional second dimension — drag a field (stack / compare).</p>}>
+                  {config.breakdown ? <Chip label={byKey[config.breakdown.key]?.label ?? config.breakdown.key} onRemove={() => set({ breakdown: null })} /> : null}
+                </DropZone>
                 {!config.breakdown && config.dimensions.length > 0 && (
                   <StyledSelect value="" onChange={(e) => e.target.value && set({ breakdown: { source: byKey[e.target.value].source, key: e.target.value } })} className="h-7 text-xs">
                     <option value="">+ Add breakdown…</option>
@@ -342,8 +378,9 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
                       ))}
                     </div>
                   )}
-                  {config.columns.map((c, i) => <Chip key={i} label={byKey[c.key]?.label ?? c.key} onRemove={() => set({ columns: config.columns.filter((_, j) => j !== i) })} />)}
-                  {config.columns.length === 0 && <p className="text-xs text-zinc-400">No columns — showing default fields.</p>}
+                  <DropZone onDropField={onDropField(addColumn)} empty={<p className="text-xs text-zinc-400">Drag fields here — otherwise default fields are shown.</p>}>
+                    {config.columns.map((c, i) => <Chip key={i} label={byKey[c.key]?.label ?? c.key} onRemove={() => set({ columns: config.columns.filter((_, j) => j !== i) })} />)}
+                  </DropZone>
                 </Section>
               )}
               <Section title="Sort & limit">
@@ -382,10 +419,29 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
           )}
         </div>
 
-        {/* Preview */}
-        <div className="min-w-0 flex-1 overflow-auto bg-zinc-50 p-6">
-          {loading && <div className="mb-3 flex items-center gap-1.5 text-xs text-zinc-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…</div>}
-          {!result ? <Empty /> : <div className="rounded-xl border border-zinc-200 bg-white p-5"><ReportView result={result} style={style} onDrill={onDrill} /></div>}
+        {/* Preview: the visualization on top, an Unsummarized/Summarized data table below (HubSpot-style) */}
+        <div className="min-w-0 flex-1 space-y-4 overflow-auto bg-zinc-50 p-6">
+          {config.viz !== "table" && (
+            <div className="rounded-xl border border-zinc-200 bg-white p-5">
+              {loading && !result ? <div className="flex items-center gap-1.5 text-xs text-zinc-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…</div>
+                : result ? <ReportView result={result} style={style} onDrill={onDrill} /> : <Empty />}
+            </div>
+          )}
+
+          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+            <div className="flex gap-1 border-b border-zinc-100 px-3 pt-2">
+              {(["unsummarized", "summarized"] as const).map((t) => (
+                <button key={t} onClick={() => setDataTab(t)}
+                  className={cn("rounded-t-lg border-b-2 px-3 py-1.5 text-sm font-medium", dataTab === t ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-800")}>
+                  {t === "unsummarized" ? "Unsummarized data" : "Summarized data"}
+                </button>
+              ))}
+            </div>
+            <div className="overflow-auto p-4">
+              {dataLoading && !dataResult ? <div className="flex items-center gap-1.5 py-6 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading data…</div>
+                : dataResult ? <DataTable result={dataResult} onDrill={dataTab === "summarized" ? onDrill : undefined} /> : <p className="py-6 text-sm text-zinc-400">No data.</p>}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -436,6 +492,25 @@ function reportLabel(objects: { key: string; label: string }[], key: string): st
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return <div><p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p><div className="space-y-1.5">{children}</div></div>
+}
+// Droppable target that accepts a field dragged from the field list.
+function DropZone({ onDropField, empty, children }: { onDropField: (e: React.DragEvent) => void; empty?: React.ReactNode; children?: React.ReactNode }) {
+  const [over, setOver] = useState(false)
+  const isEmpty = !children || (Array.isArray(children) && children.length === 0)
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setOver(true) }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => { setOver(false); onDropField(e) }}
+      className={cn(
+        "space-y-1.5 rounded-lg transition-colors",
+        over && "ring-2 ring-blue-400 ring-offset-1",
+        isEmpty && "border border-dashed border-zinc-200 p-2",
+      )}
+    >
+      {isEmpty ? (empty ?? <p className="text-xs text-zinc-400">Drag fields here.</p>) : children}
+    </div>
+  )
 }
 function Chip({ label, onRemove, children }: { label: string; onRemove: () => void; children?: React.ReactNode }) {
   return <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm"><span className="flex-1 truncate text-zinc-700">{label}</span>{children}<button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button></div>

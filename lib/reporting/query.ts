@@ -132,7 +132,12 @@ async function loadReportRows(config: ReportConfig, window?: { start: Date; end:
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: primary.slice(3) }, select: { id: true } }).catch(() => null)
     where = def ? { AND: [{ objectDefId: def.id }, ...clauses] } : where
   }
-  const include = Object.fromEntries((config.sources ?? []).map((s) => [s.joinPath, true]))
+  const include: Record<string, unknown> = Object.fromEntries((config.sources ?? []).map((s) => [s.joinPath, true]))
+  // Always join the primary's USER owner relations so inline Owner/Created-by name
+  // fields resolve (they're single-FK and cheap), regardless of selected sources.
+  for (const a of (REPORT_OBJECTS[primary]?.associations ?? [])) {
+    if (a.target === "USER" && !(a.path in include)) include[a.path] = { select: { name: true, email: true } }
+  }
   const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: ROW_CAP }).catch(() => [])
   return { rows, fields, byKey, total: rows.length, capped: rows.length >= ROW_CAP }
 }
