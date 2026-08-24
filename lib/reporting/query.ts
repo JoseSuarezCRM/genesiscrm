@@ -7,7 +7,7 @@ import { filterStateToWhere } from "@/lib/filter-to-prisma"
 import type { FilterField } from "@/lib/filters"
 import { reportFieldsFor, joinedFieldsForSource, REPORT_OBJECTS } from "./objects"
 import type {
-  ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series,
+  ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series, DateFrequency,
 } from "./types"
 
 const ROW_CAP = 10000
@@ -61,6 +61,34 @@ function toDate(v: unknown): Date | null {
   if (!v) return null
   const d = new Date(v as any)
   return isNaN(d.getTime()) ? null : d
+}
+
+// The bucket key + label for a specific date at a frequency — must match dimKeyLabel's date branch.
+function dateBucket(d: Date, freq: DateFrequency): { key: string; label: string } {
+  const y = d.getUTCFullYear(), m = d.getUTCMonth()
+  if (freq === "year") return { key: `${y}`, label: `${y}` }
+  if (freq === "quarter") { const q = Math.floor(m / 3) + 1; return { key: `${y}-Q${q}`, label: `Q${q} ${y}` } }
+  if (freq === "month") return { key: `${y}-${String(m + 1).padStart(2, "0")}`, label: d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) }
+  if (freq === "week") { const day = d.getUTCDate(); const wk = Math.ceil(day / 7); return { key: `${y}-${m}-w${wk}`, label: d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) } }
+  return { key: d.toISOString().slice(0, 10), label: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) }
+}
+// Every bucket between two dates (inclusive) at the given frequency, in order — so a
+// date axis is continuous (empty periods still appear), like HubSpot.
+function enumerateDateBuckets(min: Date, max: Date, freq: DateFrequency): { key: string; label: string; t: number }[] {
+  const out: { key: string; label: string; t: number }[] = []
+  const seen = new Set<string>()
+  const cur = new Date(Date.UTC(min.getUTCFullYear(), min.getUTCMonth(), min.getUTCDate()))
+  let guard = 0
+  while (cur.getTime() <= max.getTime() && guard++ < 2000) {
+    const b = dateBucket(cur, freq)
+    if (!seen.has(b.key)) { seen.add(b.key); out.push({ ...b, t: cur.getTime() }) }
+    if (freq === "year") cur.setUTCFullYear(cur.getUTCFullYear() + 1)
+    else if (freq === "quarter") cur.setUTCMonth(cur.getUTCMonth() + 3)
+    else if (freq === "month") cur.setUTCMonth(cur.getUTCMonth() + 1)
+    else if (freq === "week") cur.setUTCDate(cur.getUTCDate() + 7)
+    else cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+  return out
 }
 
 // A group key + display label for a dimension value (with date bucketing).
@@ -189,9 +217,14 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     }
   }
 
-  // KPI — a single measure, no dimension.
+  // KPI — one big number per measure (a multi-metric summary card).
   if (config.viz === "kpi") {
-    return { viz: "kpi", columns: [], rows: [], kpi: aggregate(rows, measures[0], measureField(measures[0])), total, capped, valueFormat, comparison }
+    const kpis = measures.map((m) => ({
+      label: measureLabel(m),
+      value: aggregate(rows, m, measureField(m)),
+      format: m.format ? { format: m.format, decimals: m.decimals } : undefined,
+    }))
+    return { viz: "kpi", columns: [], rows: [], kpi: kpis[0]?.value ?? 0, kpis, total, capped, valueFormat, comparison }
   }
 
   const dims = config.dimensions.map((d) => ({ d, f: byKey[d.key] })).filter((x) => x.f)
@@ -216,11 +249,36 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
 
   // Bucket rows by the primary dimension (a single "All" group when none is set).
   const groups = new Map<string, { label: string; rows: any[] }>()
+  const bucketTime = new Map<string, number>() // sortable timestamp for (esp. empty) date buckets
   const order: string[] = []
   for (const r of rows) {
     const { key, label } = dim ? dimKeyLabel(r, dim.d, dim.f) : { key: "all", label: "All" }
     if (!groups.has(key)) { groups.set(key, { label, rows: [] }); order.push(key) }
     groups.get(key)!.rows.push(r)
+  }
+
+  // Continuous date axis: for a date dimension, insert empty buckets between the
+  // earliest and latest present value so gaps (e.g. a day with no records) still show.
+  const dateDimGF = !!dim && (dim.f.type === "date" || !!dim.d.dateFrequency)
+  if (dateDimGF && order.length > 1) {
+    const freq = dim!.d.dateFrequency ?? "day"
+    const dates = rows.map((r) => toDate(readValue(r, dim!.f))).filter((d): d is Date => !!d)
+    if (dates.length) {
+      const min = new Date(Math.min(...dates.map((d) => d.getTime())))
+      const max = new Date(Math.max(...dates.map((d) => d.getTime())))
+      const full = enumerateDateBuckets(min, max, freq)
+      if (full.length <= 500) {
+        const complete: string[] = []
+        for (const b of full) {
+          if (!groups.has(b.key)) groups.set(b.key, { label: b.label, rows: [] })
+          bucketTime.set(b.key, b.t)
+          complete.push(b.key)
+        }
+        // keep any "(No value)" bucket that isn't part of the date sequence
+        for (const k of order) if (!complete.includes(k)) complete.push(k)
+        order.splice(0, order.length, ...complete)
+      }
+    }
   }
 
   // Pivot: rows = primary dimension, columns = breakdown (or a single value column).
@@ -268,7 +326,11 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   // other dimensions sort by the first series value (or label).
   const dateDim = !!dim && (dim.f.type === "date" || !!dim.d.dateFrequency)
   if (dateDim) {
-    const t = (k: string) => { const d = toDate(readValue(groups.get(k)!.rows[0], dim!.f)); return d ? d.getTime() : -Infinity }
+    const t = (k: string) => {
+      const r0 = groups.get(k)!.rows[0]
+      const d = r0 ? toDate(readValue(r0, dim!.f)) : null
+      return d ? d.getTime() : (bucketTime.get(k) ?? -Infinity)
+    }
     const idxOrder = order.map((k, i) => ({ k, i })).sort((a, b) => t(a.k) - t(b.k))
     const perm = idxOrder.map((x) => x.i)
     order.splice(0, order.length, ...idxOrder.map((x) => x.k))

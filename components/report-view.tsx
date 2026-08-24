@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Hash, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ReportResult } from "@/lib/reporting/types"
@@ -40,14 +40,29 @@ export function fmtNum(v: number, vf?: ValueFormat): string {
 // preview and dashboard cards. Pass onDrill to make bars/rows/cells click into records.
 export function ReportView({ result, style, onDrill }: { result: ReportResult; style?: ReportStyle; onDrill?: DrillFn }) {
   const st = style ?? {}
-  if (result.viz === "kpi") return (
-    <div className="flex h-full flex-col items-center justify-center">
-      <Hash className="h-6 w-6 text-zinc-300" />
-      <div className="mt-2 text-5xl font-bold text-zinc-900">{fmtNum(result.kpi ?? 0, result.valueFormat)}</div>
-      <p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p>
-      {result.comparison && <DeltaBadge c={result.comparison} vf={result.valueFormat} />}
-    </div>
-  )
+  if (result.viz === "kpi") {
+    const kpis = result.kpis && result.kpis.length ? result.kpis : [{ label: "", value: result.kpi ?? 0, format: result.valueFormat }]
+    if (kpis.length === 1) return (
+      <div className="flex h-full flex-col items-center justify-center">
+        <Hash className="h-6 w-6 text-zinc-300" />
+        <div className="mt-2 text-5xl font-bold text-zinc-900">{fmtNum(kpis[0].value, kpis[0].format)}</div>
+        {kpis[0].label && <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">{kpis[0].label}</p>}
+        <p className="mt-1 text-sm text-zinc-500">{result.total.toLocaleString()} records</p>
+        {result.comparison && <DeltaBadge c={result.comparison} vf={result.valueFormat} />}
+      </div>
+    )
+    // Multi-metric summary card: a row of big numbers.
+    return (
+      <div className="flex flex-wrap items-start justify-around gap-6 py-4">
+        {kpis.map((k, i) => (
+          <div key={i} className="min-w-[120px] text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{k.label}</p>
+            <div className="mt-1 text-4xl font-bold text-zinc-900">{fmtNum(k.value, k.format)}</div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   if (result.viz === "pivot" && result.pivot) return <div><CompareCaption result={result} /><PivotTable pivot={result.pivot} onDrill={onDrill} valueFormat={result.valueFormat} /></div>
 
@@ -167,13 +182,32 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
   const W = 640, H = 280, padL = 64, padB = 68, padT = 10, cW = W - padL - 10, cH = H - padT - padB
   const xTitle = result.axis?.x, yTitle = result.axis?.y
 
+  // Hover tooltip (dark box near the cursor with category + each series value).
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [tip, setTip] = useState<{ x: number; y: number; title: string; rows: { name: string; value: number; color: string }[] } | null>(null)
+  const moveTip = (e: React.MouseEvent, title: string, tRows: { name: string; value: number; color: string }[]) => {
+    const r = wrapRef.current?.getBoundingClientRect(); if (!r) return
+    setTip({ x: e.clientX - r.left, y: e.clientY - r.top, title, rows: tRows })
+  }
+  const clearTip = () => setTip(null)
+  const TipEl = tip ? (
+    <div className="pointer-events-none absolute z-20 min-w-[120px] rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs text-white shadow-lg"
+      style={{ left: Math.min(tip.x + 12, (wrapRef.current?.clientWidth ?? 400) - 150), top: Math.max(0, tip.y - 8) }}>
+      <p className="mb-0.5 font-semibold">{tip.title}</p>
+      {tip.rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: r.color }} /><span className="text-zinc-300">{r.name}</span><span className="ml-auto pl-3 font-medium">{fmtNum(r.value, vf)}</span></div>
+      ))}
+    </div>
+  ) : null
+
   if (result.viz === "pie" || result.viz === "donut") {
     const pts = (series[0]?.points ?? [])
     const totalV = Math.max(1, pts.reduce((a, p) => a + p.value, 0))
     let a0 = -Math.PI / 2
     const cx = 130, cy = 130, r = 110, ri = result.viz === "donut" ? 55 : 0
     return (
-      <div className="flex flex-wrap items-center gap-6">
+      <div ref={wrapRef} className="relative flex flex-wrap items-center gap-6" onMouseLeave={clearTip}>
+        {TipEl}
         <svg viewBox="0 0 260 260" className="h-56 w-56">
           {pts.map((p, i) => {
             const a1 = a0 + (p.value / totalV) * Math.PI * 2
@@ -183,7 +217,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
               ? `M ${cx + ri * Math.cos(a0)} ${cy + ri * Math.sin(a0)} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${cx + ri * Math.cos(a1)} ${cy + ri * Math.sin(a1)} A ${ri} ${ri} 0 ${large} 0 ${cx + ri * Math.cos(a0)} ${cy + ri * Math.sin(a0)} Z`
               : `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
             a0 = a1
-            return <path key={i} d={d} fill={palette[i % palette.length]} onClick={onDrill ? () => onDrill(p.key, null, p.label) : undefined} className={onDrill ? "cursor-pointer" : undefined} />
+            return <path key={i} d={d} fill={palette[i % palette.length]} onClick={onDrill ? () => onDrill(p.key, null, p.label) : undefined} onMouseMove={(e) => moveTip(e, p.label, [{ name: series[0]?.name ?? "", value: p.value, color: palette[i % palette.length] }])} className={onDrill ? "cursor-pointer" : undefined} />
           })}
         </svg>
         {showLegend && <div className="space-y-1 text-sm">{pts.map((p, i) => <div key={i} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: palette[i % palette.length] }} />{p.label}<span className="text-zinc-400">{fmtNum(p.value, vf)}</span></div>)}</div>}
@@ -197,7 +231,8 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
   if (result.viz === "hbar") {
     const rowH = 26, gap = 8, chartW = 560, labelW = 130
     return (
-      <div>
+      <div ref={wrapRef} className="relative" onMouseLeave={clearTip}>
+        {TipEl}
         {showAxis && (result.axis?.x || result.axis?.y) && (
           <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-zinc-500">
             <span>{result.axis?.x}</span>
@@ -210,7 +245,7 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
             const y = i * (rowH + gap) + 5
             const sh = rowH / series.length
             return (
-              <g key={i} onClick={labelClick(i)} className={onDrill ? "cursor-pointer" : undefined}>
+              <g key={i} onClick={labelClick(i)} onMouseMove={(e) => moveTip(e, l, series.map((s, si) => ({ name: s.name, value: s.points[i]?.value ?? 0, color: palette[si % palette.length] })))} className={onDrill ? "cursor-pointer" : undefined}>
                 <rect x={0} y={y} width={labelW + chartW + 50} height={rowH} fill="transparent" />
                 <text x={labelW - 8} y={y + rowH / 2} textAnchor="end" dominantBaseline="middle" fontSize={11} fill="#555">{l.length > 18 ? l.slice(0, 17) + "…" : l}</text>
                 {series.map((s, si) => {
@@ -242,6 +277,11 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
       ))}
       {showAxis && yTitle && <text x={12} y={padT + cH / 2} transform={`rotate(-90 12 ${padT + cH / 2})`} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{yTitle}</text>}
       {showAxis && xTitle && <text x={padL + cW / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{xTitle}</text>}
+      {labels.map((_, i) => (
+        <rect key={`hit${i}`} x={padL + bw * i} y={padT} width={bw} height={cH} fill="transparent"
+          onMouseMove={(e) => moveTip(e, labels[i], series.map((s, si) => ({ name: s.name, value: s.points[i]?.value ?? 0, color: palette[si % palette.length] })))}
+          onClick={labelClick(i)} className={onDrill ? "cursor-pointer" : undefined} />
+      ))}
         {result.viz === "line" || result.viz === "area" ? (
           series.map((s, si) => {
             const pts = s.points.map((p, i) => `${padL + bw * i + bw / 2},${padT + cH - (p.value / max) * cH}`).join(" ")
@@ -286,7 +326,8 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
     </svg>
   )
   return (
-    <div className={cn(legendPos === "right" && "flex items-start gap-4")}>
+    <div ref={wrapRef} className={cn("relative", legendPos === "right" && "flex items-start gap-4")} onMouseLeave={clearTip}>
+      {TipEl}
       {legendEl && legendPos === "top" && <div className="mb-2">{legendEl}</div>}
       <div className="min-w-0 flex-1">{chartSvg}</div>
       {legendEl && legendPos === "right" && <div className="shrink-0 pt-2">{legendEl}</div>}
