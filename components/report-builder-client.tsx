@@ -244,7 +244,7 @@ export default function ReportBuilderClient({
     if (plm === "exclude") p.set("pipelineMode", "exclude")
     if (sm === "exclude") p.set("statusMode", "exclude")
     if (dm === "exclude") p.set("doctorMode", "exclude")
-    return `/reports/builder?${p.toString()}`
+    return `/reports/builder/classic?${p.toString()}`
   }
 
   function applyGroupBy(g: GroupBy) { router.push(buildUrl({ g })) }
@@ -416,7 +416,7 @@ export default function ReportBuilderClient({
     if ((cfg as any).pipelineMode === "exclude") p.set("pipelineMode", "exclude")
     if ((cfg as any).statusMode === "exclude") p.set("statusMode", "exclude")
     if ((cfg as any).doctorMode === "exclude") p.set("doctorMode", "exclude")
-    router.push(`/reports/builder?${p.toString()}`)
+    router.push(`/reports/builder/classic?${p.toString()}`)
   }
 
   // Build CSV data (all sorted rows, ignoring the display limit).

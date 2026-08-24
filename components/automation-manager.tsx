@@ -2759,6 +2759,7 @@ function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }
                     <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search records…"
                       className="w-full rounded-lg border border-zinc-200 pl-8 pr-3 py-2 text-sm outline-none focus:border-zinc-400" />
                   </div>
+                  <p className="text-xs text-zinc-400 -mt-1.5">Search by name, email, MRN, or any of the record&apos;s fields.</p>
                   <div className="border border-zinc-100 rounded-lg divide-y divide-zinc-100 max-h-64 overflow-y-auto">
                     {searching ? (
                       <div className="flex justify-center py-6 text-zinc-300"><Loader2 className="h-4 w-4 animate-spin" /></div>

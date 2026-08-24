@@ -1545,10 +1545,13 @@ model MessageTemplate {
 }
 
 model SavedReport {
-  id          String            @id @default(cuid())
-  name        String
-  config      Json
-  isPinned    Boolean           @default(false)
+  id            String            @id @default(cuid())
+  name          String
+  config        Json
+  isPinned      Boolean           @default(false)
+  visibility    String            @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
+  teamId        String?
+  sharedUserIds String[]          @default([])
   createdById String
   createdBy   User              @relation("SavedReportCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   dashboards  DashboardReport[]
@@ -1557,8 +1560,13 @@ model SavedReport {
 }
 
 model Dashboard {
-  id          String            @id @default(cuid())
-  name        String
+  id            String            @id @default(cuid())
+  name          String
+  layout        Json?             // react-grid-layout: { [savedReportId]: {x,y,w,h} }
+  dateRange     Json?             // dashboard-level quick date filter: { preset, from?, to? }
+  visibility    String            @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
+  teamId        String?
+  sharedUserIds String[]          @default([])
   createdById String
   createdBy   User              @relation("DashboardCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   reports     DashboardReport[]
@@ -1570,6 +1578,7 @@ model DashboardReport {
   dashboardId   String
   savedReportId String
   order         Int          @default(0)
+  filters       Json?        // per-card FilterState merged into the report at render
   addedAt       DateTime     @default(now())
   dashboard     Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
   savedReport   SavedReport  @relation(fields: [savedReportId], references: [id], onDelete: Cascade)

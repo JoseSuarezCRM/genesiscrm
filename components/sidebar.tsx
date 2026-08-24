@@ -19,6 +19,7 @@ import {
   Box,
   Workflow,
   LayoutDashboard,
+  BarChart3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { userCanLevel } from "@/lib/permissions"
@@ -36,6 +37,11 @@ const referralItems: NavItem[] = [
   { href: "/messages",          label: "SMS Inbox",  object: "SMS" },
   { href: "/reports",           label: "Reports",    object: "REPORTS" },
   { href: "/broadcasts",        label: "Broadcasts", object: "BROADCASTS" },
+]
+
+const reportingItems: NavItem[] = [
+  { href: "/reports/dashboard", label: "Dashboards", object: "REPORTS" },
+  { href: "/reports/builder",   label: "Reports",    object: "REPORTS" },
 ]
 
 const appointmentItems: NavItem[] = [
@@ -88,6 +94,7 @@ const sections = [
   { key: "NAV_SCHEDULING",   title: "Scheduling v2", icon: LayoutDashboard, items: schedulingV2Items },
   { key: "NAV_SURGERY",      title: "Surgery",      icon: Stethoscope,   items: surgeryItems },
   { key: "NAV_COMMUNICATIONS", title: "Communications", icon: MessageCircle, items: communicationsItems },
+  { key: "NAV_REPORTING",    title: "Reporting",    icon: BarChart3,     items: reportingItems },
   { key: "NAV_AUTOMATIONS",  title: "Automations",  icon: Workflow,      items: automationItems },
   { key: "NAV_ADMIN",        title: "Settings",     icon: Settings,      items: adminItems },
 ]

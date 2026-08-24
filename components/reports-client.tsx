@@ -274,10 +274,13 @@ export default function ReportsClient({
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
             <Link href="/reports/builder" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all">
-              Custom Report
+              Report Builder
             </Link>
             <Link href="/reports/dashboard" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all">
               Dashboard
+            </Link>
+            <Link href="/reports/builder/classic" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-600 transition-all">
+              Classic
             </Link>
           </div>
           <p className="text-sm text-slate-500">Click any metric to view the matching referrals</p>

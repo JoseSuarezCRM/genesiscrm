@@ -1745,11 +1745,27 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         <div className="space-y-2">
           {filtered.map(a => (
             <div key={a.id} className="flex items-start gap-4 p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
-              <div className="shrink-0 w-16 text-center">
+              <div className="shrink-0 w-20 text-center">
                 <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{format(activityDay(a.date), "MMM")}</p>
                 <p className="text-2xl font-bold text-slate-800 leading-none">{format(activityDay(a.date), "d")}</p>
                 <p className="text-xs text-slate-400">{format(activityDay(a.date), "yyyy")}</p>
                 {hasActivityTime(a.date) && <p className="text-[11px] text-slate-400 mt-0.5 whitespace-nowrap">{fmtActivityTime(a.date)}</p>}
+                {(a.rating != null || a.meetingRating != null) && (
+                  <div className="mt-2 space-y-1">
+                    {a.rating != null && (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[9px] font-medium uppercase tracking-wide text-slate-400">Clinic</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.rating}</span>
+                      </div>
+                    )}
+                    {a.meetingRating != null && (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[9px] font-medium uppercase tracking-wide text-slate-400">Meeting</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.meetingRating}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 min-w-0 space-y-1.5">
@@ -1778,7 +1794,6 @@ export default function ActivityManager({ activities, practices, allDoctors, all
                 )}
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-slate-500">
-                  {a.rating != null && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.rating}</span>}
                   {a.nextStep && <span><span className="font-medium text-slate-600">Next:</span> {a.nextStep}</span>}
                   {a.frontDesk && <span><span className="font-medium text-slate-600">Front desk:</span> {a.frontDesk}</span>}
                   {a.flyer && (() => {

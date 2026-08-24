@@ -57,6 +57,7 @@ export const CAPABILITIES: PermissionDef[] = [
 // Nav sections (control sidebar visibility). Keep keys in sync with sidebar.tsx.
 export const NAV_PERMISSIONS: PermissionDef[] = [
   { key: "NAV_REFERRALS",    label: "Referrals",    description: "Dashboard, Referrals, Practices, Locations, Providers, Activities, Tasks, SMS, Reports, Broadcasts" },
+  { key: "NAV_REPORTING",    label: "Reporting",    description: "Dashboards and the report builder" },
   { key: "NAV_APPOINTMENTS", label: "Appointments", description: "Completed appointments and referring providers" },
   { key: "NAV_SCHEDULING",   label: "Scheduling",   description: "Weekly schedule and staff roster" },
   { key: "NAV_SURGERY",      label: "Surgery",      description: "Surgery cases tracker with file import, call log, and documents" },

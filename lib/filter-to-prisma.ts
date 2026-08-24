@@ -48,7 +48,16 @@ function jsonConditionToWhere(cond: Condition, field: FilterField): Record<strin
   return null
 }
 
+// Wraps the scalar/json/relation condition; for a joined field (relationPath set,
+// e.g. "referringPractice") nests it as `{ referringPractice: <where> }` so a
+// single-FK relation can be filtered (Prisma relation `is`).
 function conditionToWhere(cond: Condition, field: FilterField): Record<string, unknown> | null {
+  const w = scalarConditionToWhere(cond, field)
+  if (w && field.relationPath) return { [field.relationPath]: w }
+  return w
+}
+
+function scalarConditionToWhere(cond: Condition, field: FilterField): Record<string, unknown> | null {
   const col = field.column
   if (!col) return null
   if (field.jsonBag) return jsonConditionToWhere(cond, field)
