@@ -25,6 +25,10 @@ const allItems: SearchItem[] = [
   { id: "reports", title: "Reports", category: "Referrals", href: "/reports" },
   { id: "broadcasts", title: "Broadcasts", category: "Referrals", href: "/broadcasts" },
 
+  // Reporting
+  { id: "dashboards", title: "Dashboards", category: "Reporting", href: "/reports/dashboard", requiredPermission: "NAV_REPORTING" },
+  { id: "report-builder", title: "Report Builder", category: "Reporting", href: "/reports/builder", requiredPermission: "NAV_REPORTING" },
+
   // Appointments
   { id: "appts", title: "Completed Appts", category: "Appointments", href: "/appointments" },
   { id: "referring-providers", title: "Referring Providers", category: "Appointments", href: "/appointments/providers" },
