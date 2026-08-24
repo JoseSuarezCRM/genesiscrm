@@ -111,6 +111,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
     [fields],
   )
   const dateFields = useMemo(() => primaryFields.filter((f) => f.type === "date"), [primaryFields])
+  const primaryDimIsDate = !!config.dimensions[0] && (byKey[config.dimensions[0].key]?.type === "date" || !!config.dimensions[0].dateFrequency)
   const toggleSource = (a: { path: string; target: string; label: string }) => setConfig((c) => {
     const on = c.sources.some((s) => s.joinPath === a.path)
     return on
@@ -418,11 +419,12 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
               )}
               <Section title="Sort & limit">
                 <div className="flex items-center gap-2">
-                  <StyledSelect value={config.sort?.dir ?? "desc"} onChange={(e) => set({ sort: { by: config.sort?.by ?? "value", dir: e.target.value as any } })} className="h-7 text-xs">
+                  <StyledSelect value={config.sort?.dir ?? "desc"} onChange={(e) => set({ sort: { by: config.sort?.by ?? "value", dir: e.target.value as any } })} className="h-7 text-xs" disabled={primaryDimIsDate}>
                     <option value="desc">Descending</option><option value="asc">Ascending</option>
                   </StyledSelect>
                   <input type="number" min={1} placeholder="Limit" value={config.limit ?? ""} onChange={(e) => set({ limit: e.target.value ? +e.target.value : null })} className="h-7 w-20 rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-zinc-400" />
                 </div>
+                {primaryDimIsDate && <p className="text-xs text-zinc-400">Date charts are ordered chronologically; a limit keeps the most recent buckets.</p>}
               </Section>
               <Section title="Date range">
                 <StyledSelect value={config.dateRange?.field ?? ""} onChange={(e) => set({ dateRange: e.target.value ? { field: e.target.value, preset: config.dateRange?.preset ?? "last_30", from: config.dateRange?.from, to: config.dateRange?.to } : null, compare: e.target.value ? config.compare : false })} className="h-7 text-xs">

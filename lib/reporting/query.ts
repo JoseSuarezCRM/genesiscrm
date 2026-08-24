@@ -264,8 +264,16 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     }
   }
 
-  // Sort groups (by first series value or by label).
-  if (config.sort) {
+  // Order groups. A date/time dimension is always chronological (oldest → newest);
+  // other dimensions sort by the first series value (or label).
+  const dateDim = !!dim && (dim.f.type === "date" || !!dim.d.dateFrequency)
+  if (dateDim) {
+    const t = (k: string) => { const d = toDate(readValue(groups.get(k)!.rows[0], dim!.f)); return d ? d.getTime() : -Infinity }
+    const idxOrder = order.map((k, i) => ({ k, i })).sort((a, b) => t(a.k) - t(b.k))
+    const perm = idxOrder.map((x) => x.i)
+    order.splice(0, order.length, ...idxOrder.map((x) => x.k))
+    for (const s of series) s.points = perm.map((i) => s.points[i])
+  } else if (config.sort) {
     const by = config.sort.by, dir = config.sort.dir === "asc" ? 1 : -1
     const primarySeries = series[0]
     const idxOrder = order.map((k, i) => ({ k, i }))
@@ -278,8 +286,15 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     for (const s of series) s.points = perm.map((i) => s.points[i])
   }
   if (config.limit && config.limit > 0) {
-    order.splice(config.limit)
-    for (const s of series) s.points = s.points.slice(0, config.limit)
+    if (dateDim) {
+      // Keep the most recent N buckets, still ordered oldest → newest.
+      const startIdx = Math.max(0, order.length - config.limit)
+      order.splice(0, startIdx)
+      for (const s of series) s.points = s.points.slice(startIdx)
+    } else {
+      order.splice(config.limit)
+      for (const s of series) s.points = s.points.slice(0, config.limit)
+    }
   }
 
   // Summarized table columns = dimension + each series. The dimension header honors
