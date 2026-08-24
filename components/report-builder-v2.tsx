@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users, GripVertical } from "lucide-react"
+import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users, GripVertical, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
-import FilterBuilder from "@/components/ui/filter-builder"
+import { FilterEditor } from "@/components/ui/filter-builder"
 import { getReportSchema, runReportPreview, drillIntoReport, getReportRows } from "@/app/actions/report-builder"
 import ExportDialog from "@/components/ui/export-dialog"
 import { createSavedReport, updateSavedReport, setSavedReportAccess } from "@/app/actions/saved-reports"
@@ -328,7 +328,10 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
               <Section title="Measures">
                 <DropZone onDropField={onDropField(addMeasure)}>
                   {config.measures.map((m, i) => (
-                    <Chip key={i} label={m.key === "*" ? "Count" : byKey[m.key]?.label ?? m.key} onRemove={() => set({ measures: config.measures.filter((_, j) => j !== i) })}>
+                    <EditableChip key={i}
+                      label={m.label ?? (m.key === "*" ? "Count" : byKey[m.key]?.label ?? m.key)}
+                      onRename={(v) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, label: v ?? undefined } : x) })}
+                      onRemove={() => set({ measures: config.measures.filter((_, j) => j !== i) })}>
                       {m.key !== "*" && (
                         <StyledSelect value={m.agg} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, agg: e.target.value as Aggregation } : x) })} className="h-6 text-xs">
                           {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
@@ -339,7 +342,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
                           {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                         </StyledSelect>
                       )}
-                    </Chip>
+                    </EditableChip>
                   ))}
                   {!config.measures.some((m) => m.key === "*") && <button onClick={() => set({ measures: [...config.measures, { source: config.primary, key: "*", agg: "count" }] })} className="text-xs text-blue-600 hover:underline">+ Count</button>}
                 </DropZone>
@@ -347,13 +350,16 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
               <Section title="Dimensions (group / x-axis)">
                 <DropZone onDropField={onDropField(addDimension)} empty={<p className="text-xs text-zinc-400">Drag a field here to group / chart.</p>}>
                   {config.dimensions.map((d, i) => (
-                    <Chip key={i} label={byKey[d.key]?.label ?? d.key} onRemove={() => set({ dimensions: config.dimensions.filter((_, j) => j !== i) })}>
+                    <EditableChip key={i}
+                      label={d.label ?? byKey[d.key]?.label ?? d.key}
+                      onRename={(v) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, label: v ?? undefined } : x) })}
+                      onRemove={() => set({ dimensions: config.dimensions.filter((_, j) => j !== i) })}>
                       {byKey[d.key]?.type === "date" && (
                         <StyledSelect value={d.dateFrequency ?? "month"} onChange={(e) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, dateFrequency: e.target.value as DateFrequency } : x) })} className="h-6 text-xs">
                           {FREQS.map((fr) => <option key={fr} value={fr}>{fr}</option>)}
                         </StyledSelect>
                       )}
-                    </Chip>
+                    </EditableChip>
                   ))}
                 </DropZone>
               </Section>
@@ -415,7 +421,15 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
               </Section>
             </div>
           ) : (
-            <div className="p-4"><FilterBuilder fields={filterFields} value={config.filters ?? emptyFilter()} onChange={(v) => set({ filters: v })} /></div>
+            <div className="space-y-3 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Filters</p>
+                {(config.filters?.groups?.length ?? 0) > 0 && (
+                  <button onClick={() => set({ filters: emptyFilter() })} className="text-xs text-zinc-500 hover:text-zinc-800">Clear all</button>
+                )}
+              </div>
+              <FilterEditor fields={filterFields} value={config.filters ?? emptyFilter()} onChange={(v) => set({ filters: v })} />
+            </div>
           )}
         </div>
 
@@ -439,7 +453,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
             </div>
             <div className="overflow-auto p-4">
               {dataLoading && !dataResult ? <div className="flex items-center gap-1.5 py-6 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading data…</div>
-                : dataResult ? <DataTable result={dataResult} onDrill={dataTab === "summarized" ? onDrill : undefined} /> : <p className="py-6 text-sm text-zinc-400">No data.</p>}
+                : dataResult ? <DataTable result={dataResult} onDrill={dataTab === "summarized" ? onDrill : undefined} pageSize={25} /> : <p className="py-6 text-sm text-zinc-400">No data.</p>}
             </div>
           </div>
         </div>
@@ -458,7 +472,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
               {drill.loading ? <div className="flex items-center gap-1.5 py-6 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading records…</div>
-                : drill.result ? <DataTable result={drill.result} /> : <p className="py-6 text-sm text-zinc-500">Couldn’t load records.</p>}
+                : drill.result ? <DataTable result={drill.result} pageSize={25} /> : <p className="py-6 text-sm text-zinc-500">Couldn’t load records.</p>}
             </div>
           </div>
         </div>
@@ -514,6 +528,27 @@ function DropZone({ onDropField, empty, children }: { onDropField: (e: React.Dra
 }
 function Chip({ label, onRemove, children }: { label: string; onRemove: () => void; children?: React.ReactNode }) {
   return <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm"><span className="flex-1 truncate text-zinc-700">{label}</span>{children}<button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button></div>
+}
+// A chip whose label can be renamed inline (sets a display-label override on the
+// measure/dimension); the override flows to the chart axis/legend + table header.
+function EditableChip({ label, onRename, onRemove, children }: { label: string; onRename: (v: string | null) => void; onRemove: () => void; children?: React.ReactNode }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(label)
+  const commit = () => { setEditing(false); onRename(draft.trim() || null) }
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm">
+      {editing ? (
+        <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setDraft(label) } }}
+          className="min-w-0 flex-1 rounded border border-zinc-300 px-1 py-0.5 text-sm outline-none focus:border-zinc-500" />
+      ) : (
+        <span className="flex-1 truncate text-zinc-700" title={label}>{label}</span>
+      )}
+      {children}
+      <button onClick={() => { setDraft(label); setEditing(true) }} className="text-zinc-400 hover:text-zinc-700" title="Rename"><Pencil className="h-3 w-3" /></button>
+      <button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+    </div>
+  )
 }
 function Empty() {
   return <div className="flex h-full items-center justify-center text-center"><div><BarChart3 className="mx-auto h-10 w-10 text-zinc-300" /><p className="mt-2 text-sm text-zinc-500">Add measures and a dimension to build your report.</p></div></div>

@@ -89,6 +89,7 @@ export interface ReportResult {
   rowKeys?: string[]          // dimension group keys aligned with `rows` (for drill-into)
   valueFormat?: { format: ValueFormat; decimals?: number } // how to render measure values
   comparison?: { prev: number; delta: number | null } // primary measure vs previous period
+  axis?: { x?: string; y?: string } // chart axis titles (dimension / measure)
 }
 
 export const EMPTY_REPORT: ReportConfig = {

@@ -282,12 +282,15 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     for (const s of series) s.points = s.points.slice(0, config.limit)
   }
 
-  // Summarized table columns = dimension + each series.
-  const columns: ResultColumn[] = [{ key: "__dim", label: dim ? dim.f.label : "All", type: dim ? dim.f.type : "text" }, ...series.map((s) => ({ key: s.name, label: s.name, type: "number" as const }))]
+  // Summarized table columns = dimension + each series. The dimension header honors
+  // a rename override (dim.d.label); the y-axis title is the primary measure label.
+  const dimLabel = dim ? (dim.d.label ?? dim.f.label) : "All"
+  const axis = { x: dim ? dimLabel : undefined, y: measureLabel(measures[0]) }
+  const columns: ResultColumn[] = [{ key: "__dim", label: dimLabel, type: dim ? dim.f.type : "text" }, ...series.map((s) => ({ key: s.name, label: s.name, type: "number" as const }))]
   const tableRows: (string | number | null)[][] = order.map((gk) => {
     const label = groups.get(gk)!.label
     return [label, ...series.map((s) => s.points.find((p) => p.key === gk)?.value ?? 0)]
   })
 
-  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order, valueFormat, comparison }
+  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order, valueFormat, comparison, axis }
 }

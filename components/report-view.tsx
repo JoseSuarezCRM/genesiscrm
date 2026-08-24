@@ -1,6 +1,7 @@
 "use client"
 
-import { Hash } from "lucide-react"
+import { useState } from "react"
+import { Hash, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ReportResult } from "@/lib/reporting/types"
 
@@ -55,20 +56,38 @@ function CompareCaption({ result }: { result: ReportResult }) {
   return <p className={cn("mb-2 text-xs font-medium", deltaColor(c.delta))}>{c.delta == null ? "—" : `${c.delta > 0 ? "▲" : c.delta < 0 ? "▼" : ""} ${Math.abs(c.delta)}%`} <span className="text-zinc-400 font-normal">vs previous period ({fmtNum(c.prev, result.valueFormat)})</span></p>
 }
 
-export function DataTable({ result, onDrill }: { result: ReportResult; onDrill?: DrillFn }) {
+export function DataTable({ result, onDrill, pageSize }: { result: ReportResult; onDrill?: DrillFn; pageSize?: number }) {
   // Summarized tables (one row per dimension group) carry rowKeys → rows drill in.
   const drillable = !!(onDrill && result.rowKeys && result.rowKeys.length === result.rows.length)
+  const [page, setPage] = useState(0)
+  const paged = !!pageSize && result.rows.length > pageSize
+  const pageCount = paged ? Math.ceil(result.rows.length / pageSize!) : 1
+  const p = Math.min(page, pageCount - 1)
+  const start = paged ? p * pageSize! : 0
+  const slice = paged ? result.rows.slice(start, start + pageSize!) : result.rows
   return (
     <div className="mt-2 overflow-x-auto">
       <table className="w-full text-sm">
         <thead><tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">{result.columns.map((c) => <th key={c.key} className="px-3 py-2 font-semibold">{c.label}</th>)}</tr></thead>
-        <tbody>{result.rows.map((r, i) => (
-          <tr key={i} onClick={drillable ? () => onDrill!(result.rowKeys![i], null, String(r[0] ?? "Records")) : undefined}
+        <tbody>{slice.map((r, i) => {
+          const idx = start + i
+          return (
+          <tr key={idx} onClick={drillable ? () => onDrill!(result.rowKeys![idx], null, String(r[0] ?? "Records")) : undefined}
             className={cn("border-b border-zinc-100", drillable ? "cursor-pointer hover:bg-blue-50" : "hover:bg-zinc-50")}>
             {r.map((v, j) => <td key={j} className="px-3 py-2 text-zinc-700">{v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : v.toLocaleString()) : v}</td>)}
           </tr>
-        ))}</tbody>
+        )})}</tbody>
       </table>
+      {paged && (
+        <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
+          <span>{(start + 1).toLocaleString()}–{(start + slice.length).toLocaleString()} of {result.rows.length.toLocaleString()}</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(Math.max(0, p - 1))} disabled={p === 0} className="inline-flex items-center gap-0.5 rounded-md border border-zinc-200 px-2 py-1 disabled:opacity-40 hover:border-zinc-400"><ChevronLeft className="h-3.5 w-3.5" /> Prev</button>
+            <span className="px-1">{p + 1} / {pageCount}</span>
+            <button onClick={() => setPage(Math.min(pageCount - 1, p + 1))} disabled={p >= pageCount - 1} className="inline-flex items-center gap-0.5 rounded-md border border-zinc-200 px-2 py-1 disabled:opacity-40 hover:border-zinc-400">Next <ChevronRight className="h-3.5 w-3.5" /></button>
+          </div>
+        </div>
+      )}
       {result.capped && <p className="mt-2 text-xs text-amber-600">Showing the first {result.total.toLocaleString()} records.</p>}
     </div>
   )
@@ -122,7 +141,8 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
   const labelClick = (i: number) => onDrill && keys[i] != null ? () => onDrill(keys[i], null, labels[i]) : undefined
   const max = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.value)))
   const stackMax = Math.max(1, ...labels.map((_, i) => series.reduce((a, s) => a + (s.points[i]?.value ?? 0), 0)))
-  const W = 640, H = 260, padL = 40, padB = 60, padT = 10, cW = W - padL - 10, cH = H - padT - padB
+  const W = 640, H = 280, padL = 64, padB = 68, padT = 10, cW = W - padL - 10, cH = H - padT - padB
+  const xTitle = result.axis?.x, yTitle = result.axis?.y
 
   if (result.viz === "pie" || result.viz === "donut") {
     const pts = (series[0]?.points ?? [])
@@ -155,6 +175,10 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
     const rowH = 26, gap = 8, chartW = 560, labelW = 130
     return (
       <div>
+        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-zinc-500">
+          <span>{result.axis?.x}</span>
+          <span>{result.axis?.y}</span>
+        </div>
         {series.length > 1 && <div className="mb-2 flex flex-wrap gap-3 text-xs">{series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{s.name}</span>)}</div>}
         <svg viewBox={`0 0 ${labelW + chartW + 50} ${(rowH + gap) * n + 10}`} className="w-full">
           {labels.map((l, i) => {
@@ -182,7 +206,14 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
     <div>
       {series.length > 1 && <div className="mb-2 flex flex-wrap gap-3 text-xs">{series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{s.name}</span>)}</div>}
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-        {[0, 0.5, 1].map((t) => <line key={t} x1={padL} x2={W - 10} y1={padT + cH - t * cH} y2={padT + cH - t * cH} stroke="#eee" />)}
+        {[0, 0.5, 1].map((t) => (
+          <g key={t}>
+            <line x1={padL} x2={W - 10} y1={padT + cH - t * cH} y2={padT + cH - t * cH} stroke="#eee" />
+            <text x={padL - 6} y={padT + cH - t * cH} textAnchor="end" dominantBaseline="middle" fontSize={9} fill="#aaa">{fmtNum(max * t, vf)}</text>
+          </g>
+        ))}
+        {yTitle && <text x={12} y={padT + cH / 2} transform={`rotate(-90 12 ${padT + cH / 2})`} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{yTitle}</text>}
+        {xTitle && <text x={padL + cW / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{xTitle}</text>}
         {result.viz === "line" || result.viz === "area" ? (
           series.map((s, si) => {
             const pts = s.points.map((p, i) => `${padL + bw * i + bw / 2},${padT + cH - (p.value / max) * cH}`).join(" ")
