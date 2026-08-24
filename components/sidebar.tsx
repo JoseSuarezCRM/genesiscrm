@@ -35,13 +35,13 @@ const referralItems: NavItem[] = [
   { href: "/activities",        label: "Activities", object: "ACTIVITIES" },
   { href: "/tasks",             label: "Tasks",      object: "TASKS" },
   { href: "/messages",          label: "SMS Inbox",  object: "SMS" },
-  { href: "/reports",           label: "Reports",    object: "REPORTS" },
+  { href: "/reports/referral-analytics", label: "Referral Analytics", object: "REPORTS" },
   { href: "/broadcasts",        label: "Broadcasts", object: "BROADCASTS" },
 ]
 
 const reportingItems: NavItem[] = [
   { href: "/reports/dashboard", label: "Dashboards", object: "REPORTS" },
-  { href: "/reports/builder",   label: "Reports",    object: "REPORTS" },
+  { href: "/reports",           label: "Reports",    object: "REPORTS" },
 ]
 
 const appointmentItems: NavItem[] = [

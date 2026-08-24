@@ -1567,6 +1567,7 @@ model Dashboard {
   visibility    String            @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[]          @default([])
+  isPinned      Boolean           @default(false)
   createdById String
   createdBy   User              @relation("DashboardCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   reports     DashboardReport[]

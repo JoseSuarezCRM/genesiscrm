@@ -9,6 +9,9 @@ export interface DashboardSummary {
   id: string
   name: string
   reportCount: number
+  ownerName: string
+  visibility: string
+  isPinned: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -53,13 +56,33 @@ export async function getDashboards(): Promise<DashboardSummary[]> {
     include: { _count: { select: { reports: true } } },
   })
 
+  const ownerIds = Array.from(new Set(dashboards.map((d: any) => d.createdById))) as string[]
+  const owners = ownerIds.length
+    ? await prisma.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true, email: true } })
+    : []
+  const ownerName = Object.fromEntries(owners.map((u) => [u.id, u.name || u.email]))
+
   return dashboards.map((d: any) => ({
     id: d.id,
     name: d.name,
     reportCount: d._count.reports,
+    ownerName: ownerName[d.createdById] ?? "—",
+    visibility: d.visibility ?? "PRIVATE",
+    isPinned: !!d.isPinned,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
   }))
+}
+
+// Toggle a dashboard as a favorite (owner only).
+export async function togglePinDashboard(id: string, isPinned: boolean): Promise<void> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  await (prisma as any).dashboard.updateMany({
+    where: { id, createdById: session.user.id },
+    data: { isPinned },
+  })
+  revalidatePath("/reports/dashboard")
 }
 
 export async function getDashboard(id: string): Promise<DashboardDetail | null> {
