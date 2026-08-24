@@ -20,6 +20,7 @@ import {
   GripVertical,
   Download,
   Filter,
+  Users,
 } from "lucide-react"
 import {
   addReportToDashboard,
@@ -27,11 +28,13 @@ import {
   renameDashboard,
   saveDashboardLayout,
   saveDashboardDateRange,
+  saveDashboardAccess,
   saveCardFilters,
   type DashboardDetail,
   type DashboardLayout,
   type DashboardDateRange,
 } from "@/app/actions/dashboards"
+import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import type { SavedReport } from "@/app/actions/saved-reports"
 import { cn } from "@/lib/utils"
 import { runReportPreview, getReportRows, getReportFields } from "@/app/actions/report-builder"
@@ -366,9 +369,13 @@ function AddReportPicker({
 export default function DashboardDetailClient({
   dashboard,
   allReports,
+  shareUsers = [],
+  shareTeams = [],
 }: {
   dashboard: DashboardDetail
   allReports: SavedReport[]
+  shareUsers?: ShareUser[]
+  shareTeams?: ShareTeam[]
 }) {
   const router = useRouter()
   const [editingName, setEditingName] = useState(false)
@@ -382,6 +389,18 @@ export default function DashboardDetailClient({
     const next = preset === "all" ? null : { preset }
     setDashDate(next)
     saveDashboardDateRange(dashboard.id, next).catch(() => {})
+  }
+
+  // Dashboard sharing (same model as saved Views / reports).
+  const [shareOpen, setShareOpen] = useState(false)
+  const [access, setAccess] = useState<ViewAccessValue>({
+    visibility: (dashboard.visibility as any) ?? "PRIVATE",
+    teamId: dashboard.teamId ?? null,
+    sharedUserIds: dashboard.sharedUserIds ?? [],
+  })
+  function changeAccess(v: ViewAccessValue) {
+    setAccess(v)
+    saveDashboardAccess(dashboard.id, v).catch(() => {})
   }
 
   const alreadyAdded = new Set(dashboard.reports.map((r) => r.savedReportId))
@@ -450,6 +469,13 @@ export default function DashboardDetailClient({
           <StyledSelect value={dashDate?.preset ?? "all"} onChange={(e) => changeDashDate(e.target.value)} className="h-9 min-w-[150px] text-sm">
             {DASH_DATE_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </StyledSelect>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Share
+          </button>
           <Link
             href="/reports/builder"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-zinc-200 rounded-lg text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 transition-all"
@@ -510,6 +536,16 @@ export default function DashboardDetailClient({
           allReports={allReports}
           onClose={() => setPickerOpen(false)}
         />
+      )}
+
+      {/* Share dashboard modal */}
+      {shareOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6" onClick={() => setShareOpen(false)}>
+          <div className="w-full max-w-md space-y-3 rounded-xl border border-zinc-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><p className="text-sm font-semibold text-zinc-900">Share dashboard</p><button onClick={() => setShareOpen(false)} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button></div>
+            <ViewAccessSelector value={access} onChange={changeAccess} users={shareUsers} teams={shareTeams} />
+          </div>
+        </div>
       )}
     </div>
   )

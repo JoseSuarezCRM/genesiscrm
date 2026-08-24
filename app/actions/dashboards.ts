@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { myTeamIds, sharedOrWhere, accessData, type ShareAccess } from "@/lib/share-access"
 
 export interface DashboardSummary {
   id: string
@@ -20,6 +21,10 @@ export interface DashboardDetail {
   name: string
   layout: DashboardLayout | null
   dateRange: DashboardDateRange | null
+  visibility: string
+  teamId: string | null
+  sharedUserIds: string[]
+  createdById: string
   createdAt: Date
   updatedAt: Date
   reports: {
@@ -40,9 +45,10 @@ export interface DashboardDetail {
 export async function getDashboards(): Promise<DashboardSummary[]> {
   const session = await auth()
   if (!session) return []
+  const teamIds = await myTeamIds(session.user.id)
 
   const dashboards = await (prisma as any).dashboard.findMany({
-    where: { createdById: session.user.id },
+    where: { OR: sharedOrWhere(session.user.id, teamIds) },
     orderBy: { updatedAt: "desc" },
     include: { _count: { select: { reports: true } } },
   })
@@ -59,9 +65,10 @@ export async function getDashboards(): Promise<DashboardSummary[]> {
 export async function getDashboard(id: string): Promise<DashboardDetail | null> {
   const session = await auth()
   if (!session) return null
+  const teamIds = await myTeamIds(session.user.id)
 
   const dashboard = await (prisma as any).dashboard.findFirst({
-    where: { id, createdById: session.user.id },
+    where: { id, OR: sharedOrWhere(session.user.id, teamIds) },
     include: {
       reports: {
         orderBy: { order: "asc" },
@@ -170,6 +177,17 @@ export async function saveDashboardDateRange(dashboardId: string, dateRange: Das
     where: { id: dashboardId, createdById: session.user.id },
     data: { dateRange },
   })
+}
+
+// Change who can see a dashboard (owner only).
+export async function saveDashboardAccess(dashboardId: string, access: ShareAccess): Promise<void> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  await (prisma as any).dashboard.updateMany({
+    where: { id: dashboardId, createdById: session.user.id },
+    data: accessData(access),
+  })
+  revalidatePath("/reports/dashboard")
 }
 
 // Per-card FilterState merged into that card's report at render.

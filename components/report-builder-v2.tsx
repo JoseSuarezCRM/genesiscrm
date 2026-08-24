@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download } from "lucide-react"
+import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { getReportSchema, runReportPreview, drillIntoReport, getReportRows } from "@/app/actions/report-builder"
 import ExportDialog from "@/components/ui/export-dialog"
-import { createSavedReport, updateSavedReport } from "@/app/actions/saved-reports"
+import { createSavedReport, updateSavedReport, setSavedReportAccess } from "@/app/actions/saved-reports"
+import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { getDashboards, addReportToDashboard, createDashboard, type DashboardSummary } from "@/app/actions/dashboards"
 import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
 import type { ReportConfig, ReportField, ReportResult, Aggregation, DateFrequency, VizType } from "@/lib/reporting/types"
@@ -31,7 +32,7 @@ const DATE_PRESETS = [
   { value: "this_year", label: "This year" }, { value: "custom", label: "Custom range" },
 ]
 
-export default function ReportBuilderV2({ objects, initial }: { objects: { key: string; label: string }[]; initial?: { id: string; name: string; config: any } | null }) {
+export default function ReportBuilderV2({ objects, initial, shareUsers = [], shareTeams = [] }: { objects: { key: string; label: string }[]; initial?: { id: string; name: string; config: any; visibility?: string; teamId?: string | null; sharedUserIds?: string[] } | null; shareUsers?: ShareUser[]; shareTeams?: ShareTeam[] }) {
   const [config, setConfig] = useState<ReportConfig>(initial ? sanitizeConfig(initial.config) : { ...EMPTY_REPORT, primary: objects[0]?.key ?? "REFERRAL" })
   const [schema, setSchema] = useState<{ fields: ReportField[]; associations: { path: string; target: string; label: string; fields: ReportField[] }[] }>({ fields: [], associations: [] })
   const [result, setResult] = useState<ReportResult | null>(null)
@@ -47,6 +48,12 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
   const [newDash, setNewDash] = useState("")
   const [addedTo, setAddedTo] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [access, setAccess] = useState<ViewAccessValue>({
+    visibility: (initial?.visibility as any) ?? "PRIVATE",
+    teamId: initial?.teamId ?? null,
+    sharedUserIds: initial?.sharedUserIds ?? [],
+  })
 
   // Drill into the records behind a bar / summarized row / pivot cell.
   async function onDrill(dimKey: string, bdKey: string | null, title: string) {
@@ -109,12 +116,16 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
   async function ensureSaved(forceNew = false): Promise<string | null> {
     if (!name.trim()) return null
     if (savedId && !forceNew) {
-      await updateSavedReport(savedId, name.trim(), { v: 2, ...config } as any)
+      await updateSavedReport(savedId, name.trim(), { v: 2, ...config } as any, access)
       return savedId
     }
-    const { id } = await createSavedReport(name.trim(), { v: 2, ...config } as any)
+    const { id } = await createSavedReport(name.trim(), { v: 2, ...config } as any, access)
     setSavedId(id)
     return id
+  }
+  async function changeAccess(v: ViewAccessValue) {
+    setAccess(v)
+    if (savedId) await setSavedReportAccess(savedId, v).catch(() => {})
   }
   async function save() {
     const id = await ensureSaved()
@@ -165,6 +176,9 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
               Save as new
             </button>
           )}
+          <button onClick={() => setShareOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
+            <Users className="h-3.5 w-3.5" /> Share
+          </button>
           <button onClick={() => setExportOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
             <Download className="h-3.5 w-3.5" /> Export
           </button>
@@ -182,6 +196,16 @@ export default function ReportBuilderV2({ objects, initial }: { objects: { key: 
         count={result?.total}
         getData={async () => getReportRows(config)}
       />
+
+      {shareOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6" onClick={() => setShareOpen(false)}>
+          <div className="w-full max-w-md space-y-3 rounded-xl border border-zinc-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><p className="text-sm font-semibold text-zinc-900">Share report</p><button onClick={() => setShareOpen(false)} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button></div>
+            <ViewAccessSelector value={access} onChange={changeAccess} users={shareUsers} teams={shareTeams} />
+            {!savedId && <p className="text-xs text-zinc-400">Applied when you save the report.</p>}
+          </div>
+        </div>
+      )}
 
       {/* Add-to-dashboard modal */}
       {dashOpen && (
