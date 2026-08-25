@@ -179,7 +179,7 @@ export default function ReportsClient({
     if (pMode !== "any") p.set("practiceMode", pMode)
     if (dMode !== "any") p.set("doctorMode", dMode)
     if (plMode !== "any") p.set("pipelineMode", plMode)
-    return `/reports?${p.toString()}`
+    return `/reports/referral-analytics?${p.toString()}`
   }
 
   const currentRangeStr = range === "custom" ? "custom" : range
