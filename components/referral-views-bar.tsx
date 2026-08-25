@@ -72,11 +72,24 @@ export default function ReferralViewsBar({ views, shareUsers, shareTeams }: Prop
     return () => { window.removeEventListener("referral-view-applied", load); window.removeEventListener("referral-prefs-changed", load) }
   }, [])
 
+  // Track the explicitly-applied view so changing a filter (which changes the
+  // query) keeps it selected and shows "Save changes" instead of deselecting.
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null)
+  useEffect(() => {
+    try { setAppliedViewId(sessionStorage.getItem(`referral-view:${pathname}`)) } catch {}
+  }, [pathname])
+  function setApplied(id: string | null) {
+    setAppliedViewId(id)
+    try { if (id) sessionStorage.setItem(`referral-view:${pathname}`, id); else sessionStorage.removeItem(`referral-view:${pathname}`) } catch {}
+  }
+
   const currentQuery = normalizeQuery(params.toString())
-  const activeView = views.find((v) => normalizeQuery(v.config.query) === currentQuery)
-  const activeViewId = activeView?.id ?? (currentQuery === "" ? "__default__" : null)
+  const matchedView = views.find((v) => normalizeQuery(v.config.query) === currentQuery)
+  const activeView = (appliedViewId ? views.find((v) => v.id === appliedViewId) : undefined) ?? matchedView
+  const activeViewId = activeView?.id ?? (currentQuery === "" && !appliedViewId ? "__default__" : null)
   const sameOrder = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((x, i) => x === b[i])
   const viewDirty = !!activeView && (
+    normalizeQuery(activeView.config.query) !== currentQuery ||
     !sameOrder(activeView.config.columns ?? DEFAULT_REFERRAL_COLS, prefs.columns) ||
     (activeView.config.frozen ?? 0) !== prefs.frozen
   )
@@ -93,11 +106,13 @@ export default function ReferralViewsBar({ views, shareUsers, shareTeams }: Prop
   }
 
   function applyView(view: SavedView) {
+    setApplied(view.id)
     applyPrefs(view.config.columns ?? DEFAULT_REFERRAL_COLS, view.config.frozen ?? 0)
     router.push(`${pathname}${view.config.query ? `?${view.config.query}` : ""}`)
   }
 
   function applyDefault() {
+    setApplied(null)
     applyPrefs(DEFAULT_REFERRAL_COLS, 0)
     router.push(pathname)
   }

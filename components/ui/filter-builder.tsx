@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { Filter, X, Plus, ChevronDown, Check, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
@@ -24,12 +25,27 @@ function MultiSelect({ options, value, onChange }: {
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
-    if (!open) return
-    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    if (!open) { setPos(null); return }
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect(); if (!r) return
+      setPos({ left: r.left, top: r.bottom + 4, width: Math.max(r.width, 240) })
+    }
+    place()
+    // The popover panel scrolls; keep the portalled menu anchored to the button.
+    function onDoc(e: MouseEvent) {
+      const t = e.target as Node
+      if (ref.current?.contains(t)) return
+      if ((t as Element)?.closest?.("[data-select-menu-open]")) return
+      setOpen(false)
+    }
     document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
+    window.addEventListener("scroll", place, true)
+    window.addEventListener("resize", place)
+    return () => { document.removeEventListener("mousedown", onDoc); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place) }
   }, [open])
   const filtered = q ? options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())) : options
   function toggle(v: string) {
@@ -37,13 +53,14 @@ function MultiSelect({ options, value, onChange }: {
   }
   return (
     <div className="relative flex-1 min-w-0" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)}
+      <button ref={btnRef} type="button" onClick={() => setOpen((o) => !o)}
         className="w-full h-9 px-3 inline-flex items-center justify-between gap-1 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300">
         <span className="truncate">{value.length === 0 ? "Select…" : value.length === 1 ? (options.find((o) => o.value === value[0])?.label ?? value[0]) : `${value.length} selected`}</span>
         <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
       </button>
-      {open && (
-        <div className="absolute left-0 top-10 z-50 w-72 max-h-72 overflow-hidden bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col">
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <div data-select-menu-open="" className="fixed z-[100] max-h-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col"
+          style={{ left: pos.left, top: pos.top, width: pos.width }}>
           <div className="relative border-b border-slate-100 p-1.5">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
@@ -65,7 +82,8 @@ function MultiSelect({ options, value, onChange }: {
               )
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
