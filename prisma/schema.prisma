@@ -1016,6 +1016,7 @@ model ReferralView {
   name          String
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pipelineId    String?  // the pipeline this view belongs to (null = the "All" scope)
   config        Json     // { query, columns }
   visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
