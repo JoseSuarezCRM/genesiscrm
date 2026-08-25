@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
 import { userCanLevel } from "@/lib/permissions"
 import ActivityManager from "@/components/activity-manager"
+import { associationColumnDefs } from "@/lib/association-columns"
 import { listActivityTags } from "@/app/actions/tags"
 import { getActivityViews } from "@/app/actions/activity-views"
 import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-share-options"
@@ -14,8 +15,8 @@ export default async function ActivitiesPage() {
     prisma.activity.findMany({
       orderBy: { date: "desc" },
       include: {
-        practice: { select: { id: true, name: true } },
-        location: { select: { id: true, name: true, address: true } },
+        practice: true,
+        location: true,
         owner: { select: { id: true, name: true, email: true } },
         providers: {
           include: {
@@ -84,6 +85,7 @@ export default async function ActivitiesPage() {
         canManage={userCanLevel(session?.user as any, "ACTIVITIES", "EDIT")}
         canCreateTasks={userCanLevel(session?.user as any, "TASKS", "EDIT")}
         customProps={activityCustomProps as any}
+        associations={await associationColumnDefs("ACTIVITY")}
       />
     </div>
   )
