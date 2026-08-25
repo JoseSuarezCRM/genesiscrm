@@ -9,6 +9,9 @@ import { getCustomObjectViews } from "@/app/actions/custom-object-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
 import CustomObjectList from "@/components/custom-object-list"
 import { getCreateForm } from "@/app/actions/create-form"
+import { pipelinesForObject } from "@/lib/stages/core"
+import Link from "next/link"
+import { LayoutGrid } from "lucide-react"
 
 interface Props {
   params: { key: string }
@@ -29,11 +32,12 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
   const totalRecords = await countCustomObjectRecords(params.key)
   const serverMode = totalRecords > CO_SERVER_THRESHOLD
 
-  const [users, savedViews, shareOptions, createFormConfig] = await Promise.all([
+  const [users, savedViews, shareOptions, createFormConfig, pipelines] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
     getCustomObjectViews(params.key),
     getViewShareOptions(),
     getCreateForm(`CO:${params.key}`),
+    pipelinesForObject(`CO:${params.key}`),
   ])
 
   const pageData = serverMode
@@ -45,9 +49,16 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">{def.plural}</h1>
-        <p className="text-sm text-slate-500">{totalRecords} {totalRecords === 1 ? def.singular.toLowerCase() : def.plural.toLowerCase()}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">{def.plural}</h1>
+          <p className="text-sm text-slate-500">{totalRecords} {totalRecords === 1 ? def.singular.toLowerCase() : def.plural.toLowerCase()}</p>
+        </div>
+        {pipelines.length > 0 && (
+          <Link href={`/objects/${params.key}/board`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
+            <LayoutGrid className="h-3.5 w-3.5" /> Board
+          </Link>
+        )}
       </div>
 
       <CustomObjectList
