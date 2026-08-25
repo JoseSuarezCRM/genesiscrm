@@ -10,7 +10,11 @@ export async function moveRecordStage(recordType: string, recordId: string, pipe
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
   await logStageTransition(recordType, recordId, pipelineId, stageId, session.user.id)
-  if (recordType.startsWith("CO:")) revalidatePath(`/objects/${recordType.slice(3)}/board`)
+  if (recordType.startsWith("CO:")) {
+    const key = recordType.slice(3)
+    revalidatePath(`/objects/${key}/board`)
+    revalidatePath(`/objects/${key}/${recordId}`)
+  }
   return { success: true }
 }
 

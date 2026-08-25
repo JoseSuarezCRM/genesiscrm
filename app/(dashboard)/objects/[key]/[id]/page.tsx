@@ -15,6 +15,8 @@ import RecordPropertyCards from "@/components/record-property-cards"
 import RecordAssociationCards from "@/components/record-association-cards"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordStageControl from "@/components/record-stage-control"
+import { pipelinesForObject } from "@/lib/stages/core"
 
 interface Props { params: { key: string; id: string } }
 
@@ -35,11 +37,14 @@ export default async function CustomRecordDetailPage({ params }: Props) {
   if (!record) notFound()
   await recordCustomObjectView(params.key, params.id)
 
-  const [users, assocCards, activityItems, propertyCards] = await Promise.all([
+  const [users, assocCards, activityItems, propertyCards, pipelines, stageRow, lastTransition] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
     loadAssociationCards(objectType, params.id),
     listRecordActivities(objectType, params.id),
     loadPropertyCards(objectType, record as any, def.ownerLabel),
+    pipelinesForObject(objectType),
+    (prisma as any).customObjectRecord.findUnique({ where: { id: params.id }, select: { pipelineId: true, stageId: true } }),
+    (prisma as any).stageTransition.findFirst({ where: { recordType: objectType, recordId: params.id }, orderBy: { enteredAt: "desc" }, select: { enteredAt: true } }),
   ])
 
   const userOptions = users.map((u) => ({ id: u.id, label: u.name ?? u.email }))
@@ -56,7 +61,21 @@ export default async function CustomRecordDetailPage({ params }: Props) {
           userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
           canEdit={canEdit} canDelete={canDelete} />
       }
-      subtitle={<span className="font-mono text-slate-400">Record ID #{record.recordNumber ?? "—"}</span>}
+      subtitle={
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="font-mono text-slate-400">Record ID #{record.recordNumber ?? "—"}</span>
+          {pipelines.length > 0 && (
+            <RecordStageControl
+              recordType={objectType}
+              recordId={record.id}
+              pipelines={pipelines.map((p) => ({ id: p.id, name: p.name, color: p.color, stages: p.stages.map((s) => ({ id: s.id, name: s.name })) }))}
+              pipelineId={stageRow?.pipelineId ?? null}
+              stageId={stageRow?.stageId ?? null}
+              enteredAt={lastTransition?.enteredAt ? lastTransition.enteredAt.toISOString() : null}
+            />
+          )}
+        </div>
+      }
       engagementBar={
         <RecordEngagementBar recordType={objectType} recordId={record.id} users={userOptions} canEdit={canEdit} compact />
       }
