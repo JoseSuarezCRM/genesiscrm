@@ -119,7 +119,7 @@ export default function ReportsListView({ reports }: { reports: ReportListItem[]
                         <button onClick={() => setRenamingId(null)} className="text-zinc-400"><X className="h-3.5 w-3.5" /></button>
                       </span>
                     ) : (
-                      <Link href={`/reports/builder?report=${r.id}`} className="font-medium text-zinc-900 hover:text-blue-700">{r.name}</Link>
+                      <Link href={`/reports/view/${r.id}`} className="font-medium text-zinc-900 hover:text-blue-700">{r.name}</Link>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-zinc-600">{r.ownerName}</td>
@@ -142,7 +142,7 @@ export default function ReportsListView({ reports }: { reports: ReportListItem[]
           {visible.map((r) => (
             <div key={r.id} className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 hover:border-zinc-300">
               <div className="flex items-start justify-between">
-                <Link href={`/reports/builder?report=${r.id}`} className="font-semibold text-zinc-900 hover:text-blue-700">{r.name}</Link>
+                <Link href={`/reports/view/${r.id}`} className="font-semibold text-zinc-900 hover:text-blue-700">{r.name}</Link>
                 <StarToggle pinned={r.isPinned} onToggle={() => togglePin(r)} />
               </div>
               <div className="flex items-center gap-2 text-xs text-zinc-500">

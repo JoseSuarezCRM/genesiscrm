@@ -129,6 +129,27 @@ export async function createSavedReport(
   return report
 }
 
+export interface ReportView {
+  id: string; name: string; config: SavedReportConfig; isPinned: boolean; tags: string[]
+  visibility: string; ownerName: string; createdById: string; isOwner: boolean
+}
+
+// One report (owned or shared) for the read-only viewer.
+export async function getReportForView(id: string): Promise<ReportView | null> {
+  const session = await auth()
+  if (!session) return null
+  const userId = session.user.id
+  const teamIds = await myTeamIds(userId)
+  const r = await (prisma as any).savedReport.findFirst({ where: { id, OR: sharedOrWhere(userId, teamIds) } })
+  if (!r) return null
+  const owner = await prisma.user.findUnique({ where: { id: r.createdById }, select: { name: true, email: true } }).catch(() => null)
+  return {
+    id: r.id, name: r.name, config: r.config, isPinned: !!r.isPinned, tags: r.tags ?? [],
+    visibility: r.visibility ?? "PRIVATE", ownerName: owner?.name || owner?.email || "—",
+    createdById: r.createdById, isOwner: r.createdById === userId,
+  }
+}
+
 // Change who can see a report (owner only).
 export async function setSavedReportAccess(id: string, access: ShareAccess): Promise<void> {
   const session = await auth()
@@ -199,4 +220,36 @@ export async function renameSavedReport(id: string, name: string): Promise<void>
   revalidatePath("/reports/builder")
   revalidatePath("/reports/builder/classic")
   revalidatePath("/reports/dashboard")
+}
+
+// Duplicate a report the user can see into a new "… (copy)" they own.
+export async function cloneSavedReport(id: string): Promise<{ id: string }> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const userId = session.user.id
+  const teamIds = await myTeamIds(userId)
+  const src = await (prisma as any).savedReport.findFirst({ where: { id, OR: sharedOrWhere(userId, teamIds) } })
+  if (!src) throw new Error("Report not found")
+  const copy = await (prisma as any).savedReport.create({
+    data: { name: `${src.name} (copy)`, config: src.config, tags: src.tags ?? [], createdById: userId },
+    select: { id: true },
+  })
+  revalidatePath("/reports")
+  return copy
+}
+
+// Set a report's tags (owner only).
+export async function setSavedReportTags(id: string, tags: string[]): Promise<void> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  await (prisma as any).savedReport.updateMany({ where: { id, createdById: session.user.id }, data: { tags } })
+  revalidatePath("/reports")
+}
+
+// Reassign a report to a new owner (current owner only).
+export async function changeSavedReportOwner(id: string, newOwnerId: string): Promise<void> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  await (prisma as any).savedReport.updateMany({ where: { id, createdById: session.user.id }, data: { createdById: newOwnerId } })
+  revalidatePath("/reports")
 }
