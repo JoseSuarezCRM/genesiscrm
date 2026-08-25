@@ -237,6 +237,8 @@ model CustomObjectRecord {
   objectDefId    String
   objectDef      CustomObjectDef @relation(fields: [objectDefId], references: [id], onDelete: Cascade)
   values         Json            @default("{}") // { propertyId: value }
+  pipelineId     String?         // current pipeline (stages feature)
+  stageId        String?         // current stage within the pipeline
   // Default properties every record gets:
   ownerId        String?         // Record Owner (defaults to creator)
   owner          User?           @relation("CustomObjectRecordOwner", fields: [ownerId], references: [id])
@@ -615,13 +617,51 @@ model DoctorLocation {
 }
 
 model Pipeline {
-  id        String     @id @default(cuid())
-  name      String     @unique
-  color     String     @default("#3b82f6")
-  order     Int        @default(0)
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  referrals Referral[]
+  id         String          @id @default(cuid())
+  objectType String          @default("REFERRAL") // registry key: "REFERRAL" or "CO:<key>"
+  name       String
+  color      String          @default("#3b82f6")
+  order      Int             @default(0)
+  isActive   Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  referrals  Referral[]
+  stages     PipelineStage[]
+
+  @@unique([objectType, name])
+  @@index([objectType])
+}
+
+// An ordered stage within a pipeline. Records move through stages; every move is
+// logged as a StageTransition so we can compute time-in-stage durations.
+model PipelineStage {
+  id          String   @id @default(cuid())
+  pipelineId  String
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name        String
+  order       Int      @default(0)
+  probability Int?     // 0–100 win probability shown in the manager
+  isClosed    Boolean  @default(false) // a terminal stage (won or lost)
+  isWon       Boolean  @default(false) // a closed-won stage
+  color       String?
+  createdAt   DateTime @default(now())
+
+  @@index([pipelineId])
+}
+
+// Append-only log of a record entering a stage — the source of truth for durations.
+// recordType is a registry key ("REFERRAL" or "CO:<key>"); recordId is the record id.
+model StageTransition {
+  id          String   @id @default(cuid())
+  recordType  String
+  recordId    String
+  pipelineId  String
+  fromStageId String?
+  toStageId   String
+  byUserId    String?
+  enteredAt   DateTime @default(now())
+
+  @@index([recordType, recordId])
+  @@index([pipelineId])
 }
 
 model Referral {
@@ -657,6 +697,7 @@ model Referral {
   // Pipeline
   pipelineId          String?
   pipeline            Pipeline?          @relation(fields: [pipelineId], references: [id])
+  stageId             String?            // current stage (stages feature; mirrors status until migrated)
   imagingType         String?            // CT | MRI | MRI Arthrogram — only set for MRI pipeline referrals
   // Notes & meta
   notes               String?
