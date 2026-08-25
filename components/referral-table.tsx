@@ -6,6 +6,7 @@ import { Phone, ChevronDown, ChevronUp, Loader2, Columns3 } from "lucide-react"
 import BulkActionBar, { bulkBtn } from "@/components/ui/bulk-action-bar"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import ColumnChooserModal from "@/components/ui/column-chooser"
+import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { useColumnPrefs } from "@/components/ui/use-column-prefs"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
@@ -83,6 +84,7 @@ interface Props {
   pipelines: Pipeline[]
   allTags: Tag[]
   customProps?: CustomPropertyDef[]
+  associations?: AssociationGroup[]
   listUrl: string
   total: number
   allMatchingIds: string[]
@@ -148,10 +150,11 @@ const REFERRAL_COL_W: Record<string, number> = {
   assignedTo: 160, tags: 180, referralDate: 130, apptDate: 130, calls: 90, notes: 240, status: 150,
 }
 
-export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], listUrl, total, allMatchingIds, canEdit = false, users = [] }: Props) {
+export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], associations = [], listUrl, total, allMatchingIds, canEdit = false, users = [] }: Props) {
   const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Full column catalog = static columns + every referral custom property.
-  const REFERRAL_COLUMNS = [...STATIC_REFERRAL_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
+  const REFERRAL_COLUMNS = [...STATIC_REFERRAL_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns]
   const cpDefById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const pipelineNameById = Object.fromEntries(pipelines.map((p) => [p.id, p.name]))
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -347,6 +350,7 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
 
   function renderReferralCell(r: Referral, key: string) {
     if (key.startsWith("cp_")) return renderCustomProp(r, key.slice(3))
+    if (assocByKey[key]) { const v = readAssocValue(r, assocByKey[key]); return v ? <span className="text-slate-600">{v}</span> : <span className="text-slate-300">—</span> }
     switch (key) {
       case "patient":
         return <Link href={`/referrals/${r.id}?from=${encodeURIComponent(listUrl)}`} className="font-medium text-slate-900 hover:text-blue-600">{r.patientFirstName} {r.patientLastName}</Link>

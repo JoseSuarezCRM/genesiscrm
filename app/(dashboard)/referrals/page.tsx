@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
 import ReferralTable from "@/components/referral-table"
+import { associationColumnDefs } from "@/lib/association-columns"
 import ReferralsExportButton from "@/components/referrals-export-button"
 import ReferralViewsBar from "@/components/referral-views-bar"
 import PipelineSelector from "@/components/pipeline-selector"
@@ -101,8 +102,8 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy,
       include: {
         referringPractice: true,
-        referringDoctor: { select: { name: true, title: true, specialty: true, npi: true, phone: true } },
-        referringLocation: { select: { name: true, address: true } },
+        referringDoctor: true,
+        referringLocation: true,
         assignedTo: { select: { id: true, name: true, email: true } },
         tags: { include: { tag: true } },
         _count: { select: { callAttempts: true } },
@@ -286,7 +287,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table (renders its own card + column chooser) */}
-      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
+      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} associations={await associationColumnDefs("REFERRAL")} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
 
       {/* Pagination */}
       {totalPages > 1 && (
