@@ -20,7 +20,7 @@ export interface ReportField {
 export type Aggregation = "count" | "distinct_count" | "sum" | "avg" | "min" | "max"
 export type DateFrequency = "day" | "week" | "month" | "quarter" | "year"
 
-export type VizType = "table" | "vbar" | "hbar" | "line" | "area" | "pie" | "donut" | "kpi" | "pivot"
+export type VizType = "table" | "vbar" | "hbar" | "line" | "area" | "pie" | "donut" | "kpi" | "gauge" | "pivot"
 
 // A reference to a field on a source (source === primary key or a joined source key).
 export interface FieldRef {

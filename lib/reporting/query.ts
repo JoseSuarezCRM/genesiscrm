@@ -201,14 +201,14 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     }
   }
 
-  // KPI — one big number per measure (a multi-metric summary card).
-  if (config.viz === "kpi") {
+  // KPI / gauge — one big number per measure (a multi-metric summary card / dial).
+  if (config.viz === "kpi" || config.viz === "gauge") {
     const kpis = measures.map((m) => ({
       label: measureLabel(m),
       value: aggregate(rows, m, measureField(m)),
       format: m.format ? { format: m.format, decimals: m.decimals } : undefined,
     }))
-    return { viz: "kpi", columns: [], rows: [], kpi: kpis[0]?.value ?? 0, kpis, total, capped, valueFormat, comparison }
+    return { viz: config.viz, columns: [], rows: [], kpi: kpis[0]?.value ?? 0, kpis, total, capped, valueFormat, comparison }
   }
 
   const dims = config.dimensions.map((d) => ({ d, f: byKey[d.key] })).filter((x) => x.f)

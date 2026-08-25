@@ -21,7 +21,7 @@ const VIZ_OPTIONS: { value: VizType; label: string }[] = [
   { value: "vbar", label: "Vertical bar" }, { value: "hbar", label: "Horizontal bar" },
   { value: "line", label: "Line" }, { value: "area", label: "Area" },
   { value: "pie", label: "Pie" }, { value: "donut", label: "Donut" },
-  { value: "pivot", label: "Pivot table" },
+  { value: "gauge", label: "Gauge" }, { value: "pivot", label: "Pivot table" },
 ]
 const AGGS: Aggregation[] = ["count", "distinct_count", "sum", "avg", "min", "max"]
 const FREQS: DateFrequency[] = ["day", "week", "month", "quarter", "year"]
@@ -49,6 +49,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
   const [addedTo, setAddedTo] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   const [access, setAccess] = useState<ViewAccessValue>({
     visibility: (initial?.visibility as any) ?? "PRIVATE",
     teamId: initial?.teamId ?? null,
@@ -262,18 +263,44 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
         {/* Fields */}
         <div className="w-72 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3">
           {/* Data sources: primary + joinable objects */}
-          {schema.associations.length > 0 && (
-            <div className="mb-3 rounded-lg border border-zinc-100 p-2">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Data sources</p>
-              {schema.associations.map((a) => {
-                const on = config.sources.some((s) => s.joinPath === a.path)
-                return (
-                  <label key={a.path} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-zinc-50">
-                    <input type="checkbox" checked={on} onChange={() => toggleSource(a)} />
-                    <span className="text-zinc-700">{a.label}</span>
-                  </label>
-                )
-              })}
+          <div className="mb-3 rounded-lg border border-zinc-100 p-2">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Data sources</p>
+              <button onClick={() => setSourcesOpen(true)} className="text-[10px] font-medium text-blue-600 hover:underline">Edit</button>
+            </div>
+            <p className="px-1 text-xs text-zinc-500">{reportLabel(objects, config.primary)} <span className="text-zinc-400">(primary)</span></p>
+            {schema.associations.filter((a) => config.sources.some((s) => s.joinPath === a.path)).map((a) => (
+              <p key={a.path} className="px-1 text-xs text-zinc-500">{a.label}</p>
+            ))}
+          </div>
+          {sourcesOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6" onClick={() => setSourcesOpen(false)}>
+              <div className="w-full max-w-lg space-y-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between"><p className="text-sm font-semibold text-zinc-900">Edit data sources</p><button onClick={() => setSourcesOpen(false)} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button></div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">Primary data source</p>
+                  <StyledSelect value={config.primary} onChange={(e) => setConfig((c) => ({ ...c, primary: e.target.value, sources: [], columns: [], measures: [{ source: e.target.value, key: "*", agg: "count" }], dimensions: [], breakdown: null }))} className="h-9 w-full text-sm">
+                    {objects.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </StyledSelect>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">Secondary data sources</p>
+                  <p className="mb-2 text-xs text-zinc-400">Related objects that share a link to the primary. Their fields become available.</p>
+                  {schema.associations.length === 0 ? <p className="text-sm text-zinc-400">No related objects.</p> : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {schema.associations.map((a) => {
+                        const on = config.sources.some((s) => s.joinPath === a.path)
+                        return (
+                          <label key={a.path} className={cn("flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm", on ? "border-blue-400 bg-blue-50 text-blue-700" : "border-zinc-200 hover:border-zinc-300")}>
+                            <input type="checkbox" checked={on} onChange={() => toggleSource(a)} /> {a.label}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end"><button onClick={() => setSourcesOpen(false)} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">Done</button></div>
+              </div>
             </div>
           )}
           <div className="relative mb-2">

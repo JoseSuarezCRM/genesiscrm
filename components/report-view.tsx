@@ -65,6 +65,27 @@ export function ReportView({ result, style, onDrill }: { result: ReportResult; s
     )
   }
 
+  if (result.viz === "gauge") {
+    const v = result.kpi ?? 0
+    const gMax = (st.yMax && st.yMax > 0) ? st.yMax : Math.max(1, v)
+    const frac = Math.max(0, Math.min(1, v / gMax))
+    const R = 90, cx = 110, cy = 110
+    const ang = Math.PI * (1 - frac) // 180°→0°
+    const arc = (a: number) => `${cx + R * Math.cos(a)},${cy - R * Math.sin(a)}`
+    const palette = PALETTES[st.palette ?? "default"] ?? PALETTE
+    return (
+      <div className="flex h-full flex-col items-center justify-center">
+        <svg viewBox="0 0 220 130" className="w-64">
+          <path d={`M ${arc(Math.PI)} A ${R} ${R} 0 0 1 ${arc(0)}`} fill="none" stroke="#e5e7eb" strokeWidth={16} strokeLinecap="round" />
+          <path d={`M ${arc(Math.PI)} A ${R} ${R} 0 0 1 ${arc(ang)}`} fill="none" stroke={palette[0]} strokeWidth={16} strokeLinecap="round" />
+          <text x={cx} y={cy - 8} textAnchor="middle" fontSize={26} fontWeight={700} fill="#18181b">{fmtNum(v, result.valueFormat)}</text>
+          <text x={cx} y={cy + 12} textAnchor="middle" fontSize={10} fill="#a1a1aa">of {fmtNum(gMax, result.valueFormat)}</text>
+        </svg>
+        {result.kpis?.[0]?.label && <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">{result.kpis[0].label}</p>}
+      </div>
+    )
+  }
+
   if (result.viz === "pivot" && result.pivot) return <div><CompareCaption result={result} /><PivotTable pivot={result.pivot} onDrill={onDrill} valueFormat={result.valueFormat} /></div>
 
   const series = result.series ?? []
