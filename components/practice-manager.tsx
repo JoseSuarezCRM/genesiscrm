@@ -1092,7 +1092,7 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
                     <Link href={`/practices/${p.id}`}><ExternalLink className="h-3.5 w-3.5" /></Link>
                   </Button>
                   <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50" title={`View reports for ${p.name}`} asChild>
-                    <Link href={`/reports?practiceId=${p.id}`}><BarChart2 className="h-3.5 w-3.5" /></Link>
+                    <Link href={`/reports/referral-analytics?practiceId=${p.id}`}><BarChart2 className="h-3.5 w-3.5" /></Link>
                   </Button>
                   {isAdmin && (
                     <>
