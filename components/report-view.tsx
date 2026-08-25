@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { Hash, ChevronLeft, ChevronRight } from "lucide-react"
+import { useState, useRef, useMemo } from "react"
+import { Hash, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ReportResult } from "@/lib/reporting/types"
 
@@ -87,31 +87,60 @@ function CompareCaption({ result }: { result: ReportResult }) {
   return <p className={cn("mb-2 text-xs font-medium", deltaColor(c.delta))}>{c.delta == null ? "—" : `${c.delta > 0 ? "▲" : c.delta < 0 ? "▼" : ""} ${Math.abs(c.delta)}%`} <span className="text-zinc-400 font-normal">vs previous period ({fmtNum(c.prev, result.valueFormat)})</span></p>
 }
 
-export function DataTable({ result, onDrill, pageSize }: { result: ReportResult; onDrill?: DrillFn; pageSize?: number }) {
+export function DataTable({ result, onDrill, pageSize, sortable, frozenFirst }: { result: ReportResult; onDrill?: DrillFn; pageSize?: number; sortable?: boolean; frozenFirst?: boolean }) {
   // Summarized tables (one row per dimension group) carry rowKeys → rows drill in.
   const drillable = !!(onDrill && result.rowKeys && result.rowKeys.length === result.rows.length)
   const [page, setPage] = useState(0)
-  const paged = !!pageSize && result.rows.length > pageSize
-  const pageCount = paged ? Math.ceil(result.rows.length / pageSize!) : 1
+  const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null)
+
+  // Sort a stable index array so rowKeys (drill) stay aligned with the visible order.
+  const orderIdx = useMemo(() => {
+    const idxs = result.rows.map((_, i) => i)
+    if (!sort) return idxs
+    const { col, dir } = sort
+    return idxs.sort((a, b) => {
+      const av = result.rows[a][col], bv = result.rows[b][col]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir
+      return String(av).localeCompare(String(bv)) * dir
+    })
+  }, [result.rows, sort])
+
+  const paged = !!pageSize && orderIdx.length > pageSize
+  const pageCount = paged ? Math.ceil(orderIdx.length / pageSize!) : 1
   const p = Math.min(page, pageCount - 1)
   const start = paged ? p * pageSize! : 0
-  const slice = paged ? result.rows.slice(start, start + pageSize!) : result.rows
+  const sliceIdx = paged ? orderIdx.slice(start, start + pageSize!) : orderIdx
+  const toggleSort = (col: number) => setSort((s) => (s && s.col === col ? { col, dir: (s.dir === 1 ? -1 : 1) as 1 | -1 } : { col, dir: 1 }))
+  const frozenCls = (j: number) => frozenFirst && j === 0 ? "sticky left-0 z-[1] bg-white" : ""
+
   return (
     <div className="mt-2 overflow-x-auto">
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">{result.columns.map((c) => <th key={c.key} className="px-3 py-2 font-semibold">{c.label}</th>)}</tr></thead>
-        <tbody>{slice.map((r, i) => {
-          const idx = start + i
+        <thead>
+          <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
+            {result.columns.map((c, j) => (
+              <th key={c.key} className={cn("px-3 py-2 font-semibold", frozenFirst && j === 0 && "sticky left-0 z-[2] bg-zinc-50", sortable && "cursor-pointer select-none hover:text-zinc-700")}
+                onClick={sortable ? () => toggleSort(j) : undefined}>
+                <span className="inline-flex items-center gap-1">{c.label}{sortable && (sort?.col === j ? (sort.dir === 1 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />)}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{sliceIdx.map((idx) => {
+          const r = result.rows[idx]
           return (
           <tr key={idx} onClick={drillable ? () => onDrill!(result.rowKeys![idx], null, String(r[0] ?? "Records")) : undefined}
             className={cn("border-b border-zinc-100", drillable ? "cursor-pointer hover:bg-blue-50" : "hover:bg-zinc-50")}>
-            {r.map((v, j) => <td key={j} className="px-3 py-2 text-zinc-700">{v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : v.toLocaleString()) : v}</td>)}
+            {r.map((v, j) => <td key={j} className={cn("px-3 py-2 text-zinc-700", frozenCls(j))}>{v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : v.toLocaleString()) : v}</td>)}
           </tr>
         )})}</tbody>
       </table>
       {paged && (
         <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-          <span>{(start + 1).toLocaleString()}–{(start + slice.length).toLocaleString()} of {result.rows.length.toLocaleString()}</span>
+          <span>{(start + 1).toLocaleString()}–{(start + sliceIdx.length).toLocaleString()} of {result.rows.length.toLocaleString()}</span>
           <div className="flex items-center gap-1">
             <button onClick={() => setPage(Math.max(0, p - 1))} disabled={p === 0} className="inline-flex items-center gap-0.5 rounded-md border border-zinc-200 px-2 py-1 disabled:opacity-40 hover:border-zinc-400"><ChevronLeft className="h-3.5 w-3.5" /> Prev</button>
             <span className="px-1">{p + 1} / {pageCount}</span>

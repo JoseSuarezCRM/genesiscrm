@@ -502,7 +502,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
             </div>
             <div className="overflow-auto p-4">
               {dataLoading && !dataResult ? <div className="flex items-center gap-1.5 py-6 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading data…</div>
-                : dataResult ? <DataTable result={dataResult} onDrill={dataTab === "summarized" ? onDrill : undefined} pageSize={25} /> : <p className="py-6 text-sm text-zinc-400">No data.</p>}
+                : dataResult ? <DataTable result={dataResult} onDrill={dataTab === "summarized" ? onDrill : undefined} pageSize={25} sortable frozenFirst /> : <p className="py-6 text-sm text-zinc-400">No data.</p>}
             </div>
           </div>
         </div>
@@ -521,7 +521,7 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
               {drill.loading ? <div className="flex items-center gap-1.5 py-6 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading records…</div>
-                : drill.result ? <DataTable result={drill.result} pageSize={25} /> : <p className="py-6 text-sm text-zinc-500">Couldn’t load records.</p>}
+                : drill.result ? <DataTable result={drill.result} pageSize={25} sortable frozenFirst /> : <p className="py-6 text-sm text-zinc-500">Couldn’t load records.</p>}
             </div>
           </div>
         </div>

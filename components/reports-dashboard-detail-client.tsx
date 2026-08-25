@@ -178,8 +178,12 @@ function V2ReportCard({
         <div className="flex min-w-0 flex-1 items-start gap-1.5">
           <span className="card-drag mt-0.5 cursor-move text-zinc-300 hover:text-zinc-500"><GripVertical className="h-4 w-4" /></span>
           <div className="min-w-0">
-            <Link href={`/reports/builder?report=${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
-            <p className="text-xs text-slate-400 mt-0.5">{reportObjectName(cfg)}</p>
+            <Link href={`/reports/view/${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-slate-400">
+              <span>{reportObjectName(cfg)}</span>
+              {dashDate?.preset && <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-zinc-500">{DATE_PRESET_GROUPS.find((p) => p.value === dashDate.preset)?.label ?? dashDate.preset}</span>}
+              {cardFilterCount > 0 && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-blue-600">Filters ({cardFilterCount})</span>}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">

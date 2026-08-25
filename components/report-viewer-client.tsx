@@ -147,7 +147,7 @@ export default function ReportViewerClient({ report, siblings, shareUsers }: {
           </div>
           <div className="overflow-auto p-4">
             {dataLoading && !dataResult ? <div className="flex items-center gap-1.5 py-6 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading data…</div>
-              : dataResult ? <DataTable result={dataResult} pageSize={25} /> : <p className="py-6 text-sm text-zinc-400">No data.</p>}
+              : dataResult ? <DataTable result={dataResult} pageSize={25} sortable frozenFirst /> : <p className="py-6 text-sm text-zinc-400">No data.</p>}
           </div>
         </div>
       </div>
