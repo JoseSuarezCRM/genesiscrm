@@ -9,30 +9,13 @@ import { reportFieldsFor, joinedFieldsForSource, REPORT_OBJECTS } from "./object
 import type {
   ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series, DateFrequency,
 } from "./types"
+import { resolvePreset } from "./date-presets"
 
 const ROW_CAP = 10000
 
 // Resolve a date-range preset (or custom from/to) to a [start, end] window.
 function resolveWindow(dr: NonNullable<ReportConfig["dateRange"]>): { start: Date; end: Date } | null {
-  const now = new Date()
-  const y = now.getFullYear(), m = now.getMonth()
-  const end = now
-  if (dr.preset === "all") return null
-  if (dr.preset === "custom") {
-    if (!dr.from || !dr.to) return null
-    return { start: new Date(dr.from), end: new Date(dr.to + "T23:59:59") }
-  }
-  const days = (n: number) => new Date(now.getTime() - n * 864e5)
-  switch (dr.preset) {
-    case "last_7": return { start: days(7), end }
-    case "last_30": return { start: days(30), end }
-    case "last_90": return { start: days(90), end }
-    case "this_month": return { start: new Date(y, m, 1), end }
-    case "last_month": return { start: new Date(y, m - 1, 1), end: new Date(y, m, 0, 23, 59, 59) }
-    case "this_quarter": return { start: new Date(y, Math.floor(m / 3) * 3, 1), end }
-    case "this_year": case "ytd": return { start: new Date(y, 0, 1), end }
-  }
-  return null
+  return resolvePreset(dr.preset, dr.from, dr.to)
 }
 
 // The equal-length period immediately before a window (for comparison).

@@ -115,8 +115,23 @@ export function FilterEditor({ fields, value, onChange }: Props) {
     patchCondition(gid, cid, { field: key, operator: field ? defaultOperator(field) : "", value: "" })
   }
 
+  // Top-level ALL / ANY match (governs the first/primary group + between groups).
+  const matchAll = (value.groups[0]?.combinator ?? "AND") === "AND"
+  function setMatch(all: boolean) {
+    const c: Combinator = all ? "AND" : "OR"
+    onChange({ ...value, combinator: c, groups: value.groups.map((g, i) => (i === 0 ? { ...g, combinator: c } : g)) })
+  }
+
   return (
     <>
+      <div className="mb-3 flex items-center gap-2 text-sm text-slate-600">
+        <span>Include records matching</span>
+        <StyledSelect value={matchAll ? "ALL" : "ANY"} onChange={(e) => setMatch(e.target.value === "ALL")} className="h-8 w-24">
+          <option value="ALL">ALL</option>
+          <option value="ANY">ANY</option>
+        </StyledSelect>
+        <span>of the filters below</span>
+      </div>
       <div className="space-y-2">
         {value.groups.map((group, gi) => (
           <div key={group.id}>

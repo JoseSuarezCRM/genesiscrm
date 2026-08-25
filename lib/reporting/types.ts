@@ -60,7 +60,7 @@ export interface ReportConfig {
   sort?: { by: "value" | "label"; dir: "asc" | "desc" } | null
   limit?: number | null
   tableMode?: "summarized" | "unsummarized" // table viz: grouped rows vs raw records
-  dateRange?: { field: string; preset: DateRangePreset; from?: string; to?: string } | null
+  dateRange?: { field: string; preset: string; from?: string; to?: string } | null
   compare?: boolean            // compare the primary measure vs the previous period
   style?: Record<string, unknown>
 }

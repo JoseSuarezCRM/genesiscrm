@@ -13,6 +13,7 @@ import { getDashboards, addReportToDashboard, createDashboard, type DashboardSum
 import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
 import type { ReportConfig, ReportField, ReportResult, Aggregation, DateFrequency, VizType } from "@/lib/reporting/types"
 import { EMPTY_REPORT } from "@/lib/reporting/types"
+import { DATE_PRESET_GROUPS } from "@/lib/reporting/date-presets"
 import { ReportView, DataTable, type ReportStyle } from "@/components/report-view"
 
 const VIZ_OPTIONS: { value: VizType; label: string }[] = [
@@ -26,12 +27,10 @@ const AGGS: Aggregation[] = ["count", "distinct_count", "sum", "avg", "min", "ma
 const FREQS: DateFrequency[] = ["day", "week", "month", "quarter", "year"]
 const FORMATS = [{ value: "number", label: "Number (1,234)" }, { value: "currency", label: "Currency ($)" }, { value: "percent", label: "Percent (%)" }, { value: "duration", label: "Duration (days)" }]
 const AGG_LABELS: Record<string, string> = { count: "Count", distinct_count: "Distinct count", sum: "Sum", avg: "Average", min: "Min", max: "Max" }
-const DATE_PRESETS = [
-  { value: "last_7", label: "Last 7 days" }, { value: "last_30", label: "Last 30 days" },
-  { value: "last_90", label: "Last 90 days" }, { value: "this_month", label: "This month" },
-  { value: "last_month", label: "Last month" }, { value: "this_quarter", label: "This quarter" },
-  { value: "this_year", label: "This year" }, { value: "custom", label: "Custom range" },
-]
+// Group the shared preset catalog for <optgroup> rendering.
+const DATE_PRESET_GROUPED = DATE_PRESET_GROUPS.filter((p) => p.value !== "all").reduce((acc, p) => {
+  (acc[p.group] ??= []).push(p); return acc
+}, {} as Record<string, typeof DATE_PRESET_GROUPS>)
 
 export default function ReportBuilderV2({ objects, initial, shareUsers = [], shareTeams = [] }: { objects: { key: string; label: string }[]; initial?: { id: string; name: string; config: any; visibility?: string; teamId?: string | null; sharedUserIds?: string[] } | null; shareUsers?: ShareUser[]; shareTeams?: ShareTeam[] }) {
   const [config, setConfig] = useState<ReportConfig>(initial ? sanitizeConfig(initial.config) : { ...EMPTY_REPORT, primary: objects[0]?.key ?? "REFERRAL" })
@@ -451,7 +450,11 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
                 {config.dateRange?.field && (
                   <>
                     <StyledSelect value={config.dateRange.preset} onChange={(e) => set({ dateRange: { ...config.dateRange!, preset: e.target.value as any } })} className="h-7 text-xs">
-                      {DATE_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                      {Object.entries(DATE_PRESET_GROUPED).map(([grp, items]) => (
+                        <optgroup key={grp} label={grp}>
+                          {items.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                        </optgroup>
+                      ))}
                     </StyledSelect>
                     {config.dateRange.preset === "custom" && (
                       <div className="flex items-center gap-1.5">
