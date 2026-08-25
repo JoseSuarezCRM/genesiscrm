@@ -7,6 +7,8 @@
 // Each group holds conditions joined by the group's own combinator. This gives the
 // "groups with AND/OR logic" the product needs without a full query language.
 
+import { resolvePreset } from "./reporting/date-presets"
+
 export type FieldType = "text" | "number" | "select" | "boolean" | "date"
 
 export interface FilterFieldOption { label: string; value: string }
@@ -38,6 +40,8 @@ export interface Operator {
   label: string
   noValue?: boolean // operator takes no operand (is known / is unknown / is true …)
   multi?: boolean   // operand is a list (is any of / is none of)
+  range?: boolean   // operand is a [from, to] pair (is between)
+  relative?: boolean // operand is a relative date preset key (is in the last …)
 }
 
 export const OPERATORS: Record<FieldType, Operator[]> = {
@@ -72,11 +76,14 @@ export const OPERATORS: Record<FieldType, Operator[]> = {
     { value: "is_false", label: "is false", noValue: true },
   ],
   date: [
+    { value: "on", label: "is on" },
+    { value: "between", label: "is between", range: true },
+    { value: "not_between", label: "is not between", range: true },
+    { value: "relative", label: "is in the range", relative: true },
     { value: "after", label: "is after" },
     { value: "on_or_after", label: "is on or after" },
     { value: "before", label: "is before" },
     { value: "on_or_before", label: "is on or before" },
-    { value: "on", label: "is on" },
     { value: "is_known", label: "is known", noValue: true },
     { value: "is_unknown", label: "is unknown", noValue: true },
   ],
@@ -143,6 +150,7 @@ export function isConditionActive(cond: Condition, fields: FilterField[]): boole
   const op = OPERATORS[field.type].find((o) => o.value === cond.operator)
   if (!op) return false
   if (op.noValue) return true
+  if (op.range) { const a = Array.isArray(cond.value) ? cond.value : []; return !isBlank(a[0]) && !isBlank(a[1]) }
   return !isBlank(cond.value)
 }
 
@@ -211,9 +219,22 @@ function evalCondition(row: any, cond: Condition, fields: FilterField[]): boolea
     }
     case "date": {
       const a = raw ? new Date(raw as any).getTime() : NaN
+      if (Number.isNaN(a)) return false
+      if (cond.operator === "between" || cond.operator === "not_between") {
+        const arr = Array.isArray(cond.value) ? cond.value : []
+        const from = arr[0] ? new Date(arr[0]).getTime() : NaN
+        const to = arr[1] ? new Date(String(arr[1]) + "T23:59:59").getTime() : NaN
+        if (Number.isNaN(from) || Number.isNaN(to)) return true
+        const inside = a >= from && a <= to
+        return cond.operator === "between" ? inside : !inside
+      }
+      if (cond.operator === "relative") {
+        const win = resolvePreset(String(cond.value || ""))
+        if (!win) return true
+        return a >= win.start.getTime() && a <= win.end.getTime()
+      }
       const b = cond.value ? new Date(cond.value as string).getTime() : NaN
       if (Number.isNaN(b)) return true
-      if (Number.isNaN(a)) return false
       switch (cond.operator) {
         case "after": return a > b
         case "on_or_after": return a >= b

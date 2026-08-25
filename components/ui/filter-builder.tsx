@@ -8,6 +8,7 @@ import {
   FilterField, FilterState, FilterGroup, Condition, Combinator,
   OPERATORS, activeConditionCount, emptyCondition, emptyGroup, emptyFilter, defaultOperator,
 } from "@/lib/filters"
+import { DATE_PRESET_GROUPS } from "@/lib/reporting/date-presets"
 
 interface Props {
   fields: FilterField[]
@@ -173,6 +174,19 @@ export function FilterEditor({ fields, value, onChange }: Props) {
                         ) : field.type === "number" ? (
                           <input type="number" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
                             placeholder="Value" className="flex-1 min-w-[130px] h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        ) : field.type === "date" && op.range ? (
+                          (() => { const a = Array.isArray(cond.value) ? cond.value : ["", ""]; return (
+                            <div className="flex min-w-[130px] flex-1 items-center gap-1">
+                              <input type="date" value={a[0] ?? ""} onChange={(e) => patchCondition(group.id, cond.id, { value: [e.target.value, a[1] ?? ""] })} className="h-9 flex-1 rounded-lg border border-slate-200 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              <span className="text-slate-400">–</span>
+                              <input type="date" value={a[1] ?? ""} onChange={(e) => patchCondition(group.id, cond.id, { value: [a[0] ?? "", e.target.value] })} className="h-9 flex-1 rounded-lg border border-slate-200 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                          ) })()
+                        ) : field.type === "date" && op.relative ? (
+                          <StyledSelect value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })} className="h-9 min-w-[130px] flex-1">
+                            <option value="">Select…</option>
+                            {DATE_PRESET_GROUPS.filter((p) => p.value !== "all" && p.value !== "custom").map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                          </StyledSelect>
                         ) : field.type === "date" ? (
                           <input type="date" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
                             className="flex-1 min-w-[130px] h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
