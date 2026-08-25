@@ -47,13 +47,14 @@ export async function getReferralViews() {
   return applyUserOrder(userId, "REFERRAL", "", views.map((v: any) => ({ ...v, isOwner: v.userId === userId })))
 }
 
-export async function createReferralView(name: string, config: ReferralViewConfig, access?: ViewAccess) {
+export async function createReferralView(name: string, config: ReferralViewConfig, access?: ViewAccess, pipelineId?: string | null) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
   const view = await (prisma as any).referralView.create({
     data: {
       name: name.trim(),
       userId: (session.user as any).id,
+      pipelineId: pipelineId ?? null,
       config,
       visibility: access?.visibility ?? "PRIVATE",
       teamId: access?.visibility === "TEAM" ? access.teamId ?? null : null,

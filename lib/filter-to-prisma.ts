@@ -5,6 +5,7 @@
 
 import { Prisma } from "@prisma/client"
 import { FilterState, FilterField, FilterGroup, Condition } from "./filters"
+import { resolvePreset } from "./reporting/date-presets"
 
 // Custom properties live in a JSON bag, so they translate to Prisma JSON-path
 // filters rather than plain column filters. Postgres compares the stored JSON
@@ -129,6 +130,19 @@ function scalarConditionToWhere(cond: Condition, field: FilterField): Record<str
       return null
     }
     case "date": {
+      if (op === "between" || op === "not_between") {
+        const arr = Array.isArray(cond.value) ? cond.value : []
+        const from = arr[0] ? new Date(arr[0]) : null
+        const to = arr[1] ? new Date(String(arr[1]) + "T23:59:59") : null
+        if (!from || !to || Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null
+        const w = { [col]: { gte: from, lte: to } }
+        return op === "between" ? w : { NOT: w }
+      }
+      if (op === "relative") {
+        const win = resolvePreset(String(cond.value ?? ""))
+        if (!win) return null
+        return { [col]: { gte: win.start, lte: win.end } }
+      }
       const s = String(v ?? "")
       if (!s) return null
       const d = new Date(s)

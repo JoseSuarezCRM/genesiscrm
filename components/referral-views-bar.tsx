@@ -14,14 +14,23 @@ interface SavedView {
   id: string
   name: string
   config: { query: string; columns: string[]; frozen?: number }
+  pipelineId?: string | null
   visibility?: string
   isOwner?: boolean
 }
 
 interface Props {
   views: SavedView[]
+  activePipelineId: string | null
   shareUsers: ShareUser[]
   shareTeams: ShareTeam[]
+}
+
+// Compare a query ignoring the pipeline param (Default = only-the-pipeline).
+function queryWithoutPipeline(qs: string): string {
+  const p = new URLSearchParams(qs)
+  p.delete("pipeline")
+  return normalizeQuery(p.toString())
 }
 
 // Normalize a query string for comparison / storage: drop `page`, sort keys.
@@ -50,7 +59,7 @@ function readPrefs(): { columns: string[]; frozen: number } {
   return { columns, frozen }
 }
 
-export default function ReferralViewsBar({ views, shareUsers, shareTeams }: Props) {
+export default function ReferralViewsBar({ views, activePipelineId, shareUsers, shareTeams }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -61,7 +70,9 @@ export default function ReferralViewsBar({ views, shareUsers, shareTeams }: Prop
   const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
   const [saving, setSaving] = useState(false)
 
-  const reorder = useCardReorder(views, (v) => v.id, (ids) => startTransition(() => { reorderViews("REFERRAL", "", ids) }))
+  // Views belong to a pipeline: only show the active tab's views (null = "All").
+  const scopedViews = views.filter((v) => (v.pipelineId ?? null) === activePipelineId)
+  const reorder = useCardReorder(scopedViews, (v) => v.id, (ids) => startTransition(() => { reorderViews("REFERRAL", "", ids) }))
 
   const [prefs, setPrefs] = useState<{ columns: string[]; frozen: number }>({ columns: DEFAULT_REFERRAL_COLS, frozen: 0 })
   useEffect(() => {
@@ -72,11 +83,30 @@ export default function ReferralViewsBar({ views, shareUsers, shareTeams }: Prop
     return () => { window.removeEventListener("referral-view-applied", load); window.removeEventListener("referral-prefs-changed", load) }
   }, [])
 
+  // Track the explicitly-applied view so changing a filter (which changes the
+  // query) keeps it selected and shows "Save changes" instead of deselecting.
+  const storeKey = `referral-view:${pathname}:${activePipelineId ?? "all"}`
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null)
+  useEffect(() => {
+    try { setAppliedViewId(sessionStorage.getItem(storeKey)) } catch {}
+  }, [storeKey])
+  function setApplied(id: string | null) {
+    setAppliedViewId(id)
+    try { if (id) sessionStorage.setItem(storeKey, id); else sessionStorage.removeItem(storeKey) } catch {}
+  }
+  // Drop a remembered selection if that view no longer belongs to this pipeline.
+  useEffect(() => {
+    if (appliedViewId && !scopedViews.some((v) => v.id === appliedViewId)) setApplied(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedViewId, activePipelineId, views])
+
   const currentQuery = normalizeQuery(params.toString())
-  const activeView = views.find((v) => normalizeQuery(v.config.query) === currentQuery)
-  const activeViewId = activeView?.id ?? (currentQuery === "" ? "__default__" : null)
+  const matchedView = scopedViews.find((v) => normalizeQuery(v.config.query) === currentQuery)
+  const activeView = (appliedViewId ? scopedViews.find((v) => v.id === appliedViewId) : undefined) ?? matchedView
+  const activeViewId = activeView?.id ?? (queryWithoutPipeline(currentQuery) === "" && !appliedViewId ? "__default__" : null)
   const sameOrder = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((x, i) => x === b[i])
   const viewDirty = !!activeView && (
+    normalizeQuery(activeView.config.query) !== currentQuery ||
     !sameOrder(activeView.config.columns ?? DEFAULT_REFERRAL_COLS, prefs.columns) ||
     (activeView.config.frozen ?? 0) !== prefs.frozen
   )
@@ -93,13 +123,15 @@ export default function ReferralViewsBar({ views, shareUsers, shareTeams }: Prop
   }
 
   function applyView(view: SavedView) {
+    setApplied(view.id)
     applyPrefs(view.config.columns ?? DEFAULT_REFERRAL_COLS, view.config.frozen ?? 0)
     router.push(`${pathname}${view.config.query ? `?${view.config.query}` : ""}`)
   }
 
   function applyDefault() {
+    setApplied(null)
     applyPrefs(DEFAULT_REFERRAL_COLS, 0)
-    router.push(pathname)
+    router.push(activePipelineId ? `${pathname}?pipeline=${activePipelineId}` : pathname)
   }
 
   function handleSave() {
@@ -110,7 +142,7 @@ export default function ReferralViewsBar({ views, shareUsers, shareTeams }: Prop
     p.delete("page")
     const config: ReferralViewConfig = { query: p.toString(), columns: cur.columns, frozen: cur.frozen }
     startTransition(async () => {
-      await createReferralView(newViewName.trim(), config, newViewAccess)
+      await createReferralView(newViewName.trim(), config, newViewAccess, activePipelineId)
       setSaving(false)
       setShowSaveForm(false)
       setNewViewName("")

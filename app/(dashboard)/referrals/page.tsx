@@ -276,7 +276,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
 
       {/* Saved views */}
       <Suspense fallback={null}>
-        <ReferralViewsBar views={savedViews as any} shareUsers={shareOptions.users as any} shareTeams={shareOptions.teams as any} />
+        <ReferralViewsBar views={savedViews as any} activePipelineId={pipelineId} shareUsers={shareOptions.users as any} shareTeams={shareOptions.teams as any} />
       </Suspense>
 
       {/* Filters */}

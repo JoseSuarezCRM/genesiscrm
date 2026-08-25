@@ -203,6 +203,7 @@ export interface CustomPropertyInput {
   internalName?: string | null // token slug
   type: string                 // CustomPropertyType
   options?: string[]
+  optionLabels?: Record<string, string> | null // option value → display label
 }
 
 export function customPropertyToDef(cp: CustomPropertyInput): PropertyDef {
@@ -217,7 +218,7 @@ export function customPropertyToDef(cp: CustomPropertyInput): PropertyDef {
       return { id: path, label: cp.name, type: "boolean", path }
     case "DROPDOWN":
     case "MULTI_SELECT":
-      return { id: path, label: cp.name, type: "select", path, options: (cp.options ?? []).map(o => ({ value: o, label: o })) }
+      return { id: path, label: cp.name, type: "select", path, options: (cp.options ?? []).map(o => ({ value: o, label: cp.optionLabels?.[o] ?? o })) }
     default: // TEXT, LONG_TEXT, EMAIL, PHONE, URL
       return { id: path, label: cp.name, type: "text", path }
   }

@@ -13,7 +13,7 @@ export default async function WorkflowEditorPage({ params }: Props) {
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.practiceLocation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, color: true } }),
-    prisma.customProperty.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, internalName: true, type: true, options: true, entityType: true } }),
+    prisma.customProperty.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, internalName: true, type: true, options: true, optionLabels: true, entityType: true } }),
     prisma.messageTemplate.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, channel: true } }),
   ])
 
@@ -29,10 +29,10 @@ export default async function WorkflowEditorPage({ params }: Props) {
 
   // Group custom properties by entity type so the editor can show the right
   // set based on which object the workflow runs on.
-  const customPropsByEntity: Record<string, { id: string; name: string; internalName: string | null; type: string; options: string[] }[]> = {}
+  const customPropsByEntity: Record<string, { id: string; name: string; internalName: string | null; type: string; options: string[]; optionLabels: Record<string, string> }[]> = {}
   for (const cp of customProps) {
     const key = cp.entityType as string
-    ;(customPropsByEntity[key] ??= []).push({ id: cp.id, name: cp.name, internalName: cp.internalName, type: cp.type, options: cp.options })
+    ;(customPropsByEntity[key] ??= []).push({ id: cp.id, name: cp.name, internalName: cp.internalName, type: cp.type, options: cp.options, optionLabels: ((cp as any).optionLabels as Record<string, string>) ?? {} })
   }
 
   let automation = null

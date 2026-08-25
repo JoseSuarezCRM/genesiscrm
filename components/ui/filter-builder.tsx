@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { Filter, X, Plus, ChevronDown, Check, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
@@ -8,6 +9,7 @@ import {
   FilterField, FilterState, FilterGroup, Condition, Combinator,
   OPERATORS, activeConditionCount, emptyCondition, emptyGroup, emptyFilter, defaultOperator,
 } from "@/lib/filters"
+import { DATE_PRESET_GROUPS } from "@/lib/reporting/date-presets"
 
 interface Props {
   fields: FilterField[]
@@ -23,12 +25,27 @@ function MultiSelect({ options, value, onChange }: {
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
-    if (!open) return
-    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    if (!open) { setPos(null); return }
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect(); if (!r) return
+      setPos({ left: r.left, top: r.bottom + 4, width: Math.max(r.width, 240) })
+    }
+    place()
+    // The popover panel scrolls; keep the portalled menu anchored to the button.
+    function onDoc(e: MouseEvent) {
+      const t = e.target as Node
+      if (ref.current?.contains(t)) return
+      if ((t as Element)?.closest?.("[data-select-menu-open]")) return
+      setOpen(false)
+    }
     document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
+    window.addEventListener("scroll", place, true)
+    window.addEventListener("resize", place)
+    return () => { document.removeEventListener("mousedown", onDoc); window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place) }
   }, [open])
   const filtered = q ? options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())) : options
   function toggle(v: string) {
@@ -36,13 +53,14 @@ function MultiSelect({ options, value, onChange }: {
   }
   return (
     <div className="relative flex-1 min-w-0" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)}
+      <button ref={btnRef} type="button" onClick={() => setOpen((o) => !o)}
         className="w-full h-9 px-3 inline-flex items-center justify-between gap-1 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300">
         <span className="truncate">{value.length === 0 ? "Select…" : value.length === 1 ? (options.find((o) => o.value === value[0])?.label ?? value[0]) : `${value.length} selected`}</span>
         <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
       </button>
-      {open && (
-        <div className="absolute left-0 top-10 z-50 w-72 max-h-72 overflow-hidden bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col">
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <div data-select-menu-open="" className="fixed z-[100] max-h-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col"
+          style={{ left: pos.left, top: pos.top, width: pos.width }}>
           <div className="relative border-b border-slate-100 p-1.5">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
@@ -64,7 +82,8 @@ function MultiSelect({ options, value, onChange }: {
               )
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
@@ -81,6 +100,141 @@ function CombinatorToggle({ value, onChange }: { value: Combinator; onChange: (c
         </button>
       ))}
     </div>
+  )
+}
+
+// The inline editor (groups / conditions / add-group), usable on its own inside a
+// narrow panel (the report builder) or wrapped by the popover FilterBuilder below.
+export function FilterEditor({ fields, value, onChange }: Props) {
+  function setGroups(groups: FilterGroup[]) { onChange({ ...value, groups }) }
+  function patchGroup(gid: string, patch: Partial<FilterGroup>) {
+    setGroups(value.groups.map((g) => (g.id === gid ? { ...g, ...patch } : g)))
+  }
+  function patchCondition(gid: string, cid: string, patch: Partial<Condition>) {
+    patchGroup(gid, {
+      conditions: value.groups.find((g) => g.id === gid)!.conditions.map((c) => (c.id === cid ? { ...c, ...patch } : c)),
+    })
+  }
+  function addCondition(gid: string) {
+    const g = value.groups.find((x) => x.id === gid)!
+    patchGroup(gid, { conditions: [...g.conditions, emptyCondition()] })
+  }
+  function removeCondition(gid: string, cid: string) {
+    const g = value.groups.find((x) => x.id === gid)!
+    const next = g.conditions.filter((c) => c.id !== cid)
+    if (next.length === 0) {
+      const groups = value.groups.filter((x) => x.id !== gid)
+      setGroups(groups.length ? groups : [emptyGroup()])
+    } else {
+      patchGroup(gid, { conditions: next })
+    }
+  }
+  function onFieldChange(gid: string, cid: string, key: string) {
+    const field = fields.find((f) => f.key === key)
+    patchCondition(gid, cid, { field: key, operator: field ? defaultOperator(field) : "", value: "" })
+  }
+
+  // Top-level ALL / ANY match (governs the first/primary group + between groups).
+  const matchAll = (value.groups[0]?.combinator ?? "AND") === "AND"
+  function setMatch(all: boolean) {
+    const c: Combinator = all ? "AND" : "OR"
+    onChange({ ...value, combinator: c, groups: value.groups.map((g, i) => (i === 0 ? { ...g, combinator: c } : g)) })
+  }
+
+  return (
+    <>
+      <div className="mb-3 flex items-center gap-2 text-sm text-slate-600">
+        <span>Include records matching</span>
+        <StyledSelect value={matchAll ? "ALL" : "ANY"} onChange={(e) => setMatch(e.target.value === "ALL")} className="h-8 w-24">
+          <option value="ALL">ALL</option>
+          <option value="ANY">ANY</option>
+        </StyledSelect>
+        <span>of the filters below</span>
+      </div>
+      <div className="space-y-2">
+        {value.groups.map((group, gi) => (
+          <div key={group.id}>
+            {gi > 0 && (
+              <div className="flex items-center gap-2 my-2 pl-1">
+                <CombinatorToggle value={value.combinator} onChange={(c) => onChange({ ...value, combinator: c })} />
+                <span className="text-[11px] text-slate-400">between groups</span>
+              </div>
+            )}
+            <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+              {group.conditions.map((cond, ci) => {
+                const field = fields.find((f) => f.key === cond.field)
+                const ops = field ? OPERATORS[field.type] : []
+                const op = ops.find((o) => o.value === cond.operator)
+                return (
+                  <div key={cond.id}>
+                    {ci > 0 && (
+                      <div className="py-1 pl-1">
+                        <CombinatorToggle value={group.combinator} onChange={(c) => patchGroup(group.id, { combinator: c })} />
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StyledSelect value={cond.field} onChange={(e) => onFieldChange(group.id, cond.id, e.target.value)} className="flex-1 min-w-[130px] h-9">
+                        <option value="">Select field…</option>
+                        {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      </StyledSelect>
+                      {field && (
+                        <StyledSelect value={cond.operator} onChange={(e) => patchCondition(group.id, cond.id, { operator: e.target.value, value: "" })} className="flex-1 min-w-[130px] h-9">
+                          {ops.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </StyledSelect>
+                      )}
+                      {field && op && !op.noValue && (
+                        op.multi && field.type === "select" ? (
+                          <MultiSelect
+                            options={field.options ?? []}
+                            value={Array.isArray(cond.value) ? cond.value : cond.value ? [cond.value] : []}
+                            onChange={(v) => patchCondition(group.id, cond.id, { value: v })}
+                          />
+                        ) : field.type === "number" ? (
+                          <input type="number" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
+                            placeholder="Value" className="flex-1 min-w-[130px] h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        ) : field.type === "date" && op.range ? (
+                          (() => { const a = Array.isArray(cond.value) ? cond.value : ["", ""]; return (
+                            <div className="flex min-w-[130px] flex-1 items-center gap-1">
+                              <input type="date" value={a[0] ?? ""} onChange={(e) => patchCondition(group.id, cond.id, { value: [e.target.value, a[1] ?? ""] })} className="h-9 flex-1 rounded-lg border border-slate-200 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              <span className="text-slate-400">–</span>
+                              <input type="date" value={a[1] ?? ""} onChange={(e) => patchCondition(group.id, cond.id, { value: [a[0] ?? "", e.target.value] })} className="h-9 flex-1 rounded-lg border border-slate-200 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                          ) })()
+                        ) : field.type === "date" && op.relative ? (
+                          <StyledSelect value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })} className="h-9 min-w-[130px] flex-1">
+                            <option value="">Select…</option>
+                            {DATE_PRESET_GROUPS.filter((p) => p.value !== "all" && p.value !== "custom").map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                          </StyledSelect>
+                        ) : field.type === "date" ? (
+                          <input type="date" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
+                            className="flex-1 min-w-[130px] h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        ) : (
+                          <input type="text" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
+                            placeholder="Value" className="flex-1 min-w-[130px] h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        )
+                      )}
+                      <button type="button" onClick={() => removeCondition(group.id, cond.id)}
+                        className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              <button type="button" onClick={() => addCondition(group.id)}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 px-1 py-0.5">
+                <Plus className="h-3.5 w-3.5" /> Add condition
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button type="button" onClick={() => setGroups([...value.groups, emptyGroup()])}
+        className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg border border-dashed border-slate-300 hover:border-slate-400">
+        <Plus className="h-3.5 w-3.5" /> Add filter group
+      </button>
+    </>
   )
 }
 
@@ -113,35 +267,6 @@ export default function FilterBuilder({ fields, value, onChange }: Props) {
 
   const count = activeConditionCount(value, fields)
 
-  function setGroups(groups: FilterGroup[]) { onChange({ ...value, groups }) }
-  function patchGroup(gid: string, patch: Partial<FilterGroup>) {
-    setGroups(value.groups.map((g) => (g.id === gid ? { ...g, ...patch } : g)))
-  }
-  function patchCondition(gid: string, cid: string, patch: Partial<Condition>) {
-    patchGroup(gid, {
-      conditions: value.groups.find((g) => g.id === gid)!.conditions.map((c) => (c.id === cid ? { ...c, ...patch } : c)),
-    })
-  }
-  function addCondition(gid: string) {
-    const g = value.groups.find((x) => x.id === gid)!
-    patchGroup(gid, { conditions: [...g.conditions, emptyCondition()] })
-  }
-  function removeCondition(gid: string, cid: string) {
-    const g = value.groups.find((x) => x.id === gid)!
-    const next = g.conditions.filter((c) => c.id !== cid)
-    if (next.length === 0) {
-      // drop the whole group, but never go below one group
-      const groups = value.groups.filter((x) => x.id !== gid)
-      setGroups(groups.length ? groups : [emptyGroup()])
-    } else {
-      patchGroup(gid, { conditions: next })
-    }
-  }
-  function onFieldChange(gid: string, cid: string, key: string) {
-    const field = fields.find((f) => f.key === key)
-    patchCondition(gid, cid, { field: key, operator: field ? defaultOperator(field) : "", value: "" })
-  }
-
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)}
@@ -162,76 +287,7 @@ export default function FilterBuilder({ fields, value, onChange }: Props) {
             )}
           </div>
 
-          <div className="space-y-2">
-            {value.groups.map((group, gi) => (
-              <div key={group.id}>
-                {gi > 0 && (
-                  <div className="flex items-center gap-2 my-2 pl-1">
-                    <CombinatorToggle value={value.combinator} onChange={(c) => onChange({ ...value, combinator: c })} />
-                    <span className="text-[11px] text-slate-400">between groups</span>
-                  </div>
-                )}
-                <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                  {group.conditions.map((cond, ci) => {
-                    const field = fields.find((f) => f.key === cond.field)
-                    const ops = field ? OPERATORS[field.type] : []
-                    const op = ops.find((o) => o.value === cond.operator)
-                    return (
-                      <div key={cond.id}>
-                        {ci > 0 && (
-                          <div className="py-1 pl-1">
-                            <CombinatorToggle value={group.combinator} onChange={(c) => patchGroup(group.id, { combinator: c })} />
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <StyledSelect value={cond.field} onChange={(e) => onFieldChange(group.id, cond.id, e.target.value)} className="w-48 h-9 shrink-0">
-                            <option value="">Select field…</option>
-                            {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-                          </StyledSelect>
-                          {field && (
-                            <StyledSelect value={cond.operator} onChange={(e) => patchCondition(group.id, cond.id, { operator: e.target.value, value: "" })} className="w-44 h-9 shrink-0">
-                              {ops.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </StyledSelect>
-                          )}
-                          {field && op && !op.noValue && (
-                            op.multi && field.type === "select" ? (
-                              <MultiSelect
-                                options={field.options ?? []}
-                                value={Array.isArray(cond.value) ? cond.value : cond.value ? [cond.value] : []}
-                                onChange={(v) => patchCondition(group.id, cond.id, { value: v })}
-                              />
-                            ) : field.type === "number" ? (
-                              <input type="number" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
-                                placeholder="Value" className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                            ) : field.type === "date" ? (
-                              <input type="date" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
-                                className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                            ) : (
-                              <input type="text" value={cond.value as string} onChange={(e) => patchCondition(group.id, cond.id, { value: e.target.value })}
-                                placeholder="Value" className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                            )
-                          )}
-                          <button type="button" onClick={() => removeCondition(group.id, cond.id)}
-                            className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700">
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  <button type="button" onClick={() => addCondition(group.id)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 px-1 py-0.5">
-                    <Plus className="h-3.5 w-3.5" /> Add condition
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <button type="button" onClick={() => setGroups([...value.groups, emptyGroup()])}
-            className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg border border-dashed border-slate-300 hover:border-slate-400">
-            <Plus className="h-3.5 w-3.5" /> Add filter group
-          </button>
+          <FilterEditor fields={fields} value={value} onChange={onChange} />
         </div>
       )}
     </div>

@@ -43,18 +43,16 @@ import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import StyledSelect from "@/components/ui/styled-select"
 import { emptyFilter, type FilterState, type FilterField } from "@/lib/filters"
+import { DATE_PRESET_GROUPS } from "@/lib/reporting/date-presets"
 import type { ReportConfig, ReportResult } from "@/lib/reporting/types"
 
 // Dashboard-level date range cascades onto each card's date field.
 const CREATED_FIELD: Record<string, string> = { REFERRAL: "createdAt", PROVIDER: "createdAt", PRACTICE: "createdAt", LOCATION: "createdAt", ACTIVITY: "createdAt", TASK: "createdAt", SURGERY: "creationDate" }
 const createdFieldFor = (primary: string) => (primary.startsWith("CO:") ? "createdAt" : CREATED_FIELD[primary] ?? "createdAt")
 
-const DASH_DATE_PRESETS = [
-  { value: "all", label: "All time" }, { value: "last_7", label: "Last 7 days" },
-  { value: "last_30", label: "Last 30 days" }, { value: "last_90", label: "Last 90 days" },
-  { value: "this_month", label: "This month" }, { value: "last_month", label: "Last month" },
-  { value: "this_quarter", label: "This quarter" }, { value: "this_year", label: "This year" },
-]
+const DASH_DATE_GROUPED = DATE_PRESET_GROUPS.filter((p) => p.value !== "custom").reduce((acc, p) => {
+  (acc[p.group] ??= []).push(p); return acc
+}, {} as Record<string, typeof DATE_PRESET_GROUPS>)
 
 function mergeFilters(a: any, b: any): FilterState | null {
   const groups = [...(a?.groups ?? []), ...(b?.groups ?? [])]
@@ -180,8 +178,12 @@ function V2ReportCard({
         <div className="flex min-w-0 flex-1 items-start gap-1.5">
           <span className="card-drag mt-0.5 cursor-move text-zinc-300 hover:text-zinc-500"><GripVertical className="h-4 w-4" /></span>
           <div className="min-w-0">
-            <Link href={`/reports/builder?report=${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
-            <p className="text-xs text-slate-400 mt-0.5">{reportObjectName(cfg)}</p>
+            <Link href={`/reports/view/${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-slate-400">
+              <span>{reportObjectName(cfg)}</span>
+              {dashDate?.preset && <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-zinc-500">{DATE_PRESET_GROUPS.find((p) => p.value === dashDate.preset)?.label ?? dashDate.preset}</span>}
+              {cardFilterCount > 0 && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-blue-600">Filters ({cardFilterCount})</span>}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -467,7 +469,9 @@ export default function DashboardDetailClient({
         </div>
         <div className="flex items-center gap-2">
           <StyledSelect value={dashDate?.preset ?? "all"} onChange={(e) => changeDashDate(e.target.value)} className="h-9 min-w-[150px] text-sm">
-            {DASH_DATE_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            {Object.entries(DASH_DATE_GROUPED).map(([grp, items]) => (
+              <optgroup key={grp} label={grp}>{items.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</optgroup>
+            ))}
           </StyledSelect>
           <button
             onClick={() => setShareOpen(true)}

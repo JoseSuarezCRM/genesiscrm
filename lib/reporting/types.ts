@@ -20,7 +20,7 @@ export interface ReportField {
 export type Aggregation = "count" | "distinct_count" | "sum" | "avg" | "min" | "max"
 export type DateFrequency = "day" | "week" | "month" | "quarter" | "year"
 
-export type VizType = "table" | "vbar" | "hbar" | "line" | "area" | "pie" | "donut" | "kpi" | "pivot"
+export type VizType = "table" | "vbar" | "hbar" | "line" | "area" | "pie" | "donut" | "kpi" | "gauge" | "pivot"
 
 // A reference to a field on a source (source === primary key or a joined source key).
 export interface FieldRef {
@@ -28,13 +28,15 @@ export interface FieldRef {
   key: string
 }
 
-export type ValueFormat = "number" | "currency" | "percent"
+export type ValueFormat = "number" | "currency" | "percent" | "duration"
 
 export interface Measure extends FieldRef {
   agg: Aggregation
   label?: string
   format?: ValueFormat
   decimals?: number
+  chartType?: "bar" | "line"   // combo charts: render this series as bars or a line
+  axis?: "left" | "right"      // combo charts: which y-axis this series uses
 }
 
 export interface Dimension extends FieldRef {
@@ -60,7 +62,7 @@ export interface ReportConfig {
   sort?: { by: "value" | "label"; dir: "asc" | "desc" } | null
   limit?: number | null
   tableMode?: "summarized" | "unsummarized" // table viz: grouped rows vs raw records
-  dateRange?: { field: string; preset: DateRangePreset; from?: string; to?: string } | null
+  dateRange?: { field: string; preset: string; from?: string; to?: string } | null
   compare?: boolean            // compare the primary measure vs the previous period
   style?: Record<string, unknown>
 }
@@ -74,7 +76,7 @@ export interface ResultColumn { key: string; label: string; type: ReportFieldTyp
 
 // A grouped series: one entry per breakdown value (or a single series when no
 // breakdown), each with points keyed by the primary dimension's label.
-export interface Series { name: string; points: { label: string; key: string; value: number }[] }
+export interface Series { name: string; points: { label: string; key: string; value: number }[]; chartType?: "bar" | "line"; axis?: "left" | "right" }
 
 export interface ReportResult {
   viz: VizType
@@ -83,12 +85,15 @@ export interface ReportResult {
   series?: Series[]           // for charts (bar/line/area/pie)
   kpi?: number                // for the KPI viz
   pivot?: { rowLabels: string[]; colLabels: string[]; cells: (number | null)[][]; rowKeys: string[]; colKeys: string[] }
+  kpis?: { label: string; value: number; format?: { format: ValueFormat; decimals?: number } }[] // multi-metric KPI card
+  rowLinks?: (string | null)[] // per-row href to the primary record (unsummarized tables)
   total: number               // total matching primary records
   capped?: boolean
   stacked?: boolean           // series form a composition (from a breakdown) → stack
   rowKeys?: string[]          // dimension group keys aligned with `rows` (for drill-into)
   valueFormat?: { format: ValueFormat; decimals?: number } // how to render measure values
   comparison?: { prev: number; delta: number | null } // primary measure vs previous period
+  axis?: { x?: string; y?: string } // chart axis titles (dimension / measure)
 }
 
 export const EMPTY_REPORT: ReportConfig = {

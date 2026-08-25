@@ -81,11 +81,22 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
     return () => { window.removeEventListener("surgery-view-applied", load); window.removeEventListener("surgery-prefs-changed", load) }
   }, [])
 
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null)
+  useEffect(() => {
+    try { setAppliedViewId(sessionStorage.getItem(`surgery-view:${pathname}`)) } catch {}
+  }, [pathname])
+  function setApplied(id: string | null) {
+    setAppliedViewId(id)
+    try { if (id) sessionStorage.setItem(`surgery-view:${pathname}`, id); else sessionStorage.removeItem(`surgery-view:${pathname}`) } catch {}
+  }
+
   const currentQuery = normalizeQuery(params.toString())
-  const activeView = views.find((v) => normalizeQuery(v.config.query) === currentQuery)
-  const activeViewId = activeView?.id ?? (currentQuery === "" ? "__default__" : null)
+  const matchedView = views.find((v) => normalizeQuery(v.config.query) === currentQuery)
+  const activeView = (appliedViewId ? views.find((v) => v.id === appliedViewId) : undefined) ?? matchedView
+  const activeViewId = activeView?.id ?? (currentQuery === "" && !appliedViewId ? "__default__" : null)
   const sameOrder = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((x, i) => x === b[i])
   const viewDirty = !!activeView && (
+    normalizeQuery(activeView.config.query) !== currentQuery ||
     !sameOrder(activeView.config.columns ?? DEFAULT_SURGERY_COLS, prefs.columns) ||
     (activeView.config.viewMode ?? "table") !== prefs.viewMode ||
     ((activeView.config as any).frozen ?? 0) !== prefs.frozen
@@ -103,11 +114,13 @@ export default function SurgeryViewsBar({ views, shareUsers, shareTeams }: Props
   }
 
   function applyView(view: SavedView) {
+    setApplied(view.id)
     applyPrefs(view.config.columns ?? DEFAULT_SURGERY_COLS, view.config.viewMode ?? "table", (view.config as any).frozen ?? 0)
     router.push(`${pathname}${view.config.query ? `?${view.config.query}` : ""}`)
   }
 
   function applyDefault() {
+    setApplied(null)
     applyPrefs(DEFAULT_SURGERY_COLS, "table")
     router.push(pathname)
   }

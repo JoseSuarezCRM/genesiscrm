@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma"
 import { RECORD_FIELDS, type RecordFieldType } from "@/lib/record-field-catalog"
 import { recordPermKey } from "@/lib/record-perm-key"
+import { STATUS_LABELS } from "@/lib/utils"
 import type { ReportField, ReportFieldType } from "./types"
 
 export interface ReportObjectMeta {
@@ -100,11 +101,31 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
   fields.push({ key: "__id", label: "Record ID", type: "text", source: objectKey, column: "id" })
   if (meta) fields.push({ key: meta.createdAtField, label: "Created", type: "date", source: objectKey, column: meta.createdAtField })
 
+  // USER associations (Owner / Created by / Assigned to) are surfaced as inline
+  // name fields on the object itself, not as joinable "data sources".
+  const userAssocs = (meta?.associations ?? []).filter((a) => a.target === "USER")
+  const userPaths = new Set(userAssocs.map((a) => a.path))
+
+  // Dynamic-option lookups: some select fields store an id/code, not a label.
+  // Resolve their options so dimensions/breakdowns/legends show names, not ids.
+  const dynamicOptions: Record<string, { value: string; label: string }[]> = {}
+  if (objectKey === "REFERRAL") {
+    const pipelines = await prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } }).catch(() => [])
+    dynamicOptions.pipelineId = pipelines.map((p) => ({ value: p.id, label: p.name }))
+    dynamicOptions.status = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label: String(label) }))
+  }
+
   for (const f of (RECORD_FIELDS[objectKey] ?? [])) {
+    if (userPaths.has(f.key)) continue // drop the raw FK-id field (e.g. assignedTo) in favor of the name field
+    const dyn = dynamicOptions[f.key]
     fields.push({
-      key: f.key, label: f.label, type: NATIVE_TYPE[f.type] ?? "text", source: objectKey, column: f.key,
-      options: f.options?.map((o) => ({ value: o, label: (f.optionLabels?.[o]) ?? o })),
+      key: f.key, label: f.label, type: dyn ? "select" : NATIVE_TYPE[f.type] ?? "text", source: objectKey, column: f.key,
+      options: dyn ?? f.options?.map((o) => ({ value: o, label: (f.optionLabels?.[o]) ?? o })),
     })
+  }
+
+  for (const a of userAssocs) {
+    fields.push({ key: `${a.path}.name`, label: a.label, type: "text", source: objectKey, column: "name", joinPath: a.path })
   }
 
   const cps = await prisma.customProperty.findMany({ where: { entityType: objectKey as any }, orderBy: { createdAt: "asc" } }).catch(() => [])
@@ -112,7 +133,7 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
     fields.push({
       key: `cp_${cp.id}`, label: cp.name, type: CP_TYPE[cp.type as string] ?? "text", source: objectKey,
       column: cp.id, jsonBag: "customProperties",
-      options: (cp.options ?? []).map((o) => ({ value: o, label: o })),
+      options: (cp.options ?? []).map((o) => ({ value: o, label: ((cp as any).optionLabels?.[o]) ?? o })),
     })
   }
   return fields
@@ -153,11 +174,21 @@ export async function reportSchema(primary: string): Promise<{
   associations: { path: string; target: string; label: string; fields: ReportField[] }[]
 }> {
   const fields = await reportFieldsFor(primary)
-  const assocs = REPORT_OBJECTS[primary]?.associations ?? []
+  // USER associations (Owner / Created by) are inline fields, not data sources.
+  const assocs = (REPORT_OBJECTS[primary]?.associations ?? []).filter((a) => a.target !== "USER")
   const associations = await Promise.all(assocs.map(async (a) => ({
     path: a.path, target: a.target, label: a.label, fields: await joinedFieldsForSource(primary, a.path),
   })))
   return { fields, associations }
+}
+
+// Detail-page route for a primary record, so report tables can link to it.
+const RECORD_ROUTE: Record<string, string> = { REFERRAL: "/referrals", PRACTICE: "/practices", PROVIDER: "/referring-doctors", LOCATION: "/locations", SURGERY: "/surgery" }
+export function recordHref(objectKey: string, id: string | null | undefined): string | null {
+  if (!id) return null
+  if (objectKey.startsWith("CO:")) return `/objects/${objectKey.slice(3)}/${id}`
+  const base = RECORD_ROUTE[objectKey]
+  return base ? `${base}/${id}` : null
 }
 
 export function reportObjectLabel(key: string): string {

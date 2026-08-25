@@ -5,34 +5,17 @@ import { prisma } from "@/lib/prisma"
 import { delegateFor } from "@/lib/automation-records"
 import { filterStateToWhere } from "@/lib/filter-to-prisma"
 import type { FilterField } from "@/lib/filters"
-import { reportFieldsFor, joinedFieldsForSource, REPORT_OBJECTS } from "./objects"
+import { reportFieldsFor, joinedFieldsForSource, REPORT_OBJECTS, recordHref } from "./objects"
 import type {
-  ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series,
+  ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series, DateFrequency,
 } from "./types"
+import { resolvePreset } from "./date-presets"
 
 const ROW_CAP = 10000
 
 // Resolve a date-range preset (or custom from/to) to a [start, end] window.
 function resolveWindow(dr: NonNullable<ReportConfig["dateRange"]>): { start: Date; end: Date } | null {
-  const now = new Date()
-  const y = now.getFullYear(), m = now.getMonth()
-  const end = now
-  if (dr.preset === "all") return null
-  if (dr.preset === "custom") {
-    if (!dr.from || !dr.to) return null
-    return { start: new Date(dr.from), end: new Date(dr.to + "T23:59:59") }
-  }
-  const days = (n: number) => new Date(now.getTime() - n * 864e5)
-  switch (dr.preset) {
-    case "last_7": return { start: days(7), end }
-    case "last_30": return { start: days(30), end }
-    case "last_90": return { start: days(90), end }
-    case "this_month": return { start: new Date(y, m, 1), end }
-    case "last_month": return { start: new Date(y, m - 1, 1), end: new Date(y, m, 0, 23, 59, 59) }
-    case "this_quarter": return { start: new Date(y, Math.floor(m / 3) * 3, 1), end }
-    case "this_year": case "ytd": return { start: new Date(y, 0, 1), end }
-  }
-  return null
+  return resolvePreset(dr.preset, dr.from, dr.to)
 }
 
 // The equal-length period immediately before a window (for comparison).
@@ -61,6 +44,34 @@ function toDate(v: unknown): Date | null {
   if (!v) return null
   const d = new Date(v as any)
   return isNaN(d.getTime()) ? null : d
+}
+
+// The bucket key + label for a specific date at a frequency — must match dimKeyLabel's date branch.
+function dateBucket(d: Date, freq: DateFrequency): { key: string; label: string } {
+  const y = d.getUTCFullYear(), m = d.getUTCMonth()
+  if (freq === "year") return { key: `${y}`, label: `${y}` }
+  if (freq === "quarter") { const q = Math.floor(m / 3) + 1; return { key: `${y}-Q${q}`, label: `Q${q} ${y}` } }
+  if (freq === "month") return { key: `${y}-${String(m + 1).padStart(2, "0")}`, label: d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) }
+  if (freq === "week") { const day = d.getUTCDate(); const wk = Math.ceil(day / 7); return { key: `${y}-${m}-w${wk}`, label: d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) } }
+  return { key: d.toISOString().slice(0, 10), label: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) }
+}
+// Every bucket between two dates (inclusive) at the given frequency, in order — so a
+// date axis is continuous (empty periods still appear), like HubSpot.
+function enumerateDateBuckets(min: Date, max: Date, freq: DateFrequency): { key: string; label: string; t: number }[] {
+  const out: { key: string; label: string; t: number }[] = []
+  const seen = new Set<string>()
+  const cur = new Date(Date.UTC(min.getUTCFullYear(), min.getUTCMonth(), min.getUTCDate()))
+  let guard = 0
+  while (cur.getTime() <= max.getTime() && guard++ < 2000) {
+    const b = dateBucket(cur, freq)
+    if (!seen.has(b.key)) { seen.add(b.key); out.push({ ...b, t: cur.getTime() }) }
+    if (freq === "year") cur.setUTCFullYear(cur.getUTCFullYear() + 1)
+    else if (freq === "quarter") cur.setUTCMonth(cur.getUTCMonth() + 3)
+    else if (freq === "month") cur.setUTCMonth(cur.getUTCMonth() + 1)
+    else if (freq === "week") cur.setUTCDate(cur.getUTCDate() + 7)
+    else cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+  return out
 }
 
 // A group key + display label for a dimension value (with date bucketing).
@@ -132,7 +143,12 @@ async function loadReportRows(config: ReportConfig, window?: { start: Date; end:
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: primary.slice(3) }, select: { id: true } }).catch(() => null)
     where = def ? { AND: [{ objectDefId: def.id }, ...clauses] } : where
   }
-  const include = Object.fromEntries((config.sources ?? []).map((s) => [s.joinPath, true]))
+  const include: Record<string, unknown> = Object.fromEntries((config.sources ?? []).map((s) => [s.joinPath, true]))
+  // Always join the primary's USER owner relations so inline Owner/Created-by name
+  // fields resolve (they're single-FK and cheap), regardless of selected sources.
+  for (const a of (REPORT_OBJECTS[primary]?.associations ?? [])) {
+    if (a.target === "USER" && !(a.path in include)) include[a.path] = { select: { name: true, email: true } }
+  }
   const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: ROW_CAP }).catch(() => [])
   return { rows, fields, byKey, total: rows.length, capped: rows.length >= ROW_CAP }
 }
@@ -149,8 +165,10 @@ export async function drillReport(config: ReportConfig, dimKey: string, breakdow
   })
   const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
   const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
-  const out = matched.slice(0, 1000).map((r) => cols.map((f) => formatCell(readValue(r, f), f)))
-  return { viz: "table", columns, rows: out, total: matched.length, capped: matched.length > 1000 }
+  const slice = matched.slice(0, 1000)
+  const out = slice.map((r) => cols.map((f) => formatCell(readValue(r, f), f)))
+  const rowLinks = slice.map((r) => recordHref(config.primary, r?.id))
+  return { viz: "table", columns, rows: out, total: matched.length, capped: matched.length > 1000, rowLinks }
 }
 
 // Flat, unsummarized rows for CSV export (chosen columns, or all primary fields).
@@ -169,7 +187,8 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
 
   const measures = config.measures.length ? config.measures : [{ source: primary, key: "*", agg: "count" as const }]
   const measureField = (m: Measure) => (m.key === "*" ? null : byKey[m.key] ?? null)
-  const measureLabel = (m: Measure) => m.label ?? (m.key === "*" ? "Count" : `${m.agg} ${byKey[m.key]?.label ?? m.key}`)
+  const AGG_LABEL: Record<string, string> = { count: "Count", distinct_count: "Distinct count", sum: "Sum", avg: "Average", min: "Min", max: "Max" }
+  const measureLabel = (m: Measure) => m.label ?? (m.key === "*" ? "(Count)" : `(${AGG_LABEL[m.agg] ?? m.agg}) ${byKey[m.key]?.label ?? m.key}`)
   const valueFormat = measures[0]?.format ? { format: measures[0].format!, decimals: measures[0].decimals } : undefined
 
   // Comparison vs the previous period (overall primary-measure total).
@@ -184,9 +203,14 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     }
   }
 
-  // KPI — a single measure, no dimension.
-  if (config.viz === "kpi") {
-    return { viz: "kpi", columns: [], rows: [], kpi: aggregate(rows, measures[0], measureField(measures[0])), total, capped, valueFormat, comparison }
+  // KPI / gauge — one big number per measure (a multi-metric summary card / dial).
+  if (config.viz === "kpi" || config.viz === "gauge") {
+    const kpis = measures.map((m) => ({
+      label: measureLabel(m),
+      value: aggregate(rows, m, measureField(m)),
+      format: m.format ? { format: m.format, decimals: m.decimals } : undefined,
+    }))
+    return { viz: config.viz, columns: [], rows: [], kpi: kpis[0]?.value ?? 0, kpis, total, capped, valueFormat, comparison }
   }
 
   const dims = config.dimensions.map((d) => ({ d, f: byKey[d.key] })).filter((x) => x.f)
@@ -195,14 +219,16 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   if (config.viz === "table" && (dims.length === 0 || config.tableMode === "unsummarized")) {
     const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
     const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
-    const out = rows.slice(0, 500).map((r) => cols.map((f) => {
+    const sliced = rows.slice(0, 500)
+    const out = sliced.map((r) => cols.map((f) => {
       const v = readValue(r, f)
       if (v == null) return null
       if (f.type === "date") { const d = toDate(v); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : String(v) }
       if (Array.isArray(v)) return v.join(", ")
       return typeof v === "number" ? v : String(v)
     }))
-    return { viz: "table", columns, rows: out, total, capped }
+    const rowLinks = sliced.map((r) => recordHref(primary, r?.id))
+    return { viz: "table", columns, rows: out, total, capped, rowLinks }
   }
 
   // Grouped: one primary dimension (first), optional breakdown → series/rows.
@@ -211,11 +237,36 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
 
   // Bucket rows by the primary dimension (a single "All" group when none is set).
   const groups = new Map<string, { label: string; rows: any[] }>()
+  const bucketTime = new Map<string, number>() // sortable timestamp for (esp. empty) date buckets
   const order: string[] = []
   for (const r of rows) {
     const { key, label } = dim ? dimKeyLabel(r, dim.d, dim.f) : { key: "all", label: "All" }
     if (!groups.has(key)) { groups.set(key, { label, rows: [] }); order.push(key) }
     groups.get(key)!.rows.push(r)
+  }
+
+  // Continuous date axis: for a date dimension, insert empty buckets between the
+  // earliest and latest present value so gaps (e.g. a day with no records) still show.
+  const dateDimGF = !!dim && (dim.f.type === "date" || !!dim.d.dateFrequency)
+  if (dateDimGF && order.length > 1) {
+    const freq = dim!.d.dateFrequency ?? "day"
+    const dates = rows.map((r) => toDate(readValue(r, dim!.f))).filter((d): d is Date => !!d)
+    if (dates.length) {
+      const min = new Date(Math.min(...dates.map((d) => d.getTime())))
+      const max = new Date(Math.max(...dates.map((d) => d.getTime())))
+      const full = enumerateDateBuckets(min, max, freq)
+      if (full.length <= 500) {
+        const complete: string[] = []
+        for (const b of full) {
+          if (!groups.has(b.key)) groups.set(b.key, { label: b.label, rows: [] })
+          bucketTime.set(b.key, b.t)
+          complete.push(b.key)
+        }
+        // keep any "(No value)" bucket that isn't part of the date sequence
+        for (const k of order) if (!complete.includes(k)) complete.push(k)
+        order.splice(0, order.length, ...complete)
+      }
+    }
   }
 
   // Pivot: rows = primary dimension, columns = breakdown (or a single value column).
@@ -255,12 +306,24 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     }
   } else {
     for (const m of measures) {
-      series.push({ name: measureLabel(m), points: order.map((gk) => ({ key: gk, label: groups.get(gk)!.label, value: aggregate(groups.get(gk)!.rows, m, measureField(m)) })) })
+      series.push({ name: measureLabel(m), chartType: m.chartType, axis: m.axis, points: order.map((gk) => ({ key: gk, label: groups.get(gk)!.label, value: aggregate(groups.get(gk)!.rows, m, measureField(m)) })) })
     }
   }
 
-  // Sort groups (by first series value or by label).
-  if (config.sort) {
+  // Order groups. A date/time dimension is always chronological (oldest → newest);
+  // other dimensions sort by the first series value (or label).
+  const dateDim = !!dim && (dim.f.type === "date" || !!dim.d.dateFrequency)
+  if (dateDim) {
+    const t = (k: string) => {
+      const r0 = groups.get(k)!.rows[0]
+      const d = r0 ? toDate(readValue(r0, dim!.f)) : null
+      return d ? d.getTime() : (bucketTime.get(k) ?? -Infinity)
+    }
+    const idxOrder = order.map((k, i) => ({ k, i })).sort((a, b) => t(a.k) - t(b.k))
+    const perm = idxOrder.map((x) => x.i)
+    order.splice(0, order.length, ...idxOrder.map((x) => x.k))
+    for (const s of series) s.points = perm.map((i) => s.points[i])
+  } else if (config.sort) {
     const by = config.sort.by, dir = config.sort.dir === "asc" ? 1 : -1
     const primarySeries = series[0]
     const idxOrder = order.map((k, i) => ({ k, i }))
@@ -273,16 +336,26 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     for (const s of series) s.points = perm.map((i) => s.points[i])
   }
   if (config.limit && config.limit > 0) {
-    order.splice(config.limit)
-    for (const s of series) s.points = s.points.slice(0, config.limit)
+    if (dateDim) {
+      // Keep the most recent N buckets, still ordered oldest → newest.
+      const startIdx = Math.max(0, order.length - config.limit)
+      order.splice(0, startIdx)
+      for (const s of series) s.points = s.points.slice(startIdx)
+    } else {
+      order.splice(config.limit)
+      for (const s of series) s.points = s.points.slice(0, config.limit)
+    }
   }
 
-  // Summarized table columns = dimension + each series.
-  const columns: ResultColumn[] = [{ key: "__dim", label: dim ? dim.f.label : "All", type: dim ? dim.f.type : "text" }, ...series.map((s) => ({ key: s.name, label: s.name, type: "number" as const }))]
+  // Summarized table columns = dimension + each series. The dimension header honors
+  // a rename override (dim.d.label); the y-axis title is the primary measure label.
+  const dimLabel = dim ? (dim.d.label ?? dim.f.label) : "All"
+  const axis = { x: dim ? dimLabel : undefined, y: measureLabel(measures[0]) }
+  const columns: ResultColumn[] = [{ key: "__dim", label: dimLabel, type: dim ? dim.f.type : "text" }, ...series.map((s) => ({ key: s.name, label: s.name, type: "number" as const }))]
   const tableRows: (string | number | null)[][] = order.map((gk) => {
     const label = groups.get(gk)!.label
     return [label, ...series.map((s) => s.points.find((p) => p.key === gk)?.value ?? 0)]
   })
 
-  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order, valueFormat, comparison }
+  return { viz: config.viz, columns, rows: tableRows, series, total, capped, stacked: !!(breakdownField && config.breakdown), rowKeys: order, valueFormat, comparison, axis }
 }
