@@ -404,6 +404,20 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
                                 {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                               </StyledSelect>
                             </PopRow>
+                            {["vbar", "line", "area"].includes(config.viz) && config.measures.length > 1 && (
+                              <>
+                                <PopRow label="Chart type">
+                                  <StyledSelect value={m.chartType ?? (config.viz === "vbar" ? "bar" : "line")} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, chartType: e.target.value as any } : x) })} className="h-8 w-full text-sm">
+                                    <option value="bar">Bar</option><option value="line">Line</option>
+                                  </StyledSelect>
+                                </PopRow>
+                                <PopRow label="Axis">
+                                  <StyledSelect value={m.axis ?? "left"} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, axis: e.target.value as any } : x) })} className="h-8 w-full text-sm">
+                                    <option value="left">Left</option><option value="right">Right (secondary)</option>
+                                  </StyledSelect>
+                                </PopRow>
+                              </>
+                            )}
                           </>
                         )}
                       />

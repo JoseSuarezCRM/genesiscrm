@@ -312,67 +312,91 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
     )
   }
 
-  const bw = cW / n
+  // Per-series chart type + axis (combo / dual-axis). Falls back to the viz default.
+  const baseType: "bar" | "line" = (result.viz === "line" || result.viz === "area") ? "line" : "bar"
+  const typeOf = (s: typeof series[number]) => s.chartType ?? baseType
+  const axisOf = (s: typeof series[number]) => s.axis ?? "left"
+  const barSeries = series.filter((s) => typeOf(s) === "bar")
+  const rightUsed = series.some((s) => axisOf(s) === "right")
+  const padRight = rightUsed ? 48 : 10
+  const cWc = W - padL - padRight
+  const bw = cWc / n
+  const canStack = stacked && series.every((s) => typeOf(s) === "bar") && !rightUsed
+  const leftVals = series.filter((s) => axisOf(s) === "left").flatMap((s) => s.points.map((p) => p.value))
+  const rightVals = series.filter((s) => axisOf(s) === "right").flatMap((s) => s.points.map((p) => p.value))
+  const leftMax = yMax ?? (canStack ? Math.max(1, ...labels.map((_, i) => series.reduce((a, s) => a + (s.points[i]?.value ?? 0), 0))) : Math.max(1, ...leftVals, 1))
+  const rightMax = Math.max(1, ...rightVals, 1)
+  const axisMax = (s: typeof series[number]) => (axisOf(s) === "right" ? rightMax : leftMax)
+  const groupW = bw / Math.max(1, barSeries.length)
   const legendEl = showLegend && series.length > 1 ? (
     <div className={cn("flex gap-x-3 gap-y-1 text-xs", legendPos === "right" ? "flex-col" : "flex-wrap")}>
-      {series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: palette[i % palette.length] }} />{s.name}</span>)}
+      {series.map((s, i) => <span key={i} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: palette[i % palette.length] }} />{s.name}{s.axis === "right" ? " (R)" : ""}</span>)}
     </div>
   ) : null
   const chartSvg = (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
       {showGrid && [0, 0.5, 1].map((t) => (
         <g key={t}>
-          <line x1={padL} x2={W - 10} y1={padT + cH - t * cH} y2={padT + cH - t * cH} stroke="#eee" />
-          <text x={padL - 6} y={padT + cH - t * cH} textAnchor="end" dominantBaseline="middle" fontSize={9} fill="#aaa">{fmtNum(max * t, vf)}</text>
+          <line x1={padL} x2={padL + cWc} y1={padT + cH - t * cH} y2={padT + cH - t * cH} stroke="#eee" />
+          <text x={padL - 6} y={padT + cH - t * cH} textAnchor="end" dominantBaseline="middle" fontSize={9} fill="#aaa">{fmtNum(leftMax * t, vf)}</text>
+          {rightUsed && <text x={padL + cWc + 6} y={padT + cH - t * cH} textAnchor="start" dominantBaseline="middle" fontSize={9} fill="#aaa">{fmtNum(rightMax * t, vf)}</text>}
         </g>
       ))}
       {showAxis && yTitle && <text x={12} y={padT + cH / 2} transform={`rotate(-90 12 ${padT + cH / 2})`} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{yTitle}</text>}
-      {showAxis && xTitle && <text x={padL + cW / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{xTitle}</text>}
+      {showAxis && xTitle && <text x={padL + cWc / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{xTitle}</text>}
       {labels.map((_, i) => (
         <rect key={`hit${i}`} x={padL + bw * i} y={padT} width={bw} height={cH} fill="transparent"
           onMouseMove={(e) => moveTip(e, labels[i], series.map((s, si) => ({ name: s.name, value: s.points[i]?.value ?? 0, color: palette[si % palette.length] })))}
           onClick={labelClick(i)} className={onDrill ? "cursor-pointer" : undefined} />
       ))}
-        {result.viz === "line" || result.viz === "area" ? (
-          series.map((s, si) => {
-            const pts = s.points.map((p, i) => `${padL + bw * i + bw / 2},${padT + cH - (p.value / max) * cH}`).join(" ")
-            return <g key={si}>{result.viz === "area" && <polygon points={`${padL + bw / 2},${padT + cH} ${pts} ${padL + bw * (n - 1) + bw / 2},${padT + cH}`} fill={palette[si % palette.length] + "33"} />}<polyline points={pts} fill="none" stroke={palette[si % palette.length]} strokeWidth={2} /></g>
-          })
-        ) : stacked ? (
-          // Stacked bars (breakdown composition): max is the tallest stack.
-          labels.map((_, i) => {
-            let running = 0
-            const total = series.reduce((a, s) => a + (s.points[i]?.value ?? 0), 0)
-            return (
-              <g key={i} onClick={labelClick(i)} className={onDrill ? "cursor-pointer" : undefined}>
-                {series.map((s, si) => {
-                  const v = s.points[i]?.value ?? 0
-                  const h = (v / stackMax) * cH
-                  const y = padT + cH - running - h
-                  running += h
-                  return <rect key={si} x={padL + bw * i + bw * 0.15} y={y} width={bw * 0.7} height={Math.max(0, h)} fill={palette[si % palette.length]} />
-                })}
-                {style.dataLabels && total > 0 && <text x={padL + bw * i + bw / 2} y={padT + cH - (total / stackMax) * cH - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(total, vf)}</text>}
-              </g>
-            )
-          })
-        ) : (
-          labels.map((_, i) => (
-            <g key={i} onClick={labelClick(i)} className={onDrill ? "cursor-pointer" : undefined}>
+      {canStack ? (
+        labels.map((_, i) => {
+          let running = 0
+          const total = series.reduce((a, s) => a + (s.points[i]?.value ?? 0), 0)
+          return (
+            <g key={i}>
               {series.map((s, si) => {
                 const v = s.points[i]?.value ?? 0
-                const groupW = bw / series.length
-                const bh = (v / max) * cH
+                const h = (v / leftMax) * cH
+                const y = padT + cH - running - h
+                running += h
+                return <rect key={si} x={padL + bw * i + bw * 0.15} y={y} width={bw * 0.7} height={Math.max(0, h)} fill={palette[si % palette.length]} />
+              })}
+              {style.dataLabels && total > 0 && <text x={padL + bw * i + bw / 2} y={padT + cH - (total / leftMax) * cH - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(total, vf)}</text>}
+            </g>
+          )
+        })
+      ) : (
+        series.map((s, si) => {
+          const color = palette[si % palette.length]
+          const aMax = axisMax(s)
+          if (typeOf(s) === "line") {
+            const pts = s.points.map((p, i) => `${padL + bw * i + bw / 2},${padT + cH - (p.value / aMax) * cH}`).join(" ")
+            return (
+              <g key={si}>
+                {result.viz === "area" && !s.chartType && <polygon points={`${padL + bw / 2},${padT + cH} ${pts} ${padL + bw * (n - 1) + bw / 2},${padT + cH}`} fill={color + "33"} />}
+                <polyline points={pts} fill="none" stroke={color} strokeWidth={2} />
+                {s.points.map((p, i) => <circle key={i} cx={padL + bw * i + bw / 2} cy={padT + cH - (p.value / aMax) * cH} r={2.5} fill={color} />)}
+              </g>
+            )
+          }
+          const bi = barSeries.indexOf(s)
+          return (
+            <g key={si}>
+              {labels.map((_, i) => {
+                const v = s.points[i]?.value ?? 0
+                const bh = (v / aMax) * cH
                 return (
-                  <g key={si}>
-                    <rect x={padL + bw * i + groupW * si + 2} y={padT + cH - bh} width={Math.max(1, groupW - 4)} height={bh} fill={palette[si % palette.length]} rx={2} />
-                    {style.dataLabels && v > 0 && <text x={padL + bw * i + groupW * si + groupW / 2} y={padT + cH - bh - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(v, vf)}</text>}
+                  <g key={i}>
+                    <rect x={padL + bw * i + groupW * bi + 2} y={padT + cH - bh} width={Math.max(1, groupW - 4)} height={Math.max(0, bh)} fill={color} rx={2} />
+                    {style.dataLabels && v > 0 && <text x={padL + bw * i + groupW * bi + groupW / 2} y={padT + cH - bh - 3} textAnchor="middle" fontSize={9} fill="#666">{fmtNum(v, vf)}</text>}
                   </g>
                 )
               })}
             </g>
-          ))
-        )}
+          )
+        })
+      )}
       {labels.map((l, i) => <text key={i} x={padL + bw * i + bw / 2} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#888">{l.length > 10 ? l.slice(0, 9) + "…" : l}</text>)}
     </svg>
   )

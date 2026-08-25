@@ -302,7 +302,7 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
     }
   } else {
     for (const m of measures) {
-      series.push({ name: measureLabel(m), points: order.map((gk) => ({ key: gk, label: groups.get(gk)!.label, value: aggregate(groups.get(gk)!.rows, m, measureField(m)) })) })
+      series.push({ name: measureLabel(m), chartType: m.chartType, axis: m.axis, points: order.map((gk) => ({ key: gk, label: groups.get(gk)!.label, value: aggregate(groups.get(gk)!.rows, m, measureField(m)) })) })
     }
   }
 

@@ -35,6 +35,8 @@ export interface Measure extends FieldRef {
   label?: string
   format?: ValueFormat
   decimals?: number
+  chartType?: "bar" | "line"   // combo charts: render this series as bars or a line
+  axis?: "left" | "right"      // combo charts: which y-axis this series uses
 }
 
 export interface Dimension extends FieldRef {
@@ -74,7 +76,7 @@ export interface ResultColumn { key: string; label: string; type: ReportFieldTyp
 
 // A grouped series: one entry per breakdown value (or a single series when no
 // breakdown), each with points keyed by the primary dimension's label.
-export interface Series { name: string; points: { label: string; key: string; value: number }[] }
+export interface Series { name: string; points: { label: string; key: string; value: number }[]; chartType?: "bar" | "line"; axis?: "left" | "right" }
 
 export interface ReportResult {
   viz: VizType
