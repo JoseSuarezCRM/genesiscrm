@@ -69,6 +69,8 @@ interface Referral {
   assignedTo: { id: string; name: string | null; email: string } | null
   customProperties: Record<string, any> | null
   referringPractice: { name: string } | null
+  referringDoctor: { name: string | null; title: string | null; specialty: string | null; npi: string | null; phone: string | null } | null
+  referringLocation: { name: string | null; address: string | null } | null
   tags: { tag: Tag }[]
   referralDate: string | Date
   appointmentDate: string | Date | null
@@ -96,10 +98,10 @@ const REFERRAL_EDIT: Record<string, RecordFieldDef & { field: string; get: (r: R
   mrn: { key: "mrn", field: "patientMrn", label: "Referring MRN", type: "text", get: (r) => r.patientMrn },
   genesisMrn: { key: "genesisMrn", field: "genesisMrn", label: "Genesis MRN", type: "text", get: (r) => r.genesisMrn },
   dob: { key: "dob", field: "patientDob", label: "Date of Birth", type: "date", get: (r) => r.patientDob },
-  providerName: { key: "providerName", field: "referringDoctorName", label: "Provider Name", type: "text", get: (r) => r.referringDoctorName },
-  npi: { key: "npi", field: "referringNpi", label: "Referring NPI", type: "text", get: (r) => r.referringNpi },
-  referringPhone: { key: "referringPhone", field: "referringPhone", label: "Referring Phone", type: "phone", get: (r) => r.referringPhone },
-  referringAddress: { key: "referringAddress", field: "referringAddress", label: "Referring Address", type: "text", get: (r) => r.referringAddress },
+  providerName: { key: "providerName", field: "referringDoctorName", label: "Provider Name", type: "text", get: (r) => r.referringDoctor?.name ?? r.referringDoctorName },
+  npi: { key: "npi", field: "referringNpi", label: "Referring NPI", type: "text", get: (r) => r.referringDoctor?.npi ?? r.referringNpi },
+  referringPhone: { key: "referringPhone", field: "referringPhone", label: "Referring Phone", type: "phone", get: (r) => r.referringDoctor?.phone ?? r.referringPhone },
+  referringAddress: { key: "referringAddress", field: "referringAddress", label: "Referring Address", type: "text", get: (r) => r.referringLocation?.address ?? r.referringAddress },
   insurance: { key: "insurance", field: "insuranceProvider", label: "Insurance", type: "text", get: (r) => r.insuranceProvider },
   insuranceMemberId: { key: "insuranceMemberId", field: "insuranceMemberId", label: "Insurance Member ID", type: "text", get: (r) => r.insuranceMemberId },
   insuranceGroup: { key: "insuranceGroup", field: "insuranceGroup", label: "Insurance Group", type: "text", get: (r) => r.insuranceGroup },
@@ -354,10 +356,10 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
       case "genesisMrn": return txt(r.genesisMrn)
       case "dob": return <span className="text-slate-600">{r.patientDob ? formatDate(r.patientDob) : "—"}</span>
       case "practice": return <span className="text-slate-600">{r.referringPractice?.name ?? "—"}</span>
-      case "providerName": return txt(r.referringDoctorName)
-      case "npi": return txt(r.referringNpi)
-      case "referringPhone": return <span className="text-slate-600">{formatPhone(r.referringPhone)}</span>
-      case "referringAddress": return txt(r.referringAddress)
+      case "providerName": return txt(r.referringDoctor?.name ?? r.referringDoctorName)
+      case "npi": return txt(r.referringDoctor?.npi ?? r.referringNpi)
+      case "referringPhone": return <span className="text-slate-600">{formatPhone(r.referringDoctor?.phone ?? r.referringPhone)}</span>
+      case "referringAddress": return txt(r.referringLocation?.address ?? r.referringAddress)
       case "insurance": return txt(r.insuranceProvider)
       case "insuranceMemberId": return txt(r.insuranceMemberId)
       case "insuranceGroup": return txt(r.insuranceGroup)

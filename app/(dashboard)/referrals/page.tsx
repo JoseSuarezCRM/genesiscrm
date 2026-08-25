@@ -100,6 +100,8 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy,
       include: {
         referringPractice: true,
+        referringDoctor: { select: { name: true, title: true, specialty: true, npi: true, phone: true } },
+        referringLocation: { select: { name: true, address: true } },
         assignedTo: { select: { id: true, name: true, email: true } },
         tags: { include: { tag: true } },
         _count: { select: { callAttempts: true } },
