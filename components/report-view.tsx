@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useMemo } from "react"
+import Link from "next/link"
 import { Hash, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ReportResult } from "@/lib/reporting/types"
@@ -155,7 +156,11 @@ export function DataTable({ result, onDrill, pageSize, sortable, frozenFirst }: 
           return (
           <tr key={idx} onClick={drillable ? () => onDrill!(result.rowKeys![idx], null, String(r[0] ?? "Records")) : undefined}
             className={cn("border-b border-zinc-100", drillable ? "cursor-pointer hover:bg-blue-50" : "hover:bg-zinc-50")}>
-            {r.map((v, j) => <td key={j} className={cn("px-3 py-2 text-zinc-700", frozenCls(j))}>{v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : v.toLocaleString()) : v}</td>)}
+            {r.map((v, j) => {
+              const href = result.columns[j]?.key === "__id" ? result.rowLinks?.[idx] : null
+              const cell = v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : v.toLocaleString()) : v
+              return <td key={j} className={cn("px-3 py-2 text-zinc-700", frozenCls(j))}>{href ? <Link href={href} onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">{cell}</Link> : cell}</td>
+            })}
           </tr>
         )})}</tbody>
       </table>

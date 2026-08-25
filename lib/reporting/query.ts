@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { delegateFor } from "@/lib/automation-records"
 import { filterStateToWhere } from "@/lib/filter-to-prisma"
 import type { FilterField } from "@/lib/filters"
-import { reportFieldsFor, joinedFieldsForSource, REPORT_OBJECTS } from "./objects"
+import { reportFieldsFor, joinedFieldsForSource, REPORT_OBJECTS, recordHref } from "./objects"
 import type {
   ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series, DateFrequency,
 } from "./types"
@@ -165,8 +165,10 @@ export async function drillReport(config: ReportConfig, dimKey: string, breakdow
   })
   const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
   const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
-  const out = matched.slice(0, 1000).map((r) => cols.map((f) => formatCell(readValue(r, f), f)))
-  return { viz: "table", columns, rows: out, total: matched.length, capped: matched.length > 1000 }
+  const slice = matched.slice(0, 1000)
+  const out = slice.map((r) => cols.map((f) => formatCell(readValue(r, f), f)))
+  const rowLinks = slice.map((r) => recordHref(config.primary, r?.id))
+  return { viz: "table", columns, rows: out, total: matched.length, capped: matched.length > 1000, rowLinks }
 }
 
 // Flat, unsummarized rows for CSV export (chosen columns, or all primary fields).
@@ -217,14 +219,16 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   if (config.viz === "table" && (dims.length === 0 || config.tableMode === "unsummarized")) {
     const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
     const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
-    const out = rows.slice(0, 500).map((r) => cols.map((f) => {
+    const sliced = rows.slice(0, 500)
+    const out = sliced.map((r) => cols.map((f) => {
       const v = readValue(r, f)
       if (v == null) return null
       if (f.type === "date") { const d = toDate(v); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : String(v) }
       if (Array.isArray(v)) return v.join(", ")
       return typeof v === "number" ? v : String(v)
     }))
-    return { viz: "table", columns, rows: out, total, capped }
+    const rowLinks = sliced.map((r) => recordHref(primary, r?.id))
+    return { viz: "table", columns, rows: out, total, capped, rowLinks }
   }
 
   // Grouped: one primary dimension (first), optional breakdown → series/rows.

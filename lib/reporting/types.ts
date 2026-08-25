@@ -86,6 +86,7 @@ export interface ReportResult {
   kpi?: number                // for the KPI viz
   pivot?: { rowLabels: string[]; colLabels: string[]; cells: (number | null)[][]; rowKeys: string[]; colKeys: string[] }
   kpis?: { label: string; value: number; format?: { format: ValueFormat; decimals?: number } }[] // multi-metric KPI card
+  rowLinks?: (string | null)[] // per-row href to the primary record (unsummarized tables)
   total: number               // total matching primary records
   capped?: boolean
   stacked?: boolean           // series form a composition (from a breakdown) → stack

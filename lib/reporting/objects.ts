@@ -182,6 +182,15 @@ export async function reportSchema(primary: string): Promise<{
   return { fields, associations }
 }
 
+// Detail-page route for a primary record, so report tables can link to it.
+const RECORD_ROUTE: Record<string, string> = { REFERRAL: "/referrals", PRACTICE: "/practices", PROVIDER: "/referring-doctors", LOCATION: "/locations", SURGERY: "/surgery" }
+export function recordHref(objectKey: string, id: string | null | undefined): string | null {
+  if (!id) return null
+  if (objectKey.startsWith("CO:")) return `/objects/${objectKey.slice(3)}/${id}`
+  const base = RECORD_ROUTE[objectKey]
+  return base ? `${base}/${id}` : null
+}
+
 export function reportObjectLabel(key: string): string {
   return REPORT_OBJECTS[key]?.label ?? (key.startsWith("CO:") ? key.slice(3) : key)
 }
