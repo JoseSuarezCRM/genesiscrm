@@ -4,12 +4,15 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { logStageTransition, pipelinesForObject } from "@/lib/stages/core"
+import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 
 // Move a record into a stage (logs a transition + updates its stage). Custom objects only for now.
 export async function moveRecordStage(recordType: string, recordId: string, pipelineId: string, stageId: string) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
-  await logStageTransition(recordType, recordId, pipelineId, stageId, session.user.id)
+  const moved = await logStageTransition(recordType, recordId, pipelineId, stageId, session.user.id)
+  // A stage change is a "stageId property changed" event for automations.
+  if (moved) await runTrigger_RecordPropertyChanged(recordType, recordId, { stageId }, session.user.id).catch(() => {})
   if (recordType.startsWith("CO:")) {
     const key = recordType.slice(3)
     revalidatePath(`/objects/${key}/board`)

@@ -213,8 +213,20 @@ export async function createCustomObjectRecord(objectKey: string, values: Record
     },
   })
   await runTrigger_RecordCreated(`CO:${objectKey}`, rec.id, uid).catch(() => {})
+  // Auto-enroll into the object's default pipeline (first stage) if one exists.
+  await assignDefaultStage(`CO:${objectKey}`, rec.id, uid).catch(() => {})
   revalidatePath(`/objects/${objectKey}`)
   return { success: true, id: rec.id }
+}
+
+// Put a new record into the first stage of the object's first pipeline (if any),
+// logging a StageTransition so time-in-stage starts immediately.
+async function assignDefaultStage(recordType: string, recordId: string, userId: string) {
+  const { pipelinesForObject, logStageTransition } = await import("@/lib/stages/core")
+  const pipelines = await pipelinesForObject(recordType)
+  const first = pipelines[0]
+  const firstStage = first?.stages[0]
+  if (first && firstStage) await logStageTransition(recordType, recordId, first.id, firstStage.id, userId)
 }
 
 export async function updateCustomObjectRecord(objectKey: string, id: string, data: { values?: Record<string, any>; ownerId?: string | null }) {

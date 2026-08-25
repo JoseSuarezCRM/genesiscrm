@@ -22,8 +22,18 @@ export default async function WorkflowEditorPage({ params }: Props) {
     orderBy: { order: "asc" },
     select: { key: true, singular: true, plural: true, properties: true },
   })
+  // Stages per custom object (so workflows can branch on / watch the Stage property).
+  const coPipelines = await (prisma as any).pipeline.findMany({
+    where: { objectType: { startsWith: "CO:" }, isActive: true },
+    orderBy: [{ order: "asc" }],
+    select: { objectType: true, stages: { orderBy: { order: "asc" }, select: { id: true, name: true } } },
+  }).catch(() => [])
+  const stagesByObject: Record<string, { id: string; name: string }[]> = {}
+  for (const p of coPipelines) (stagesByObject[p.objectType] ??= []).push(...p.stages)
+
   const customObjects = customObjectDefs.map((d: any) => ({
     key: d.key, singular: d.singular, plural: d.plural,
+    stages: stagesByObject[`CO:${d.key}`] ?? [],
     properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, internalName: p.internalName ?? null, type: p.type, options: p.options ?? [], optionLabels: p.optionLabels ?? {} })),
   }))
 
