@@ -15,6 +15,8 @@ export interface ReportField {
   jsonBag?: string     // set when the value lives in a JSON bag (customProperties/values)
   joinPath?: string    // set for a joined source: the Prisma relation on the primary row
   options?: { value: string; label: string }[]
+  // Computed time-in-stage field (from StageTransition), value rendered in days.
+  stageDuration?: { kind: "current" | "toClose" | "cumulative" | "latest"; stageId?: string }
 }
 
 export type Aggregation = "count" | "distinct_count" | "sum" | "avg" | "min" | "max"

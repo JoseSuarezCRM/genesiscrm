@@ -10,6 +10,7 @@ import type {
   ReportConfig, ReportResult, ReportField, Measure, Dimension, ResultColumn, Series, DateFrequency,
 } from "./types"
 import { resolvePreset } from "./date-presets"
+import { computeStageDurations } from "@/lib/stages/durations"
 
 const ROW_CAP = 10000
 
@@ -34,6 +35,16 @@ function toFilterFields(fields: ReportField[]): FilterField[] {
 }
 
 function readValue(row: any, field: ReportField): unknown {
+  if (field.stageDuration) {
+    const sd = row?.__sd
+    if (!sd) return null
+    const k = field.stageDuration
+    const ms = k.kind === "current" ? sd.timeInCurrentStage
+      : k.kind === "toClose" ? sd.timeToClose
+      : k.kind === "cumulative" ? (sd.cumulative[k.stageId!] ?? 0)
+      : (sd.latest[k.stageId!] ?? 0)
+    return ms == null ? null : ms / 864e5 // milliseconds → days
+  }
   const base = field.joinPath ? row?.[field.joinPath] : row
   if (base == null) return null
   if (field.jsonBag) return base?.[field.jsonBag]?.[field.column]
@@ -150,7 +161,31 @@ async function loadReportRows(config: ReportConfig, window?: { start: Date; end:
     if (a.target === "USER" && !(a.path in include)) include[a.path] = { select: { name: true, email: true } }
   }
   const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: ROW_CAP }).catch(() => [])
+
+  // If any referenced field is a stage duration, compute time-in-stage per row
+  // from the StageTransition log (attach row.__sd for readValue).
+  if (allFields.some((f) => f.stageDuration) && rows.length) {
+    await attachStageDurations(primary, rows)
+  }
   return { rows, fields, byKey, total: rows.length, capped: rows.length >= ROW_CAP }
+}
+
+// Load StageTransitions for the loaded rows and compute per-record durations.
+async function attachStageDurations(primary: string, rows: any[]): Promise<void> {
+  const ids = rows.map((r) => r.id).filter(Boolean)
+  if (!ids.length) return
+  const [stages, transitions] = await Promise.all([
+    (prisma as any).pipelineStage.findMany({ where: { pipeline: { objectType: primary } }, select: { id: true, isClosed: true, isWon: true, name: true, order: true, pipelineId: true, probability: true, color: true } }).catch(() => []),
+    (prisma as any).stageTransition.findMany({ where: { recordType: primary, recordId: { in: ids } }, orderBy: { enteredAt: "asc" }, select: { recordId: true, toStageId: true, enteredAt: true } }).catch(() => []),
+  ])
+  const byRecord = new Map<string, { toStageId: string; enteredAt: Date }[]>()
+  for (const t of transitions) {
+    const arr = byRecord.get(t.recordId) ?? []
+    arr.push({ toStageId: t.toStageId, enteredAt: t.enteredAt })
+    byRecord.set(t.recordId, arr)
+  }
+  const now = new Date()
+  for (const r of rows) r.__sd = computeStageDurations(byRecord.get(r.id) ?? [], stages, now)
 }
 
 // The underlying primary records behind a chart bar / summarized row / pivot cell.
