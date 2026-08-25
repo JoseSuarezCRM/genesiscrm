@@ -202,7 +202,8 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
 
   const measures = config.measures.length ? config.measures : [{ source: primary, key: "*", agg: "count" as const }]
   const measureField = (m: Measure) => (m.key === "*" ? null : byKey[m.key] ?? null)
-  const measureLabel = (m: Measure) => m.label ?? (m.key === "*" ? "Count" : `${m.agg} ${byKey[m.key]?.label ?? m.key}`)
+  const AGG_LABEL: Record<string, string> = { count: "Count", distinct_count: "Distinct count", sum: "Sum", avg: "Average", min: "Min", max: "Max" }
+  const measureLabel = (m: Measure) => m.label ?? (m.key === "*" ? "(Count)" : `(${AGG_LABEL[m.agg] ?? m.agg}) ${byKey[m.key]?.label ?? m.key}`)
   const valueFormat = measures[0]?.format ? { format: measures[0].format!, decimals: measures[0].decimals } : undefined
 
   // Comparison vs the previous period (overall primary-measure total).

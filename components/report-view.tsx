@@ -24,11 +24,12 @@ export type ReportStyle = {
   palette?: string
   yMax?: number | null
 }
-type ValueFormat = { format: "number" | "currency" | "percent"; decimals?: number }
+type ValueFormat = { format: "number" | "currency" | "percent" | "duration"; decimals?: number }
 
-// Render a measure value per its format (currency/percent/decimals).
+// Render a measure value per its format (currency/percent/duration/decimals).
 export function fmtNum(v: number, vf?: ValueFormat): string {
   if (!vf) return v.toLocaleString()
+  if (vf.format === "duration") { const d = vf.decimals ?? 1; return `${v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })} days` }
   const d = vf.decimals ?? (vf.format === "currency" ? 2 : 0)
   const n = v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
   if (vf.format === "currency") return "$" + n

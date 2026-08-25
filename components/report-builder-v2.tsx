@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users, GripVertical, Pencil, Check } from "lucide-react"
+import { Search, Plus, X, Loader2, Save, BarChart3, LayoutDashboard, Download, Users, GripVertical, Pencil, Check, SlidersHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import StyledSelect from "@/components/ui/styled-select"
 import { FilterEditor } from "@/components/ui/filter-builder"
@@ -24,7 +24,8 @@ const VIZ_OPTIONS: { value: VizType; label: string }[] = [
 ]
 const AGGS: Aggregation[] = ["count", "distinct_count", "sum", "avg", "min", "max"]
 const FREQS: DateFrequency[] = ["day", "week", "month", "quarter", "year"]
-const FORMATS = [{ value: "number", label: "1,234" }, { value: "currency", label: "$" }, { value: "percent", label: "%" }]
+const FORMATS = [{ value: "number", label: "Number (1,234)" }, { value: "currency", label: "Currency ($)" }, { value: "percent", label: "Percent (%)" }, { value: "duration", label: "Duration (days)" }]
+const AGG_LABELS: Record<string, string> = { count: "Count", distinct_count: "Distinct count", sum: "Sum", avg: "Average", min: "Min", max: "Max" }
 const DATE_PRESETS = [
   { value: "last_7", label: "Last 7 days" }, { value: "last_30", label: "Last 30 days" },
   { value: "last_90", label: "Last 90 days" }, { value: "this_month", label: "This month" },
@@ -355,40 +356,56 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
             <div className="space-y-4 p-4">
               <Section title="Measures">
                 <DropZone onDropField={onDropField(addMeasure)}>
-                  {config.measures.map((m, i) => (
-                    <EditableChip key={i}
-                      label={m.label ?? (m.key === "*" ? "Count" : byKey[m.key]?.label ?? m.key)}
-                      onRename={(v) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, label: v ?? undefined } : x) })}
-                      onRemove={() => set({ measures: config.measures.filter((_, j) => j !== i) })}>
-                      {m.key !== "*" && (
-                        <StyledSelect value={m.agg} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, agg: e.target.value as Aggregation } : x) })} className="h-6 text-xs">
-                          {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
-                        </StyledSelect>
-                      )}
-                      {i === 0 && (
-                        <StyledSelect value={m.format ?? "number"} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, format: e.target.value === "number" ? undefined : (e.target.value as any) } : x) })} className="h-6 text-xs">
-                          {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                        </StyledSelect>
-                      )}
-                    </EditableChip>
-                  ))}
+                  {config.measures.map((m, i) => {
+                    const mDefault = m.key === "*" ? "(Count)" : `(${AGG_LABELS[m.agg] ?? m.agg}) ${byKey[m.key]?.label ?? m.key}`
+                    return (
+                      <FieldChip key={i}
+                        label={m.label ?? mDefault}
+                        defaultName={mDefault}
+                        onRename={(v) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, label: v ?? undefined } : x) })}
+                        onRemove={() => set({ measures: config.measures.filter((_, j) => j !== i) })}
+                        render={() => (
+                          <>
+                            {m.key !== "*" && (
+                              <PopRow label="Aggregation">
+                                <StyledSelect value={m.agg} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, agg: e.target.value as Aggregation } : x) })} className="h-8 w-full text-sm">
+                                  {AGGS.map((a) => <option key={a} value={a}>{AGG_LABELS[a] ?? a}</option>)}
+                                </StyledSelect>
+                              </PopRow>
+                            )}
+                            <PopRow label="Format">
+                              <StyledSelect value={m.format ?? "number"} onChange={(e) => set({ measures: config.measures.map((x, j) => j === i ? { ...x, format: e.target.value === "number" ? undefined : (e.target.value as any) } : x) })} className="h-8 w-full text-sm">
+                                {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                              </StyledSelect>
+                            </PopRow>
+                          </>
+                        )}
+                      />
+                    )
+                  })}
                   {!config.measures.some((m) => m.key === "*") && <button onClick={() => set({ measures: [...config.measures, { source: config.primary, key: "*", agg: "count" }] })} className="text-xs text-blue-600 hover:underline">+ Count</button>}
                 </DropZone>
               </Section>
               <Section title="Dimensions (group / x-axis)">
                 <DropZone onDropField={onDropField(addDimension)} empty={<p className="text-xs text-zinc-400">Drag a field here to group / chart.</p>}>
-                  {config.dimensions.map((d, i) => (
-                    <EditableChip key={i}
-                      label={d.label ?? byKey[d.key]?.label ?? d.key}
-                      onRename={(v) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, label: v ?? undefined } : x) })}
-                      onRemove={() => set({ dimensions: config.dimensions.filter((_, j) => j !== i) })}>
-                      {byKey[d.key]?.type === "date" && (
-                        <StyledSelect value={d.dateFrequency ?? "month"} onChange={(e) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, dateFrequency: e.target.value as DateFrequency } : x) })} className="h-6 text-xs">
-                          {FREQS.map((fr) => <option key={fr} value={fr}>{fr}</option>)}
-                        </StyledSelect>
-                      )}
-                    </EditableChip>
-                  ))}
+                  {config.dimensions.map((d, i) => {
+                    const dDefault = byKey[d.key]?.label ?? d.key
+                    return (
+                      <FieldChip key={i}
+                        label={d.label ?? dDefault}
+                        defaultName={dDefault}
+                        onRename={(v) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, label: v ?? undefined } : x) })}
+                        onRemove={() => set({ dimensions: config.dimensions.filter((_, j) => j !== i) })}
+                        render={byKey[d.key]?.type === "date" ? () => (
+                          <PopRow label="Frequency">
+                            <StyledSelect value={d.dateFrequency ?? "month"} onChange={(e) => set({ dimensions: config.dimensions.map((x, j) => j === i ? { ...x, dateFrequency: e.target.value as DateFrequency } : x) })} className="h-8 w-full text-sm capitalize">
+                              {FREQS.map((fr) => <option key={fr} value={fr}>{fr}</option>)}
+                            </StyledSelect>
+                          </PopRow>
+                        ) : undefined}
+                      />
+                    )
+                  })}
                 </DropZone>
               </Section>
               <Section title="Break down by">
@@ -558,33 +575,41 @@ function DropZone({ onDropField, empty, children }: { onDropField: (e: React.Dra
 function Chip({ label, onRemove, children }: { label: string; onRemove: () => void; children?: React.ReactNode }) {
   return <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm"><span className="flex-1 truncate text-zinc-700">{label}</span>{children}<button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button></div>
 }
-// A chip whose label can be renamed inline (sets a display-label override on the
-// measure/dimension); the override flows to the chart axis/legend + table header.
-function EditableChip({ label, onRename, onRemove, children }: { label: string; onRename: (v: string | null) => void; onRemove: () => void; children?: React.ReactNode }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(label)
-  const commit = () => { setEditing(false); onRename(draft.trim() || null) }
-  if (editing) {
-    // Full-width input (child selects hidden) so the name is actually editable.
-    return (
-      <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm">
-        <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setDraft(label) } }}
-          placeholder="Display name…"
-          className="min-w-0 flex-1 rounded border border-zinc-300 px-1.5 py-0.5 text-sm outline-none focus:border-zinc-500" />
-        <button onMouseDown={(e) => { e.preventDefault(); commit() }} className="text-emerald-600 hover:text-emerald-700" title="Save"><Check className="h-3.5 w-3.5" /></button>
-        <button onMouseDown={(e) => { e.preventDefault(); setEditing(false); setDraft(label) }} className="text-zinc-400 hover:text-zinc-700" title="Cancel"><X className="h-3.5 w-3.5" /></button>
-      </div>
-    )
-  }
+// A chip with a unified "Edit field" popover (rename + aggregation/format/frequency).
+// `render` supplies the popover body; `defaultName` is the reset target for rename.
+function FieldChip({ label, defaultName, onRename, onRemove, render }: {
+  label: string; defaultName: string; onRename: (v: string | null) => void; onRemove: () => void
+  render?: (close: () => void) => React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as Element)?.closest?.("[data-select-menu-open]")) setOpen(false) }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open])
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm">
-      <span className="flex-1 truncate text-zinc-700" title={label}>{label}</span>
-      {children}
-      <button onClick={() => { setDraft(label); setEditing(true) }} className="text-zinc-400 hover:text-zinc-700" title="Rename"><Pencil className="h-3 w-3" /></button>
-      <button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+    <div className="relative" ref={ref}>
+      <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-sm">
+        <span className="flex-1 truncate text-zinc-700" title={label}>{label}</span>
+        <button onClick={() => setOpen((o) => !o)} className={cn("text-zinc-400 hover:text-zinc-700", open && "text-zinc-800")} title="Edit field"><SlidersHorizontal className="h-3.5 w-3.5" /></button>
+        <button onClick={onRemove} className="text-zinc-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+      </div>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-64 space-y-2.5 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg">
+          <div>
+            <div className="mb-1 flex items-center justify-between"><span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Name</span><button onClick={() => onRename(null)} className="text-[11px] text-blue-600 hover:underline">Reset</button></div>
+            <input value={label} onChange={(e) => onRename(e.target.value || null)} placeholder={defaultName} className="w-full rounded-lg border border-zinc-200 px-2 py-1 text-sm outline-none focus:border-zinc-400" />
+          </div>
+          {render?.(() => setOpen(false))}
+        </div>
+      )}
     </div>
   )
+}
+function PopRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{label}</p>{children}</div>
 }
 function Empty() {
   return <div className="flex h-full items-center justify-center text-center"><div><BarChart3 className="mx-auto h-10 w-10 text-zinc-300" /><p className="mt-2 text-sm text-zinc-500">Add measures and a dimension to build your report.</p></div></div>

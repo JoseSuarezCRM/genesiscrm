@@ -28,7 +28,7 @@ export interface FieldRef {
   key: string
 }
 
-export type ValueFormat = "number" | "currency" | "percent"
+export type ValueFormat = "number" | "currency" | "percent" | "duration"
 
 export interface Measure extends FieldRef {
   agg: Aggregation
