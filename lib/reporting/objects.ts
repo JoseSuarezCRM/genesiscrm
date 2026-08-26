@@ -136,7 +136,33 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
       options: (cp.options ?? []).map((o) => ({ value: o, label: ((cp as any).optionLabels?.[o]) ?? o })),
     })
   }
+
+  // Time-in-stage calculated fields (from StageTransition), when the object has stages.
+  for (const f of await stageDurationFields(objectKey)) fields.push(f)
   return fields
+}
+
+// Synthetic duration fields (in days) for a stage-enabled object: time in current
+// stage, time to close, and per stage cumulative + latest time.
+async function stageDurationFields(objectKey: string): Promise<ReportField[]> {
+  const pipelines = await (prisma as any).pipeline.findMany({
+    where: { objectType: objectKey, isActive: true },
+    select: { stages: { orderBy: { order: "asc" }, select: { id: true, name: true } } },
+  }).catch(() => [])
+  const stages = pipelines.flatMap((p: any) => p.stages as { id: string; name: string }[])
+  if (stages.length === 0) return []
+  const out: ReportField[] = [
+    { key: "__stage.current", label: "Time in current stage", type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "current" } },
+    { key: "__stage.toClose", label: "Time to close", type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "toClose" } },
+  ]
+  const seen = new Set<string>()
+  for (const s of stages) {
+    if (seen.has(s.id)) continue
+    seen.add(s.id)
+    out.push({ key: `__stage.cum.${s.id}`, label: `Cumulative time in "${s.name}"`, type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "cumulative", stageId: s.id } })
+    out.push({ key: `__stage.latest.${s.id}`, label: `Latest time in "${s.name}"`, type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "latest", stageId: s.id } })
+  }
+  return out
 }
 
 // Every object a user can report on, including custom objects, with a label.
@@ -164,7 +190,8 @@ export async function joinedFieldsForSource(primary: string, joinPath: string): 
   const assoc = REPORT_OBJECTS[primary]?.associations.find((a) => a.path === joinPath)
   if (!assoc) return []
   const tf = await baseFieldsFor(assoc.target)
-  return tf.map((f) => ({ ...f, key: `${joinPath}.${f.key}`, source: joinPath, joinPath }))
+  // Stage durations are computed from the primary row only — not on joined sources.
+  return tf.filter((f) => !f.stageDuration).map((f) => ({ ...f, key: `${joinPath}.${f.key}`, source: joinPath, joinPath }))
 }
 
 // Everything the builder needs for a primary object: its own fields + each joinable

@@ -9,8 +9,10 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
 import ReferralTable from "@/components/referral-table"
+import { associationColumnDefs } from "@/lib/association-columns"
 import ReferralsExportButton from "@/components/referrals-export-button"
 import ReferralViewsBar from "@/components/referral-views-bar"
+import PipelineSelector from "@/components/pipeline-selector"
 import { getAssignableUsers, getViewShareOptions } from "@/app/actions/view-share-options"
 import { getReferralViews } from "@/app/actions/referral-views"
 import { buildReferralWhere } from "@/lib/referral-query"
@@ -100,8 +102,8 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       orderBy,
       include: {
         referringPractice: true,
-        referringDoctor: { select: { name: true, title: true, specialty: true, npi: true, phone: true } },
-        referringLocation: { select: { name: true, address: true } },
+        referringDoctor: true,
+        referringLocation: true,
         assignedTo: { select: { id: true, name: true, email: true } },
         tags: { include: { tag: true } },
         _count: { select: { callAttempts: true } },
@@ -240,40 +242,12 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      {/* Pipeline tabs */}
+      {/* Pipeline selector */}
       {pipelines.length > 0 && (
-        <div className="flex gap-1 border-b border-zinc-200">
-          <Link
-            href={pipelineTabHref(null)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              !pipelineId
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
-            }`}
-          >
-            All
-          </Link>
-          {(pipelines as any[]).map((p) => (
-            <Link
-              key={p.id}
-              href={pipelineTabHref(p.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                pipelineId === p.id
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
-              }`}
-            >
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: p.color }}
-              />
-              {p.name}
-              <span className="ml-1 text-xs text-slate-400">
-                {(p as any)._count.referrals}
-              </span>
-            </Link>
-          ))}
-        </div>
+        <PipelineSelector
+          pipelines={(pipelines as any[]).map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+          activePipelineId={pipelineId}
+        />
       )}
 
       {/* Saved views */}
@@ -313,7 +287,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table (renders its own card + column chooser) */}
-      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
+      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} associations={await associationColumnDefs("REFERRAL")} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
 
       {/* Pagination */}
       {totalPages > 1 && (

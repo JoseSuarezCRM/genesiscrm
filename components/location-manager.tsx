@@ -30,6 +30,7 @@ import FilterBuilder from "@/components/ui/filter-builder"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
+import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { cn } from "@/lib/utils"
 
 export interface LocationRow {
@@ -40,6 +41,7 @@ export interface LocationRow {
   address: string | null
   practiceId: string
   practiceName: string
+  practice?: any // raw practice record, for association columns
   ownerId?: string | null
   ownerName?: string | null
   createdAt: string | Date
@@ -60,6 +62,7 @@ interface Props {
   users?: { id: string; label: string }[]
   createFormConfig?: CreateFormField[] | null
   isAdmin?: boolean
+  associations?: AssociationGroup[]
 }
 
 const LOCATION_COLUMNS: { key: string; label: string; sortable?: boolean; align?: "right" }[] = [
@@ -81,10 +84,12 @@ function fmtDate(d: string | Date | null | undefined) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
 }
 
-type SortKey = "name" | "practice" | "providers" | "referrals" | "activities" | "owner" | "created"
+type SortKey = string // native keys + association column keys (e.g. "practice.name")
 
-export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete, users = [], createFormConfig = null, isAdmin = false }: Props) {
+export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete, users = [], createFormConfig = null, isAdmin = false, associations = [] }: Props) {
   const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
+  // Association columns (Practice → field): available in the chooser, opt-in per table.
+  const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -143,9 +148,14 @@ export default function LocationManager({ locations, practices, customPropertyDe
   })
   const filtersActive = activeConditionCount(filter, filterFields) > 0
 
+  const assocSortField = assocByKey[sortKey]
   const sorted = [...filtered].sort((a, b) => {
     let av: string | number = 0, bv: string | number = 0
-    switch (sortKey) {
+    if (assocSortField) {
+      const fa = readAssocValue(a, assocSortField), fb = readAssocValue(b, assocSortField)
+      if (assocSortField.type === "number") { av = parseFloat(fa) || 0; bv = parseFloat(fb) || 0 }
+      else { av = fa.toLowerCase(); bv = fb.toLowerCase() }
+    } else switch (sortKey) {
       case "name": av = a.name.toLowerCase(); bv = b.name.toLowerCase(); break
       case "practice": av = a.practiceName.toLowerCase(); bv = b.practiceName.toLowerCase(); break
       case "providers": av = a.providerCount; bv = b.providerCount; break
@@ -160,11 +170,15 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    else { setSortKey(key); setSortDir(key === "practice" || key === "name" ? "asc" : "desc") }
+    else { setSortKey(key); setSortDir(key === "practice" || key === "name" || assocByKey[key] ? "asc" : "desc") }
   }
 
-  // Full catalog = native columns + every location custom property.
-  const allLocCols: { key: string; label: string; sortable?: boolean; align?: "right" }[] = [...LOCATION_COLUMNS, ...customPropertyDefs.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  // Full catalog = native columns + every location custom property + association columns (grouped).
+  const allLocCols: { key: string; label: string; sortable?: boolean; align?: "right"; group?: string }[] = [
+    ...LOCATION_COLUMNS,
+    ...customPropertyDefs.map((p) => ({ key: `cp_${p.id}`, label: p.name })),
+    ...assocColumns.map((c) => ({ key: c.key, label: c.label, sortable: true, group: c.group })),
+  ]
   const locCpById = Object.fromEntries(customPropertyDefs.map((p) => [p.id, p]))
   // Render in the user's chosen order (name is the fixed leading column, always first).
   const cols = (visibleCols.map((k) => allLocCols.find((c) => c.key === k)).filter(Boolean) as typeof allLocCols)
@@ -220,10 +234,13 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
   // ── Export ───────────────────────────────────────────────────────────────────
   function buildExport() {
-    const headers = ["Name", "Practice", "Address", "Phone", "Fax", "Providers", "Referrals", "Activities", "Location Owner", "Created"]
+    // Association columns currently added to the view are appended to the export.
+    const assocVisible = visibleCols.map((k) => (assocByKey[k] ? { field: assocByKey[k], label: (assocColumns.find((c) => c.key === k)?.group ?? "") + " — " + (assocColumns.find((c) => c.key === k)?.label ?? k) } : null)).filter(Boolean) as { field: any; label: string }[]
+    const headers = ["Name", "Practice", "Address", "Phone", "Fax", "Providers", "Referrals", "Activities", "Location Owner", "Created", ...assocVisible.map((a) => a.label)]
     const rows = sorted.map((l) => [
       l.name, l.practiceName, l.address ?? "", l.phone ?? "", l.fax ?? "",
       l.providerCount, l.referralCount, l.activityCount, l.ownerName ?? "", fmtDate(l.createdAt),
+      ...assocVisible.map((a) => readAssocValue(l, a.field)),
     ])
     return { headers, rows }
   }
@@ -362,6 +379,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
                         {col.key === "owner" && <span className="text-slate-500">{l.ownerName || "—"}</span>}
                         {col.key === "created" && <span className="text-slate-500">{fmtDate(l.createdAt)}</span>}
                         {col.key.startsWith("cp_") && renderLocationCp(l, col.key.slice(3))}
+                        {assocByKey[col.key] && (readAssocValue(l, assocByKey[col.key]) ? <span className="text-slate-500">{readAssocValue(l, assocByKey[col.key])}</span> : <span className="text-slate-400">—</span>)}
                           </>}
                       </td>
                     )})}

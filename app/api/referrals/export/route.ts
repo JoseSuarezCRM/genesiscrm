@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createAuditLog } from "@/lib/audit"
-import { STATUS_LABELS } from "@/lib/utils"
 import { userCan } from "@/lib/permissions"
 import { ReferralStatus, AuditAction } from "@prisma/client"
 import { buildReferralWhere } from "@/lib/referral-query"
 import { referralFilterFields } from "@/lib/referral-filter-fields"
 import { decodeFilterParam } from "@/lib/filters"
+import { referralExportColumns, DEFAULT_EXPORT_COLS } from "@/lib/referral-export-columns"
+import { associationColumnDefs, readAssocValue } from "@/lib/association-columns"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -51,32 +52,25 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       referringPractice: true,
+      referringDoctor: true,
+      referringLocation: true,
       pipeline: { select: { name: true } },
+      assignedTo: { select: { name: true, email: true } },
       createdBy: { select: { name: true, email: true } },
+      tags: { include: { tag: { select: { name: true } } } },
+      _count: { select: { callAttempts: true } },
     },
     orderBy: { referralDate: "desc" },
   })
 
-  const headers = [
-    "Patient First Name",
-    "Patient Last Name",
-    "Patient Phone",
-    "Patient Email",
-    "Date of Birth",
-    "Referring Practice",
-    "Referring Doctor",
-    "Pipeline",
-    "Status",
-    "Referral Date",
-    "Appointment Date",
-    "Insurance Provider",
-    "Insurance Member ID",
-    "Insurance Group",
-    "Auth Status",
-    "Notes",
-    "Created By",
-    "Created At",
-  ]
+  // Export the columns the user has visible (in order); fall back to a default set.
+  const catalog = referralExportColumns(referralCustomProps.map((p) => ({ id: p.id, name: p.name })))
+  // Association columns (Practice/Provider/Location → their fields), so the CSV matches the table.
+  for (const g of await associationColumnDefs("REFERRAL")) {
+    for (const f of g.fields) catalog[f.key] = { key: f.key, label: `${g.label} — ${f.label}`, get: (r: any) => readAssocValue(r, f) }
+  }
+  const requested = searchParams.getAll("col").filter((k) => catalog[k])
+  const chosen = (requested.length ? requested : DEFAULT_EXPORT_COLS).map((k) => catalog[k]).filter(Boolean)
 
   function escape(val: string | null | undefined): string {
     if (!val) return ""
@@ -87,26 +81,8 @@ export async function GET(req: NextRequest) {
     return str
   }
 
-  const rows = (referrals as any[]).map((r) => [
-    r.patientFirstName,
-    r.patientLastName,
-    r.patientPhone,
-    r.patientEmail,
-    r.patientDob ? new Date(r.patientDob).toLocaleDateString() : "",
-    r.referringPractice?.name,
-    r.referringDoctorName,
-    r.pipeline?.name,
-    STATUS_LABELS[r.status as import("@prisma/client").ReferralStatus],
-    new Date(r.referralDate).toLocaleDateString(),
-    r.appointmentDate ? new Date(r.appointmentDate).toLocaleDateString() : "",
-    r.insuranceProvider,
-    r.insuranceMemberId,
-    r.insuranceGroup,
-    r.authStatus,
-    r.notes,
-    r.createdBy?.name || r.createdBy?.email,
-    new Date(r.createdAt).toLocaleDateString(),
-  ])
+  const headers = chosen.map((c) => c.label)
+  const rows = (referrals as any[]).map((r) => chosen.map((c) => c.get(r)))
 
   const csv = [headers, ...rows]
     .map((row) => row.map(escape).join(","))

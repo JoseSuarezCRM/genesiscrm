@@ -38,6 +38,7 @@ import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
+import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,7 @@ type Task = {
   createdBy: User
   assignedTo: User | null
   associations: Assoc[]
+  __assoc?: Record<string, any> // first linked record per associated type, for association columns
   createdAt: string | Date
   customProperties?: Record<string, any> | null
 }
@@ -421,7 +423,7 @@ const TASK_COL_W: Record<string, number> = { title: 260, status: 130, type: 100,
 const PRIORITY_ORDER: Record<string, number> = { URGENT: 0, HIGH: 1, NORMAL: 2, LOW: 3 }
 const STAGE_ORDER: Record<string, number> = { NOT_STARTED: 0, IN_PROGRESS: 1, WAITING: 2, DEFERRED: 3, COMPLETED: 4 }
 
-export default function TasksClient({ tasks: initialTasks, users, queues, objectTypes, currentUserId, highlight, initialFilter, canManage = true, canDelete = false, customProps = [], savedViews = [], shareUsers = [], shareTeams = [] }: {
+export default function TasksClient({ tasks: initialTasks, users, queues, objectTypes, currentUserId, highlight, initialFilter, canManage = true, canDelete = false, customProps = [], savedViews = [], shareUsers = [], shareTeams = [], associations = [] }: {
   tasks: Task[]
   users: User[]
   queues: Queue[]
@@ -435,6 +437,7 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
   savedViews?: SavedTaskView[]
   shareUsers?: ShareUser[]
   shareTeams?: ShareTeam[]
+  associations?: AssociationGroup[]
 }) {
   const [isPending, startTransition] = useTransition()
   const [tasks, setTasks] = useState(initialTasks)
@@ -451,6 +454,8 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
   const assignableUsers = users.map((u) => ({ id: u.id, label: u.name || u.email }))
   const ownerUserMap = Object.fromEntries(assignableUsers.map((u) => [u.id, u.label]))
   const cpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
+  // Association columns (linked-record fields): available in the chooser, opt-in per table.
+  const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
 
   function run(fn: () => Promise<{ success?: boolean; error?: unknown } | undefined>) {
     startTransition(async () => {
@@ -470,7 +475,7 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
 
   // ── View mode + columns ──
   const [viewMode, setViewMode] = useState<"table" | "cards">("table")
-  const allTaskCols = [...TASK_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const allTaskCols = [...TASK_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns.map((c) => ({ key: c.key, label: c.label, sortable: true, group: c.group }))]
   const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs("taskCols", DEFAULT_TASK_COLS)
   const { colWidth, startResize } = useColumnResize("taskColWidths")
   const cols = (visibleCols.map((k) => allTaskCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string; sortable?: boolean }[])
@@ -514,6 +519,7 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
     if (k === "priority") return PRIORITY_ORDER[t.priority] ?? 9
     if (k === "dueDate") return t.dueDate ? new Date(t.dueDate).getTime() : Number.MAX_SAFE_INTEGER
     if (k === "created") return new Date(t.createdAt).getTime()
+    if (assocByKey[k]) { const f = assocByKey[k]; const v = readAssocValue(t, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
     return ""
   }
   const sorted = [...filtered].sort((a, b) => {
@@ -618,6 +624,7 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
     }
   }
   function renderTaskCell(t: Task, key: string): React.ReactNode {
+    if (assocByKey[key]) { const v = readAssocValue(t, assocByKey[key]); return v ? <span className="text-slate-600">{v}</span> : <span className="text-slate-300">—</span> }
     if (key.startsWith("cp_")) {
       const raw = t.customProperties?.[key.slice(3)]
       if (raw == null || raw === "") return <span className="text-slate-300">—</span>
@@ -639,6 +646,7 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
     const headers = ["Title", ...colReorder.order.map((c) => c.label)]
     const rows = sorted.map((t) => [t.title, ...colReorder.order.map((c) => {
       const k = c.key
+      if (assocByKey[k]) return readAssocValue(t, assocByKey[k])
       if (k.startsWith("cp_")) { const v = t.customProperties?.[k.slice(3)]; return Array.isArray(v) ? v.join("; ") : (v ?? "") }
       if (k === "status") return stageMeta(t.status).label
       if (k === "type") return typeLabel(t.type)

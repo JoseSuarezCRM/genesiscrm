@@ -10,6 +10,20 @@ import { cn } from "@/lib/utils"
 
 export interface ChooserColumn { key: string; label: string; group?: string }
 
+// Group the catalog: ungrouped ("own") fields first, then one section per group.
+function groupCatalog(cols: ChooserColumn[]): [string, ChooserColumn[]][] {
+  const order: string[] = []
+  const map = new Map<string, ChooserColumn[]>()
+  for (const c of cols) {
+    const g = c.group ?? ""
+    if (!map.has(g)) { map.set(g, []); order.push(g) }
+    map.get(g)!.push(c)
+  }
+  // keep ungrouped ("") first, groups after in first-seen order
+  order.sort((a, b) => (a === "" ? -1 : b === "" ? 1 : 0))
+  return order.map((g) => [g, map.get(g)!])
+}
+
 interface Props {
   open: boolean
   onClose: () => void
@@ -76,12 +90,17 @@ export default function ColumnChooserModal({ open, onClose, columns, selected, r
             <div className="mt-3 flex-1 overflow-y-auto -mx-1 px-1">
               {shownCatalog.length === 0 ? (
                 <p className="px-2 py-3 text-sm text-slate-400">No matches</p>
-              ) : shownCatalog.map((c) => (
-                <label key={c.key} className={cn("flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm cursor-pointer hover:bg-slate-50", reqSet.has(c.key) && "opacity-60 cursor-not-allowed")}>
-                  <input type="checkbox" checked={isSelected(c.key)} disabled={reqSet.has(c.key)} onChange={() => toggle(c.key)}
-                    className="h-4 w-4 rounded border-slate-300 accent-blue-600" />
-                  <span className="text-slate-700 truncate">{c.label}</span>
-                </label>
+              ) : groupCatalog(shownCatalog).map(([group, items]) => (
+                <div key={group || "__ungrouped"}>
+                  {group && <p className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{group}</p>}
+                  {items.map((c) => (
+                    <label key={c.key} className={cn("flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm cursor-pointer hover:bg-slate-50", reqSet.has(c.key) && "opacity-60 cursor-not-allowed")}>
+                      <input type="checkbox" checked={isSelected(c.key)} disabled={reqSet.has(c.key)} onChange={() => toggle(c.key)}
+                        className="h-4 w-4 rounded border-slate-300 accent-blue-600" />
+                      <span className="text-slate-700 truncate">{c.label}</span>
+                    </label>
+                  ))}
+                </div>
               ))}
             </div>
             {createHref && (

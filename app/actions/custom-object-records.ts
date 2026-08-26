@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { runTrigger_RecordCreated, runTrigger_RecordPropertyChanged, runTrigger_RecordOwnerChanged } from "@/lib/automation-engine"
 import { filterStateToWhere } from "@/lib/filter-to-prisma"
 import { decodeFilterParam, customPropertyFilterFields, type FilterField } from "@/lib/filters"
+import { attachAssociatedRecords } from "@/lib/association-columns"
 
 // Records are gated by the object's own permission key: "CO:<objectKey>".
 function objKey(key: string) { return `CO:${key}` }
@@ -168,7 +169,7 @@ export async function exportCustomObjectRecords(objectKey: string, opts: { sort?
   }
 
   const names = await resolveNames(records.flatMap((r: any) => [r.ownerId, r.createdById, r.updatedById, r.lastViewedById]))
-  return records.map((r: any) => ({
+  const mapped = records.map((r: any) => ({
     id: r.id, recordNumber: r.recordNumber ?? null, values: (r.values as Record<string, any>) ?? {},
     ownerId: r.ownerId, ownerName: r.ownerId ? names[r.ownerId] ?? null : null,
     createdById: r.createdById, createdByName: r.createdById ? names[r.createdById] ?? null : null,
@@ -176,6 +177,9 @@ export async function exportCustomObjectRecords(objectKey: string, opts: { sort?
     lastViewedById: r.lastViewedById, lastViewedByName: r.lastViewedById ? names[r.lastViewedById] ?? null : null,
     lastViewedAt: r.lastViewedAt, createdAt: r.createdAt, updatedAt: r.updatedAt,
   }))
+  // Attach linked records so association columns export for large (server-mode) objects too.
+  await attachAssociatedRecords(`CO:${objectKey}`, mapped as any[])
+  return mapped
 }
 
 export async function getCustomObjectRecord(objectKey: string, id: string): Promise<CustomRecordRow | null> {
@@ -213,8 +217,20 @@ export async function createCustomObjectRecord(objectKey: string, values: Record
     },
   })
   await runTrigger_RecordCreated(`CO:${objectKey}`, rec.id, uid).catch(() => {})
+  // Auto-enroll into the object's default pipeline (first stage) if one exists.
+  await assignDefaultStage(`CO:${objectKey}`, rec.id, uid).catch(() => {})
   revalidatePath(`/objects/${objectKey}`)
   return { success: true, id: rec.id }
+}
+
+// Put a new record into the first stage of the object's first pipeline (if any),
+// logging a StageTransition so time-in-stage starts immediately.
+async function assignDefaultStage(recordType: string, recordId: string, userId: string) {
+  const { pipelinesForObject, logStageTransition } = await import("@/lib/stages/core")
+  const pipelines = await pipelinesForObject(recordType)
+  const first = pipelines[0]
+  const firstStage = first?.stages[0]
+  if (first && firstStage) await logStageTransition(recordType, recordId, first.id, firstStage.id, userId)
 }
 
 export async function updateCustomObjectRecord(objectKey: string, id: string, data: { values?: Record<string, any>; ownerId?: string | null }) {

@@ -20,6 +20,7 @@ import { createCustomObjectView, updateCustomObjectView, deleteCustomObjectView 
 import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
 import ColumnChooserModal from "@/components/ui/column-chooser"
+import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { useColumnPrefs } from "@/components/ui/use-column-prefs"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields, decodeFilterParam } from "@/lib/filters"
@@ -44,6 +45,7 @@ interface RecordRow {
   createdByName: string | null
   createdAt: string | Date
   updatedAt: string | Date
+  __assoc?: Record<string, any> // associated records attached server-side (association columns)
 }
 
 interface Props {
@@ -66,6 +68,7 @@ interface Props {
   serverPageSize?: number
   createFormConfig?: CreateFormField[] | null
   isAdmin?: boolean
+  associations?: AssociationGroup[]
 }
 
 interface SavedView {
@@ -105,7 +108,7 @@ function displayCell(p: CustomObjectProperty | undefined, v: any, userMap: Recor
   return displayValue(p, v, userMap)
 }
 
-export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [], serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, createFormConfig = null, isAdmin = false }: Props) {
+export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [], serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, createFormConfig = null, isAdmin = false, associations = [] }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const urlParams = useSearchParams()
@@ -128,8 +131,10 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
 
   // Columns: Record ID + Name (both toggleable) + property columns + owner + created.
   const dataCols = [...otherProps.map((p) => ({ key: p.id, label: p.name })), { key: "__owner", label: ownerLabel }, { key: "__created", label: "Created" }]
-  const allCols = [{ key: "__id", label: "Record ID" }, { key: "__name", label: nameHeader }, ...dataCols]
-  const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs(`co_${objectKey}_cols_v2`, allCols.map((c) => c.key))
+  const baseCols = [{ key: "__id", label: "Record ID" }, { key: "__name", label: nameHeader }, ...dataCols]
+  const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
+  const allCols = [...baseCols, ...assocColumns] // catalog incl. association columns (grouped)
+  const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs(`co_${objectKey}_cols_v2`, baseCols.map((c) => c.key))
   const [colModalOpen, setColModalOpen] = useState(false)
   // Columns render in the user's chosen order (not catalog order).
   const cols = (visibleCols.map((k) => allCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[])
@@ -181,6 +186,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     if (key === "__name") return (recordName(properties, r.values, "") || (primary ? displayValue(primary, r.values[primary.id], userMap) : "")).toLowerCase()
     if (key === "__owner") return (r.ownerName ?? "").toLowerCase()
     if (key === "__created") return new Date(r.createdAt).getTime()
+    if (assocByKey[key]) { const f = assocByKey[key]; const v = readAssocValue(r as any, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
     const p = otherProps.find((x) => x.id === key)
     return p ? displayValue(p, r.values[key], userMap).toLowerCase() : ""
   }
@@ -230,8 +236,8 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
   const activeView = savedViews.find((v) => v.id === appliedViewId)
   const viewDirty = !!activeView
     && JSON.stringify({ filter, columns: visibleCols, frozen: frozenCount }) !== JSON.stringify({ filter: activeView.config.filter, columns: activeView.config.columns, frozen: (activeView.config as any).frozen ?? 0 })
-  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); applyCols(v.config.columns ?? allCols.map((c) => c.key), (v.config as any).frozen ?? 0); setSearch(""); setAppliedViewId(v.id) }
-  function applyDefault() { setFilter(emptyFilter()); applyCols(allCols.map((c) => c.key), 0); setSearch(""); setAppliedViewId(null) }
+  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); applyCols(v.config.columns ?? baseCols.map((c) => c.key), (v.config as any).frozen ?? 0); setSearch(""); setAppliedViewId(v.id) }
+  function applyDefault() { setFilter(emptyFilter()); applyCols(baseCols.map((c) => c.key), 0); setSearch(""); setAppliedViewId(null) }
   function updateActiveView() {
     if (!appliedViewId) return
     setSavingView(true)
@@ -258,7 +264,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     const rows = list.map((r) => [
       r.recordNumber != null ? `#${r.recordNumber}` : "",
       primary ? displayValue(primary, r.values[primary.id], userMap) : "",
-      ...cols.map((c) => c.key === "__owner" ? (r.ownerName ?? "") : c.key === "__created" ? fmtDate(r.createdAt) : displayValue(otherProps.find((p) => p.id === c.key)!, r.values[c.key], userMap)),
+      ...cols.map((c) => c.key === "__owner" ? (r.ownerName ?? "") : c.key === "__created" ? fmtDate(r.createdAt) : c.key === "__id" ? (r.recordNumber != null ? `#${r.recordNumber}` : "") : assocByKey[c.key] ? readAssocValue(r as any, assocByKey[c.key]) : (() => { const p = otherProps.find((x) => x.id === c.key); return p ? displayValue(p, r.values[c.key], userMap) : "" })()),
     ])
     return { headers, rows }
   }
@@ -424,6 +430,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                               onSaveOwner={(uid) => setRecordOwner(`CO:${objectKey}`, r.id, uid)} />
                           )
                           : c.key === "__created" ? fmtDate(r.createdAt)
+                          : assocByKey[c.key] ? (readAssocValue(r as any, assocByKey[c.key]) || <span className="text-slate-300">—</span>)
                           : prop ? (
                             <EditableCell def={cpToFieldDef(prop, prop.id)} value={r.values[c.key]} values={r.values}
                               canEdit={canEdit} userMap={userMap}

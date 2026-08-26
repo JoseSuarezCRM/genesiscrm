@@ -12,6 +12,7 @@ import { createActivityView, updateActivityView, deleteActivityView } from "@/ap
 import { reorderViews } from "@/app/actions/view-order"
 import { useCardReorder } from "@/components/use-card-reorder"
 import ColumnChooserModal from "@/components/ui/column-chooser"
+import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
@@ -785,10 +786,11 @@ const ACTIVITY_COL_W: Record<string, number> = { date: 120, account: 200, locati
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, currentUserName, assignableUsers = [], savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean }) {
+export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, currentUserName, assignableUsers = [], savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [], associations = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean; associations?: AssociationGroup[] }) {
   const ownerUserMap = Object.fromEntries(assignableUsers.map((u) => [u.id, u.label]))
   // Full catalog = native activity columns + every activity custom property.
-  const allActivityCols = [...ACTIVITY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
+  const allActivityCols = [...ACTIVITY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns]
   const activityCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -1236,21 +1238,30 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     filterPracticeIds.length > 0 || filterLocationIds.length > 0 || filterProviderIds.length > 0
 
   // Build CSV data (headers + rows) for the currently filtered activities.
+  // Export the visible columns (in order) so the CSV matches the table — including
+  // custom-property and association columns.
+  function cellText(a: ActivityRow, key: string): string {
+    if (assocByKey[key]) return readAssocValue(a, assocByKey[key])
+    if (key.startsWith("cp_")) { const raw = (a as any).customProperties?.[key.slice(3)]; return raw == null ? "" : Array.isArray(raw) ? raw.join(", ") : String(raw) }
+    switch (key) {
+      case "date": return format(activityDay(a.date), "yyyy-MM-dd")
+      case "account": return a.practice?.name ?? ""
+      case "location": return a.location?.name ?? ""
+      case "providers": return a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join("; ")
+      case "type": return a.flyer ?? ""
+      case "rating": return a.rating ? String(a.rating) : ""
+      case "nextStep": return a.nextStep ?? ""
+      case "frontDesk": return a.frontDesk ?? ""
+      case "tags": return a.tags.map(t => t.name).join("; ")
+      case "notes": return (a.notes ?? "").replace(/\s+/g, " ").trim()
+      case "owner": return (a as any).owner?.name ?? (a as any).owner?.email ?? ""
+      case "loggedBy": return a.createdBy.name ?? a.createdBy.email
+      default: return ""
+    }
+  }
   function buildExportData() {
-    const headers = ["Date", "Account", "Location", "Providers", "Activity Type", "Rating", "Next Step", "Front Desk", "Tags", "Notes", "Logged By"]
-    const rows = filtered.map(a => [
-      format(activityDay(a.date), "yyyy-MM-dd"),
-      a.practice?.name ?? "",
-      a.location?.name ?? "",
-      a.providers.map(p => p.doctor.name + (p.doctor.title ? `, ${p.doctor.title}` : "")).join("; "),
-      a.flyer ?? "",
-      a.rating ? String(a.rating) : "",
-      a.nextStep ?? "",
-      a.frontDesk ?? "",
-      a.tags.map(t => t.name).join("; "),
-      (a.notes ?? "").replace(/\s+/g, " ").trim(),
-      a.createdBy.name ?? a.createdBy.email,
-    ])
+    const headers = cols.map(c => c.label)
+    const rows = filtered.map(a => cols.map(c => cellText(a, c.key)))
     return { headers, rows }
   }
 
@@ -1268,7 +1279,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       case "frontDesk": return (a.frontDesk ?? "").toLowerCase()
       case "tags": return a.tags.map(t => t.name).join(", ").toLowerCase()
       case "loggedBy": return (a.createdBy.name ?? a.createdBy.email).toLowerCase()
-      default: return ""
+      default:
+        if (assocByKey[key]) { const f = assocByKey[key]; const v = readAssocValue(a, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
+        return ""
     }
   }
   const sorted = useMemo(() => {
@@ -1375,6 +1388,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   }
 
   function renderCell(a: typeof filtered[number], key: string): React.ReactNode {
+    if (assocByKey[key]) { const v = readAssocValue(a, assocByKey[key]); return v ? <span className="text-zinc-600">{v}</span> : <span className="text-zinc-400">—</span> }
     if (key.startsWith("cp_")) {
       const id = key.slice(3)
       const raw = (a as any).customProperties?.[id]

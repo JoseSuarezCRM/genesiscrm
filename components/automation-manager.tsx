@@ -2418,15 +2418,20 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
   // A custom object's properties come from its definition, not the static catalog.
   const customObjectDef = customObjects.find(c => `CO:${c.key}` === objectKey)
+  const coStages = ((customObjectDef as any)?.stages ?? []) as { id: string; name: string }[]
   const propDefs: PropertyDef[] = customObjectDef
-    ? (customObjectDef.properties ?? []).map(p => ({
-        id: p.id,
-        label: p.name,
-        type: (p.type === "NUMBER" ? "number" : p.type === "DATE" ? "date" : p.type === "CHECKBOX" ? "boolean"
-          : p.type === "DROPDOWN" || p.type === "MULTI_SELECT" ? "select" : "text") as PropertyDef["type"],
-        path: p.id,
-        options: (p.options ?? []).map(o => ({ value: o, label: (p as any).optionLabels?.[o] ?? o })),
-      }))
+    ? [
+        // Pipeline Stage — a native select whose options are the object's stages.
+        ...(coStages.length ? [{ id: "stageId", label: "Stage", type: "select" as const, path: "stageId", options: coStages.map(s => ({ value: s.id, label: s.name })) }] : []),
+        ...(customObjectDef.properties ?? []).map(p => ({
+          id: p.id,
+          label: p.name,
+          type: (p.type === "NUMBER" ? "number" : p.type === "DATE" ? "date" : p.type === "CHECKBOX" ? "boolean"
+            : p.type === "DROPDOWN" || p.type === "MULTI_SELECT" ? "select" : "text") as PropertyDef["type"],
+          path: p.id,
+          options: (p.options ?? []).map(o => ({ value: o, label: (p as any).optionLabels?.[o] ?? o })),
+        })),
+      ]
     : OBJECT_PROPERTY_DEFS[objectKey] ?? REFERRAL_PROPERTY_DEFS
   const objectEntity = OBJECT_CUSTOM_ENTITY[objectKey]
   const rawCustoms = objectEntity ? customPropsByEntity[objectEntity] ?? [] : []

@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react"
 import { createPipeline, updatePipeline, deletePipeline } from "@/app/actions/pipelines"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
-import { Pencil, Trash2, Plus, Check, X } from "lucide-react"
+import { Pencil, Trash2, Plus, Check, X, ChevronRight } from "lucide-react"
+import StageEditor, { type Stage } from "@/components/stage-editor"
 
 const COLOR_OPTIONS = [
   "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899",
@@ -17,11 +18,13 @@ interface Pipeline {
   color: string
   order: number
   isActive: boolean
-  _count: { referrals: number }
+  stages?: Stage[]
+  recordCount?: number
 }
 
-export default function PipelineManager({ pipelines: initial }: { pipelines: Pipeline[] }) {
+export default function PipelineManager({ pipelines: initial, objectType = "REFERRAL", recordNoun = "referral" }: { pipelines: Pipeline[]; objectType?: string; recordNoun?: string }) {
   const [pipelines, setPipelines] = useState(initial)
+  const [expanded, setExpanded] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [editColor, setEditColor] = useState("")
@@ -67,10 +70,10 @@ export default function PipelineManager({ pipelines: initial }: { pipelines: Pip
     if (!newName.trim()) return
     setError(null)
     startTransition(async () => {
-      const res = await createPipeline({ name: newName, color: newColor })
+      const res = await createPipeline({ name: newName, color: newColor, objectType })
       if ("error" in res) { setError(res.error as string); return }
       if (res.pipeline) {
-        setPipelines(prev => [...prev, { ...res.pipeline!, _count: { referrals: 0 } }])
+        setPipelines(prev => [...prev, { ...(res.pipeline as any), stages: (res.pipeline as any).stages ?? [], recordCount: 0 }])
       }
       setNewName("")
       setNewColor(COLOR_OPTIONS[0])
@@ -86,7 +89,8 @@ export default function PipelineManager({ pipelines: initial }: { pipelines: Pip
 
       <div className="rounded-xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
         {pipelines.map(p => (
-          <div key={p.id} className="flex items-center gap-3 px-4 py-3 bg-white">
+          <div key={p.id} className="bg-white">
+          <div className="flex items-center gap-3 px-4 py-3">
             {editId === p.id ? (
               <>
                 <div className="flex gap-1.5">
@@ -114,9 +118,13 @@ export default function PipelineManager({ pipelines: initial }: { pipelines: Pip
               </>
             ) : (
               <>
+                <button onClick={() => setExpanded(expanded === p.id ? null : p.id)} className="p-0.5 text-slate-400 hover:text-slate-700">
+                  <ChevronRight className={`h-4 w-4 transition-transform ${expanded === p.id ? "rotate-90" : ""}`} />
+                </button>
                 <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                 <span className="flex-1 text-sm font-medium text-slate-800">{p.name}</span>
-                <span className="text-xs text-slate-400">{p._count.referrals} referral{p._count.referrals !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-slate-400">{p.stages?.length ?? 0} stage{(p.stages?.length ?? 0) !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-slate-400">· {p.recordCount ?? 0} {recordNoun}{(p.recordCount ?? 0) !== 1 ? "s" : ""}</span>
                 <button onClick={() => startEdit(p)} className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100">
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -125,6 +133,10 @@ export default function PipelineManager({ pipelines: initial }: { pipelines: Pip
                 </button>
               </>
             )}
+          </div>
+          {expanded === p.id && editId !== p.id && (
+            <div className="px-4 pb-3"><StageEditor pipelineId={p.id} stages={p.stages ?? []} /></div>
+          )}
           </div>
         ))}
 

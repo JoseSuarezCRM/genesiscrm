@@ -122,7 +122,13 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
 
   const addColumn = (f: ReportField) => { if (!config.columns.some((c) => c.key === f.key)) set({ columns: [...config.columns, { source: f.source, key: f.key }] }) }
   const addDimension = (f: ReportField) => { if (!config.dimensions.some((d) => d.key === f.key)) set({ dimensions: [...config.dimensions, { source: f.source, key: f.key, dateFrequency: f.type === "date" ? "month" : undefined }] }) }
-  const addMeasure = (f: ReportField) => { if (!config.measures.some((m) => m.key === f.key)) set({ measures: [...config.measures, { source: f.source, key: f.key, agg: f.type === "number" ? "sum" : "distinct_count" }] }) }
+  const addMeasure = (f: ReportField) => {
+    if (config.measures.some((m) => m.key === f.key)) return
+    const m: any = f.stageDuration
+      ? { source: f.source, key: f.key, agg: "avg", format: "duration" as const, decimals: 1 }
+      : { source: f.source, key: f.key, agg: f.type === "number" ? "sum" : "distinct_count" }
+    set({ measures: [...config.measures, m] })
+  }
   const setBreakdownField = (f: ReportField) => set({ breakdown: { source: f.source, key: f.key } })
   // Resolve a dropped field key (from the field list) and hand it to an add fn.
   const onDropField = (add: (f: ReportField) => void) => (e: React.DragEvent) => {
