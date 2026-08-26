@@ -5,6 +5,7 @@ import { listCustomProperties } from "@/app/actions/custom-properties"
 import { getAssignableUsers } from "@/app/actions/view-share-options"
 import { getCreateForm } from "@/app/actions/create-form"
 import { userCanLevel, userCanDelete } from "@/lib/permissions"
+import { associationColumnDefs } from "@/lib/association-columns"
 import LocationManager from "@/components/location-manager"
 
 export default async function LocationsPage() {
@@ -39,6 +40,7 @@ export default async function LocationsPage() {
         users={assignableUsers}
         createFormConfig={createFormConfig}
         isAdmin={user?.role === "ADMIN"}
+        associations={await associationColumnDefs("LOCATION")}
       />
     </div>
   )

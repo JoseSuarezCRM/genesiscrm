@@ -243,7 +243,7 @@ export async function getLocations() {
   const locations = await prisma.practiceLocation.findMany({
     orderBy: [{ referrals: { _count: "desc" } }, { name: "asc" }],
     include: {
-      practice: { select: { id: true, name: true } },
+      practice: true,
       owner: { select: { id: true, name: true, email: true } },
       _count: { select: { referrals: true, doctors: true, activities: true } },
     },
@@ -257,6 +257,8 @@ export async function getLocations() {
     address: l.address,
     practiceId: l.practiceId,
     practiceName: l.practice.name,
+    // Raw practice record threaded through for association columns (Practice → field).
+    practice: l.practice,
     ownerId: l.owner?.id ?? null,
     ownerName: l.owner?.name ?? l.owner?.email ?? null,
     createdAt: l.createdAt,

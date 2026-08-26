@@ -186,6 +186,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
     if (key === "__name") return (recordName(properties, r.values, "") || (primary ? displayValue(primary, r.values[primary.id], userMap) : "")).toLowerCase()
     if (key === "__owner") return (r.ownerName ?? "").toLowerCase()
     if (key === "__created") return new Date(r.createdAt).getTime()
+    if (assocByKey[key]) { const f = assocByKey[key]; const v = readAssocValue(r as any, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
     const p = otherProps.find((x) => x.id === key)
     return p ? displayValue(p, r.values[key], userMap).toLowerCase() : ""
   }

@@ -1279,7 +1279,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       case "frontDesk": return (a.frontDesk ?? "").toLowerCase()
       case "tags": return a.tags.map(t => t.name).join(", ").toLowerCase()
       case "loggedBy": return (a.createdBy.name ?? a.createdBy.email).toLowerCase()
-      default: return ""
+      default:
+        if (assocByKey[key]) { const f = assocByKey[key]; const v = readAssocValue(a, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
+        return ""
     }
   }
   const sorted = useMemo(() => {

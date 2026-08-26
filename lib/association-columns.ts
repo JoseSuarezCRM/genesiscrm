@@ -5,7 +5,25 @@
 import { reportSchema, reportFieldsFor, reportObjectLabel } from "@/lib/reporting/objects"
 import { prisma } from "@/lib/prisma"
 import { delegateFor } from "@/lib/automation-records"
+import { listObjectTypes } from "@/lib/object-registry"
 import type { ReportField } from "@/lib/reporting/types"
+
+// Objects whose associations live in the generic `objectAssociation` link table
+// (heterogeneous, m2m) rather than a direct Prisma FK: every custom object, plus
+// built-in Tasks (which associate with any object type via the picker).
+function isGenericAssoc(objectType: string): boolean {
+  return objectType.startsWith("CO:") || objectType === "TASK"
+}
+
+// Related types for a generic-association object's column catalog.
+async function genericRelatedTypes(objectType: string): Promise<string[]> {
+  if (objectType === "TASK") {
+    const types = await listObjectTypes().catch(() => [])
+    return types.map((t) => t.key).filter((k) => k !== "TASK")
+  }
+  const defs = await (prisma as any).objectAssociationDef.findMany({ where: { OR: [{ typeA: objectType }, { typeB: objectType }] } }).catch(() => [])
+  return Array.from(new Set(defs.map((d: any) => (d.typeA === objectType ? d.typeB : d.typeA))))
+}
 
 export interface AssociationGroup {
   path: string   // Prisma relation (FK associations) — e.g. "referringPractice"
@@ -18,13 +36,13 @@ export interface AssociationGroup {
 // Built-ins: direct FK relations (reportSchema). Custom objects: generic
 // ObjectAssociation links (each field reads from row.__assoc[type]).
 export async function associationColumnDefs(objectType: string): Promise<AssociationGroup[]> {
-  if (!objectType.startsWith("CO:")) {
+  if (!isGenericAssoc(objectType)) {
     const schema = await reportSchema(objectType).catch(() => ({ associations: [] as any[] }))
     return (schema.associations ?? []).map((a: any) => ({ path: a.path, label: a.label, fields: a.fields as ReportField[] }))
   }
-  // Custom object: related types come from the data-model association defs.
-  const defs = await (prisma as any).objectAssociationDef.findMany({ where: { OR: [{ typeA: objectType }, { typeB: objectType }] } }).catch(() => [])
-  const others: string[] = Array.from(new Set(defs.map((d: any) => (d.typeA === objectType ? d.typeB : d.typeA))))
+  // Generic associations (custom objects + Tasks): related types come from the
+  // data-model defs (custom objects) or the associable-type registry (Tasks).
+  const others: string[] = await genericRelatedTypes(objectType)
   const groups: AssociationGroup[] = []
   for (const other of others) {
     const fields = (await reportFieldsFor(other).catch(() => [])).filter((f) => !f.stageDuration && f.key !== "__id")
@@ -41,9 +59,7 @@ export async function associationColumnDefs(objectType: string): Promise<Associa
 // Load associated records for a page of custom-object rows and attach them as
 // `row.__assoc[<type>]` (the first linked record per related type — m2m).
 export async function attachAssociatedRecords(objectType: string, rows: any[]): Promise<void> {
-  if (!objectType.startsWith("CO:") || !rows.length) return
-  const defs = await (prisma as any).objectAssociationDef.findMany({ where: { OR: [{ typeA: objectType }, { typeB: objectType }] } }).catch(() => [])
-  if (!defs.length) return
+  if (!isGenericAssoc(objectType) || !rows.length) return
   const ids = rows.map((r) => r.id)
   const idSet = new Set(ids)
   const links = await (prisma as any).objectAssociation.findMany({

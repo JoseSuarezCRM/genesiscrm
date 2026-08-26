@@ -6,6 +6,7 @@ import TasksClient from "@/components/tasks-client"
 import { listTaskQueues } from "@/app/actions/tasks"
 import { listObjectTypes } from "@/lib/object-registry"
 import { loadTaskAssociations } from "@/lib/task-associations"
+import { associationColumnDefs, attachAssociatedRecords } from "@/lib/association-columns"
 import { listCustomProperties } from "@/app/actions/custom-properties"
 import { getTaskViews } from "@/app/actions/task-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
@@ -34,6 +35,10 @@ export default async function TasksPage({ searchParams }: { searchParams: { filt
   const assocMap = await loadTaskAssociations(tasks.map((t) => t.id))
   const tasksWithAssoc = tasks.map((t) => ({ ...t, associations: assocMap.get(t.id) ?? [] }))
 
+  // Association columns: their field catalog + the linked records for this page.
+  const associations = await associationColumnDefs("TASK")
+  await attachAssociatedRecords("TASK", tasksWithAssoc as any[])
+
   const openCount = tasks.filter((t) => t.status !== "COMPLETED").length
 
   return (
@@ -56,6 +61,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { filt
         savedViews={savedViews as any}
         shareUsers={shareOptions.users as any}
         shareTeams={shareOptions.teams as any}
+        associations={associations}
       />
     </div>
   )
