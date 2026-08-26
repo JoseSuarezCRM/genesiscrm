@@ -14,6 +14,7 @@ export interface ReportField {
   column: string       // DB column / JSON key used to read the value
   jsonBag?: string     // set when the value lives in a JSON bag (customProperties/values)
   joinPath?: string    // set for a joined source: the Prisma relation on the primary row
+  assocType?: string   // generic (list) association: read from row.__assoc[assocType] instead of a FK
   options?: { value: string; label: string }[]
   // Computed time-in-stage field (from StageTransition), value rendered in days.
   stageDuration?: { kind: "current" | "toClose" | "cumulative" | "latest"; stageId?: string }

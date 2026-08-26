@@ -10,6 +10,7 @@ import { getViewShareOptions } from "@/app/actions/view-share-options"
 import CustomObjectList from "@/components/custom-object-list"
 import { getCreateForm } from "@/app/actions/create-form"
 import { pipelinesForObject } from "@/lib/stages/core"
+import { associationColumnDefs, attachAssociatedRecords } from "@/lib/association-columns"
 import Link from "next/link"
 import { LayoutGrid } from "lucide-react"
 
@@ -47,6 +48,10 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
       })
     : { rows: await listCustomObjectRecords(params.key), total: totalRecords, page: 1, pageSize: 0 }
 
+  // Association columns: their field catalog + the associated records for this page.
+  const associations = await associationColumnDefs(`CO:${params.key}`)
+  if (associations.length) await attachAssociatedRecords(`CO:${params.key}`, pageData.rows as any[])
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between">
@@ -80,6 +85,7 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
         serverPageSize={pageData.pageSize}
         createFormConfig={createFormConfig}
         isAdmin={user?.role === "ADMIN"}
+        associations={associations}
       />
     </div>
   )
