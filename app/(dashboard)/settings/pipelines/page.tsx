@@ -2,11 +2,13 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import PipelineManager from "@/components/pipeline-manager"
+import PipelineOverview from "@/components/pipeline-overview"
+import { getPipelineColorStyle } from "@/app/actions/pipelines"
 
 export default async function PipelinesPage({ searchParams }: { searchParams: { object?: string } }) {
   const session = await auth()
   if ((session?.user as { role?: string })?.role !== "ADMIN") redirect("/")
+  const isAdmin = true
 
   const objectType = searchParams.object ?? "REFERRAL"
   const customObjects = await (prisma as any).customObjectDef.findMany({ orderBy: { order: "asc" }, select: { key: true, singular: true, plural: true } }).catch(() => [])
@@ -16,21 +18,21 @@ export default async function PipelinesPage({ searchParams }: { searchParams: { 
   const rawPipelines = await (prisma as any).pipeline.findMany({
     where: { objectType },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    include: { stages: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] } },
+    include: { _count: { select: { stages: true } } },
   })
-  // Record counts per pipeline (referrals or custom-object records).
+  const colorStyle = await getPipelineColorStyle(objectType)
   const pipelines = await Promise.all(rawPipelines.map(async (p: any) => {
     const recordCount = objectType === "REFERRAL"
       ? await prisma.referral.count({ where: { pipelineId: p.id } })
       : await (prisma as any).customObjectRecord.count({ where: { pipelineId: p.id } })
-    return { ...p, recordCount }
+    return { id: p.id, name: p.name, color: p.color, order: p.order, stageCount: p._count.stages, recordCount }
   }))
 
   return (
-    <div className="p-6 max-w-2xl space-y-6">
+    <div className="max-w-5xl space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Pipelines & Stages</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <h1 className="text-2xl font-bold text-slate-900">Pipelines &amp; Stages</h1>
+        <p className="mt-1 text-sm text-slate-500">
           Create pipelines and their stages for an object. Records move through stages and the time spent
           in each stage is tracked automatically.
         </p>
@@ -47,7 +49,7 @@ export default async function PipelinesPage({ searchParams }: { searchParams: { 
         ))}
       </div>
 
-      <PipelineManager pipelines={pipelines} objectType={current.key} recordNoun={current.noun} />
+      <PipelineOverview pipelines={pipelines} objectType={current.key} colorStyle={colorStyle} recordNoun={current.noun} isAdmin={isAdmin} />
     </div>
   )
 }

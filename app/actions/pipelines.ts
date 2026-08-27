@@ -11,6 +11,23 @@ async function requireAdmin() {
   if ((session.user as { role?: string }).role !== "ADMIN") throw new Error("Admin access required")
 }
 
+// Per-object pipeline display style ("text" | "dot" | "badge").
+export async function getPipelineColorStyle(objectType: string): Promise<string> {
+  const row = await (prisma as any).pipelineSettings.findUnique({ where: { objectType } }).catch(() => null)
+  return row?.colorStyle ?? "dot"
+}
+
+export async function setPipelineColorStyle(objectType: string, colorStyle: string) {
+  await requireAccess("PIPELINES", "EDIT")
+  await requireAdmin()
+  const style = ["text", "dot", "badge"].includes(colorStyle) ? colorStyle : "dot"
+  await (prisma as any).pipelineSettings.upsert({
+    where: { objectType }, create: { objectType, colorStyle: style }, update: { colorStyle: style },
+  })
+  revalidatePath("/settings/pipelines")
+  return { success: true }
+}
+
 export async function getPipelines(objectType = "REFERRAL") {
   return (prisma as any).pipeline.findMany({
     where: { isActive: true, objectType },
