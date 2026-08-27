@@ -20,7 +20,7 @@ export default async function NewReferralServerPage({ searchParams }: { searchPa
       },
     }),
     prisma.pipeline.findMany({
-      where: { isActive: true },
+      where: { isActive: true, objectType: "REFERRAL" },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
     prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { createdAt: "asc" } }),

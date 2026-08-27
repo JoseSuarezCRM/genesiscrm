@@ -73,7 +73,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
       },
     }),
     prisma.pipeline.findMany({
-      where: { isActive: true },
+      where: { isActive: true, objectType: "REFERRAL" },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
     loadCustomPropertiesForDetail("REFERRAL", params.id),

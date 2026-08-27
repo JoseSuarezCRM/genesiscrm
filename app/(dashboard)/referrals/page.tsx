@@ -121,7 +121,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       select: { id: true, name: true, title: true },
     }),
     (prisma as any).pipeline.findMany({
-      where: { isActive: true },
+      where: { isActive: true, objectType: "REFERRAL" },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       include: { _count: { select: { referrals: true } } },
     }),

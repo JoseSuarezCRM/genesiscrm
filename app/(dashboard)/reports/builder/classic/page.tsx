@@ -158,7 +158,7 @@ export default async function ReportBuilderPage({
   const [filterPractices, filterPipelines, filterDoctors, savedReports, dashboards] = await Promise.all([
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     (prisma as any).pipeline.findMany({
-      where: { isActive: true },
+      where: { isActive: true, objectType: "REFERRAL" },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true, color: true },
     }),

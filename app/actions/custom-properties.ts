@@ -50,7 +50,7 @@ export async function getNativeVisibilityControllers(
   const out: { key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[] = []
 
   if (entity === "REFERRAL") {
-    const pipelines = await (prisma as any).pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
+    const pipelines = await (prisma as any).pipeline.findMany({ where: { isActive: true, objectType: "REFERRAL" }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
     out.push({ key: "pipelineId", name: "Pipeline", options: pipelines.map((p: any) => p.id), optionLabels: Object.fromEntries(pipelines.map((p: any) => [p.id, p.name])) })
     out.push({ key: "status", name: "Status", options: ["NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "NO_SHOW"] })
   }

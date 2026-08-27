@@ -110,7 +110,7 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
   // Resolve their options so dimensions/breakdowns/legends show names, not ids.
   const dynamicOptions: Record<string, { value: string; label: string }[]> = {}
   if (objectKey === "REFERRAL") {
-    const pipelines = await prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } }).catch(() => [])
+    const pipelines = await prisma.pipeline.findMany({ where: { isActive: true, objectType: "REFERRAL" }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } }).catch(() => [])
     dynamicOptions.pipelineId = pipelines.map((p) => ({ value: p.id, label: p.name }))
     dynamicOptions.status = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label: String(label) }))
   }

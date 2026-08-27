@@ -112,7 +112,7 @@ export default async function ReferralAnalyticsPage({ searchParams }: PageProps)
       select: { id: true, name: true, title: true, practiceId: true },
     }),
     (prisma as any).pipeline.findMany({
-      where: { isActive: true },
+      where: { isActive: true, objectType: "REFERRAL" },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true, color: true },
     }),
