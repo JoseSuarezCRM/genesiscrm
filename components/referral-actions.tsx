@@ -12,6 +12,7 @@ import type { RecordFieldDef } from "@/lib/record-field-catalog"
 // header has a single Actions button like every other object.
 export default function ReferralActions({
   referral, practices, pipelines, catalog, values, userMap, canEdit, canDelete, canOutreach,
+  customProps = [], createFormConfig = null, isAdmin = false, users = [],
 }: {
   referral: any
   practices: any[]
@@ -22,6 +23,10 @@ export default function ReferralActions({
   canEdit: boolean
   canDelete: boolean
   canOutreach: boolean
+  customProps?: any[]
+  createFormConfig?: { key: string; required?: boolean }[] | null
+  isAdmin?: boolean
+  users?: { id: string; label: string }[]
 }) {
   const [editing, setEditing] = useState(false)
   const [messaging, setMessaging] = useState(false)
@@ -54,7 +59,7 @@ export default function ReferralActions({
         )}
       />
 
-      <EditReferralDialog referral={referral} practices={practices} pipelines={pipelines} open={editing} onOpenChange={setEditing} hideTrigger />
+      <EditReferralDialog referral={referral} practices={practices} pipelines={pipelines} open={editing} onOpenChange={setEditing} hideTrigger customProps={customProps} createFormConfig={createFormConfig} isAdmin={isAdmin} users={users} />
       {canOutreach && <OutreachDialog referral={referral} open={messaging} onOpenChange={setMessaging} hideTrigger />}
     </>
   )

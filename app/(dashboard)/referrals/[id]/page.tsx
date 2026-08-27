@@ -23,6 +23,7 @@ import RecordPropertyCards from "@/components/record-property-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { loadPropertyCards } from "@/lib/record-cards"
 import { listRecordActivities } from "@/app/actions/record-activity"
+import { getCreateForm } from "@/app/actions/create-form"
 
 interface Props {
   params: { id: string }
@@ -58,7 +59,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
 
   if (!referral) notFound()
 
-  const [allTags, users, practices, pipelines, customProperties, leftCards] = await Promise.all([
+  const [allTags, users, practices, pipelines, customProperties, leftCards, referralCustomProps, referralFormConfig] = await Promise.all([
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.referringPractice.findMany({
@@ -77,7 +78,10 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
     }),
     loadCustomPropertiesForDetail("REFERRAL", params.id),
     getCardLayouts("REFERRAL", "LEFT"),
+    prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { createdAt: "asc" } }),
+    getCreateForm("REFERRAL"),
   ])
+  const isAdminRole = (session?.user as any)?.role === "ADMIN"
 
   const referralActivity = await listRecordActivities("REFERRAL", referral.id)
   const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
@@ -105,6 +109,10 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           canEdit={isAdmin}
           canDelete={canDelete}
           canOutreach={!!(referral.patientPhone || referral.patientEmail)}
+          customProps={referralCustomProps}
+          createFormConfig={referralFormConfig}
+          isAdmin={isAdminRole}
+          users={userOptions}
         />
       }
       engagementBar={

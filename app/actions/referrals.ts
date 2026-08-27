@@ -47,6 +47,7 @@ const ReferralSchema = z.object({
   notes: z.string().optional(),
   pipelineId: z.string().optional(),
   imagingType: z.string().optional(),
+  customProperties: z.record(z.any()).optional(),
 })
 
 function parseDate(val: string | undefined): Date | null {
@@ -129,6 +130,7 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
       notes: d.notes || null,
       pipelineId: d.pipelineId || null,
       imagingType: d.imagingType || null,
+      customProperties: d.customProperties ?? {},
       createdById: session.user.id,
     },
   })
@@ -181,7 +183,7 @@ export async function updateReferral(id: string, data: unknown) {
 
   const d = parsed.data
 
-  const prev = await prisma.referral.findUnique({ where: { id }, select: { authStatus: true } })
+  const prev = await prisma.referral.findUnique({ where: { id }, select: { authStatus: true, customProperties: true } })
 
   await prisma.referral.update({
     where: { id },
@@ -210,6 +212,8 @@ export async function updateReferral(id: string, data: unknown) {
       notes: d.notes || null,
       pipelineId: d.pipelineId || null,
       imagingType: d.imagingType || null,
+      // Merge so properties not currently on the form keep their stored value.
+      customProperties: { ...(prev?.customProperties as any ?? {}), ...(d.customProperties ?? {}) },
     },
   })
 

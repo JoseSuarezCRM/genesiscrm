@@ -12,7 +12,6 @@ import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -27,9 +26,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { STATUS_LABELS } from "@/lib/utils"
-import { CheckCircle2, FileText, Info, Loader2, Paperclip, X } from "lucide-react"
+import { CheckCircle2, FileText, Info, Loader2, Paperclip, Settings2, X } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import type { ExtractedReferralData, PendingFile } from "@/app/api/fax/extract/route"
+import { PropertyInput } from "@/components/ui/property-input"
+import { builtinCreateCatalog } from "@/lib/create-catalog"
+import { isPropertyVisible, type RecordFieldDef } from "@/lib/record-field-catalog"
+import { type CreateFormField } from "@/app/actions/create-form"
+import CreateFormEditor from "@/components/create-form-editor"
 
 // ─── Types passed from server ─────────────────────────────────────────────────
 
@@ -95,13 +99,22 @@ type FormValues = z.infer<typeof schema>
 interface ReferralFormProps {
   practices: Practice[]
   pipelines?: Pipeline[]
-  defaultValues?: Partial<FormValues>
+  defaultValues?: Partial<FormValues> & { customProperties?: Record<string, any> }
   referralId?: string
   prefillData?: ExtractedReferralData
   pendingFile?: PendingFile | null
   onSuccess?: () => void
   onCancel?: () => void
+  // Configurable "Referral details" region: insurance/notes native fields + custom properties.
+  customProps?: any[]
+  createFormConfig?: CreateFormField[] | null
+  isAdmin?: boolean
+  users?: { id: string; label: string }[]
 }
+
+// Native fields that live in the configurable region (moved out of fixed sections).
+// Everything else on the referral stays in its bespoke, structural section.
+const REGION_NATIVE_KEYS = ["insuranceProvider", "insuranceMemberId", "insuranceGroup", "authStatus", "notes"]
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -162,7 +175,7 @@ function parseDoctorTitle(fullName: string): { name: string; title?: string } {
   return { name, title }
 }
 
-export default function ReferralForm({ practices, pipelines = [], defaultValues, referralId, prefillData, pendingFile, onSuccess, onCancel }: ReferralFormProps) {
+export default function ReferralForm({ practices, pipelines = [], defaultValues, referralId, prefillData, pendingFile, onSuccess, onCancel, customProps = [], createFormConfig = null, isAdmin = false, users = [] }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
@@ -217,6 +230,25 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
     resolver: zodResolver(schema),
     defaultValues: { status: ReferralStatus.NEW, referralDate: today, ...defaultValues },
   })
+
+  // ── Configurable "Referral details" region: insurance/notes natives + custom
+  // properties. Field set + order come from the saved create-form config; unset
+  // reproduces today's fields. Custom properties honor their visibility rule, so a
+  // property scoped to a pipeline shows only for it (generalizes Imaging-for-MRI).
+  const [editorOpen, setEditorOpen] = useState(false)
+  const regionCatalog: RecordFieldDef[] = builtinCreateCatalog({ entityType: "REFERRAL", customProps })
+    .filter((f) => REGION_NATIVE_KEYS.includes(f.key) || f.key.startsWith("cp_"))
+  const regionByKey = Object.fromEntries(regionCatalog.map((c) => [c.key, c]))
+  const defaultRegion: CreateFormField[] = regionCatalog.map((c) => ({ key: c.key }))
+  const effectiveRegion = (createFormConfig && createFormConfig.length > 0 ? createFormConfig : defaultRegion)
+    .filter((f) => regionByKey[f.key])
+  const [regionValues, setRegionValues] = useState<Record<string, any>>(() => {
+    const seed: Record<string, any> = {}
+    for (const k of REGION_NATIVE_KEYS) seed[k] = (defaultValues as any)?.[k] ?? ""
+    for (const p of customProps) seed[`cp_${p.id}`] = defaultValues?.customProperties?.[p.id]
+    return seed
+  })
+  const setRegionVal = (k: string, v: any) => setRegionValues((prev) => ({ ...prev, [k]: v }))
 
   // When fax extraction data arrives, atomically pre-fill all extracted fields
   useEffect(() => {
@@ -373,9 +405,9 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
       if (prefillData.referringNpi) setValue("referringNpi", prefillData.referringNpi)
       if (prefillData.referringPhone) setValue("referringPhone", prefillData.referringPhone)
       if (!matchedLocationId && prefillData.referringAddress) setValue("referringAddress", prefillData.referringAddress)
-      if (prefillData.insuranceProvider) setValue("insuranceProvider", prefillData.insuranceProvider)
-      if (prefillData.insuranceMemberId) setValue("insuranceMemberId", prefillData.insuranceMemberId)
-      if (prefillData.notes) setValue("notes", prefillData.notes)
+      if (prefillData.insuranceProvider) setRegionVal("insuranceProvider", prefillData.insuranceProvider)
+      if (prefillData.insuranceMemberId) setRegionVal("insuranceMemberId", prefillData.insuranceMemberId)
+      if (prefillData.notes) setRegionVal("notes", prefillData.notes)
       if (prefillData.referringDoctorName && !matchedDoctorId) setValue("referringDoctorName", prefillData.referringDoctorName)
 
       // Store location/doctor IDs in refs; they are applied by the useEffect below
@@ -396,6 +428,12 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
   const locationId = watch("referringLocationId")
   const doctorId = watch("referringDoctorId")
   const statusValue = watch("status")
+  const pipelineIdValue = watch("pipelineId")
+
+  // Region visibility is driven by the pipeline/status controllers + the region's
+  // own values (so a property conditional on the pipeline appears/hides live).
+  const controllingValues: Record<string, any> = { pipelineId: pipelineIdValue, status: statusValue, ...regionValues }
+  const visibleRegion = effectiveRegion.filter((f) => isPropertyVisible(regionByKey[f.key]?.visibilityRule, controllingValues))
 
   // After practiceId commits to React state, availableLocations is populated.
   // Apply any pending location/doctor IDs from fax prefill at that point.
@@ -503,6 +541,19 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
   // ─── Submit ────────────────────────────────────────────────────────────────
 
   function onSubmit(data: FormValues) {
+    // Required check for visible region fields (config can mark a field required).
+    const isEmpty = (v: any) => v == null || v === "" || (Array.isArray(v) && v.length === 0)
+    const missing = visibleRegion.find((f) => f.required && isEmpty(regionValues[f.key]))
+    if (missing) { setSaveError(`${regionByKey[missing.key]?.label ?? "A field"} is required`); return }
+
+    // Split the region bag into native columns + the custom-property bag.
+    const regionNative: Record<string, any> = {}
+    const cpValues: Record<string, any> = {}
+    for (const [k, v] of Object.entries(regionValues)) {
+      if (k.startsWith("cp_")) cpValues[k.slice(3)] = v
+      else regionNative[k] = v
+    }
+
     startTransition(async () => {
       // Resolve any pending (fax-extracted) records before saving
       let resolvedPracticeId = data.referringPracticeId === NONE ? "" : (data.referringPracticeId ?? "")
@@ -534,6 +585,8 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
 
       const clean = {
         ...data,
+        ...regionNative,
+        customProperties: cpValues,
         referringPracticeId: resolvedPracticeId,
         referringLocationId: resolvedLocationId,
         referringDoctorId: resolvedDoctorId,
@@ -824,29 +877,36 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
           </div>
         </section>
 
-        {/* Insurance */}
+        {/* Referral details — admin-configurable fields (insurance, notes, …) +
+            custom properties. Custom properties honor visibility rules, so one
+            scoped to a pipeline appears only for it (like Imaging under MRI). */}
         <section>
-          <SectionTitle>Insurance</SectionTitle>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Insurance Provider" error={errors.insuranceProvider?.message}>
-              <Input {...register("insuranceProvider")} placeholder="Blue Cross Blue Shield" />
-            </Field>
-            <Field label="Member ID" error={errors.insuranceMemberId?.message}>
-              <Input {...register("insuranceMemberId")} placeholder="XYZ123456" />
-            </Field>
-            <Field label="Group Number" error={errors.insuranceGroup?.message}>
-              <Input {...register("insuranceGroup")} placeholder="GRP001" />
-            </Field>
-            <Field label="Auth Status" error={errors.authStatus?.message}>
-              <Input {...register("authStatus")} placeholder="Approved / Pending / Not Required" />
-            </Field>
+          <div className="flex items-center justify-between border-b pb-2 mb-4">
+            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Referral Details</h3>
+            {isAdmin && (
+              <button type="button" onClick={() => setEditorOpen(true)} title="Customize form"
+                className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                <Settings2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        </section>
-
-        {/* Notes */}
-        <section>
-          <SectionTitle>Notes</SectionTitle>
-          <Textarea {...register("notes")} placeholder="Additional notes about this referral..." rows={4} />
+          {visibleRegion.length === 0 ? (
+            <p className="text-sm text-slate-400">No fields configured.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {visibleRegion.map((f) => {
+                const def = regionByKey[f.key]
+                if (!def) return null
+                const full = def.type === "long_text" || def.multi
+                return (
+                  <div key={f.key} className={full ? "md:col-span-2 space-y-1.5" : "space-y-1.5"}>
+                    <Label>{def.label}{f.required ? " *" : ""}</Label>
+                    <PropertyInput def={def} value={regionValues[f.key]} onChange={(v) => setRegionVal(f.key, v)} users={users} values={controllingValues} />
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         {/* Documents (new referral only) */}
@@ -1045,6 +1105,17 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Admin: customize which fields + properties appear in the Referral Details region */}
+      {editorOpen && (
+        <CreateFormEditor
+          objectType="REFERRAL"
+          catalog={regionCatalog}
+          initial={effectiveRegion}
+          onClose={() => setEditorOpen(false)}
+          onSaved={() => { setEditorOpen(false); router.refresh() }}
+        />
+      )}
     </>
   )
 }
