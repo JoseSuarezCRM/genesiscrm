@@ -43,7 +43,7 @@ export default async function ReferralBoardPage({ searchParams }: { searchParams
               This pipeline has no stages yet. <Link href={`/settings/pipelines/${board.pipeline.id}`} className="text-blue-600 hover:underline">Add stages</Link>.
             </div>
           ) : board.pipeline ? (
-            <KanbanBoard recordType="REFERRAL" hrefBase="/referrals" pipelineId={board.pipeline.id} stages={board.stages} cards={board.cards} />
+            <KanbanBoard recordType="REFERRAL" hrefBase="/referrals" pipelineId={board.pipeline.id} stages={board.stages} cards={board.cards} colorStyle={colorStyle} />
           ) : null}
         </>
       )}
