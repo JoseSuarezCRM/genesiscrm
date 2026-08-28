@@ -251,9 +251,15 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
             })}
           </div>
         </div>
+      ) : tab === "Automate" ? (
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          <p>Moving a {recordNoun} into a stage fires automation triggers automatically. Build a workflow that watches the <strong>Stage</strong> property to send emails, create tasks, or update fields when a record enters a stage.</p>
+          <Link href="/automations" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 font-medium text-white hover:bg-blue-700">Open Automations</Link>
+        </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-12 text-center text-sm text-slate-400">
-          {tab} — coming soon.
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          <p>Tags let you label and filter {recordNoun}s on the board and in lists. Time-in-stage and date-entered-stage are tracked automatically for every stage and are available as fields in the Report Builder (stage calculated properties).</p>
+          <Link href={pipeline.objectType === "REFERRAL" ? "/referrals" : `/objects/${pipeline.objectType.slice(3)}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 font-medium text-slate-700 hover:border-slate-400">Go to {objectLabel}</Link>
         </div>
       )}
 
