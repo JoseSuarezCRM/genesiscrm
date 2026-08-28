@@ -29,6 +29,17 @@ export default async function ManagePipelinePage({ params }: { params: { id: str
 
   const colorStyle = await getPipelineColorStyle(objectType)
 
+  // Conditional logic per stage (REFERRAL / built-in objects use the CustomProperty table).
+  let objectProperties: { id: string; name: string }[] = []
+  const stageRules: Record<string, string[]> = {}
+  if (!objectType.startsWith("CO:")) {
+    const props = await prisma.customProperty.findMany({ where: { entityType: objectType as any }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, visibilityRule: true } })
+    objectProperties = props.map((p) => ({ id: p.id, name: p.name }))
+    for (const s of pipeline.stages as any[]) {
+      stageRules[s.id] = props.filter((p) => { const r = p.visibilityRule as any; return r?.controllingKey === "stageId" && Array.isArray(r.equals) && r.equals.includes(s.id) }).map((p) => p.id)
+    }
+  }
+
   // Friendly object label + record noun.
   let objectLabel = "Referrals", recordNoun = "referral"
   if (objectType.startsWith("CO:")) {
@@ -46,6 +57,8 @@ export default async function ManagePipelinePage({ params }: { params: { id: str
         colorStyle={colorStyle}
         objectLabel={objectLabel}
         recordNoun={recordNoun}
+        objectProperties={objectProperties}
+        stageRules={stageRules}
       />
     </div>
   )

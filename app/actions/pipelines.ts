@@ -57,6 +57,33 @@ export async function createPipeline(data: { name: string; color: string; object
   return { pipeline }
 }
 
+// Conditional logic per stage: set which of the object's properties are shown when
+// a record is in `stageId`. Reuses CustomProperty.visibilityRule (controllingKey
+// "stageId"); only touches unruled or already-stage-ruled properties so pipeline/
+// status rules are never clobbered. (REFERRAL / built-in objects using CustomProperty.)
+export async function setStageConditionalFields(objectType: string, stageId: string, propertyIds: string[]) {
+  await requireAccess("PIPELINES", "EDIT")
+  await requireAdmin()
+  if (objectType.startsWith("CO:")) return { error: "Custom-object conditional logic is not supported yet." }
+  const entityType = objectType // "REFERRAL", etc.
+  const props = await prisma.customProperty.findMany({ where: { entityType: entityType as any }, select: { id: true, visibilityRule: true } })
+  for (const p of props) {
+    const rule = (p.visibilityRule as any) || null
+    const isStageRule = !!rule && rule.controllingKey === "stageId"
+    if (rule && !isStageRule) continue // don't clobber a pipeline/status rule
+    const cur: string[] = isStageRule && Array.isArray(rule.equals) ? rule.equals : []
+    const has = cur.includes(stageId)
+    const want = propertyIds.includes(p.id)
+    if (has === want) continue
+    const equals = want ? Array.from(new Set([...cur, stageId])) : cur.filter((x) => x !== stageId)
+    const newRule = equals.length ? { controllingKey: "stageId", equals } : null
+    await prisma.customProperty.update({ where: { id: p.id }, data: { visibilityRule: newRule as any } })
+  }
+  revalidatePath("/settings/pipelines")
+  revalidatePath("/referrals")
+  return { success: true }
+}
+
 export async function reorderPipelines(objectType: string, ids: string[]) {
   await requireAccess("PIPELINES", "EDIT")
   await requireAdmin()

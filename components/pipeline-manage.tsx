@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { upsertStage, deleteStage, reorderStages, updatePipeline, deletePipeline } from "@/app/actions/pipelines"
+import { upsertStage, deleteStage, reorderStages, updatePipeline, deletePipeline, setStageConditionalFields } from "@/app/actions/pipelines"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { ChevronLeft, ChevronDown, Plus, Check, X, Copy, GripVertical, Trash2 } from "lucide-react"
@@ -26,13 +26,31 @@ function probPatch(v: string): Partial<Stage> {
   return { probability: v === "" ? null : Number(v), isClosed: false, isWon: false }
 }
 
-export default function PipelineManage({ pipeline, stages: initial, siblings, colorStyle, objectLabel, recordNoun }: {
+export default function PipelineManage({ pipeline, stages: initial, siblings, colorStyle, objectLabel, recordNoun, objectProperties = [], stageRules: initialRules = {} }: {
   pipeline: { id: string; name: string; color: string; objectType: string }
   stages: Stage[]; siblings: Sibling[]; colorStyle: string; objectLabel: string; recordNoun: string
+  objectProperties?: { id: string; name: string }[]; stageRules?: Record<string, string[]>
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<(typeof TABS)[number]>("Configure")
   const [stages, setStages] = useState(initial)
+  const [rules, setRules] = useState<Record<string, string[]>>(initialRules)
+  const [ruleStage, setRuleStage] = useState<Stage | null>(null) // stage whose rule modal is open
+  const [ruleDraft, setRuleDraft] = useState<Set<string>>(new Set())
+  const [savingRule, setSavingRule] = useState(false)
+  const conditionalSupported = !pipeline.objectType.startsWith("CO:") && objectProperties.length > 0
+  const propName = (id: string) => objectProperties.find((p) => p.id === id)?.name ?? id
+  function openRules(s: Stage) { setRuleStage(s); setRuleDraft(new Set(rules[s.id] ?? [])) }
+  function saveRules() {
+    if (!ruleStage) return
+    const stageId = ruleStage.id, ids = Array.from(ruleDraft)
+    setSavingRule(true)
+    startTransition(async () => {
+      await setStageConditionalFields(pipeline.objectType, stageId, ids).catch(() => {})
+      setRules((prev) => ({ ...prev, [stageId]: ids }))
+      setSavingRule(false); setRuleStage(null)
+    })
+  }
   const [editId, setEditId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState("")
   const [adding, setAdding] = useState(false)
@@ -129,6 +147,7 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
                 <th className="px-3 py-2.5 font-semibold">Stage name</th>
                 <th className="px-3 py-2.5 font-semibold">Probability</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Used in</th>
+                <th className="px-3 py-2.5 font-semibold">Conditional logic rules</th>
                 <th className="px-3 py-2.5 font-semibold">Stage ID</th>
                 <th className="w-10 px-3 py-2.5" />
               </tr>
@@ -159,6 +178,15 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
                   </td>
                   <td className="px-3 py-2.5 text-right text-slate-600">{s.recordCount} {recordNoun}{s.recordCount !== 1 ? "s" : ""}</td>
                   <td className="px-3 py-2.5">
+                    {conditionalSupported ? (
+                      (rules[s.id]?.length ?? 0) > 0 ? (
+                        <button onClick={() => openRules(s)} title={rules[s.id].map(propName).join(", ")} className="text-sm text-blue-600 hover:underline">{rules[s.id].length} field rule{rules[s.id].length !== 1 ? "s" : ""}</button>
+                      ) : (
+                        <button onClick={() => openRules(s)} className="text-sm text-slate-400 hover:text-blue-600">Add rule</button>
+                      )
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5">
                     <button onClick={() => copyId(s.id)} className="inline-flex items-center gap-1.5 font-mono text-xs text-slate-500 hover:text-slate-800">
                       {s.id}{copied === s.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 opacity-60" />}
                     </button>
@@ -169,7 +197,7 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
                 </tr>
               ))}
               <tr className="bg-white">
-                <td className="px-3 py-2.5" colSpan={5}>
+                <td className="px-3 py-2.5" colSpan={6}>
                   {adding ? (
                     <div className="flex items-center gap-2">
                       <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
@@ -189,6 +217,33 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
       ) : (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-12 text-center text-sm text-slate-400">
           {tab} — coming soon.
+        </div>
+      )}
+
+      {ruleStage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setRuleStage(null)}>
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-slate-900">Conditional logic — {ruleStage.name}</h3>
+            <p className="mt-1 text-sm text-slate-500">Choosing this stage will show these fields on the record.</p>
+            <div className="mt-3 max-h-72 space-y-0.5 overflow-y-auto rounded-lg border border-slate-200 p-1">
+              {objectProperties.length === 0 ? (
+                <p className="px-2 py-3 text-sm text-slate-400">This object has no custom properties yet.</p>
+              ) : objectProperties.map((p) => {
+                const on = ruleDraft.has(p.id)
+                return (
+                  <button key={p.id} onClick={() => setRuleDraft((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n })}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-50">
+                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${on ? "border-blue-600 bg-blue-600" : "border-slate-300"}`}>{on && <Check className="h-3 w-3 text-white" />}</span>
+                    <span className="text-slate-700">{p.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setRuleStage(null)} className="h-9 rounded-lg px-3 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
+              <button onClick={saveRules} disabled={savingRule} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">{savingRule ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
