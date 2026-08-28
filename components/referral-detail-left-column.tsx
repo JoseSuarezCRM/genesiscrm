@@ -17,6 +17,7 @@ import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import { useCardReorder } from "@/components/use-card-reorder"
 import CustomPropertyField from "@/components/custom-property-field"
 import { isPropertyVisible } from "@/lib/record-field-catalog"
+import { PipelineChip } from "@/components/pipeline-chip"
 
 interface CardLayout {
   cardName: string
@@ -30,7 +31,8 @@ interface Props {
   allTags: any[]
   leftCards: CardLayout[]
   customProperties: any[]
-  pipelines?: { id: string; name: string }[]
+  pipelines?: { id: string; name: string; color?: string }[]
+  pipelineColorStyle?: string
   isAdmin: boolean
   canEditCards?: boolean
 }
@@ -68,14 +70,19 @@ function PropertyRow({
 }
 
 // Pipeline as an inline editable select (admins); read-only name otherwise.
-function PipelineRow({ referralId, value, name, pipelines, canEdit }: {
+function PipelineRow({ referralId, value, name, pipelines, canEdit, colorStyle = "dot" }: {
   referralId: string; value: string | null; name: string | null | undefined
-  pipelines: { id: string; name: string }[]; canEdit: boolean
+  pipelines: { id: string; name: string; color?: string }[]; canEdit: boolean; colorStyle?: string
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [cur, setCur] = useState(value ?? "")
-  if (!canEdit) return <PropertyRow label="Pipeline" value={name} />
+  if (!canEdit) return (
+    <div className="py-2.5 border-b border-slate-100 last:border-0">
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pipeline</span>
+      {name ? <PipelineChip name={name} color={pipelines.find((p) => p.id === value)?.color} style={colorStyle} /> : <span className="text-sm text-slate-400">—</span>}
+    </div>
+  )
   return (
     <div className="py-2.5 border-b border-slate-100 last:border-0">
       <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pipeline</span>
@@ -238,6 +245,7 @@ export default function ReferralDetailLeftColumn({
   leftCards,
   customProperties,
   pipelines = [],
+  pipelineColorStyle = "dot",
   isAdmin,
   canEditCards = isAdmin,
 }: Props) {
@@ -361,7 +369,7 @@ export default function ReferralDetailLeftColumn({
       case "insurance":
         return <EditableRow key={fieldId} referralId={referral.id} field="insuranceProvider" label="Insurance" value={referral.insuranceProvider} />
       case "pipeline":
-        return <PipelineRow key={fieldId} referralId={referral.id} value={referral.pipelineId ?? null} name={referral.pipeline?.name} pipelines={pipelines} canEdit={isAdmin} />
+        return <PipelineRow key={fieldId} referralId={referral.id} value={referral.pipelineId ?? null} name={referral.pipeline?.name} pipelines={pipelines} canEdit={isAdmin} colorStyle={pipelineColorStyle} />
       case "referralDate":
         return <EditableRow key={fieldId} referralId={referral.id} field="referralDate" label="Referral Date" value={referral.referralDate} type="date" format={formatDate} />
       case "appointmentDate":

@@ -7,6 +7,7 @@ import BulkActionBar, { bulkBtn } from "@/components/ui/bulk-action-bar"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import ColumnChooserModal from "@/components/ui/column-chooser"
 import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
+import { PipelineChip } from "@/components/pipeline-chip"
 import { useColumnPrefs } from "@/components/ui/use-column-prefs"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
@@ -82,6 +83,7 @@ interface Referral {
 interface Props {
   referrals: Referral[]
   pipelines: Pipeline[]
+  pipelineColorStyle?: string
   allTags: Tag[]
   customProps?: CustomPropertyDef[]
   associations?: AssociationGroup[]
@@ -150,13 +152,14 @@ const REFERRAL_COL_W: Record<string, number> = {
   assignedTo: 160, tags: 180, referralDate: 130, apptDate: 130, calls: 90, notes: 240, status: 150,
 }
 
-export default function ReferralTable({ referrals, pipelines, allTags, customProps = [], associations = [], listUrl, total, allMatchingIds, canEdit = false, users = [] }: Props) {
+export default function ReferralTable({ referrals, pipelines, pipelineColorStyle = "dot", allTags, customProps = [], associations = [], listUrl, total, allMatchingIds, canEdit = false, users = [] }: Props) {
   const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Full column catalog = static columns + every referral custom property.
   const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
   const REFERRAL_COLUMNS = [...STATIC_REFERRAL_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns]
   const cpDefById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const pipelineNameById = Object.fromEntries(pipelines.map((p) => [p.id, p.name]))
+  const pipelineById = Object.fromEntries(pipelines.map((p) => [p.id, p]))
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [allPagesSelected, setAllPagesSelected] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -369,7 +372,11 @@ export default function ReferralTable({ referrals, pipelines, allTags, customPro
       case "insuranceGroup": return txt(r.insuranceGroup)
       case "authStatus": return txt(r.authStatus)
       case "imagingType": return txt(r.imagingType)
-      case "pipeline": return txt(r.pipelineId ? pipelineNameById[r.pipelineId] : null)
+      case "pipeline": {
+        if (!r.pipelineId) return <span className="text-slate-300">—</span>
+        const p = pipelineById[r.pipelineId]
+        return p ? <PipelineChip name={p.name} color={p.color} style={pipelineColorStyle} /> : txt(pipelineNameById[r.pipelineId])
+      }
       case "assignedTo": return txt(r.assignedTo?.name ?? r.assignedTo?.email)
       case "notes": return txt(r.notes)
       case "tags":

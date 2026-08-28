@@ -24,6 +24,7 @@ import RecordMiddleTabs from "@/components/record-middle-tabs"
 import { loadPropertyCards } from "@/lib/record-cards"
 import { listRecordActivities } from "@/app/actions/record-activity"
 import { getCreateForm } from "@/app/actions/create-form"
+import { getPipelineColorStyle } from "@/app/actions/pipelines"
 
 interface Props {
   params: { id: string }
@@ -82,6 +83,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
     getCreateForm("REFERRAL"),
   ])
   const isAdminRole = (session?.user as any)?.role === "ADMIN"
+  const pipelineColorStyle = await getPipelineColorStyle("REFERRAL")
 
   const referralActivity = await listRecordActivities("REFERRAL", referral.id)
   const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
@@ -126,6 +128,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           leftCards={leftCards as any}
           customProperties={customProperties}
           pipelines={pipelines as any}
+          pipelineColorStyle={pipelineColorStyle}
           isAdmin={isAdmin}
           canEditCards={canEditCards}
         />

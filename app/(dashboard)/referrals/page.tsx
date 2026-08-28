@@ -13,6 +13,7 @@ import { associationColumnDefs } from "@/lib/association-columns"
 import ReferralsExportButton from "@/components/referrals-export-button"
 import ReferralViewsBar from "@/components/referral-views-bar"
 import PipelineSelector from "@/components/pipeline-selector"
+import { getPipelineColorStyle } from "@/app/actions/pipelines"
 import { getAssignableUsers, getViewShareOptions } from "@/app/actions/view-share-options"
 import { getReferralViews } from "@/app/actions/referral-views"
 import { buildReferralWhere } from "@/lib/referral-query"
@@ -184,6 +185,8 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     pipelineId,
   } = await getReferrals(searchParams)
 
+  const pipelineColorStyle = await getPipelineColorStyle("REFERRAL")
+
   const listUrl = `/referrals?${new URLSearchParams(
     Object.fromEntries(
       Object.entries(searchParams).flatMap(([k, v]) =>
@@ -247,6 +250,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         <PipelineSelector
           pipelines={(pipelines as any[]).map((p) => ({ id: p.id, name: p.name, color: p.color }))}
           activePipelineId={pipelineId}
+          colorStyle={pipelineColorStyle}
         />
       )}
 
@@ -287,7 +291,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table (renders its own card + column chooser) */}
-      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} associations={await associationColumnDefs("REFERRAL")} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
+      <ReferralTable referrals={referrals as any} pipelines={pipelines} pipelineColorStyle={pipelineColorStyle} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} associations={await associationColumnDefs("REFERRAL")} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
 
       {/* Pagination */}
       {totalPages > 1 && (
