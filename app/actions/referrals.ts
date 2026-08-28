@@ -21,6 +21,7 @@ import {
 } from "@/lib/automation-engine"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
+import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
@@ -47,6 +48,7 @@ const ReferralSchema = z.object({
   notes: z.string().optional(),
   pipelineId: z.string().optional(),
   imagingType: z.string().optional(),
+  customProperties: z.record(z.any()).optional(),
 })
 
 function parseDate(val: string | undefined): Date | null {
@@ -129,6 +131,7 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
       notes: d.notes || null,
       pipelineId: d.pipelineId || null,
       imagingType: d.imagingType || null,
+      customProperties: d.customProperties ?? {},
       createdById: session.user.id,
     },
   })
@@ -181,7 +184,7 @@ export async function updateReferral(id: string, data: unknown) {
 
   const d = parsed.data
 
-  const prev = await prisma.referral.findUnique({ where: { id }, select: { authStatus: true } })
+  const prev = await prisma.referral.findUnique({ where: { id }, select: { authStatus: true, customProperties: true } })
 
   await prisma.referral.update({
     where: { id },
@@ -210,6 +213,8 @@ export async function updateReferral(id: string, data: unknown) {
       notes: d.notes || null,
       pipelineId: d.pipelineId || null,
       imagingType: d.imagingType || null,
+      // Merge so properties not currently on the form keep their stored value.
+      customProperties: { ...(prev?.customProperties as any ?? {}), ...(d.customProperties ?? {}) },
     },
   })
 
@@ -230,14 +235,12 @@ export async function updateReferral(id: string, data: unknown) {
   redirect(`/referrals/${id}`)
 }
 
-const EDITABLE_REFERRAL_TEXT_FIELDS = [
-  "genesisMrn",
-  "patientMrn",
-  "patientPhone",
-  "patientEmail",
-  "referringNpi",
-  "insuranceProvider",
-] as const
+// Inline-editable text fields = every non-readonly text-ish native referral field
+// (from the shared catalog), minus the record-title names. Derived so new fields
+// added to RECORD_FIELDS are inline-editable automatically (no drift).
+const EDITABLE_REFERRAL_TEXT_FIELDS: readonly string[] = (RECORD_FIELDS["REFERRAL"] ?? [])
+  .filter((f) => ["text", "email", "phone", "long_text"].includes(f.type) && !f.readOnly && f.key !== "patientFirstName" && f.key !== "patientLastName")
+  .map((f) => f.key)
 const EDITABLE_REFERRAL_DATE_FIELDS = ["patientDob", "referralDate", "appointmentDate"] as const
 
 // Updates a single referral field (inline editing on the detail page)

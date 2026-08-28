@@ -35,9 +35,13 @@ interface NewReferralPageProps {
   practices: Practice[]
   pipelines?: Pipeline[]
   defaultPipelineId?: string
+  customProps?: any[]
+  createFormConfig?: { key: string; required?: boolean }[] | null
+  isAdmin?: boolean
+  users?: { id: string; label: string }[]
 }
 
-export default function NewReferralPage({ practices, pipelines = [], defaultPipelineId }: NewReferralPageProps) {
+export default function NewReferralPage({ practices, pipelines = [], defaultPipelineId, customProps = [], createFormConfig = null, isAdmin = false, users = [] }: NewReferralPageProps) {
   const [mode, setMode] = useState<"single" | "batch">("single")
   const [extractedData, setExtractedData] = useState<ExtractedReferralData | null>(null)
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null)
@@ -83,6 +87,10 @@ export default function NewReferralPage({ practices, pipelines = [], defaultPipe
               defaultValues={defaultPipelineId ? { pipelineId: defaultPipelineId } : undefined}
               prefillData={extractedData ?? undefined}
               pendingFile={pendingFile}
+              customProps={customProps}
+              createFormConfig={createFormConfig}
+              isAdmin={isAdmin}
+              users={users}
             />
           </div>
         </>

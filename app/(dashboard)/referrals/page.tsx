@@ -6,13 +6,14 @@ import { userCan, userCanLevel } from "@/lib/permissions"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus, LayoutGrid } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
 import ReferralTable from "@/components/referral-table"
 import { associationColumnDefs } from "@/lib/association-columns"
 import ReferralsExportButton from "@/components/referrals-export-button"
 import ReferralViewsBar from "@/components/referral-views-bar"
 import PipelineSelector from "@/components/pipeline-selector"
+import { getPipelineColorStyle } from "@/app/actions/pipelines"
 import { getAssignableUsers, getViewShareOptions } from "@/app/actions/view-share-options"
 import { getReferralViews } from "@/app/actions/referral-views"
 import { buildReferralWhere } from "@/lib/referral-query"
@@ -121,7 +122,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
       select: { id: true, name: true, title: true },
     }),
     (prisma as any).pipeline.findMany({
-      where: { isActive: true },
+      where: { isActive: true, objectType: "REFERRAL" },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       include: { _count: { select: { referrals: true } } },
     }),
@@ -184,6 +185,8 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     pipelineId,
   } = await getReferrals(searchParams)
 
+  const pipelineColorStyle = await getPipelineColorStyle("REFERRAL")
+
   const listUrl = `/referrals?${new URLSearchParams(
     Object.fromEntries(
       Object.entries(searchParams).flatMap(([k, v]) =>
@@ -242,12 +245,18 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      {/* Pipeline selector */}
+      {/* Pipeline selector + board */}
       {pipelines.length > 0 && (
-        <PipelineSelector
-          pipelines={(pipelines as any[]).map((p) => ({ id: p.id, name: p.name, color: p.color }))}
-          activePipelineId={pipelineId}
-        />
+        <div className="flex items-center gap-2">
+          <PipelineSelector
+            pipelines={(pipelines as any[]).map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+            activePipelineId={pipelineId}
+            colorStyle={pipelineColorStyle}
+          />
+          <Link href="/referrals/board" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
+            <LayoutGrid className="h-3.5 w-3.5" /> Board
+          </Link>
+        </div>
       )}
 
       {/* Saved views */}
@@ -287,7 +296,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table (renders its own card + column chooser) */}
-      <ReferralTable referrals={referrals as any} pipelines={pipelines} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} associations={await associationColumnDefs("REFERRAL")} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
+      <ReferralTable referrals={referrals as any} pipelines={pipelines} pipelineColorStyle={pipelineColorStyle} allTags={(allTags as any[]).map((t) => ({ id: t.id, name: t.name, color: t.color }))} customProps={referralCustomProps as any} associations={await associationColumnDefs("REFERRAL")} listUrl={listUrl} total={total} allMatchingIds={allMatchingIds} canEdit={canCreate} users={assignableUsers} />
 
       {/* Pagination */}
       {totalPages > 1 && (

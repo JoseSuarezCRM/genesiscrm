@@ -31,8 +31,12 @@ export default function RecordStageControl({ recordType, recordId, pipelines, pi
   const pipeline = pipelines.find((p) => p.id === pipelineId) ?? null
 
   function move(pid: string, sid: string) {
+    const prev = { pipelineId, stageId, enteredAt }
     setPipelineId(pid); setStageId(sid); setEnteredAt(new Date().toISOString())
-    startTransition(() => { moveRecordStage(recordType, recordId, pid, sid).catch(() => {}) })
+    startTransition(async () => {
+      const res = await moveRecordStage(recordType, recordId, pid, sid).catch(() => ({ error: "Could not move stage." }))
+      if ((res as any)?.error) { setPipelineId(prev.pipelineId); setStageId(prev.stageId); setEnteredAt(prev.enteredAt); alert((res as any).error) }
+    })
   }
 
   if (pipelines.length === 0) return null

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { moveRecordStage, type BoardCard } from "@/app/actions/stages"
+import { PipelineChip } from "@/components/pipeline-chip"
 
 interface Stage { id: string; name: string; color: string | null }
 
@@ -20,13 +21,12 @@ const UNASSIGNED = "__unassigned"
 
 // Drag-and-drop stage board for a custom object. Dropping a card into a column
 // logs a stage transition (which the durations engine reads).
-export default function KanbanBoard({ objectKey, pipelineId, stages, cards: initial }: {
-  objectKey: string; pipelineId: string; stages: Stage[]; cards: BoardCard[]
+export default function KanbanBoard({ recordType, hrefBase, pipelineId, stages, cards: initial, colorStyle = "dot" }: {
+  recordType: string; hrefBase: string; pipelineId: string; stages: Stage[]; cards: BoardCard[]; colorStyle?: string
 }) {
   const [cards, setCards] = useState(initial)
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
-  const recordType = `CO:${objectKey}`
 
   function onDrop(stageId: string) {
     setOver(null)
@@ -34,8 +34,11 @@ export default function KanbanBoard({ objectKey, pipelineId, stages, cards: init
     if (!id || stageId === UNASSIGNED) return
     const card = cards.find((c) => c.id === id)
     if (!card || card.stageId === stageId) return
+    const prevStage = card.stageId, prevEntered = card.enteredAt
     setCards((cs) => cs.map((c) => c.id === id ? { ...c, stageId, enteredAt: new Date().toISOString() } : c))
-    moveRecordStage(recordType, id, pipelineId, stageId).catch(() => {})
+    moveRecordStage(recordType, id, pipelineId, stageId)
+      .then((res) => { if ((res as any)?.error) { setCards((cs) => cs.map((c) => c.id === id ? { ...c, stageId: prevStage, enteredAt: prevEntered } : c)); alert((res as any).error) } })
+      .catch(() => {})
   }
 
   const columns: { id: string; name: string; color: string | null }[] = [
@@ -54,14 +57,14 @@ export default function KanbanBoard({ objectKey, pipelineId, stages, cards: init
             onDrop={() => onDrop(col.id)}
             className={`flex w-72 shrink-0 flex-col rounded-xl border bg-zinc-50 ${over === col.id ? "border-blue-400 ring-2 ring-blue-200" : "border-zinc-200"}`}>
             <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2">
-              <span className="flex items-center gap-2 text-sm font-semibold text-zinc-800">
-                <span className="h-2 w-2 rounded-full" style={{ background: col.color ?? "#94a3b8" }} />{col.name}
+              <span className="text-sm font-semibold text-zinc-800">
+                <PipelineChip name={col.name} color={col.color ?? "#94a3b8"} style={col.id === UNASSIGNED ? "dot" : colorStyle} />
               </span>
               <span className="text-xs text-zinc-400">{colCards.length}</span>
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ minHeight: 120 }}>
               {colCards.map((c) => (
-                <Link key={c.id} href={`/objects/${objectKey}/${c.id}`}
+                <Link key={c.id} href={`${hrefBase}/${c.id}`}
                   draggable
                   onDragStart={() => setDragId(c.id)}
                   onDragEnd={() => setDragId(null)}

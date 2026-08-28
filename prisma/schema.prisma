@@ -626,9 +626,24 @@ model Pipeline {
   createdAt  DateTime        @default(now())
   referrals  Referral[]
   stages     PipelineStage[]
+  rules      PipelineRule[]
 
   @@unique([objectType, name])
   @@index([objectType])
+}
+
+// Stage-transition restriction: from `fromStageId`, records may only move to a
+// stage in `toStageIds` (empty = no restriction). One row per (pipeline, fromStage).
+model PipelineRule {
+  id          String   @id @default(cuid())
+  pipelineId  String
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  fromStageId String
+  toStageIds  String[] @default([])
+  createdAt   DateTime @default(now())
+
+  @@unique([pipelineId, fromStageId])
+  @@index([pipelineId])
 }
 
 // An ordered stage within a pipeline. Records move through stages; every move is
@@ -643,6 +658,8 @@ model PipelineStage {
   isClosed    Boolean  @default(false) // a terminal stage (won or lost)
   isWon       Boolean  @default(false) // a closed-won stage
   color       String?
+  // Property ids that must be filled before a record can enter this stage.
+  requiredPropertyIds String[] @default([])
   createdAt   DateTime @default(now())
 
   @@index([pipelineId])
@@ -1074,6 +1091,14 @@ model CreateFormConfig {
   id         String   @id @default(cuid())
   objectType String   @unique
   fields     Json     @default("[]")
+  updatedAt  DateTime @default(now()) @updatedAt
+}
+
+// Per-object pipeline display preferences (HubSpot-style). colorStyle controls
+// how stage/pipeline chips render: "text" | "dot" | "badge".
+model PipelineSettings {
+  objectType String   @id
+  colorStyle String   @default("text")
   updatedAt  DateTime @default(now()) @updatedAt
 }
 

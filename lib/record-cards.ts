@@ -87,7 +87,7 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
   let pipelineField: RecordFieldDef["options"] | null = null
   let pipelineLabels: Record<string, string> = {}
   if (entityType === "REFERRAL") {
-    const pipelines = await prisma.pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
+    const pipelines = await prisma.pipeline.findMany({ where: { isActive: true, objectType: "REFERRAL" }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
     pipelineField = pipelines.map((p) => p.id)
     pipelineLabels = Object.fromEntries(pipelines.map((p) => [p.id, p.name]))
   }

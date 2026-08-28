@@ -4,20 +4,22 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import StyledSelect from "@/components/ui/styled-select"
 import { updateReferralPipeline } from "@/app/actions/referrals"
+import { PipelineChip } from "@/components/pipeline-chip"
 
 // Inline pipeline picker for a referral. Read-only name when the user can't edit.
-export default function ReferralPipelineSelect({ referralId, value, name, pipelines, canEdit }: {
+export default function ReferralPipelineSelect({ referralId, value, name, pipelines, canEdit, colorStyle = "dot" }: {
   referralId: string
   value: string | null
   name: string | null | undefined
-  pipelines: { id: string; name: string }[]
+  pipelines: { id: string; name: string; color?: string }[]
   canEdit: boolean
+  colorStyle?: string
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [cur, setCur] = useState(value ?? "")
 
-  if (!canEdit) return <p className="text-sm font-medium text-slate-900">{name ?? "—"}</p>
+  if (!canEdit) return name ? <PipelineChip name={name} color={pipelines.find((p) => p.id === value)?.color} style={colorStyle} /> : <span className="text-sm text-slate-400">—</span>
 
   return (
     <StyledSelect

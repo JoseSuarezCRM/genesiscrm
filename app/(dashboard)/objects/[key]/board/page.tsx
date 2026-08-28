@@ -4,6 +4,7 @@ import { requireView } from "@/lib/auth-guard"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { pipelinesForObject } from "@/lib/stages/core"
 import { getBoardData } from "@/app/actions/stages"
+import { getPipelineColorStyle } from "@/app/actions/pipelines"
 import PipelineSelector from "@/components/pipeline-selector"
 import KanbanBoard from "@/components/kanban-board"
 import { LayoutList } from "lucide-react"
@@ -15,6 +16,7 @@ export default async function ObjectBoardPage({ params, searchParams }: { params
 
   const pipelines = await pipelinesForObject(`CO:${params.key}`)
   const board = await getBoardData(params.key, searchParams.pipeline ?? pipelines[0]?.id)
+  const colorStyle = await getPipelineColorStyle(`CO:${params.key}`)
 
   return (
     <div className="p-6 space-y-4">
@@ -38,13 +40,14 @@ export default async function ObjectBoardPage({ params, searchParams }: { params
             pipelines={pipelines.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
             activePipelineId={board.pipeline?.id ?? null}
             managePath={`/settings/pipelines?object=CO:${params.key}`}
+            colorStyle={colorStyle}
           />
           {board.pipeline && board.stages.length === 0 ? (
             <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
               This pipeline has no stages yet. <Link href={`/settings/pipelines?object=CO:${params.key}`} className="text-blue-600 hover:underline">Add stages</Link>.
             </div>
           ) : board.pipeline ? (
-            <KanbanBoard objectKey={params.key} pipelineId={board.pipeline.id} stages={board.stages} cards={board.cards} />
+            <KanbanBoard recordType={`CO:${params.key}`} hrefBase={`/objects/${params.key}`} pipelineId={board.pipeline.id} stages={board.stages} cards={board.cards} colorStyle={colorStyle} />
           ) : null}
         </>
       )}

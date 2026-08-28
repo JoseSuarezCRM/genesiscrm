@@ -16,7 +16,8 @@ import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import { useCardReorder } from "@/components/use-card-reorder"
 import CustomPropertyField from "@/components/custom-property-field"
-import { isPropertyVisible } from "@/lib/record-field-catalog"
+import { isPropertyVisible, RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { PipelineChip } from "@/components/pipeline-chip"
 
 interface CardLayout {
   cardName: string
@@ -30,7 +31,8 @@ interface Props {
   allTags: any[]
   leftCards: CardLayout[]
   customProperties: any[]
-  pipelines?: { id: string; name: string }[]
+  pipelines?: { id: string; name: string; color?: string }[]
+  pipelineColorStyle?: string
   isAdmin: boolean
   canEditCards?: boolean
 }
@@ -68,14 +70,19 @@ function PropertyRow({
 }
 
 // Pipeline as an inline editable select (admins); read-only name otherwise.
-function PipelineRow({ referralId, value, name, pipelines, canEdit }: {
+function PipelineRow({ referralId, value, name, pipelines, canEdit, colorStyle = "dot" }: {
   referralId: string; value: string | null; name: string | null | undefined
-  pipelines: { id: string; name: string }[]; canEdit: boolean
+  pipelines: { id: string; name: string; color?: string }[]; canEdit: boolean; colorStyle?: string
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [cur, setCur] = useState(value ?? "")
-  if (!canEdit) return <PropertyRow label="Pipeline" value={name} />
+  if (!canEdit) return (
+    <div className="py-2.5 border-b border-slate-100 last:border-0">
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pipeline</span>
+      {name ? <PipelineChip name={name} color={pipelines.find((p) => p.id === value)?.color} style={colorStyle} /> : <span className="text-sm text-slate-400">—</span>}
+    </div>
+  )
   return (
     <div className="py-2.5 border-b border-slate-100 last:border-0">
       <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pipeline</span>
@@ -238,6 +245,7 @@ export default function ReferralDetailLeftColumn({
   leftCards,
   customProperties,
   pipelines = [],
+  pipelineColorStyle = "dot",
   isAdmin,
   canEditCards = isAdmin,
 }: Props) {
@@ -356,12 +364,26 @@ export default function ReferralDetailLeftColumn({
         )
       case "npi":
         return <EditableRow key={fieldId} referralId={referral.id} field="referringNpi" label="NPI" value={referral.referringNpi ?? referral.referringDoctor?.npi} />
+      case "referringDoctorName":
+        return <EditableRow key={fieldId} referralId={referral.id} field="referringDoctorName" label="Referring Provider Name" value={referral.referringDoctorName} />
+      case "referringPhone":
+        return <EditableRow key={fieldId} referralId={referral.id} field="referringPhone" label="Referring Phone" value={referral.referringPhone} format={formatPhone} />
+      case "referringAddress":
+        return <EditableRow key={fieldId} referralId={referral.id} field="referringAddress" label="Referring Address" value={referral.referringAddress} />
       case "location":
         return <PropertyRow key={fieldId} label="Location" value={referral.referringLocation?.name} />
       case "insurance":
         return <EditableRow key={fieldId} referralId={referral.id} field="insuranceProvider" label="Insurance" value={referral.insuranceProvider} />
+      case "insuranceMemberId":
+        return <EditableRow key={fieldId} referralId={referral.id} field="insuranceMemberId" label="Member ID" value={referral.insuranceMemberId} />
+      case "insuranceGroup":
+        return <EditableRow key={fieldId} referralId={referral.id} field="insuranceGroup" label="Group Number" value={referral.insuranceGroup} />
+      case "authStatus":
+        return <EditableRow key={fieldId} referralId={referral.id} field="authStatus" label="Auth Status" value={referral.authStatus} />
+      case "imagingType":
+        return <EditableRow key={fieldId} referralId={referral.id} field="imagingType" label="Imaging Type" value={referral.imagingType} />
       case "pipeline":
-        return <PipelineRow key={fieldId} referralId={referral.id} value={referral.pipelineId ?? null} name={referral.pipeline?.name} pipelines={pipelines} canEdit={isAdmin} />
+        return <PipelineRow key={fieldId} referralId={referral.id} value={referral.pipelineId ?? null} name={referral.pipeline?.name} pipelines={pipelines} canEdit={isAdmin} colorStyle={pipelineColorStyle} />
       case "referralDate":
         return <EditableRow key={fieldId} referralId={referral.id} field="referralDate" label="Referral Date" value={referral.referralDate} type="date" format={formatDate} />
       case "appointmentDate":
@@ -370,8 +392,21 @@ export default function ReferralDetailLeftColumn({
         return <PropertyRow key={fieldId} label="Created By" value={referral.createdBy?.name || referral.createdBy?.email} />
       case "createdAt":
         return <PropertyRow key={fieldId} label="Created Date" value={formatDate(referral.createdAt)} />
-      default:
+      default: {
+        // Generic native field (e.g. Notes, or any field added to the catalog later):
+        // editable inline when writable, otherwise a read-only value row.
+        const nf = (RECORD_FIELDS["REFERRAL"] ?? []).find((f) => f.key === fieldId)
+        if (nf) {
+          const v = (referral as any)[nf.key]
+          const isDate = nf.type === "date" || nf.type === "datetime"
+          if (!nf.readOnly) {
+            return <EditableRow key={fieldId} referralId={referral.id} field={nf.key} label={nf.label} value={v}
+              type={isDate ? "date" : undefined} format={nf.type === "phone" ? formatPhone : isDate ? formatDate : undefined} />
+          }
+          return <PropertyRow key={fieldId} label={nf.label} value={v == null ? undefined : String(v)} />
+        }
         return null
+      }
     }
   }
 

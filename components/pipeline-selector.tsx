@@ -5,13 +5,14 @@ import Link from "next/link"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { ChevronDown, Search, Settings2, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PipelineChip } from "@/components/pipeline-chip"
 
 interface Pipeline { id: string; name: string; color: string }
 
 // Searchable pipeline dropdown (replaces the horizontal tabs). Preserves the
 // other list filters and just swaps the `pipeline` param.
-export default function PipelineSelector({ pipelines, activePipelineId, managePath = "/settings/pipelines" }: {
-  pipelines: Pipeline[]; activePipelineId: string | null; managePath?: string
+export default function PipelineSelector({ pipelines, activePipelineId, managePath = "/settings/pipelines", colorStyle = "dot" }: {
+  pipelines: Pipeline[]; activePipelineId: string | null; managePath?: string; colorStyle?: string
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -44,8 +45,7 @@ export default function PipelineSelector({ pipelines, activePipelineId, managePa
     <div className="relative inline-block" ref={ref}>
       <button onClick={() => setOpen((o) => !o)}
         className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
-        {active && <span className="h-2 w-2 rounded-full" style={{ background: active.color }} />}
-        {label}
+        {active ? <PipelineChip name={active.name} color={active.color} style={colorStyle} /> : label}
         <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
       </button>
       {open && (
@@ -63,7 +63,7 @@ export default function PipelineSelector({ pipelines, activePipelineId, managePa
             )}
             {filtered.map((p) => (
               <button key={p.id} onClick={() => go(p.id)} className={cn("flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50", activePipelineId === p.id && "bg-zinc-50 font-medium")}>
-                <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: p.color }} />{p.name}</span>
+                <PipelineChip name={p.name} color={p.color} style={colorStyle} />
                 {activePipelineId === p.id && <Check className="h-3.5 w-3.5 text-blue-600" />}
               </button>
             ))}

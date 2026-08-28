@@ -50,8 +50,11 @@ export async function getNativeVisibilityControllers(
   const out: { key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[] = []
 
   if (entity === "REFERRAL") {
-    const pipelines = await (prisma as any).pipeline.findMany({ where: { isActive: true }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } })
+    const pipelines = await (prisma as any).pipeline.findMany({ where: { isActive: true, objectType: "REFERRAL" }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, stages: { orderBy: { order: "asc" }, select: { id: true, name: true } } } })
     out.push({ key: "pipelineId", name: "Pipeline", options: pipelines.map((p: any) => p.id), optionLabels: Object.fromEntries(pipelines.map((p: any) => [p.id, p.name])) })
+    // Stage controller (conditional logic per stage) — options across all referral pipelines.
+    const stages = pipelines.flatMap((p: any) => (p.stages ?? []).map((s: any) => ({ id: s.id, label: `${p.name} — ${s.name}` })))
+    if (stages.length) out.push({ key: "stageId", name: "Stage", options: stages.map((s: any) => s.id), optionLabels: Object.fromEntries(stages.map((s: any) => [s.id, s.label])) })
     out.push({ key: "status", name: "Status", options: ["NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "NO_SHOW"] })
   }
 

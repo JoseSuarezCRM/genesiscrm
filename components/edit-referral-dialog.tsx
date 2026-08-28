@@ -33,9 +33,13 @@ interface Props {
   onOpenChange?: (open: boolean) => void
   /** Hide the built-in Edit trigger button (when opened externally). */
   hideTrigger?: boolean
+  customProps?: any[]
+  createFormConfig?: { key: string; required?: boolean }[] | null
+  isAdmin?: boolean
+  users?: { id: string; label: string }[]
 }
 
-export default function EditReferralDialog({ referral, practices, pipelines = [], open: openProp, onOpenChange, hideTrigger }: Props) {
+export default function EditReferralDialog({ referral, practices, pipelines = [], open: openProp, onOpenChange, hideTrigger, customProps = [], createFormConfig = null, isAdmin = false, users = [] }: Props) {
   const [openState, setOpenState] = useState(false)
   const open = openProp ?? openState
   const setOpen = onOpenChange ?? setOpenState
@@ -66,6 +70,7 @@ export default function EditReferralDialog({ referral, practices, pipelines = []
     notes: referral.notes ?? "",
     pipelineId: (referral as any).pipelineId ?? "",
     imagingType: (referral as any).imagingType ?? "",
+    customProperties: ((referral as any).customProperties as Record<string, any>) ?? {},
   }
 
   return (
@@ -88,6 +93,10 @@ export default function EditReferralDialog({ referral, practices, pipelines = []
           defaultValues={defaultValues}
           referralId={referral.id}
           onSuccess={() => setOpen(false)}
+          customProps={customProps}
+          createFormConfig={createFormConfig}
+          isAdmin={isAdmin}
+          users={users}
         />
       </DialogContent>
     </Dialog>
