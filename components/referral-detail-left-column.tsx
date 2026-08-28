@@ -364,10 +364,24 @@ export default function ReferralDetailLeftColumn({
         )
       case "npi":
         return <EditableRow key={fieldId} referralId={referral.id} field="referringNpi" label="NPI" value={referral.referringNpi ?? referral.referringDoctor?.npi} />
+      case "referringDoctorName":
+        return <EditableRow key={fieldId} referralId={referral.id} field="referringDoctorName" label="Referring Provider Name" value={referral.referringDoctorName} />
+      case "referringPhone":
+        return <EditableRow key={fieldId} referralId={referral.id} field="referringPhone" label="Referring Phone" value={referral.referringPhone} format={formatPhone} />
+      case "referringAddress":
+        return <EditableRow key={fieldId} referralId={referral.id} field="referringAddress" label="Referring Address" value={referral.referringAddress} />
       case "location":
         return <PropertyRow key={fieldId} label="Location" value={referral.referringLocation?.name} />
       case "insurance":
         return <EditableRow key={fieldId} referralId={referral.id} field="insuranceProvider" label="Insurance" value={referral.insuranceProvider} />
+      case "insuranceMemberId":
+        return <EditableRow key={fieldId} referralId={referral.id} field="insuranceMemberId" label="Member ID" value={referral.insuranceMemberId} />
+      case "insuranceGroup":
+        return <EditableRow key={fieldId} referralId={referral.id} field="insuranceGroup" label="Group Number" value={referral.insuranceGroup} />
+      case "authStatus":
+        return <EditableRow key={fieldId} referralId={referral.id} field="authStatus" label="Auth Status" value={referral.authStatus} />
+      case "imagingType":
+        return <EditableRow key={fieldId} referralId={referral.id} field="imagingType" label="Imaging Type" value={referral.imagingType} />
       case "pipeline":
         return <PipelineRow key={fieldId} referralId={referral.id} value={referral.pipelineId ?? null} name={referral.pipeline?.name} pipelines={pipelines} canEdit={isAdmin} colorStyle={pipelineColorStyle} />
       case "referralDate":

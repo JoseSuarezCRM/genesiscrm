@@ -241,6 +241,13 @@ const EDITABLE_REFERRAL_TEXT_FIELDS = [
   "patientEmail",
   "referringNpi",
   "insuranceProvider",
+  "insuranceMemberId",
+  "insuranceGroup",
+  "authStatus",
+  "referringDoctorName",
+  "referringPhone",
+  "referringAddress",
+  "imagingType",
 ] as const
 const EDITABLE_REFERRAL_DATE_FIELDS = ["patientDob", "referralDate", "appointmentDate"] as const
 
