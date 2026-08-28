@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { upsertStage, deleteStage, reorderStages, updatePipeline, deletePipeline, setStageConditionalFields } from "@/app/actions/pipelines"
+import { upsertStage, deleteStage, reorderStages, updatePipeline, deletePipeline, setStageConditionalFields, setPipelineRule } from "@/app/actions/pipelines"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { ChevronLeft, ChevronDown, Plus, Check, X, Copy, GripVertical, Trash2 } from "lucide-react"
@@ -26,10 +26,11 @@ function probPatch(v: string): Partial<Stage> {
   return { probability: v === "" ? null : Number(v), isClosed: false, isWon: false }
 }
 
-export default function PipelineManage({ pipeline, stages: initial, siblings, colorStyle, objectLabel, recordNoun, objectProperties = [], stageRules: initialRules = {} }: {
+export default function PipelineManage({ pipeline, stages: initial, siblings, colorStyle, objectLabel, recordNoun, objectProperties = [], stageRules: initialRules = {}, pipelineRules: initialPipelineRules = {} }: {
   pipeline: { id: string; name: string; color: string; objectType: string }
   stages: Stage[]; siblings: Sibling[]; colorStyle: string; objectLabel: string; recordNoun: string
   objectProperties?: { id: string; name: string }[]; stageRules?: Record<string, string[]>
+  pipelineRules?: Record<string, string[]>
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<(typeof TABS)[number]>("Configure")
@@ -39,6 +40,15 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
   const [ruleDraft, setRuleDraft] = useState<Set<string>>(new Set())
   const [savingRule, setSavingRule] = useState(false)
   const conditionalSupported = !pipeline.objectType.startsWith("CO:") && objectProperties.length > 0
+  const [pRules, setPRules] = useState<Record<string, string[]>>(initialPipelineRules)
+  function toggleAllowed(fromId: string, toId: string) {
+    setPRules((prev) => {
+      const cur = prev[fromId] ?? []
+      const next = cur.includes(toId) ? cur.filter((x) => x !== toId) : [...cur, toId]
+      startTransition(() => { setPipelineRule(pipeline.id, fromId, next).catch(() => {}) })
+      return { ...prev, [fromId]: next }
+    })
+  }
   const propName = (id: string) => objectProperties.find((p) => p.id === id)?.name ?? id
   function openRules(s: Stage) { setRuleStage(s); setRuleDraft(new Set(rules[s.id] ?? [])) }
   function saveRules() {
@@ -213,6 +223,33 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
               </tr>
             </tbody>
           </table>
+        </div>
+      ) : tab === "Pipeline Rules" ? (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Restrict which stage a {recordNoun} can move to from each stage. Select the allowed next stages; leave all unchecked to allow any move.</p>
+          <div className="space-y-3">
+            {stages.map((from) => {
+              const allowed = pRules[from.id] ?? []
+              return (
+                <div key={from.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="mb-2 text-sm font-semibold text-slate-800">From <span className="rounded bg-slate-100 px-1.5 py-0.5">{from.name}</span> can move to:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {stages.filter((t) => t.id !== from.id).map((to) => {
+                      const on = allowed.includes(to.id)
+                      return (
+                        <button key={to.id} onClick={() => toggleAllowed(from.id, to.id)}
+                          className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"}`}>
+                          {to.name}
+                        </button>
+                      )
+                    })}
+                    {stages.length <= 1 && <span className="text-xs text-slate-400">Add more stages to define rules.</span>}
+                  </div>
+                  {allowed.length === 0 && stages.length > 1 && <p className="mt-2 text-xs text-slate-400">No restriction — any stage move is allowed.</p>}
+                </div>
+              )
+            })}
+          </div>
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-12 text-center text-sm text-slate-400">

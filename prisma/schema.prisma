@@ -626,9 +626,24 @@ model Pipeline {
   createdAt  DateTime        @default(now())
   referrals  Referral[]
   stages     PipelineStage[]
+  rules      PipelineRule[]
 
   @@unique([objectType, name])
   @@index([objectType])
+}
+
+// Stage-transition restriction: from `fromStageId`, records may only move to a
+// stage in `toStageIds` (empty = no restriction). One row per (pipeline, fromStage).
+model PipelineRule {
+  id          String   @id @default(cuid())
+  pipelineId  String
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  fromStageId String
+  toStageIds  String[] @default([])
+  createdAt   DateTime @default(now())
+
+  @@unique([pipelineId, fromStageId])
+  @@index([pipelineId])
 }
 
 // An ordered stage within a pipeline. Records move through stages; every move is

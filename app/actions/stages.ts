@@ -10,6 +10,19 @@ import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 export async function moveRecordStage(recordType: string, recordId: string, pipelineId: string, stageId: string) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
+
+  // Enforce pipeline rules (allowed stage transitions) from the record's current stage.
+  const cur = recordType === "REFERRAL"
+    ? await prisma.referral.findUnique({ where: { id: recordId }, select: { stageId: true } as any }).catch(() => null)
+    : await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { stageId: true } }).catch(() => null)
+  const fromStageId = (cur as any)?.stageId
+  if (fromStageId && fromStageId !== stageId) {
+    const rule = await (prisma as any).pipelineRule.findUnique({ where: { pipelineId_fromStageId: { pipelineId, fromStageId } } }).catch(() => null)
+    if (rule && rule.toStageIds.length && !rule.toStageIds.includes(stageId)) {
+      return { error: "That stage move isn't allowed by this pipeline's rules." }
+    }
+  }
+
   const moved = await logStageTransition(recordType, recordId, pipelineId, stageId, session.user.id)
   // A stage change is a "stageId property changed" event for automations.
   if (moved) await runTrigger_RecordPropertyChanged(recordType, recordId, { stageId }, session.user.id).catch(() => {})

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { redirect, notFound } from "next/navigation"
 import PipelineManage from "@/components/pipeline-manage"
-import { getPipelineColorStyle } from "@/app/actions/pipelines"
+import { getPipelineColorStyle, getPipelineRules } from "@/app/actions/pipelines"
 
 export default async function ManagePipelinePage({ params }: { params: { id: string } }) {
   const session = await auth()
@@ -28,6 +28,7 @@ export default async function ManagePipelinePage({ params }: { params: { id: str
   for (const g of grouped as any[]) if (g.stageId) stageCounts[g.stageId] = g._count._all
 
   const colorStyle = await getPipelineColorStyle(objectType)
+  const pipelineRules = await getPipelineRules(params.id)
 
   // Conditional logic per stage (REFERRAL / built-in objects use the CustomProperty table).
   let objectProperties: { id: string; name: string }[] = []
@@ -59,6 +60,7 @@ export default async function ManagePipelinePage({ params }: { params: { id: str
         recordNoun={recordNoun}
         objectProperties={objectProperties}
         stageRules={stageRules}
+        pipelineRules={pipelineRules}
       />
     </div>
   )

@@ -84,6 +84,30 @@ export async function setStageConditionalFields(objectType: string, stageId: str
   return { success: true }
 }
 
+// ── Pipeline Rules (allowed stage transitions) ───────────────────────────────
+export async function getPipelineRules(pipelineId: string): Promise<Record<string, string[]>> {
+  const rows = await (prisma as any).pipelineRule.findMany({ where: { pipelineId } }).catch(() => [])
+  const out: Record<string, string[]> = {}
+  for (const r of rows) out[r.fromStageId] = r.toStageIds ?? []
+  return out
+}
+
+export async function setPipelineRule(pipelineId: string, fromStageId: string, toStageIds: string[]) {
+  await requireAccess("PIPELINES", "EDIT")
+  await requireAdmin()
+  if (!toStageIds.length) {
+    await (prisma as any).pipelineRule.deleteMany({ where: { pipelineId, fromStageId } })
+  } else {
+    await (prisma as any).pipelineRule.upsert({
+      where: { pipelineId_fromStageId: { pipelineId, fromStageId } },
+      create: { pipelineId, fromStageId, toStageIds },
+      update: { toStageIds },
+    })
+  }
+  revalidatePath("/settings/pipelines")
+  return { success: true }
+}
+
 export async function reorderPipelines(objectType: string, ids: string[]) {
   await requireAccess("PIPELINES", "EDIT")
   await requireAdmin()
