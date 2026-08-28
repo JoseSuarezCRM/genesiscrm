@@ -44,7 +44,7 @@ export default async function ObjectBoardPage({ params, searchParams }: { params
               This pipeline has no stages yet. <Link href={`/settings/pipelines?object=CO:${params.key}`} className="text-blue-600 hover:underline">Add stages</Link>.
             </div>
           ) : board.pipeline ? (
-            <KanbanBoard objectKey={params.key} pipelineId={board.pipeline.id} stages={board.stages} cards={board.cards} />
+            <KanbanBoard recordType={`CO:${params.key}`} hrefBase={`/objects/${params.key}`} pipelineId={board.pipeline.id} stages={board.stages} cards={board.cards} />
           ) : null}
         </>
       )}

@@ -30,8 +30,41 @@ export async function moveRecordStage(recordType: string, recordId: string, pipe
     const key = recordType.slice(3)
     revalidatePath(`/objects/${key}/board`)
     revalidatePath(`/objects/${key}/${recordId}`)
+  } else if (recordType === "REFERRAL") {
+    revalidatePath(`/referrals/${recordId}`)
+    revalidatePath("/referrals")
+    revalidatePath("/referrals/board")
   }
   return { success: true }
+}
+
+// Board data for Referrals + a pipeline (mirrors getBoardData for custom objects).
+export async function getReferralBoardData(pipelineId?: string | null): Promise<BoardData> {
+  const pipelines = await pipelinesForObject("REFERRAL")
+  const pipeline = (pipelineId ? pipelines.find((p) => p.id === pipelineId) : pipelines[0]) ?? null
+  if (!pipeline) return { pipeline: null, stages: [], cards: [] }
+
+  const referrals = await prisma.referral.findMany({
+    where: { pipelineId: pipeline.id },
+    select: { id: true, patientFirstName: true, patientLastName: true, stageId: true as any, assignedTo: { select: { name: true, email: true } } },
+    orderBy: { referralDate: "desc" },
+    take: 1000,
+  }) as any[]
+  const ids = referrals.map((r) => r.id)
+  const transitions = ids.length
+    ? await (prisma as any).stageTransition.findMany({ where: { recordType: "REFERRAL", recordId: { in: ids } }, orderBy: { enteredAt: "desc" }, select: { recordId: true, enteredAt: true } })
+    : []
+  const enteredAt = new Map<string, string>()
+  for (const t of transitions) if (!enteredAt.has(t.recordId)) enteredAt.set(t.recordId, t.enteredAt.toISOString())
+
+  const cards: BoardCard[] = referrals.map((r) => ({
+    id: r.id,
+    title: `${r.patientFirstName ?? ""} ${r.patientLastName ?? ""}`.trim() || "Referral",
+    ownerName: r.assignedTo?.name || r.assignedTo?.email || null,
+    stageId: r.stageId ?? null,
+    enteredAt: enteredAt.get(r.id) ?? null,
+  }))
+  return { pipeline: { id: pipeline.id, name: pipeline.name }, stages: pipeline.stages as any, cards }
 }
 
 export interface BoardCard { id: string; title: string; ownerName: string | null; stageId: string | null; enteredAt: string | null }

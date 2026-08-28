@@ -6,7 +6,7 @@ import { userCan, userCanLevel } from "@/lib/permissions"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus, LayoutGrid } from "lucide-react"
 import ReferralFilters from "@/components/referral-filters"
 import ReferralTable from "@/components/referral-table"
 import { associationColumnDefs } from "@/lib/association-columns"
@@ -245,13 +245,18 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      {/* Pipeline selector */}
+      {/* Pipeline selector + board */}
       {pipelines.length > 0 && (
-        <PipelineSelector
-          pipelines={(pipelines as any[]).map((p) => ({ id: p.id, name: p.name, color: p.color }))}
-          activePipelineId={pipelineId}
-          colorStyle={pipelineColorStyle}
-        />
+        <div className="flex items-center gap-2">
+          <PipelineSelector
+            pipelines={(pipelines as any[]).map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+            activePipelineId={pipelineId}
+            colorStyle={pipelineColorStyle}
+          />
+          <Link href="/referrals/board" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
+            <LayoutGrid className="h-3.5 w-3.5" /> Board
+          </Link>
+        </div>
       )}
 
       {/* Saved views */}

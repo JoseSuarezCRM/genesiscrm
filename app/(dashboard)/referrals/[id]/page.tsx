@@ -18,6 +18,7 @@ import RecordDetailShell from "@/components/record-detail-shell"
 import ReferralActions from "@/components/referral-actions"
 import { loadAssociationCards } from "@/lib/record-associations"
 import RecordEngagementBar from "@/components/record-engagement-bar"
+import RecordStageControl from "@/components/record-stage-control"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordPropertyCards from "@/components/record-property-cards"
 import RecordMiddleTabs from "@/components/record-middle-tabs"
@@ -76,6 +77,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
     prisma.pipeline.findMany({
       where: { isActive: true, objectType: "REFERRAL" },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      include: { stages: { orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } } },
     }),
     loadCustomPropertiesForDetail("REFERRAL", params.id),
     getCardLayouts("REFERRAL", "LEFT"),
@@ -84,6 +86,9 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
   ])
   const isAdminRole = (session?.user as any)?.role === "ADMIN"
   const pipelineColorStyle = await getPipelineColorStyle("REFERRAL")
+  const lastStageTransition = await (prisma as any).stageTransition.findFirst({
+    where: { recordType: "REFERRAL", recordId: params.id }, orderBy: { enteredAt: "desc" }, select: { enteredAt: true },
+  }).catch(() => null)
 
   const referralActivity = await listRecordActivities("REFERRAL", referral.id)
   const canDeleteActivities = userCan(session?.user as any, "DELETE_ACTIVITIES")
@@ -118,7 +123,19 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
         />
       }
       engagementBar={
-        <RecordEngagementBar recordType="REFERRAL" recordId={referral.id} users={userOptions} canEdit={isAdmin} compact />
+        <div className="space-y-3">
+          {isAdmin && pipelines.length > 0 && (
+            <RecordStageControl
+              recordType="REFERRAL"
+              recordId={referral.id}
+              pipelines={(pipelines as any[]).map((p) => ({ id: p.id, name: p.name, color: p.color, stages: (p.stages ?? []).map((s: any) => ({ id: s.id, name: s.name })) }))}
+              pipelineId={referral.pipelineId ?? null}
+              stageId={(referral as any).stageId ?? null}
+              enteredAt={lastStageTransition?.enteredAt ? lastStageTransition.enteredAt.toISOString() : null}
+            />
+          )}
+          <RecordEngagementBar recordType="REFERRAL" recordId={referral.id} users={userOptions} canEdit={isAdmin} compact />
+        </div>
       }
       left={
         <ReferralDetailLeftColumn

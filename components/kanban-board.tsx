@@ -20,13 +20,12 @@ const UNASSIGNED = "__unassigned"
 
 // Drag-and-drop stage board for a custom object. Dropping a card into a column
 // logs a stage transition (which the durations engine reads).
-export default function KanbanBoard({ objectKey, pipelineId, stages, cards: initial }: {
-  objectKey: string; pipelineId: string; stages: Stage[]; cards: BoardCard[]
+export default function KanbanBoard({ recordType, hrefBase, pipelineId, stages, cards: initial }: {
+  recordType: string; hrefBase: string; pipelineId: string; stages: Stage[]; cards: BoardCard[]
 }) {
   const [cards, setCards] = useState(initial)
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
-  const recordType = `CO:${objectKey}`
 
   function onDrop(stageId: string) {
     setOver(null)
@@ -61,7 +60,7 @@ export default function KanbanBoard({ objectKey, pipelineId, stages, cards: init
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ minHeight: 120 }}>
               {colCards.map((c) => (
-                <Link key={c.id} href={`/objects/${objectKey}/${c.id}`}
+                <Link key={c.id} href={`${hrefBase}/${c.id}`}
                   draggable
                   onDragStart={() => setDragId(c.id)}
                   onDragEnd={() => setDragId(null)}
