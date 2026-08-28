@@ -3,11 +3,11 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createPipeline, updatePipeline, deletePipeline, reorderPipelines, setPipelineColorStyle } from "@/app/actions/pipelines"
+import { createPipeline, updatePipeline, deletePipeline, reorderPipelines, setPipelineColorStyle, setDefaultPipeline, clonePipeline } from "@/app/actions/pipelines"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { PipelineChip } from "@/components/pipeline-chip"
-import { Plus, Search, Check, X, Copy, MoreHorizontal, GripVertical, Pencil, Trash2 } from "lucide-react"
+import { Plus, Search, Check, X, Copy, MoreHorizontal, GripVertical, Pencil, Trash2, Star, CopyPlus } from "lucide-react"
 
 const COLOR_OPTIONS = ["#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#64748b"]
 
@@ -66,6 +66,19 @@ export default function PipelineOverview({ pipelines: initial, objectType, color
     setPipelines((prev) => prev.map((p) => p.id === id ? { ...p, name } : p))
     setEditId(null); setMenuId(null)
     startTransition(() => { updatePipeline(id, { name }).catch(() => {}) })
+  }
+  function makeDefault(p: Row) {
+    setMenuId(null)
+    setPipelines((prev) => [p, ...prev.filter((x) => x.id !== p.id)])
+    startTransition(() => { setDefaultPipeline(objectType, p.id).catch(() => {}) })
+  }
+  function cloneOne(p: Row) {
+    setMenuId(null)
+    startTransition(async () => {
+      const res = await clonePipeline(p.id)
+      if ((res as any)?.pipeline) { const c = (res as any).pipeline; setPipelines((prev) => [...prev, { id: c.id, name: c.name, color: c.color, order: c.order, stageCount: c._count?.stages ?? c.stages?.length ?? 0, recordCount: 0 }]) }
+      router.refresh()
+    })
   }
   async function handleDelete(p: Row) {
     setMenuId(null)
@@ -138,6 +151,9 @@ export default function PipelineOverview({ pipelines: initial, objectType, color
                         <PipelineChip name={p.name} color={p.color} style={style} />
                       </Link>
                     )}
+                    {p.id === pipelines[0]?.id && editId !== p.id && (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Default</span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right text-slate-600">{p.stageCount}</td>
@@ -160,6 +176,8 @@ export default function PipelineOverview({ pipelines: initial, objectType, color
                       <div className="absolute right-4 top-10 z-20 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
                         <Link href={`/settings/pipelines/${p.id}`} className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5 text-slate-400" /> Manage stages</Link>
                         <button onClick={() => { setEditId(p.id); setEditName(p.name); setMenuId(null) }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5 text-slate-400" /> Rename</button>
+                        <button onClick={() => makeDefault(p)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"><Star className="h-3.5 w-3.5 text-slate-400" /> Set as default</button>
+                        <button onClick={() => cloneOne(p)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"><CopyPlus className="h-3.5 w-3.5 text-slate-400" /> Clone</button>
                         <button onClick={() => handleDelete(p)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
                       </div>
                     </>

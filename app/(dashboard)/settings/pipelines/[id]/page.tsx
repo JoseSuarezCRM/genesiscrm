@@ -53,7 +53,7 @@ export default async function ManagePipelinePage({ params }: { params: { id: str
     <div className="max-w-5xl space-y-5 p-6">
       <PipelineManage
         pipeline={{ id: pipeline.id, name: pipeline.name, color: pipeline.color, objectType }}
-        stages={pipeline.stages.map((s: any) => ({ id: s.id, name: s.name, order: s.order, probability: s.probability, isClosed: s.isClosed, isWon: s.isWon, color: s.color, recordCount: stageCounts[s.id] ?? 0 }))}
+        stages={pipeline.stages.map((s: any) => ({ id: s.id, name: s.name, order: s.order, probability: s.probability, isClosed: s.isClosed, isWon: s.isWon, color: s.color, recordCount: stageCounts[s.id] ?? 0, requiredPropertyIds: s.requiredPropertyIds ?? [] }))}
         siblings={siblings}
         colorStyle={colorStyle}
         objectLabel={objectLabel}

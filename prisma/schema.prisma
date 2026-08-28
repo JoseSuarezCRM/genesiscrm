@@ -658,6 +658,8 @@ model PipelineStage {
   isClosed    Boolean  @default(false) // a terminal stage (won or lost)
   isWon       Boolean  @default(false) // a closed-won stage
   color       String?
+  // Property ids that must be filled before a record can enter this stage.
+  requiredPropertyIds String[] @default([])
   createdAt   DateTime @default(now())
 
   @@index([pipelineId])

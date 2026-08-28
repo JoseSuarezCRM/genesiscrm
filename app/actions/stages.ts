@@ -23,6 +23,13 @@ export async function moveRecordStage(recordType: string, recordId: string, pipe
     }
   }
 
+  // Enforce required-to-enter fields on the target stage.
+  const targetStage = await (prisma as any).pipelineStage.findUnique({ where: { id: stageId }, select: { requiredPropertyIds: true, name: true } }).catch(() => null)
+  if (targetStage?.requiredPropertyIds?.length) {
+    const missing = await missingRequiredFields(recordType, recordId, targetStage.requiredPropertyIds)
+    if (missing.length) return { error: `Fill required field${missing.length > 1 ? "s" : ""} before moving to ${targetStage.name}: ${missing.join(", ")}` }
+  }
+
   const moved = await logStageTransition(recordType, recordId, pipelineId, stageId, session.user.id)
   // A stage change is a "stageId property changed" event for automations.
   if (moved) await runTrigger_RecordPropertyChanged(recordType, recordId, { stageId }, session.user.id).catch(() => {})
@@ -65,6 +72,23 @@ export async function getReferralBoardData(pipelineId?: string | null): Promise<
     enteredAt: enteredAt.get(r.id) ?? null,
   }))
   return { pipeline: { id: pipeline.id, name: pipeline.name }, stages: pipeline.stages as any, cards }
+}
+
+// Which of `propIds` are empty on the record (custom properties). Returns display names.
+async function missingRequiredFields(recordType: string, recordId: string, propIds: string[]): Promise<string[]> {
+  const empty = (v: any) => v == null || v === "" || (Array.isArray(v) && v.length === 0)
+  let values: Record<string, any> = {}
+  const nameMap: Record<string, string> = {}
+  if (recordType === "REFERRAL") {
+    const r = await prisma.referral.findUnique({ where: { id: recordId }, select: { customProperties: true } }).catch(() => null)
+    values = (r?.customProperties as any) ?? {}
+    const props = await prisma.customProperty.findMany({ where: { id: { in: propIds } }, select: { id: true, name: true } }).catch(() => [])
+    for (const p of props) nameMap[p.id] = p.name
+  } else if (recordType.startsWith("CO:")) {
+    const r = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { values: true } }).catch(() => null)
+    values = (r?.values as any) ?? {}
+  }
+  return propIds.filter((id) => empty(values[id])).map((id) => nameMap[id] ?? "a required field")
 }
 
 export interface BoardCard { id: string; title: string; ownerName: string | null; stageId: string | null; enteredAt: string | null }

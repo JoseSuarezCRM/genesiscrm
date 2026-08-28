@@ -3,12 +3,12 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { upsertStage, deleteStage, reorderStages, updatePipeline, deletePipeline, setStageConditionalFields, setPipelineRule } from "@/app/actions/pipelines"
+import { upsertStage, deleteStage, reorderStages, updatePipeline, deletePipeline, setStageConditionalFields, setPipelineRule, setStageRequiredFields } from "@/app/actions/pipelines"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { ChevronLeft, ChevronDown, Plus, Check, X, Copy, GripVertical, Trash2 } from "lucide-react"
 
-interface Stage { id: string; name: string; order: number; probability: number | null; isClosed: boolean; isWon: boolean; color: string | null; recordCount: number }
+interface Stage { id: string; name: string; order: number; probability: number | null; isClosed: boolean; isWon: boolean; color: string | null; recordCount: number; requiredPropertyIds?: string[] }
 interface Sibling { id: string; name: string }
 
 const TABS = ["Configure", "Pipeline Rules", "Automate", "Tags"] as const
@@ -47,6 +47,15 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
       const next = cur.includes(toId) ? cur.filter((x) => x !== toId) : [...cur, toId]
       startTransition(() => { setPipelineRule(pipeline.id, fromId, next).catch(() => {}) })
       return { ...prev, [fromId]: next }
+    })
+  }
+  const [reqFields, setReqFields] = useState<Record<string, string[]>>(Object.fromEntries(initial.map((s) => [s.id, s.requiredPropertyIds ?? []])))
+  function toggleReq(stageId: string, propId: string) {
+    setReqFields((prev) => {
+      const cur = prev[stageId] ?? []
+      const next = cur.includes(propId) ? cur.filter((x) => x !== propId) : [...cur, propId]
+      startTransition(() => { setStageRequiredFields(stageId, next).catch(() => {}) })
+      return { ...prev, [stageId]: next }
     })
   }
   const propName = (id: string) => objectProperties.find((p) => p.id === id)?.name ?? id
@@ -246,6 +255,22 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
                     {stages.length <= 1 && <span className="text-xs text-slate-400">Add more stages to define rules.</span>}
                   </div>
                   {allowed.length === 0 && stages.length > 1 && <p className="mt-2 text-xs text-slate-400">No restriction — any stage move is allowed.</p>}
+                  {conditionalSupported && (
+                    <div className="mt-3 border-t border-slate-100 pt-2.5">
+                      <p className="mb-1.5 text-xs font-medium text-slate-500">Required to enter this stage:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {objectProperties.map((p) => {
+                          const on = (reqFields[from.id] ?? []).includes(p.id)
+                          return (
+                            <button key={p.id} onClick={() => toggleReq(from.id, p.id)}
+                              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${on ? "border-amber-500 bg-amber-500 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"}`}>
+                              {p.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}

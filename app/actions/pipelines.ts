@@ -108,12 +108,52 @@ export async function setPipelineRule(pipelineId: string, fromStageId: string, t
   return { success: true }
 }
 
+// Fields required before a record can ENTER a stage (enforced in moveRecordStage).
+export async function setStageRequiredFields(stageId: string, propertyIds: string[]) {
+  await requireAccess("PIPELINES", "EDIT")
+  await requireAdmin()
+  await (prisma as any).pipelineStage.update({ where: { id: stageId }, data: { requiredPropertyIds: propertyIds } })
+  revalidatePath("/settings/pipelines")
+  return { success: true }
+}
+
 export async function reorderPipelines(objectType: string, ids: string[]) {
   await requireAccess("PIPELINES", "EDIT")
   await requireAdmin()
   await Promise.all(ids.map((id, i) => (prisma as any).pipeline.updateMany({ where: { id, objectType }, data: { order: i } })))
   revalidatePath("/settings/pipelines")
   return { success: true }
+}
+
+// Make a pipeline the default (first) — new records auto-enroll into the first pipeline.
+export async function setDefaultPipeline(objectType: string, id: string) {
+  await requireAccess("PIPELINES", "EDIT")
+  await requireAdmin()
+  const rows = await prisma.pipeline.findMany({ where: { objectType }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true } })
+  const ids = [id, ...rows.map((r) => r.id).filter((x) => x !== id)]
+  await Promise.all(ids.map((pid, i) => prisma.pipeline.update({ where: { id: pid }, data: { order: i } })))
+  revalidatePath("/settings/pipelines")
+  return { success: true }
+}
+
+// Duplicate a pipeline and its stages.
+export async function clonePipeline(id: string) {
+  await requireAccess("PIPELINES", "EDIT")
+  await requireAdmin()
+  const src = await (prisma as any).pipeline.findUnique({ where: { id }, include: { stages: { orderBy: { order: "asc" } } } })
+  if (!src) return { error: "Pipeline not found" }
+  const maxOrder = await prisma.pipeline.aggregate({ where: { objectType: src.objectType } as any, _max: { order: true } })
+  let name = `${src.name} (copy)`, n = 2
+  while (await prisma.pipeline.findFirst({ where: { objectType: src.objectType, name } })) name = `${src.name} (copy ${n++})`
+  const created = await (prisma as any).pipeline.create({
+    data: {
+      objectType: src.objectType, name, color: src.color, order: (maxOrder._max.order ?? 0) + 1,
+      stages: { create: src.stages.map((s: any) => ({ name: s.name, order: s.order, probability: s.probability, isClosed: s.isClosed, isWon: s.isWon, color: s.color })) },
+    },
+    include: { stages: true, _count: { select: { stages: true } } },
+  })
+  revalidatePath("/settings/pipelines")
+  return { pipeline: created }
 }
 
 // ── Stages ───────────────────────────────────────────────────────────────────

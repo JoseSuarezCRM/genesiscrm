@@ -33,8 +33,11 @@ export default function KanbanBoard({ recordType, hrefBase, pipelineId, stages, 
     if (!id || stageId === UNASSIGNED) return
     const card = cards.find((c) => c.id === id)
     if (!card || card.stageId === stageId) return
+    const prevStage = card.stageId, prevEntered = card.enteredAt
     setCards((cs) => cs.map((c) => c.id === id ? { ...c, stageId, enteredAt: new Date().toISOString() } : c))
-    moveRecordStage(recordType, id, pipelineId, stageId).catch(() => {})
+    moveRecordStage(recordType, id, pipelineId, stageId)
+      .then((res) => { if ((res as any)?.error) { setCards((cs) => cs.map((c) => c.id === id ? { ...c, stageId: prevStage, enteredAt: prevEntered } : c)); alert((res as any).error) } })
+      .catch(() => {})
   }
 
   const columns: { id: string; name: string; color: string | null }[] = [
