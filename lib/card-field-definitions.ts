@@ -71,8 +71,14 @@ export const cardFieldDefinitions: Record<EntityType, Record<string, CardFieldDe
 }
 
 // Properties available for custom cards in the left sidebar of the referral detail page.
-// Widget fields (status, assignedTo, tags) render interactive controls; the rest render values.
-export const referralLeftFieldPool: { id: string; label: string }[] = [
+// Widget/relation entries (status, assignedTo, tags, practice, provider, …) use their
+// own ids + bespoke rendering; the native data fields use their column name as id and
+// render generically. To prevent drift, every RECORD_FIELDS["REFERRAL"] native field not
+// already listed here is appended automatically (see referralLeftFieldPool below).
+import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+
+// The special/widget + legacy-id entries the left-column renderer handles explicitly.
+const REFERRAL_LEFT_SPECIAL: { id: string; label: string }[] = [
   { id: "status", label: "Status" },
   { id: "assignedTo", label: "Assigned To" },
   { id: "tags", label: "Tags" },
@@ -98,6 +104,24 @@ export const referralLeftFieldPool: { id: string; label: string }[] = [
   { id: "appointmentDate", label: "Appointment Date" },
   { id: "createdBy", label: "Created By" },
   { id: "createdAt", label: "Created Date" },
+]
+
+// Native referral columns already represented by a special/legacy entry above.
+const REFERRAL_LEFT_COVERED = new Set([
+  "genesisMrn", "patientMrn", "patientDob", "patientPhone", "patientEmail",
+  "referringNpi", "referringDoctorName", "referringPhone", "referringAddress",
+  "insuranceProvider", "insuranceMemberId", "insuranceGroup", "authStatus", "imagingType",
+  "pipelineId", "referralDate", "appointmentDate", "status", "assignedTo",
+  "patientFirstName", "patientLastName", // record title — kept in the header, not offered as a card field
+])
+
+export const referralLeftFieldPool: { id: string; label: string }[] = [
+  ...REFERRAL_LEFT_SPECIAL,
+  // Auto-append any other native field (e.g. Notes, and anything added later) so the
+  // picker never drifts out of sync with the referral's real columns.
+  ...(RECORD_FIELDS["REFERRAL"] ?? [])
+    .filter((f) => !REFERRAL_LEFT_COVERED.has(f.key))
+    .map((f) => ({ id: f.key, label: f.label })),
 ]
 
 // Get all card names for an entity type

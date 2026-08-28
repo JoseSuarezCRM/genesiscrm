@@ -16,7 +16,7 @@ import LeftCardEditorModal from "@/components/left-card-editor-modal"
 import { replaceColumnCards } from "@/app/actions/record-card-actions"
 import { useCardReorder } from "@/components/use-card-reorder"
 import CustomPropertyField from "@/components/custom-property-field"
-import { isPropertyVisible } from "@/lib/record-field-catalog"
+import { isPropertyVisible, RECORD_FIELDS } from "@/lib/record-field-catalog"
 import { PipelineChip } from "@/components/pipeline-chip"
 
 interface CardLayout {
@@ -392,8 +392,21 @@ export default function ReferralDetailLeftColumn({
         return <PropertyRow key={fieldId} label="Created By" value={referral.createdBy?.name || referral.createdBy?.email} />
       case "createdAt":
         return <PropertyRow key={fieldId} label="Created Date" value={formatDate(referral.createdAt)} />
-      default:
+      default: {
+        // Generic native field (e.g. Notes, or any field added to the catalog later):
+        // editable inline when writable, otherwise a read-only value row.
+        const nf = (RECORD_FIELDS["REFERRAL"] ?? []).find((f) => f.key === fieldId)
+        if (nf) {
+          const v = (referral as any)[nf.key]
+          const isDate = nf.type === "date" || nf.type === "datetime"
+          if (!nf.readOnly) {
+            return <EditableRow key={fieldId} referralId={referral.id} field={nf.key} label={nf.label} value={v}
+              type={isDate ? "date" : undefined} format={nf.type === "phone" ? formatPhone : isDate ? formatDate : undefined} />
+          }
+          return <PropertyRow key={fieldId} label={nf.label} value={v == null ? undefined : String(v)} />
+        }
         return null
+      }
     }
   }
 
