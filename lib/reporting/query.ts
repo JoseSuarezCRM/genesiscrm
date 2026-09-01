@@ -123,6 +123,8 @@ function aggregate(rows: any[], measure: Measure, field: ReportField | null): nu
 
 function formatCell(v: unknown, f: ReportField): string | number | null {
   if (v == null) return null
+  // Custom-object Record ID reads the record number → show as "#4" (built-in ids are cuids → strings).
+  if (f.key === "__id" && typeof v === "number") return `#${v}`
   if (f.type === "date") { const d = toDate(v); return d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : String(v) }
   if (Array.isArray(v)) return v.join(", ")
   return typeof v === "number" ? v : String(v)
@@ -199,7 +201,7 @@ export async function drillReport(config: ReportConfig, dimKey: string, breakdow
     return true
   })
   const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
-  const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
+  const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type, numberFormat: f.numberFormat }))
   const slice = matched.slice(0, 1000)
   const out = slice.map((r) => cols.map((f) => formatCell(readValue(r, f), f)))
   const rowLinks = slice.map((r) => recordHref(config.primary, r?.id))
@@ -253,7 +255,7 @@ export async function runReport(config: ReportConfig): Promise<ReportResult> {
   // Unsummarized table: raw rows for the chosen columns (or a sensible default).
   if (config.viz === "table" && (dims.length === 0 || config.tableMode === "unsummarized")) {
     const cols = (config.columns.length ? config.columns.map((c) => byKey[c.key]).filter(Boolean) : fields.slice(0, 6)) as ReportField[]
-    const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type }))
+    const columns: ResultColumn[] = cols.map((f) => ({ key: f.key, label: f.label, type: f.type, numberFormat: f.numberFormat }))
     const sliced = rows.slice(0, 500)
     const out = sliced.map((r) => cols.map((f) => {
       const v = readValue(r, f)

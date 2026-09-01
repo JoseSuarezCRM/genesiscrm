@@ -4,6 +4,7 @@ import { useState, useRef, useMemo } from "react"
 import Link from "next/link"
 import { Hash, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatNumber } from "@/lib/number-format"
 import type { ReportResult } from "@/lib/reporting/types"
 
 export const PALETTE = ["#6366f1", "#14b8a6", "#f97316", "#ec4899", "#8b5cf6", "#0ea5e9", "#84cc16", "#f59e0b"]
@@ -157,8 +158,11 @@ export function DataTable({ result, onDrill, pageSize, sortable, frozenFirst }: 
           <tr key={idx} onClick={drillable ? () => onDrill!(result.rowKeys![idx], null, String(r[0] ?? "Records")) : undefined}
             className={cn("border-b border-zinc-100", drillable ? "cursor-pointer hover:bg-blue-50" : "hover:bg-zinc-50")}>
             {r.map((v, j) => {
-              const href = result.columns[j]?.key === "__id" ? result.rowLinks?.[idx] : null
-              const cell = v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : v.toLocaleString()) : v
+              const col = result.columns[j]
+              const href = col?.key === "__id" ? result.rowLinks?.[idx] : null
+              // Unsummarized cells render per the field's own number format (currency / raw id / grouped),
+              // matching the record detail; summarized cells use the measure's value format.
+              const cell = v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : formatNumber(v, col?.numberFormat as any)) : v
               return <td key={j} className={cn("px-3 py-2 text-zinc-700", frozenCls(j))}>{href ? <Link href={href} onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">{cell}</Link> : cell}</td>
             })}
           </tr>

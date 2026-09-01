@@ -86,12 +86,13 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
 
   if (objectKey.startsWith("CO:")) {
     const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey.slice(3) } }).catch(() => null)
-    fields.push({ key: "__id", label: "Record ID", type: "text", source: objectKey, column: "id" })
+    // Record ID shows the friendly record number (#4), not the raw cuid.
+    fields.push({ key: "__id", label: "Record ID", type: "text", source: objectKey, column: "recordNumber" })
     fields.push({ key: "createdAt", label: "Created", type: "date", source: objectKey, column: "createdAt" })
     for (const p of ((def?.properties as any[]) ?? [])) {
       fields.push({
         key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", source: objectKey,
-        column: p.id, jsonBag: "values",
+        column: p.id, jsonBag: "values", numberFormat: p.numberFormat ?? undefined,
         options: (p.options ?? []).map((o: string) => ({ value: o, label: (p.optionLabels?.[o]) ?? o })),
       })
     }
@@ -132,7 +133,7 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
   for (const cp of cps) {
     fields.push({
       key: `cp_${cp.id}`, label: cp.name, type: CP_TYPE[cp.type as string] ?? "text", source: objectKey,
-      column: cp.id, jsonBag: "customProperties",
+      column: cp.id, jsonBag: "customProperties", numberFormat: (cp as any).numberFormat ?? undefined,
       options: (cp.options ?? []).map((o) => ({ value: o, label: ((cp as any).optionLabels?.[o]) ?? o })),
     })
   }

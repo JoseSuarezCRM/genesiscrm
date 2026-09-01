@@ -16,6 +16,7 @@ export interface ReportField {
   joinPath?: string    // set for a joined source: the Prisma relation on the primary row
   assocType?: string   // generic (list) association: read from row.__assoc[assocType] instead of a FK
   options?: { value: string; label: string }[]
+  numberFormat?: string // NUMBER props: "currency" (else plain) — carried through to the table renderer
   // Computed time-in-stage field (from StageTransition), value rendered in days.
   stageDuration?: { kind: "current" | "toClose" | "cumulative" | "latest"; stageId?: string }
 }
@@ -75,7 +76,7 @@ export type DateRangePreset =
   | "this_quarter" | "this_year" | "ytd" | "custom"
 
 // ── Results ────────────────────────────────────────────────────────────────
-export interface ResultColumn { key: string; label: string; type: ReportFieldType }
+export interface ResultColumn { key: string; label: string; type: ReportFieldType; numberFormat?: string }
 
 // A grouped series: one entry per breakdown value (or a single series when no
 // breakdown), each with points keyed by the primary dimension's label.
