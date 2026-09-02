@@ -465,21 +465,20 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
                   </StyledSelect>
                 )}
               </Section>
-              {config.viz === "table" && (
-                <Section title="Columns">
-                  {config.dimensions.length > 0 && (
-                    <div className="mb-1.5 inline-flex rounded-lg border border-zinc-200 p-0.5 text-xs">
-                      {(["summarized", "unsummarized"] as const).map((mode) => (
-                        <button key={mode} onClick={() => set({ tableMode: mode })}
-                          className={cn("rounded-md px-2 py-1 capitalize", (config.tableMode ?? "summarized") === mode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:text-zinc-900")}>{mode}</button>
-                      ))}
-                    </div>
-                  )}
-                  <DropZone onDropField={onDropField(addColumn)} empty={<p className="text-xs text-zinc-400">Drag fields here — otherwise default fields are shown.</p>}>
-                    {config.columns.map((c, i) => <Chip key={i} label={byKey[c.key]?.label ?? c.key} onRemove={() => set({ columns: config.columns.filter((_, j) => j !== i) })} />)}
-                  </DropZone>
-                </Section>
-              )}
+              <Section title="Columns">
+                {config.viz === "table" && config.dimensions.length > 0 && (
+                  <div className="mb-1.5 inline-flex rounded-lg border border-zinc-200 p-0.5 text-xs">
+                    {(["summarized", "unsummarized"] as const).map((mode) => (
+                      <button key={mode} onClick={() => set({ tableMode: mode })}
+                        className={cn("rounded-md px-2 py-1 capitalize", (config.tableMode ?? "summarized") === mode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:text-zinc-900")}>{mode}</button>
+                    ))}
+                  </div>
+                )}
+                {config.viz !== "table" && <p className="mb-1.5 text-[11px] text-zinc-400">Columns for the “Unsummarized data” table.</p>}
+                <DropZone onDropField={onDropField(addColumn)} empty={<p className="text-xs text-zinc-400">Drag fields here — otherwise default fields are shown.</p>}>
+                  {config.columns.map((c, i) => <Chip key={i} label={byKey[c.key]?.label ?? c.key} onRemove={() => set({ columns: config.columns.filter((_, j) => j !== i) })} />)}
+                </DropZone>
+              </Section>
               <Section title="Sort & limit">
                 <div className="flex items-center gap-2">
                   <StyledSelect value={config.sort?.dir ?? "desc"} onChange={(e) => set({ sort: { by: config.sort?.by ?? "value", dir: e.target.value as any } })} className="h-7 text-xs" disabled={primaryDimIsDate}>
