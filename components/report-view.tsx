@@ -160,9 +160,17 @@ export function DataTable({ result, onDrill, pageSize, sortable, frozenFirst }: 
             {r.map((v, j) => {
               const col = result.columns[j]
               const href = col?.key === "__id" ? result.rowLinks?.[idx] : null
-              // Unsummarized cells render per the field's own number format (currency / raw id / grouped),
-              // matching the record detail; summarized cells use the measure's value format.
-              const cell = v == null ? <span className="text-zinc-300">—</span> : typeof v === "number" ? (result.rowKeys ? fmtNum(v, result.valueFormat) : formatNumber(v, col?.numberFormat as any)) : v
+              // Format by the COLUMN's declared type, not the value's JS type — the JSON value bag isn't
+              // type-enforced, so a number column can hold both 8504 and "8504". formatNumber coerces, so
+              // every cell in a number column renders consistently (currency / raw id / grouped), matching
+              // the record detail. Summarized cells use the measure's value format.
+              const cell = v == null
+                ? <span className="text-zinc-300">—</span>
+                : result.rowKeys
+                  ? (typeof v === "number" ? fmtNum(v, result.valueFormat) : v)
+                  : col?.type === "number"
+                    ? formatNumber(v as any, col?.numberFormat as any)
+                    : v
               return <td key={j} className={cn("px-3 py-2 text-zinc-700", frozenCls(j))}>{href ? <Link href={href} onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">{cell}</Link> : cell}</td>
             })}
           </tr>
