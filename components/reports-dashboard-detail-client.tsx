@@ -37,7 +37,7 @@ import {
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import type { SavedReport } from "@/app/actions/saved-reports"
 import { cn } from "@/lib/utils"
-import { runReportPreview, getReportRows, getReportFields } from "@/app/actions/report-builder"
+import { runReportPreview, getReportRows, getReportFields, getReportObjects } from "@/app/actions/report-builder"
 import { ReportView } from "@/components/report-view"
 import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
@@ -145,6 +145,20 @@ function V2ReportCard({
   const runCfg = useMemo(() => mergeConfig(cfg, dashDate, cardFilters), [cfg, dashDate, cardFilters])
   const cardFilterCount = (cardFilters?.groups ?? []).reduce((n: number, g: any) => n + (g.conditions?.length ?? 0), 0)
 
+  // Friendly subtitle labels (object plural + measure field name), resolved from the catalog.
+  const [subtitleMeta, setSubtitleMeta] = useState<{ primaryLabel: string; fieldLabel: Record<string, string> } | null>(null)
+  useEffect(() => {
+    let alive = true
+    Promise.all([getReportObjects().catch(() => []), getReportFields(cfg.primary).catch(() => [])]).then(([objs, fields]) => {
+      if (!alive) return
+      setSubtitleMeta({
+        primaryLabel: objs.find((o) => o.key === cfg.primary)?.label ?? cfg.primary,
+        fieldLabel: Object.fromEntries(fields.map((f) => [f.key, f.label])),
+      })
+    })
+    return () => { alive = false }
+  }, [cfg.primary])
+
   useEffect(() => {
     let alive = true
     setLoading(true)
@@ -180,7 +194,7 @@ function V2ReportCard({
           <div className="min-w-0">
             <Link href={`/reports/view/${entry.savedReportId}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-blue-700">{entry.savedReport.name}</Link>
             <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-slate-400">
-              <span>{reportObjectName(cfg)}</span>
+              <span>{reportObjectName(cfg, subtitleMeta ?? undefined)}</span>
               {dashDate?.preset && <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-zinc-500">{DATE_PRESET_GROUPS.find((p) => p.value === dashDate.preset)?.label ?? dashDate.preset}</span>}
               {cardFilterCount > 0 && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-blue-600">Filters ({cardFilterCount})</span>}
             </div>
@@ -211,10 +225,11 @@ function V2ReportCard({
   )
 }
 
-function reportObjectName(cfg: ReportConfig): string {
+function reportObjectName(cfg: ReportConfig, meta?: { primaryLabel: string; fieldLabel: Record<string, string> }): string {
   const m = cfg.measures?.[0]
-  const agg = m ? (m.key === "*" ? "Count" : `${m.agg} of ${m.key}`) : "—"
-  return `${cfg.primary} · ${agg}`
+  const fieldName = (key: string) => meta?.fieldLabel[key] ?? key
+  const agg = m ? (m.key === "*" ? "Count" : `${m.agg} of ${fieldName(m.key)}`) : "—"
+  return `${meta?.primaryLabel ?? cfg.primary} · ${agg}`
 }
 
 function ReportCard({

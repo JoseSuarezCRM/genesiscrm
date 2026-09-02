@@ -54,3 +54,8 @@
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background-color: #475569;
 }
+
+/* Dashboard grid drag/resize placeholder — round it to match the cards. */
+.react-grid-placeholder {
+  border-radius: 0.75rem !important;
+}
