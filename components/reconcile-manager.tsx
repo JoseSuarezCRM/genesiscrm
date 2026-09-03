@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useRef } from "react"
-import { matchAppointments, cleanupGenesisMrn, getAppointmentProperties, getImportMapping, saveImportMapping, applyReconciliationImport } from "@/app/actions/reconcile"
+import { matchAppointments, cleanupGenesisMrn, getAppointmentProperties, getImportMapping, saveImportMapping, applyReconciliationImport, previewIntakeMatches } from "@/app/actions/reconcile"
 import type { CsvRow, MatchResult, NoShowCandidate, AppliedRecord } from "@/app/actions/reconcile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -82,6 +82,7 @@ export default function ReconcileManager() {
   const [props, setProps] = useState<{ id: string; name: string; type: string }[]>([])
   const [fieldMap, setFieldMap] = useState<Record<string, string>>({})
   const [importMsg, setImportMsg] = useState<string | null>(null)
+  const [srcPreview, setSrcPreview] = useState<{ eligible: number; matched: number; error?: string } | null>(null)
 
   const [matches, setMatches]           = useState<MatchResult[]>([])
   const [noShowList, setNoShowList]     = useState<NoShowCandidate[]>([])
@@ -99,7 +100,7 @@ export default function ReconcileManager() {
   function reset() {
     setStep("setup"); setFileName(""); setMatches([]); setNoShowList([])
     setSelCompleted([]); setSelNoShow([]); setApplied([])
-    setHeaders([]); setRawRows([]); setFieldMap({}); setImportMsg(null)
+    setHeaders([]); setRawRows([]); setFieldMap({}); setImportMsg(null); setSrcPreview(null)
   }
 
   // Column mapped to a given property, and the property whose name matches a pattern.
@@ -152,9 +153,11 @@ export default function ReconcileManager() {
     const k = keyCols()
     if (!k.visit) { setError("Map the file's appointment date column to “Visit Date” before continuing."); return }
     setError(null)
+    const csvRows = toCsvRows()
     startTransition(async () => {
       await saveImportMapping("appointments", fieldMap)
-      const result = await matchAppointments(toCsvRows(), dateFrom, dateTo)
+      setSrcPreview(await previewIntakeMatches(csvRows.map((r) => ({ dob: r.dob, visitDate: r.visitDate }))))
+      const result = await matchAppointments(csvRows, dateFrom, dateTo)
       setMatches(result.matches)
       setNoShowList(result.noShowCandidates)
       setUnmatchedCsv(result.unmatchedCsvRows)
@@ -338,15 +341,32 @@ export default function ReconcileManager() {
                 {" · "}{noShowList.length} unmatched → No Show
                 {unmatchedCsv > 0 && ` · ${unmatchedCsv} CSV rows outside range or no match`}
               </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {rawRows.length} row{rawRows.length !== 1 ? "s" : ""} → Appointment records
+                {srcPreview?.error
+                  ? <span className="text-amber-600"> · referral source not mapped ({srcPreview.error.replace(/\.$/, "")})</span>
+                  : srcPreview
+                    ? <> · <span className={srcPreview.matched ? "text-emerald-600" : "text-amber-600"}>{srcPreview.matched} will get an IntakeQ referral source</span>
+                        {srcPreview.eligible !== rawRows.length && ` (${srcPreview.eligible} row${srcPreview.eligible !== 1 ? "s" : ""} have a usable DOB + date)`}</>
+                    : null}
+              </p>
             </div>
             <Button variant="outline" size="sm" onClick={reset}>Start over</Button>
           </div>
 
           {matches.length === 0 && noShowList.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-center">
+            <div className="flex flex-col items-center py-10 text-center">
               <AlertCircle className="h-10 w-10 text-amber-400 mb-3" />
-              <p className="font-medium text-slate-700">No referrals found in this date range</p>
-              <p className="text-sm text-slate-500 mt-1">Try a different date range or check that Genesis MRNs are cleaned up.</p>
+              <p className="font-medium text-slate-700">No referrals matched in this date range</p>
+              <p className="text-sm text-slate-500 mt-1 max-w-lg">
+                No referral statuses will change. You can still import the {rawRows.length} row
+                {rawRows.length !== 1 ? "s" : ""} as Appointment records
+                {srcPreview && !srcPreview.error && srcPreview.matched > 0 ? ` (${srcPreview.matched} will get an IntakeQ referral source)` : ""}.
+                To reconcile statuses too, try a different date range or check that Genesis MRNs are cleaned up.
+              </p>
+              <Button className="mt-4" onClick={handleApply} disabled={isPending}>
+                {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing…</> : <><Check className="h-4 w-4 mr-2" />Import {rawRows.length} appointment{rawRows.length !== 1 ? "s" : ""}</>}
+              </Button>
             </div>
           ) : (
             <div className="space-y-6">
@@ -436,9 +456,9 @@ export default function ReconcileManager() {
 
               <div className="flex items-center justify-between pt-2">
                 <p className="text-sm text-slate-500">
-                  {selCompleted.length} → Completed · {selNoShow.length} → No Show
+                  {rawRows.length} → Appointment records · {selCompleted.length} → Completed · {selNoShow.length} → No Show
                 </p>
-                <Button onClick={handleApply} disabled={isPending || (selCompleted.length === 0 && selNoShow.length === 0)}>
+                <Button onClick={handleApply} disabled={isPending}>
                   {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Applying…</> : <><Check className="h-4 w-4 mr-2" />Apply</>}
                 </Button>
               </div>

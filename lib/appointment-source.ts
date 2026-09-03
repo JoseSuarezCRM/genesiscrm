@@ -93,6 +93,79 @@ export interface AttributionResult {
   error?: string
 }
 
+interface PairTarget { dob: string; day: number }
+interface PairMatch { intakeId: string; submittedAt: Date; category: string }
+
+/**
+ * Pair targets (dob + appointment day) with IntakeQ submissions: same DOB, submitted
+ * on/after the appointment day within the window, nearest first, one submission per
+ * target and one target per submission. Returns targetIndex → match.
+ * Shared by the real attribution and the pre-import preview.
+ */
+export async function pairWithSubmissions(targets: PairTarget[]): Promise<Map<number, PairMatch>> {
+  const out = new Map<number, PairMatch>()
+  if (!targets.length) return out
+
+  const minDay = Math.min(...targets.map((t) => t.day))
+  const since = new Date((minDay - 1) * 86400000)
+  const submissions: { intakeId: string; dateOfBirth: string | null; submittedAt: Date; category: string }[] =
+    await (prisma as any).intakeReferralResponse.findMany({
+      where: { submittedAt: { gte: since } },
+      select: { intakeId: true, dateOfBirth: true, submittedAt: true, category: true },
+    })
+
+  const byDob = new Map<string, { intakeId: string; day: number; submittedAt: Date; category: string }[]>()
+  for (const s of submissions) {
+    const k = dobKey(s.dateOfBirth)
+    const day = instantDayNum(s.submittedAt)
+    if (!k || day == null) continue
+    const arr = byDob.get(k) ?? []
+    arr.push({ intakeId: s.intakeId, day, submittedAt: s.submittedAt, category: s.category })
+    byDob.set(k, arr)
+  }
+
+  type Pair = { idx: number; intakeId: string; gap: number; submittedAt: Date; category: string }
+  const pairs: Pair[] = []
+  targets.forEach((t, idx) => {
+    for (const s of byDob.get(t.dob) ?? []) {
+      const gap = s.day - t.day
+      if (gap >= 0 && gap <= INTAKE_MATCH_WINDOW_DAYS) {
+        pairs.push({ idx, intakeId: s.intakeId, gap, submittedAt: s.submittedAt, category: s.category })
+      }
+    }
+  })
+
+  pairs.sort((a, b) => a.gap - b.gap)
+  const usedIntake = new Set<string>()
+  for (const p of pairs) {
+    if (out.has(p.idx) || usedIntake.has(p.intakeId)) continue
+    usedIntake.add(p.intakeId)
+    out.set(p.idx, { intakeId: p.intakeId, submittedAt: p.submittedAt, category: p.category })
+  }
+  return out
+}
+
+/**
+ * Dry run for the reconcile preview: how many of these rows would pick up a referral
+ * source, without creating anything. `eligible` = rows that have both a usable DOB
+ * and appointment date (the rest can never match).
+ */
+export async function previewSourceMatches(
+  rows: { dob?: string; visitDate?: string }[],
+): Promise<{ eligible: number; matched: number; error?: string }> {
+  const mapping = await getSourceMapping()
+  if (!mapping) return { eligible: 0, matched: 0, error: "No referral-source mapping configured on the IntakeQ integration." }
+
+  const targets: PairTarget[] = []
+  for (const r of rows) {
+    const dob = dobKey(r.dob)
+    const day = recordDayNum(r.visitDate)
+    if (dob && day != null) targets.push({ dob, day })
+  }
+  const paired = await pairWithSubmissions(targets)
+  return { eligible: targets.length, matched: paired.size }
+}
+
 /**
  * Pair records with IntakeQ submissions and write the referral source.
  * `recordIds` limits the run (e.g. the rows an import just created); omit to sweep
@@ -128,54 +201,14 @@ export async function attributeReferralSources(opts: {
 
   if (targets.length === 0) return { scanned: records.length, matched: 0, skipped: records.length }
 
-  // Only submissions that could fall inside any record's window.
-  const minDay = Math.min(...targets.map((t) => t.day!))
-  const since = new Date((minDay - 1) * 86400000)
-  const submissions: { intakeId: string; dateOfBirth: string | null; submittedAt: Date; category: string }[] =
-    await (prisma as any).intakeReferralResponse.findMany({
-      where: { submittedAt: { gte: since } },
-      select: { intakeId: true, dateOfBirth: true, submittedAt: true, category: true },
-    })
-
-  // Index submissions by DOB key.
-  const byDob = new Map<string, { intakeId: string; day: number; submittedAt: Date; category: string }[]>()
-  for (const s of submissions) {
-    const k = dobKey(s.dateOfBirth)
-    const day = instantDayNum(s.submittedAt)
-    if (!k || day == null) continue
-    const arr = byDob.get(k) ?? []
-    arr.push({ intakeId: s.intakeId, day, submittedAt: s.submittedAt, category: s.category })
-    byDob.set(k, arr)
-  }
-
-  // Candidate pairs: same DOB, submitted on/after the appointment day, within the window.
-  type Pair = { recIdx: number; intakeId: string; gap: number; submittedAt: Date; category: string }
-  const pairs: Pair[] = []
-  targets.forEach((t, recIdx) => {
-    for (const s of byDob.get(t.dob) ?? []) {
-      const gap = s.day - t.day!
-      if (gap >= 0 && gap <= INTAKE_MATCH_WINDOW_DAYS) {
-        pairs.push({ recIdx, intakeId: s.intakeId, gap, submittedAt: s.submittedAt, category: s.category })
-      }
-    }
-  })
-
-  // Greedy nearest-first, one submission per record and one record per submission —
-  // so a repeat visitor can't attribute the same intake twice.
-  pairs.sort((a, b) => a.gap - b.gap)
-  const usedRec = new Set<number>()
-  const usedIntake = new Set<string>()
+  const paired = await pairWithSubmissions(targets.map((t) => ({ dob: t.dob, day: t.day! })))
   let matched = 0
 
-  for (const p of pairs) {
-    if (usedRec.has(p.recIdx) || usedIntake.has(p.intakeId)) continue
-    usedRec.add(p.recIdx)
-    usedIntake.add(p.intakeId)
-
-    const t = targets[p.recIdx]
-    const next: Record<string, any> = { ...t.values, [mapping.sourcePropId]: p.category }
-    if (mapping.submittedPropId) next[mapping.submittedPropId] = dateValueForDay(p.submittedAt)
-    if (mapping.intakeIdPropId) next[mapping.intakeIdPropId] = p.intakeId
+  for (const [idx, m] of Array.from(paired.entries())) {
+    const t = targets[idx]
+    const next: Record<string, any> = { ...t.values, [mapping.sourcePropId]: m.category }
+    if (mapping.submittedPropId) next[mapping.submittedPropId] = dateValueForDay(m.submittedAt)
+    if (mapping.intakeIdPropId) next[mapping.intakeIdPropId] = m.intakeId
 
     await (prisma as any).customObjectRecord.update({ where: { id: t.id }, data: { values: next } }).catch(() => {})
     matched++

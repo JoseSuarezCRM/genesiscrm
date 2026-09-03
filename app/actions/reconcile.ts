@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { runImportBatch, startImportRun } from "@/app/actions/import-records"
-import { attributeReferralSources } from "@/lib/appointment-source"
+import { attributeReferralSources, previewSourceMatches } from "@/lib/appointment-source"
 
 // The object the weekly completed-appointments file is imported into.
 // NOT exported: a "use server" module may only export async functions.
@@ -158,6 +158,15 @@ export async function getAppointmentProperties(): Promise<{ id: string; name: st
     where: { key: APPOINTMENTS_OBJECT_KEY }, select: { properties: true },
   }).catch(() => null)
   return (((def?.properties as any[]) ?? []) as any[]).map((p) => ({ id: p.id, name: p.name, type: p.type }))
+}
+
+/** Preview (no writes): how many uploaded rows would pick up an IntakeQ referral source. */
+export async function previewIntakeMatches(
+  rows: { dob?: string; visitDate?: string }[],
+): Promise<{ eligible: number; matched: number; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { eligible: 0, matched: 0, error: "Unauthorized" }
+  return previewSourceMatches(rows)
 }
 
 // ── Remembered column mapping (the weekly file has the same shape each time) ──
