@@ -11,6 +11,7 @@ import { periodOf, recentPeriods, periodLabel, periodStartDate, defaultPeriodCou
 import { encryptSecret, maskTail, randomToken, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
 import { sendReferralReport, sendScheduledIntakeReport, type IntakeEmailReportConfig } from "@/lib/intakeq-report"
+import { attributeReferralSources, type SourceMapping, type AttributionResult } from "@/lib/appointment-source"
 
 export interface ReferralSourceReport {
   configured: boolean
@@ -218,6 +219,8 @@ export interface IntegrationSettings {
   lastRunAt: string | null
   // Scheduled email report of the referral-source table.
   emailReport: IntakeEmailReportConfig
+  // Where the matched referral source gets written (object + properties).
+  sourceMapping: SourceMapping | null
 }
 
 export async function getIntegrationSettings(): Promise<IntegrationSettings> {
@@ -245,7 +248,57 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
       window: cfg.emailReport?.window ?? "last_7_days",
       lastSentAt: cfg.emailReport?.lastSentAt ?? null,
     },
+    sourceMapping: cfg.sourceMapping ?? null,
   }
+}
+
+// ── Referral-source mapping (which object/properties receive the source) ─────
+
+export interface SourceMappingObject {
+  key: string
+  label: string
+  dateProps: { id: string; name: string }[]
+  textProps: { id: string; name: string }[]
+}
+
+/** Custom objects + their DATE / text-ish properties, for the mapping pickers. */
+export async function getSourceMappingOptions(): Promise<SourceMappingObject[]> {
+  await requireAccess("REPORTS", "VIEW")
+  const defs = await (prisma as any).customObjectDef.findMany({
+    orderBy: { plural: "asc" }, select: { key: true, plural: true, properties: true },
+  }).catch(() => [])
+  return (defs as any[]).map((d) => {
+    const props: any[] = (d.properties as any[]) ?? []
+    return {
+      key: `CO:${d.key}`,
+      label: d.plural,
+      dateProps: props.filter((p) => p.type === "DATE" || p.type === "DATE_TIME").map((p) => ({ id: p.id, name: p.name })),
+      textProps: props.filter((p) => ["TEXT", "LONG_TEXT", "DROPDOWN"].includes(p.type)).map((p) => ({ id: p.id, name: p.name })),
+    }
+  })
+}
+
+export async function saveIntakeqSourceMapping(input: SourceMapping | null): Promise<{ ok?: boolean; error?: string }> {
+  await requireAccess("REPORTS", "EDIT")
+  try {
+    const row = await getIntegration()
+    const cfg = (row?.config ?? {}) as any
+    await (prisma as any).integration.upsert({
+      where: { provider: "intakeq" },
+      create: { provider: "intakeq", config: { sourceMapping: input } },
+      update: { config: { ...cfg, sourceMapping: input } },
+    })
+    revalidatePath("/settings/integrations/intakeq")
+    return { ok: true }
+  } catch (e: any) { return { error: e?.message ?? "Couldn't save the mapping." } }
+}
+
+/** Backfill: attribute referral sources to mapped records that don't have one yet. */
+export async function runSourceAttribution(): Promise<AttributionResult> {
+  await requireAccess("REPORTS", "EDIT")
+  const res = await attributeReferralSources({ onlyMissing: true })
+  revalidatePath("/settings/integrations/intakeq")
+  return res
 }
 
 // Save the scheduled-pull settings (when it runs + which date window to reconcile).
