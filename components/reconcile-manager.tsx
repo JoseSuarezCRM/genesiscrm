@@ -5,6 +5,8 @@ import { matchAppointments, cleanupGenesisMrn, getAppointmentProperties, getImpo
 import type { CsvRow, MatchResult, NoShowCandidate, AppliedRecord } from "@/app/actions/reconcile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import DatePicker from "@/components/ui/date-picker"
+import StyledSelect from "@/components/ui/styled-select"
 import Link from "next/link"
 import {
   Upload,
@@ -52,9 +54,18 @@ function suggestProp(header: string, props: { id: string; name: string }[]): str
   return props.find((p) => norm(p.name) === h)?.id ?? ""
 }
 
+/** A real instant (e.g. a referral's scheduled date) — shown in clinic time. */
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—"
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
+}
+
+/** A date-only value (the picked range) — read its literal y-m-d so no zone can shift it. */
+function fmtDay(v: string | null | undefined) {
+  if (!v) return "—"
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return v
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -240,11 +251,11 @@ export default function ReconcileManager() {
             <div className="flex items-center gap-3">
               <div className="flex-1 space-y-1">
                 <label className="text-xs text-slate-500 font-medium">From</label>
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                <DatePicker value={dateFrom} autoOpen={false} onCommit={(v) => setDateFrom(v)} onCancel={() => {}} />
               </div>
               <div className="flex-1 space-y-1">
                 <label className="text-xs text-slate-500 font-medium">To</label>
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                <DatePicker value={dateTo} autoOpen={false} onCommit={(v) => setDateTo(v)} onCancel={() => {}} />
               </div>
             </div>
           </div>
@@ -306,11 +317,11 @@ export default function ReconcileManager() {
                     <td className="px-3 py-2 font-medium text-slate-700">{h}</td>
                     <td className="px-3 py-2 text-slate-400 truncate max-w-[220px]">{rawRows[0]?.[h] || "—"}</td>
                     <td className="px-3 py-2">
-                      <select value={fieldMap[h] ?? ""} onChange={(e) => setFieldMap((m) => ({ ...m, [h]: e.target.value }))}
-                        className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-zinc-400">
+                      <StyledSelect searchable value={fieldMap[h] ?? ""} onChange={(e) => setFieldMap((m) => ({ ...m, [h]: e.target.value }))}
+                        className="h-9 w-64 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-zinc-400">
                         <option value="">— Don&rsquo;t import —</option>
                         {props.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                      </StyledSelect>
                     </td>
                   </tr>
                 ))}
@@ -336,7 +347,7 @@ export default function ReconcileManager() {
             <div>
               <p className="text-sm font-medium text-slate-800">{fileName}</p>
               <p className="text-xs text-slate-500">
-                Range: {fmtDate(dateFrom)} — {fmtDate(dateTo)}
+                Range: {fmtDay(dateFrom)} — {fmtDay(dateTo)}
                 {" · "}{matches.length} matched → Completed
                 {" · "}{noShowList.length} unmatched → No Show
                 {unmatchedCsv > 0 && ` · ${unmatchedCsv} CSV rows outside range or no match`}
@@ -477,7 +488,7 @@ export default function ReconcileManager() {
                 {completedCount} marked Completed · {noShowCount} marked No Show
               </p>
               <p className="text-sm text-green-600">
-                {fileName} · Range: {fmtDate(dateFrom)} — {fmtDate(dateTo)}
+                {fileName} · Range: {fmtDay(dateFrom)} — {fmtDay(dateTo)}
               </p>
               {importMsg && <p className="mt-1 text-sm text-green-700">{importMsg}</p>}
               <p className="mt-1 text-xs text-green-600/80">
