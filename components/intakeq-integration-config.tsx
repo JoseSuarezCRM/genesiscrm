@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarClock, Mail } from "lucide-react"
-import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, saveIntakeqReportSchedule, sendIntakeReportNow, type IntegrationSettings } from "@/app/actions/intakeq"
+import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarClock, Mail, Link2 } from "lucide-react"
+import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, saveIntakeqReportSchedule, sendIntakeReportNow, getSourceMappingOptions, saveIntakeqSourceMapping, runSourceAttribution, type IntegrationSettings, type SourceMappingObject } from "@/app/actions/intakeq"
 import { INTAKE_WINDOWS, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { cn } from "@/lib/utils"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
@@ -35,6 +35,52 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
   const [repHour, setRepHour] = useState(settings.emailReport.hour)
   const [repWin, setRepWin] = useState<IntakeWindow>(settings.emailReport.window)
   const [repMsg, setRepMsg] = useState<{ text: string; ok?: boolean } | null>(null)
+
+  // Referral-source mapping (which object + properties receive the matched source)
+  const sm = settings.sourceMapping
+  const [mapObjects, setMapObjects] = useState<SourceMappingObject[] | null>(null)
+  const [mapObj, setMapObj] = useState(sm?.objectType ?? "")
+  const [mapDob, setMapDob] = useState(sm?.dobPropId ?? "")
+  const [mapVisit, setMapVisit] = useState(sm?.visitDatePropId ?? "")
+  const [mapSource, setMapSource] = useState(sm?.sourcePropId ?? "")
+  const [mapSubmitted, setMapSubmitted] = useState(sm?.submittedPropId ?? "")
+  const [mapIntakeId, setMapIntakeId] = useState(sm?.intakeIdPropId ?? "")
+  const [mapMsg, setMapMsg] = useState<{ text: string; ok?: boolean } | null>(null)
+
+  useEffect(() => { getSourceMappingOptions().then(setMapObjects).catch(() => setMapObjects([])) }, [])
+  const selectedObj = (mapObjects ?? []).find((o) => o.key === mapObj) ?? null
+  const mapComplete = !!(mapObj && mapDob && mapVisit && mapSource)
+
+  // A property used twice means a "save into" target would overwrite a match key.
+  const propName = (id: string) =>
+    [...(selectedObj?.dateProps ?? []), ...(selectedObj?.textProps ?? [])].find((p) => p.id === id)?.name ?? id
+  const dupProp = (() => {
+    const seen = new Set<string>()
+    for (const id of [mapDob, mapVisit, mapSource, mapSubmitted, mapIntakeId].filter(Boolean)) {
+      if (seen.has(id)) return propName(id)
+      seen.add(id)
+    }
+    return null
+  })()
+
+  function saveMapping() {
+    setMapMsg(null)
+    startTransition(async () => {
+      const r = await saveIntakeqSourceMapping(mapComplete
+        ? { objectType: mapObj, dobPropId: mapDob, visitDatePropId: mapVisit, sourcePropId: mapSource, submittedPropId: mapSubmitted || undefined, intakeIdPropId: mapIntakeId || undefined }
+        : null)
+      setMapMsg(r.error ? { text: r.error } : { text: mapComplete ? "Mapping saved." : "Mapping cleared.", ok: true })
+      router.refresh()
+    })
+  }
+  function backfillSources() {
+    setMapMsg(null)
+    startTransition(async () => {
+      const r = await runSourceAttribution()
+      setMapMsg(r.error ? { text: r.error } : { text: `Matched ${r.matched} of ${r.scanned} records.`, ok: true })
+      router.refresh()
+    })
+  }
 
   const reportInput = () => ({ enabled: repEnabled, recipients: repRecipients.split(",").map((s) => s.trim()).filter(Boolean), frequency: repFreq, dayOfWeek: repDay, hour: repHour, window: repWin })
   function saveReportSchedule() {
@@ -258,6 +304,106 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
           {repMsg && <span className={cn("text-xs", repMsg.ok ? "text-emerald-600" : "text-red-600")}>{repMsg.text}</span>}
           {settings.emailReport.lastSentAt && <span className="text-[11px] text-slate-400 ml-auto">Last sent {new Date(settings.emailReport.lastSentAt).toLocaleString()}</span>}
         </div>
+      </div>
+
+      {/* Referral source mapping */}
+      <div className={card}>
+        <div className="flex items-center gap-2 mb-1">
+          <Link2 className="h-4 w-4 text-slate-400" />
+          <h3 className="text-sm font-semibold text-slate-800">Referral source mapping</h3>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">
+          Writes each patient&rsquo;s IntakeQ referral source onto their record. A record is matched to the
+          submission with the same <strong>date of birth</strong> that was submitted <strong>on the appointment
+          date or after it</strong> (nearest one wins, within 30 days).
+        </p>
+
+        {mapObjects === null ? (
+          <p className="text-xs text-slate-400"><Loader2 className="inline h-3 w-3 animate-spin" /> Loading objects…</p>
+        ) : (
+          <>
+            <label className="text-xs text-slate-500">Records live in
+              <select value={mapObj} onChange={(e) => { setMapObj(e.target.value); setMapDob(""); setMapVisit(""); setMapSource(""); setMapSubmitted(""); setMapIntakeId("") }}
+                className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-56 focus:outline-none focus:border-zinc-400">
+                <option value="">— Select object —</option>
+                {mapObjects.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+              </select>
+            </label>
+
+            {/* Match: IntakeQ field ↔ a property that must line up with it */}
+            <p className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Find the right submission by</p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="w-64">IntakeQ <strong>Date of Birth</strong> must equal</span>
+                <select value={mapDob} onChange={(e) => setMapDob(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Select property —</option>
+                  {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="w-64">IntakeQ <strong>Submitted</strong> must be on/after</span>
+                <select value={mapVisit} onChange={(e) => setMapVisit(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Select property —</option>
+                  {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Write: IntakeQ value → the property it's saved into */}
+            <p className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Then save onto the record</p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="w-64">IntakeQ <strong>Referral Source</strong> &rarr; save into</span>
+                <select value={mapSource} onChange={(e) => setMapSource(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Select property —</option>
+                  {(selectedObj?.textProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <span className="w-64">IntakeQ <strong>Submitted</strong> &rarr; save into <span className="text-slate-300">(optional)</span></span>
+                <select value={mapSubmitted} onChange={(e) => setMapSubmitted(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Don&rsquo;t save —</option>
+                  {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <span className="w-64">IntakeQ <strong>Submission ID</strong> &rarr; save into <span className="text-slate-300">(optional)</span></span>
+                <select value={mapIntakeId} onChange={(e) => setMapIntakeId(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Don&rsquo;t save —</option>
+                  {(selectedObj?.textProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {dupProp && (
+              <p className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <strong>{dupProp}</strong> is used for more than one thing. A &ldquo;save into&rdquo; property gets
+                overwritten — don&rsquo;t point it at the property you&rsquo;re matching on, or you&rsquo;ll lose that value.
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              <button onClick={saveMapping} disabled={pending || !!dupProp} title={dupProp ? "Fix the duplicate property first" : ""}
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+                {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save mapping
+              </button>
+              <button onClick={backfillSources} disabled={pending || !settings.sourceMapping} title={settings.sourceMapping ? "" : "Save a mapping first"}
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-zinc-200 text-zinc-700 hover:border-zinc-400 disabled:opacity-50">
+                Match referral sources now
+              </button>
+              {mapMsg && <span className={cn("text-xs", mapMsg.ok ? "text-emerald-600" : "text-red-600")}>{mapMsg.text}</span>}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">
+              &ldquo;Match now&rdquo; fills only records that don&rsquo;t have a source yet — useful for a first run, or when a
+              patient submits their intake after the appointments file was imported.
+            </p>
+          </>
+        )}
       </div>
 
       {/* Enable */}

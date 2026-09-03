@@ -110,10 +110,36 @@ function CompareCaption({ result }: { result: ReportResult }) {
   return <p className={cn("mb-2 text-xs font-medium", deltaColor(c.delta))}>{c.delta == null ? "—" : `${c.delta > 0 ? "▲" : c.delta < 0 ? "▼" : ""} ${Math.abs(c.delta)}%`} <span className="text-zinc-400 font-normal">vs previous period ({fmtNum(c.prev, result.valueFormat)})</span></p>
 }
 
-export function DataTable({ result, onDrill, pageSize, sortable, frozenFirst }: { result: ReportResult; onDrill?: DrillFn; pageSize?: number; sortable?: boolean; frozenFirst?: boolean }) {
+// Shared footer: "x–y of z" + page-size selector (10/25/50/100) + Prev/Next.
+function PagerControls({ total, page, pageCount, pageSize, start, shown, onPage, onPageSize }: {
+  total: number; page: number; pageCount: number; pageSize: number; start: number; shown: number
+  onPage: (p: number) => void; onPageSize: (n: number) => void
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+      <span>{(start + 1).toLocaleString()}–{(start + shown).toLocaleString()} of {total.toLocaleString()}</span>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1">
+          <span className="text-zinc-400">Per page</span>
+          <select value={pageSize} onChange={(e) => onPageSize(Number(e.target.value))} className="rounded-md border border-zinc-200 px-1.5 py-1 text-xs outline-none hover:border-zinc-400">
+            {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onPage(Math.max(0, page - 1))} disabled={page === 0} className="inline-flex items-center gap-0.5 rounded-md border border-zinc-200 px-2 py-1 disabled:opacity-40 hover:border-zinc-400"><ChevronLeft className="h-3.5 w-3.5" /> Prev</button>
+          <span className="px-1">{page + 1} / {pageCount}</span>
+          <button onClick={() => onPage(Math.min(pageCount - 1, page + 1))} disabled={page >= pageCount - 1} className="inline-flex items-center gap-0.5 rounded-md border border-zinc-200 px-2 py-1 disabled:opacity-40 hover:border-zinc-400">Next <ChevronRight className="h-3.5 w-3.5" /></button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function DataTable({ result, onDrill, pageSize: propPageSize, sortable = true, frozenFirst }: { result: ReportResult; onDrill?: DrillFn; pageSize?: number; sortable?: boolean; frozenFirst?: boolean }) {
   // Summarized tables (one row per dimension group) carry rowKeys → rows drill in.
   const drillable = !!(onDrill && result.rowKeys && result.rowKeys.length === result.rows.length)
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(propPageSize ?? 25)
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null)
 
   // Sort a stable index array so rowKeys (drill) stay aligned with the visible order.
@@ -131,11 +157,11 @@ export function DataTable({ result, onDrill, pageSize, sortable, frozenFirst }: 
     })
   }, [result.rows, sort])
 
-  const paged = !!pageSize && orderIdx.length > pageSize
-  const pageCount = paged ? Math.ceil(orderIdx.length / pageSize!) : 1
+  const showControls = orderIdx.length > 10
+  const pageCount = showControls ? Math.max(1, Math.ceil(orderIdx.length / pageSize)) : 1
   const p = Math.min(page, pageCount - 1)
-  const start = paged ? p * pageSize! : 0
-  const sliceIdx = paged ? orderIdx.slice(start, start + pageSize!) : orderIdx
+  const start = showControls ? p * pageSize : 0
+  const sliceIdx = showControls ? orderIdx.slice(start, start + pageSize) : orderIdx
   const toggleSort = (col: number) => setSort((s) => (s && s.col === col ? { col, dir: (s.dir === 1 ? -1 : 1) as 1 | -1 } : { col, dir: 1 }))
   const frozenCls = (j: number) => frozenFirst && j === 0 ? "sticky left-0 z-[1] bg-white" : ""
 
@@ -176,15 +202,9 @@ export function DataTable({ result, onDrill, pageSize, sortable, frozenFirst }: 
           </tr>
         )})}</tbody>
       </table>
-      {paged && (
-        <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-          <span>{(start + 1).toLocaleString()}–{(start + sliceIdx.length).toLocaleString()} of {result.rows.length.toLocaleString()}</span>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setPage(Math.max(0, p - 1))} disabled={p === 0} className="inline-flex items-center gap-0.5 rounded-md border border-zinc-200 px-2 py-1 disabled:opacity-40 hover:border-zinc-400"><ChevronLeft className="h-3.5 w-3.5" /> Prev</button>
-            <span className="px-1">{p + 1} / {pageCount}</span>
-            <button onClick={() => setPage(Math.min(pageCount - 1, p + 1))} disabled={p >= pageCount - 1} className="inline-flex items-center gap-0.5 rounded-md border border-zinc-200 px-2 py-1 disabled:opacity-40 hover:border-zinc-400">Next <ChevronRight className="h-3.5 w-3.5" /></button>
-          </div>
-        </div>
+      {showControls && (
+        <PagerControls total={orderIdx.length} page={p} pageCount={pageCount} pageSize={pageSize} start={start} shown={sliceIdx.length}
+          onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(0) }} />
       )}
       {result.capped && <p className="mt-2 text-xs text-amber-600">Showing the first {result.total.toLocaleString()} records.</p>}
     </div>
@@ -197,18 +217,46 @@ export function PivotTable({ pivot, onDrill, valueFormat }: { pivot: NonNullable
   const colTotals = pivot.colLabels.map((_, j) => pivot.cells.reduce((a: number, row) => a + (row[j] ?? 0), 0))
   const grand = colTotals.reduce((a: number, v) => a + v, 0)
   const f = (v: number) => fmtNum(v, valueFormat)
+
+  // Sort col: -1 = row label, 0..nCols-1 = data column, nCols = Total. Totals stay pinned.
+  const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(25)
+  const orderIdx = useMemo(() => {
+    const idxs = pivot.rowLabels.map((_, i) => i)
+    if (!sort) return idxs
+    const { col, dir } = sort
+    const rowTotal = (i: number): number => pivot.cells[i].reduce((a: number, v) => a + (v ?? 0), 0)
+    return idxs.sort((a, b) => {
+      if (col === -1) return String(pivot.rowLabels[a]).localeCompare(String(pivot.rowLabels[b])) * dir
+      const av: number = col === nCols ? rowTotal(a) : (pivot.cells[a][col] ?? 0)
+      const bv: number = col === nCols ? rowTotal(b) : (pivot.cells[b][col] ?? 0)
+      return (av - bv) * dir
+    })
+  }, [pivot, sort, nCols])
+
+  const showControls = orderIdx.length > 10
+  const pageCount = showControls ? Math.max(1, Math.ceil(orderIdx.length / pageSize)) : 1
+  const p = Math.min(page, pageCount - 1)
+  const start = showControls ? p * pageSize : 0
+  const sliceIdx = showControls ? orderIdx.slice(start, start + pageSize) : orderIdx
+  const toggleSort = (col: number) => setSort((s) => (s && s.col === col ? { col, dir: (s.dir === 1 ? -1 : 1) as 1 | -1 } : { col, dir: 1 }))
+  const SortIcon = ({ col }: { col: number }) => sort?.col === col ? (sort.dir === 1 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b-2 border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
-            <th className="px-3 py-2 font-semibold" />
-            {pivot.colLabels.map((c, j) => <th key={j} className="px-3 py-2 text-right font-semibold">{c}</th>)}
-            {nCols > 1 && <th className="px-3 py-2 text-right font-semibold">Total</th>}
+            <th className="cursor-pointer select-none px-3 py-2 font-semibold hover:text-zinc-700" onClick={() => toggleSort(-1)}><span className="inline-flex items-center gap-1"><SortIcon col={-1} /></span></th>
+            {pivot.colLabels.map((c, j) => <th key={j} className="cursor-pointer select-none px-3 py-2 text-right font-semibold hover:text-zinc-700" onClick={() => toggleSort(j)}><span className="inline-flex items-center justify-end gap-1">{c}<SortIcon col={j} /></span></th>)}
+            {nCols > 1 && <th className="cursor-pointer select-none px-3 py-2 text-right font-semibold hover:text-zinc-700" onClick={() => toggleSort(nCols)}><span className="inline-flex items-center justify-end gap-1">Total<SortIcon col={nCols} /></span></th>}
           </tr>
         </thead>
         <tbody>
-          {pivot.rowLabels.map((rl, i) => (
+          {sliceIdx.map((i) => {
+            const rl = pivot.rowLabels[i]
+            return (
             <tr key={i} className="border-b border-zinc-100 hover:bg-zinc-50">
               <td className="px-3 py-2 font-medium text-zinc-700">{rl}</td>
               {pivot.cells[i].map((v, j) => (
@@ -217,7 +265,7 @@ export function PivotTable({ pivot, onDrill, valueFormat }: { pivot: NonNullable
               ))}
               {nCols > 1 && <td className="px-3 py-2 text-right font-semibold text-zinc-900">{f(rowTotals[i])}</td>}
             </tr>
-          ))}
+          )})}
           <tr className="border-t-2 border-zinc-200 font-semibold text-zinc-900">
             <td className="px-3 py-2">Total</td>
             {colTotals.map((v, j) => <td key={j} className="px-3 py-2 text-right">{f(v)}</td>)}
@@ -225,6 +273,10 @@ export function PivotTable({ pivot, onDrill, valueFormat }: { pivot: NonNullable
           </tr>
         </tbody>
       </table>
+      {showControls && (
+        <PagerControls total={orderIdx.length} page={p} pageCount={pageCount} pageSize={pageSize} start={start} shown={sliceIdx.length}
+          onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(0) }} />
+      )}
     </div>
   )
 }
@@ -361,11 +413,6 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
       ))}
       {showAxis && yTitle && <text x={12} y={padT + cH / 2} transform={`rotate(-90 12 ${padT + cH / 2})`} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{yTitle}</text>}
       {showAxis && xTitle && <text x={padL + cWc / 2} y={H - 4} textAnchor="middle" fontSize={11} fontWeight={600} fill="#666">{xTitle}</text>}
-      {labels.map((_, i) => (
-        <rect key={`hit${i}`} x={padL + bw * i} y={padT} width={bw} height={cH} fill="transparent"
-          onMouseMove={(e) => moveTip(e, labels[i], series.map((s, si) => ({ name: s.name, value: s.points[i]?.value ?? 0, color: palette[si % palette.length] })))}
-          onClick={labelClick(i)} className={onDrill ? "cursor-pointer" : undefined} />
-      ))}
       {canStack ? (
         labels.map((_, i) => {
           let running = 0
@@ -415,6 +462,13 @@ export function Chart({ result, style, onDrill }: { result: ReportResult; style:
         })
       )}
       {labels.map((l, i) => <text key={i} x={padL + bw * i + bw / 2} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#888">{l.length > 10 ? l.slice(0, 9) + "…" : l}</text>)}
+      {/* Hover/drill hit areas — rendered LAST so they sit on top of the bars and
+          reliably capture the mouse over each full column (fixes sticky tooltips). */}
+      {labels.map((_, i) => (
+        <rect key={`hit${i}`} x={padL + bw * i} y={padT} width={bw} height={cH} fill="transparent"
+          onMouseMove={(e) => moveTip(e, labels[i], series.map((s, si) => ({ name: s.name, value: s.points[i]?.value ?? 0, color: palette[si % palette.length] })))}
+          onClick={labelClick(i)} className={onDrill ? "cursor-pointer" : undefined} />
+      ))}
     </svg>
   )
   return (

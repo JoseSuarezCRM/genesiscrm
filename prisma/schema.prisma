@@ -1094,6 +1094,14 @@ model CreateFormConfig {
   updatedAt  DateTime @default(now()) @updatedAt
 }
 
+// Remembered column→property mapping for a recurring import into an object, so a
+// weekly upload doesn't have to be re-mapped every time. fieldMap: colName -> propertyId.
+model ImportMappingConfig {
+  objectKey String   @id
+  fieldMap  Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 // Per-object pipeline display preferences (HubSpot-style). colorStyle controls
 // how stage/pipeline chips render: "text" | "dot" | "badge".
 model PipelineSettings {

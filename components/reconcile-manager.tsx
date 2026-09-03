@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useTransition, useRef } from "react"
-import { matchAppointments, applyReconciliation, cleanupGenesisMrn } from "@/app/actions/reconcile"
+import { matchAppointments, cleanupGenesisMrn, getAppointmentProperties, getImportMapping, saveImportMapping, applyReconciliationImport, previewIntakeMatches } from "@/app/actions/reconcile"
 import type { CsvRow, MatchResult, NoShowCandidate, AppliedRecord } from "@/app/actions/reconcile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import DatePicker from "@/components/ui/date-picker"
+import StyledSelect from "@/components/ui/styled-select"
 import Link from "next/link"
 import {
   Upload,
@@ -37,20 +39,33 @@ function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((c) => c !== ""))
 }
 
-function findCol(headers: string[], ...kw: string[]) {
-  return headers.findIndex((h) => kw.some((k) => h.toLowerCase().includes(k.toLowerCase())))
+/** Parsed file: header names + each row keyed by header (the shape the importer wants). */
+function toObjectRows(raw: string[][]): { headers: string[]; rows: Record<string, string>[] } {
+  if (raw.length < 2) return { headers: [], rows: [] }
+  const headers = raw[0].map((h, i) => h.trim() || `Column ${i + 1}`)
+  const rows = raw.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])))
+  return { headers, rows }
 }
 
-function extractRows(raw: string[][]): CsvRow[] {
-  if (raw.length < 2) return []
-  const h = raw[0]
-  const mrnIdx = findCol(h, "mrn"), nameIdx = findCol(h, "patient"), dateIdx = findCol(h, "visit date", "date")
-  return raw.slice(1).map((r) => ({ mrn: r[mrnIdx] ?? "", patientName: r[nameIdx] ?? "", visitDate: r[dateIdx] ?? "" }))
+/** Suggest a property for a column when there's no saved mapping (exact-ish name match). */
+function suggestProp(header: string, props: { id: string; name: string }[]): string {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+  const h = norm(header)
+  return props.find((p) => norm(p.name) === h)?.id ?? ""
 }
 
+/** A real instant (e.g. a referral's scheduled date) — shown in clinic time. */
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—"
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
+}
+
+/** A date-only value (the picked range) — read its literal y-m-d so no zone can shift it. */
+function fmtDay(v: string | null | undefined) {
+  if (!v) return "—"
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return v
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -67,10 +82,18 @@ const STATUS_COLORS: Record<string, string> = {
 export default function ReconcileManager() {
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [step, setStep] = useState<"setup" | "preview" | "done">("setup")
+  const [step, setStep] = useState<"setup" | "map" | "preview" | "done">("setup")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo]     = useState("")
   const [fileName, setFileName] = useState("")
+
+  // Column mapping (file headers → Appointments properties), remembered week to week.
+  const [headers, setHeaders] = useState<string[]>([])
+  const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
+  const [props, setProps] = useState<{ id: string; name: string; type: string }[]>([])
+  const [fieldMap, setFieldMap] = useState<Record<string, string>>({})
+  const [importMsg, setImportMsg] = useState<string | null>(null)
+  const [srcPreview, setSrcPreview] = useState<{ eligible: number; matched: number; error?: string } | null>(null)
 
   const [matches, setMatches]           = useState<MatchResult[]>([])
   const [noShowList, setNoShowList]     = useState<NoShowCandidate[]>([])
@@ -88,6 +111,29 @@ export default function ReconcileManager() {
   function reset() {
     setStep("setup"); setFileName(""); setMatches([]); setNoShowList([])
     setSelCompleted([]); setSelNoShow([]); setApplied([])
+    setHeaders([]); setRawRows([]); setFieldMap({}); setImportMsg(null); setSrcPreview(null)
+  }
+
+  // Column mapped to a given property, and the property whose name matches a pattern.
+  const colFor = (propId: string | null) => propId ? (Object.entries(fieldMap).find(([, pid]) => pid === propId)?.[0] ?? null) : null
+  const propIdBy = (re: RegExp) => props.find((p) => re.test(p.name))?.id ?? null
+  const keyCols = () => ({
+    mrn: colFor(propIdBy(/^mrn$/i)),
+    visit: colFor(propIdBy(/visit date/i)),
+    dob: colFor(propIdBy(/date of birth|dob/i)),
+    first: colFor(propIdBy(/first name/i)),
+    last: colFor(propIdBy(/last name/i)),
+  })
+
+  /** Reconciliation keys (MRN / name / visit date / DOB) pulled out via the mapping. */
+  function toCsvRows(): CsvRow[] {
+    const k = keyCols()
+    return rawRows.map((r) => ({
+      mrn: k.mrn ? (r[k.mrn] ?? "") : "",
+      patientName: [k.first && r[k.first], k.last && r[k.last]].filter(Boolean).join(" ").trim(),
+      visitDate: k.visit ? (r[k.visit] ?? "") : "",
+      dob: k.dob ? (r[k.dob] ?? "") : "",
+    }))
   }
 
   function handleFile(file: File) {
@@ -97,28 +143,70 @@ export default function ReconcileManager() {
     setFileName(file.name)
     const reader = new FileReader()
     reader.onload = (e) => {
-      const rows = extractRows(parseCsv(e.target?.result as string))
-      if (!rows.length) { setError("Could not parse file. Save as CSV from Excel first."); return }
+      const parsed = toObjectRows(parseCsv(e.target?.result as string))
+      if (!parsed.rows.length) { setError("Could not parse file. Save as CSV from Excel first."); return }
+      setHeaders(parsed.headers)
+      setRawRows(parsed.rows)
       startTransition(async () => {
-        const result = await matchAppointments(rows, dateFrom, dateTo)
-        setMatches(result.matches)
-        setNoShowList(result.noShowCandidates)
-        setUnmatchedCsv(result.unmatchedCsvRows)
-        setSelCompleted(result.matches.map((m) => m.referralId))
-        setSelNoShow(result.noShowCandidates.map((c) => c.referralId))
-        setStep("preview")
+        const [p, saved] = await Promise.all([getAppointmentProperties(), getImportMapping("appointments")])
+        setProps(p)
+        // Reuse last week's mapping for the headers present; suggest by name for the rest.
+        const map: Record<string, string> = {}
+        for (const h of parsed.headers) map[h] = saved[h] ?? suggestProp(h, p)
+        setFieldMap(map)
+        setStep("map")
       })
     }
     reader.readAsText(file)
   }
 
+  function continueToPreview() {
+    const k = keyCols()
+    if (!k.visit) { setError("Map the file's appointment date column to “Visit Date” before continuing."); return }
+    setError(null)
+    const csvRows = toCsvRows()
+    startTransition(async () => {
+      await saveImportMapping("appointments", fieldMap)
+      setSrcPreview(await previewIntakeMatches(csvRows.map((r) => ({ dob: r.dob, visitDate: r.visitDate }))))
+      const result = await matchAppointments(csvRows, dateFrom, dateTo)
+      setMatches(result.matches)
+      setNoShowList(result.noShowCandidates)
+      setUnmatchedCsv(result.unmatchedCsvRows)
+      setSelCompleted(result.matches.map((m) => m.referralId))
+      setSelNoShow(result.noShowCandidates.map((c) => c.referralId))
+      setStep("preview")
+    })
+  }
+
   function handleApply() {
     const matchMap: Record<string, { reportMrn: string; reportVisitDate: string }> = {}
     for (const m of matches) matchMap[m.referralId] = { reportMrn: m.csvRow.mrn, reportVisitDate: m.csvRow.visitDate }
+
+    // Row index → matched referral id, so the importer creates the association.
+    const rows = toCsvRows()
+    const norm = (s: string) => (s ?? "").replace(/\D/g, "")
+    const referralIdByRow: Record<number, string> = {}
+    for (const m of matches) {
+      if (!selCompleted.includes(m.referralId)) continue
+      const i = rows.findIndex((r, idx) => referralIdByRow[idx] === undefined && norm(r.mrn) === norm(m.csvRow.mrn) && r.visitDate === m.csvRow.visitDate)
+      if (i >= 0) referralIdByRow[i] = m.referralId
+    }
+
+    // Only columns actually mapped to a property are imported.
+    const cleanMap = Object.fromEntries(Object.entries(fieldMap).filter(([, v]) => v))
     startTransition(async () => {
-      const result = await applyReconciliation(selCompleted, selNoShow, matchMap)
+      const result = await applyReconciliationImport({
+        rows: rawRows, fieldMap: cleanMap, referralIdByRow,
+        completedIds: selCompleted, noShowIds: selNoShow, matchMap,
+      })
       if (result.error) { setError(result.error); return }
       setApplied(result.applied ?? [])
+      setImportMsg(
+        `${result.created} appointment record${result.created !== 1 ? "s" : ""} created · ` +
+        `${result.sourcesMatched} matched to an IntakeQ referral source` +
+        (result.sourceNote ? ` · ${result.sourceNote}` : "") +
+        (result.importErrors.length ? ` · ${result.importErrors.length} row(s) failed` : "")
+      )
       setStep("done")
     })
   }
@@ -163,11 +251,11 @@ export default function ReconcileManager() {
             <div className="flex items-center gap-3">
               <div className="flex-1 space-y-1">
                 <label className="text-xs text-slate-500 font-medium">From</label>
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                <DatePicker value={dateFrom} autoOpen={false} onCommit={(v) => setDateFrom(v)} onCancel={() => {}} />
               </div>
               <div className="flex-1 space-y-1">
                 <label className="text-xs text-slate-500 font-medium">To</label>
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                <DatePicker value={dateTo} autoOpen={false} onCommit={(v) => setDateTo(v)} onCancel={() => {}} />
               </div>
             </div>
           </div>
@@ -177,6 +265,7 @@ export default function ReconcileManager() {
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-slate-500" />
               <p className="text-sm font-semibold text-slate-700">Step 2 — Upload completed appointments CSV</p>
+              <p className="text-xs text-slate-500 mt-0.5">Next you&rsquo;ll map its columns to Appointment properties; each row becomes an Appointment record.</p>
             </div>
             <div
               className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl py-12 transition-colors ${dateFrom && dateTo ? "border-slate-300 cursor-pointer hover:border-blue-400 hover:bg-blue-50" : "border-slate-200 bg-slate-50 cursor-not-allowed opacity-60"}`}
@@ -196,6 +285,61 @@ export default function ReconcileManager() {
         </div>
       )}
 
+      {/* ── Map columns ──────────────────────────────── */}
+      {step === "map" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-800">{fileName}</p>
+              <p className="text-xs text-slate-500">{rawRows.length} row{rawRows.length !== 1 ? "s" : ""} · map each column to an Appointments property</p>
+            </div>
+            <Button variant="outline" onClick={reset}>Start over</Button>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            Each row becomes an <strong>Appointment</strong> record. Columns left as
+            &ldquo;Don&rsquo;t import&rdquo; are ignored. Map <strong>Date of Birth</strong> so the IntakeQ referral
+            source can be matched. This mapping is remembered for next week&rsquo;s file.
+          </p>
+
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">File column</th>
+                  <th className="px-3 py-2">Sample value</th>
+                  <th className="px-3 py-2">Import into</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {headers.map((h) => (
+                  <tr key={h} className="bg-white">
+                    <td className="px-3 py-2 font-medium text-slate-700">{h}</td>
+                    <td className="px-3 py-2 text-slate-400 truncate max-w-[220px]">{rawRows[0]?.[h] || "—"}</td>
+                    <td className="px-3 py-2">
+                      <StyledSelect searchable value={fieldMap[h] ?? ""} onChange={(e) => setFieldMap((m) => ({ ...m, [h]: e.target.value }))}
+                        className="h-9 w-64 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-zinc-400">
+                        <option value="">— Don&rsquo;t import —</option>
+                        {props.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </StyledSelect>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
+
+          <div className="flex items-center gap-3">
+            <Button onClick={continueToPreview} disabled={isPending}>
+              {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null} Continue
+            </Button>
+            <span className="text-xs text-slate-400">Mapping is saved when you continue.</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Preview ──────────────────────────────────── */}
       {step === "preview" && (
         <div className="space-y-6">
@@ -203,20 +347,37 @@ export default function ReconcileManager() {
             <div>
               <p className="text-sm font-medium text-slate-800">{fileName}</p>
               <p className="text-xs text-slate-500">
-                Range: {fmtDate(dateFrom)} — {fmtDate(dateTo)}
+                Range: {fmtDay(dateFrom)} — {fmtDay(dateTo)}
                 {" · "}{matches.length} matched → Completed
                 {" · "}{noShowList.length} unmatched → No Show
                 {unmatchedCsv > 0 && ` · ${unmatchedCsv} CSV rows outside range or no match`}
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {rawRows.length} row{rawRows.length !== 1 ? "s" : ""} → Appointment records
+                {srcPreview?.error
+                  ? <span className="text-amber-600"> · referral source not mapped ({srcPreview.error.replace(/\.$/, "")})</span>
+                  : srcPreview
+                    ? <> · <span className={srcPreview.matched ? "text-emerald-600" : "text-amber-600"}>{srcPreview.matched} will get an IntakeQ referral source</span>
+                        {srcPreview.eligible !== rawRows.length && ` (${srcPreview.eligible} row${srcPreview.eligible !== 1 ? "s" : ""} have a usable DOB + date)`}</>
+                    : null}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={reset}>Start over</Button>
           </div>
 
           {matches.length === 0 && noShowList.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-center">
+            <div className="flex flex-col items-center py-10 text-center">
               <AlertCircle className="h-10 w-10 text-amber-400 mb-3" />
-              <p className="font-medium text-slate-700">No referrals found in this date range</p>
-              <p className="text-sm text-slate-500 mt-1">Try a different date range or check that Genesis MRNs are cleaned up.</p>
+              <p className="font-medium text-slate-700">No referrals matched in this date range</p>
+              <p className="text-sm text-slate-500 mt-1 max-w-lg">
+                No referral statuses will change. You can still import the {rawRows.length} row
+                {rawRows.length !== 1 ? "s" : ""} as Appointment records
+                {srcPreview && !srcPreview.error && srcPreview.matched > 0 ? ` (${srcPreview.matched} will get an IntakeQ referral source)` : ""}.
+                To reconcile statuses too, try a different date range or check that Genesis MRNs are cleaned up.
+              </p>
+              <Button className="mt-4" onClick={handleApply} disabled={isPending}>
+                {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing…</> : <><Check className="h-4 w-4 mr-2" />Import {rawRows.length} appointment{rawRows.length !== 1 ? "s" : ""}</>}
+              </Button>
             </div>
           ) : (
             <div className="space-y-6">
@@ -306,9 +467,9 @@ export default function ReconcileManager() {
 
               <div className="flex items-center justify-between pt-2">
                 <p className="text-sm text-slate-500">
-                  {selCompleted.length} → Completed · {selNoShow.length} → No Show
+                  {rawRows.length} → Appointment records · {selCompleted.length} → Completed · {selNoShow.length} → No Show
                 </p>
-                <Button onClick={handleApply} disabled={isPending || (selCompleted.length === 0 && selNoShow.length === 0)}>
+                <Button onClick={handleApply} disabled={isPending}>
                   {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Applying…</> : <><Check className="h-4 w-4 mr-2" />Apply</>}
                 </Button>
               </div>
@@ -327,7 +488,12 @@ export default function ReconcileManager() {
                 {completedCount} marked Completed · {noShowCount} marked No Show
               </p>
               <p className="text-sm text-green-600">
-                {fileName} · Range: {fmtDate(dateFrom)} — {fmtDate(dateTo)}
+                {fileName} · Range: {fmtDay(dateFrom)} — {fmtDay(dateTo)}
+              </p>
+              {importMsg && <p className="mt-1 text-sm text-green-700">{importMsg}</p>}
+              <p className="mt-1 text-xs text-green-600/80">
+                Created records are a tracked import — undo it from{" "}
+                <Link href="/settings/import" className="underline">Import Records</Link> if this file was uploaded twice.
               </p>
             </div>
             <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={reset}>
