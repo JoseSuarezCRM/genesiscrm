@@ -3,6 +3,14 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { runImportBatch, startImportRun } from "@/app/actions/import-records"
+import { attributeReferralSources } from "@/lib/appointment-source"
+
+// The object the weekly completed-appointments file is imported into.
+export const APPOINTMENTS_OBJECT_KEY = "appointments"
+// Synthetic column carrying the reconciliation's matched referral id, so the shared
+// importer creates (and records for Undo) the Appointment↔Referral association.
+const REFERRAL_COL = "__referralId"
 
 function normalizeMrn(s: string | null | undefined): string {
   if (!s) return ""
@@ -13,6 +21,7 @@ export interface CsvRow {
   mrn: string
   patientName: string
   visitDate: string
+  dob?: string
 }
 
 export interface MatchResult {
@@ -138,6 +147,104 @@ export async function matchAppointments(
     }))
 
   return { matches, noShowCandidates, unmatchedCsvRows }
+}
+
+/** Properties of the Appointments object, for the column-mapping step. */
+export async function getAppointmentProperties(): Promise<{ id: string; name: string; type: string }[]> {
+  const session = await auth()
+  if (!session?.user) return []
+  const def = await (prisma as any).customObjectDef.findUnique({
+    where: { key: APPOINTMENTS_OBJECT_KEY }, select: { properties: true },
+  }).catch(() => null)
+  return (((def?.properties as any[]) ?? []) as any[]).map((p) => ({ id: p.id, name: p.name, type: p.type }))
+}
+
+// ── Remembered column mapping (the weekly file has the same shape each time) ──
+
+export async function getImportMapping(objectKey: string): Promise<Record<string, string>> {
+  const session = await auth()
+  if (!session?.user) return {}
+  const row = await (prisma as any).importMappingConfig.findUnique({ where: { objectKey } }).catch(() => null)
+  return (row?.fieldMap as Record<string, string>) ?? {}
+}
+
+export async function saveImportMapping(objectKey: string, fieldMap: Record<string, string>) {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  await (prisma as any).importMappingConfig.upsert({
+    where: { objectKey }, create: { objectKey, fieldMap }, update: { fieldMap },
+  }).catch(() => {})
+  return { success: true }
+}
+
+export interface ReconcileImportResult {
+  created: number
+  skipped: number
+  importErrors: { row: number; message: string }[]
+  sourcesMatched: number
+  sourceNote?: string
+  runId?: string
+  applied?: AppliedRecord[]
+  error?: string
+}
+
+/**
+ * One commit for the weekly upload: import every row as an Appointment record (via
+ * the shared importer, so it lands in Import History with Undo), set the reconciled
+ * referral statuses, and attribute IntakeQ referral sources to the new records.
+ */
+export async function applyReconciliationImport(input: {
+  rows: Record<string, string>[]
+  fieldMap: Record<string, string>
+  referralIdByRow: Record<number, string>
+  completedIds: string[]
+  noShowIds: string[]
+  matchMap: Record<string, { reportMrn: string; reportVisitDate: string }>
+}): Promise<ReconcileImportResult> {
+  const session = await auth()
+  if (!session?.user) return { created: 0, skipped: 0, importErrors: [], sourcesMatched: 0, error: "Unauthorized" }
+
+  const base: ReconcileImportResult = { created: 0, skipped: 0, importErrors: [], sourcesMatched: 0 }
+
+  // 1) Import the rows as Appointment records (create-only — each upload is a new week).
+  const run = await startImportRun(APPOINTMENTS_OBJECT_KEY)
+  if (run.error || !run.runId) return { ...base, error: run.error ?? "Couldn't start the import." }
+  const runId = run.runId
+
+  const rows = input.rows.map((r, i) => ({ ...r, [REFERRAL_COL]: input.referralIdByRow[i] ?? "" }))
+  const config = {
+    fieldMap: input.fieldMap,
+    assocMap: [{ column: REFERRAL_COL, targetType: "REFERRAL" }],
+    mode: "createOnly" as const,
+  }
+
+  const CHUNK = 200
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const res = await runImportBatch(APPOINTMENTS_OBJECT_KEY, config, rows.slice(i, i + CHUNK), i, runId)
+    if (res.error) return { ...base, error: res.error, runId }
+    base.created += res.created
+    base.skipped += res.skipped
+    base.importErrors.push(...res.errors)
+  }
+
+  // 2) Referral statuses (unchanged reconciliation behaviour).
+  const statusRes = await applyReconciliation(input.completedIds, input.noShowIds, input.matchMap)
+  const applied = (statusRes as any).applied as AppliedRecord[] | undefined
+
+  // 3) Attribute IntakeQ referral sources to exactly the records this run created.
+  const changes: { recordId: string }[] = await (prisma as any).importRunChange
+    .findMany({ where: { runId, kind: "create" }, select: { recordId: true } }).catch(() => [])
+  let sourcesMatched = 0
+  let sourceNote: string | undefined
+  if (changes.length) {
+    const attr = await attributeReferralSources({ recordIds: changes.map((c) => c.recordId) })
+    sourcesMatched = attr.matched
+    sourceNote = attr.error
+  }
+
+  revalidatePath(`/objects/${APPOINTMENTS_OBJECT_KEY}`)
+  revalidatePath("/referrals")
+  return { ...base, sourcesMatched, sourceNote, runId, applied }
 }
 
 /** Apply: mark completedIds as COMPLETED and noShowIds as NO_SHOW */
