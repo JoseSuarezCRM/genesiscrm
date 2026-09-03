@@ -51,6 +51,18 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
   const selectedObj = (mapObjects ?? []).find((o) => o.key === mapObj) ?? null
   const mapComplete = !!(mapObj && mapDob && mapVisit && mapSource)
 
+  // A property used twice means a "save into" target would overwrite a match key.
+  const propName = (id: string) =>
+    [...(selectedObj?.dateProps ?? []), ...(selectedObj?.textProps ?? [])].find((p) => p.id === id)?.name ?? id
+  const dupProp = (() => {
+    const seen = new Set<string>()
+    for (const id of [mapDob, mapVisit, mapSource, mapSubmitted, mapIntakeId].filter(Boolean)) {
+      if (seen.has(id)) return propName(id)
+      seen.add(id)
+    }
+    return null
+  })()
+
   function saveMapping() {
     setMapMsg(null)
     startTransition(async () => {
@@ -310,56 +322,74 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
           <p className="text-xs text-slate-400"><Loader2 className="inline h-3 w-3 animate-spin" /> Loading objects…</p>
         ) : (
           <>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="text-xs text-slate-500">Object
-                <select value={mapObj} onChange={(e) => { setMapObj(e.target.value); setMapDob(""); setMapVisit(""); setMapSource(""); setMapSubmitted(""); setMapIntakeId("") }}
-                  className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-48 focus:outline-none focus:border-zinc-400">
-                  <option value="">— Select —</option>
-                  {mapObjects.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-slate-500">Date of birth
+            <label className="text-xs text-slate-500">Records live in
+              <select value={mapObj} onChange={(e) => { setMapObj(e.target.value); setMapDob(""); setMapVisit(""); setMapSource(""); setMapSubmitted(""); setMapIntakeId("") }}
+                className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-56 focus:outline-none focus:border-zinc-400">
+                <option value="">— Select object —</option>
+                {mapObjects.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+              </select>
+            </label>
+
+            {/* Match: IntakeQ field ↔ a property that must line up with it */}
+            <p className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Find the right submission by</p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="w-64">IntakeQ <strong>Date of Birth</strong> must equal</span>
                 <select value={mapDob} onChange={(e) => setMapDob(e.target.value)} disabled={!selectedObj}
-                  className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
-                  <option value="">— Select —</option>
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Select property —</option>
                   {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-              </label>
-              <label className="text-xs text-slate-500">Appointment date
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="w-64">IntakeQ <strong>Submitted</strong> must be on/after</span>
                 <select value={mapVisit} onChange={(e) => setMapVisit(e.target.value)} disabled={!selectedObj}
-                  className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
-                  <option value="">— Select —</option>
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Select property —</option>
                   {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-              </label>
-              <label className="text-xs text-slate-500">Write source to
-                <select value={mapSource} onChange={(e) => setMapSource(e.target.value)} disabled={!selectedObj}
-                  className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
-                  <option value="">— Select —</option>
-                  {(selectedObj?.textProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </label>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-end gap-2 mt-2">
-              <label className="text-xs text-slate-400">Submitted date <span className="text-slate-300">(optional)</span>
-                <select value={mapSubmitted} onChange={(e) => setMapSubmitted(e.target.value)} disabled={!selectedObj}
-                  className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
-                  <option value="">— None —</option>
-                  {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </label>
-              <label className="text-xs text-slate-400">Submission ID <span className="text-slate-300">(optional)</span>
-                <select value={mapIntakeId} onChange={(e) => setMapIntakeId(e.target.value)} disabled={!selectedObj}
-                  className="block h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
-                  <option value="">— None —</option>
+            {/* Write: IntakeQ value → the property it's saved into */}
+            <p className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Then save onto the record</p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="w-64">IntakeQ <strong>Referral Source</strong> &rarr; save into</span>
+                <select value={mapSource} onChange={(e) => setMapSource(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Select property —</option>
                   {(selectedObj?.textProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-              </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <span className="w-64">IntakeQ <strong>Submitted</strong> &rarr; save into <span className="text-slate-300">(optional)</span></span>
+                <select value={mapSubmitted} onChange={(e) => setMapSubmitted(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Don&rsquo;t save —</option>
+                  {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <span className="w-64">IntakeQ <strong>Submission ID</strong> &rarr; save into <span className="text-slate-300">(optional)</span></span>
+                <select value={mapIntakeId} onChange={(e) => setMapIntakeId(e.target.value)} disabled={!selectedObj}
+                  className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
+                  <option value="">— Don&rsquo;t save —</option>
+                  {(selectedObj?.textProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
             </div>
+
+            {dupProp && (
+              <p className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <strong>{dupProp}</strong> is used for more than one thing. A &ldquo;save into&rdquo; property gets
+                overwritten — don&rsquo;t point it at the property you&rsquo;re matching on, or you&rsquo;ll lose that value.
+              </p>
+            )}
 
             <div className="flex flex-wrap items-center gap-3 mt-3">
-              <button onClick={saveMapping} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+              <button onClick={saveMapping} disabled={pending || !!dupProp} title={dupProp ? "Fix the duplicate property first" : ""}
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save mapping
               </button>
               <button onClick={backfillSources} disabled={pending || !settings.sourceMapping} title={settings.sourceMapping ? "" : "Save a mapping first"}
