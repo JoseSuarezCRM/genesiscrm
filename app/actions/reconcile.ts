@@ -7,7 +7,8 @@ import { runImportBatch, startImportRun } from "@/app/actions/import-records"
 import { attributeReferralSources } from "@/lib/appointment-source"
 
 // The object the weekly completed-appointments file is imported into.
-export const APPOINTMENTS_OBJECT_KEY = "appointments"
+// NOT exported: a "use server" module may only export async functions.
+const APPOINTMENTS_OBJECT_KEY = "appointments"
 // Synthetic column carrying the reconciliation's matched referral id, so the shared
 // importer creates (and records for Undo) the Appointment↔Referral association.
 const REFERRAL_COL = "__referralId"
