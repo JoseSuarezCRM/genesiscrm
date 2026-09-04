@@ -15,6 +15,7 @@ import QuickFilterBar from "@/components/quick-filter-bar"
 import SortByControl from "@/components/sort-by-control"
 import ViewSettingsPanel from "@/components/view-settings-panel"
 import CustomObjectList, { type RecordRow } from "@/components/custom-object-list"
+import type { PipelineOption } from "@/components/pipeline-stage-cell"
 import ObjectBoard from "@/components/object-board"
 import ObjectCalendar from "@/components/object-calendar"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
@@ -69,7 +70,8 @@ interface Props {
   createFormConfig: CreateFormField[] | null
   isAdmin: boolean
   associations: AssociationGroup[]
-  pipelines: { id: string; name: string; color: string }[]
+  /** Pipelines with their stages — the list's Pipeline/Stage cells edit both together. */
+  pipelines: PipelineOption[]
   pipelineColorStyle: string
 }
 
@@ -89,7 +91,7 @@ export default function ObjectViewShell(props: Props) {
   const [isPending, startTransition] = useTransition()
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.label])), [users])
 
-  const catalog = useMemo(() => buildObjectColumns(properties, ownerLabel, associations), [properties, ownerLabel, associations])
+  const catalog = useMemo(() => buildObjectColumns(properties, ownerLabel, associations, pipelines.length > 0), [properties, ownerLabel, associations, pipelines.length])
   const filterFields = useMemo(() => buildFilterFields(properties, ownerLabel, users), [properties, ownerLabel, users])
   const defaultColumns = useMemo(() => catalog.baseCols.map((c) => c.key), [catalog])
 
@@ -260,6 +262,14 @@ export default function ObjectViewShell(props: Props) {
     if (key === "__name") return (recordName(properties, r.values, "") || (catalog.primary ? displayValue(catalog.primary, r.values[catalog.primary.id], userMap) : "")).toLowerCase()
     if (key === "__owner") return (r.ownerName ?? "").toLowerCase()
     if (key === "__created") return new Date(r.createdAt).getTime()
+    if (key === "__pipeline") return (pipelines.find((p) => p.id === r.pipelineId)?.name ?? "").toLowerCase()
+    // Stages sort by their position in the pipeline, not alphabetically — a board
+    // reads left-to-right and the column should match.
+    if (key === "__stage") {
+      const p = pipelines.find((x) => x.id === r.pipelineId)
+      const i = p?.stages.findIndex((s) => s.id === r.stageId) ?? -1
+      return i < 0 ? Number.MAX_SAFE_INTEGER : i
+    }
     const af = catalog.assocByKey[key]
     if (af) { const v = readAssocValue(r as any, af); return af.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
     const p = catalog.otherProps.find((x) => x.id === key)
@@ -335,6 +345,8 @@ export default function ObjectViewShell(props: Props) {
       c.key === "__id" ? (r.recordNumber != null ? `#${r.recordNumber}` : "")
       : c.key === "__name" ? (recordName(properties, r.values, "") || (catalog.primary ? displayValue(catalog.primary, r.values[catalog.primary.id], userMap) : ""))
       : c.key === "__owner" ? (r.ownerName ?? "")
+      : c.key === "__pipeline" ? (pipelines.find((p) => p.id === r.pipelineId)?.name ?? "")
+      : c.key === "__stage" ? (pipelines.find((p) => p.id === r.pipelineId)?.stages.find((s) => s.id === r.stageId)?.name ?? "")
       : c.key === "__created" ? fmtDate(r.createdAt)
       : catalog.assocByKey[c.key] ? readAssocValue(r as any, catalog.assocByKey[c.key])
       : (() => { const p = catalog.otherProps.find((x) => x.id === c.key); return p ? displayValue(p, r.values[c.key], userMap) : "" })(),
@@ -515,6 +527,7 @@ export default function ObjectViewShell(props: Props) {
               columns={cfg.columns} frozenCount={cfg.frozen}
               onColumnsChange={(c) => setCfg((s) => ({ ...s, columns: c }))}
               sort={cfg.sort} onSortChange={(s) => setCfg((c) => ({ ...c, sort: s }))}
+              pipelines={pipelines} pipelineColorStyle={pipelineColorStyle}
               serverMode={serverMode} serverTotal={serverTotal} serverPage={serverPage} serverPageSize={serverPageSize}
               onServerPage={(p) => pushParams({ page: String(p) })} />
           )}

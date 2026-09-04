@@ -75,7 +75,10 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
         createFormConfig={createFormConfig}
         isAdmin={user?.role === "ADMIN"}
         associations={associations}
-        pipelines={pipelines.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+        pipelines={pipelines.map((p) => ({
+          id: p.id, name: p.name, color: p.color,
+          stages: p.stages.map((s) => ({ id: s.id, name: s.name, color: s.color })),
+        }))}
         pipelineColorStyle={pipelineColorStyle}
       />
     </div>

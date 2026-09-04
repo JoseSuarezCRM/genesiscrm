@@ -31,6 +31,9 @@ export interface CustomRecordRow {
   id: string
   recordNumber: number | null
   values: Record<string, any>
+  // Which pipeline/stage the record sits in — editable inline from the list.
+  pipelineId: string | null
+  stageId: string | null
   ownerId: string | null
   ownerName: string | null
   createdById: string | null
@@ -64,6 +67,7 @@ export async function listCustomObjectRecords(objectKey: string): Promise<Custom
     id: r.id,
     recordNumber: r.recordNumber ?? null,
     values: (r.values as Record<string, any>) ?? {},
+    pipelineId: r.pipelineId ?? null, stageId: r.stageId ?? null,
     ownerId: r.ownerId, ownerName: r.ownerId ? names[r.ownerId] ?? null : null,
     createdById: r.createdById, createdByName: r.createdById ? names[r.createdById] ?? null : null,
     updatedById: r.updatedById, updatedByName: r.updatedById ? names[r.updatedById] ?? null : null,
@@ -129,6 +133,7 @@ export async function queryCustomObjectRecords(objectKey: string, opts: { page?:
   const names = await resolveNames(records.flatMap((r: any) => [r.ownerId, r.createdById, r.updatedById, r.lastViewedById]))
   const rows: CustomRecordRow[] = records.map((r: any) => ({
     id: r.id, recordNumber: r.recordNumber ?? null, values: (r.values as Record<string, any>) ?? {},
+    pipelineId: r.pipelineId ?? null, stageId: r.stageId ?? null,
     ownerId: r.ownerId, ownerName: r.ownerId ? names[r.ownerId] ?? null : null,
     createdById: r.createdById, createdByName: r.createdById ? names[r.createdById] ?? null : null,
     updatedById: r.updatedById, updatedByName: r.updatedById ? names[r.updatedById] ?? null : null,
@@ -171,6 +176,7 @@ export async function exportCustomObjectRecords(objectKey: string, opts: { sort?
   const names = await resolveNames(records.flatMap((r: any) => [r.ownerId, r.createdById, r.updatedById, r.lastViewedById]))
   const mapped = records.map((r: any) => ({
     id: r.id, recordNumber: r.recordNumber ?? null, values: (r.values as Record<string, any>) ?? {},
+    pipelineId: r.pipelineId ?? null, stageId: r.stageId ?? null,
     ownerId: r.ownerId, ownerName: r.ownerId ? names[r.ownerId] ?? null : null,
     createdById: r.createdById, createdByName: r.createdById ? names[r.createdById] ?? null : null,
     updatedById: r.updatedById, updatedByName: r.updatedById ? names[r.updatedById] ?? null : null,
@@ -189,6 +195,7 @@ export async function getCustomObjectRecord(objectKey: string, id: string): Prom
   const names = await resolveNames([r.ownerId, r.createdById, r.updatedById, r.lastViewedById])
   return {
     id: r.id, recordNumber: r.recordNumber ?? null, values: (r.values as Record<string, any>) ?? {},
+    pipelineId: r.pipelineId ?? null, stageId: r.stageId ?? null,
     ownerId: r.ownerId, ownerName: r.ownerId ? names[r.ownerId] ?? null : null,
     createdById: r.createdById, createdByName: r.createdById ? names[r.createdById] ?? null : null,
     updatedById: r.updatedById, updatedByName: r.updatedById ? names[r.updatedById] ?? null : null,

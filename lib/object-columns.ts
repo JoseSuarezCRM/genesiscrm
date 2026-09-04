@@ -34,6 +34,8 @@ export function buildObjectColumns(
   properties: ObjectProperty[],
   ownerLabel: string,
   associations: AssociationGroup[] = [],
+  /** Pipeline + Stage columns only exist once the object has a pipeline. */
+  hasPipelines = false,
 ): ObjectColumnCatalog {
   const primary = properties.find((p) => p.primary) ?? properties[0]
   const isPerson = isPersonObject(properties)
@@ -46,6 +48,7 @@ export function buildObjectColumns(
     { key: "__id", label: "Record ID" },
     { key: "__name", label: nameHeader },
     ...otherProps.map((p) => ({ key: p.id, label: p.name })),
+    ...(hasPipelines ? [{ key: "__stage", label: "Stage" }, { key: "__pipeline", label: "Pipeline" }] : []),
     { key: "__owner", label: ownerLabel },
     { key: "__created", label: "Created" },
   ]

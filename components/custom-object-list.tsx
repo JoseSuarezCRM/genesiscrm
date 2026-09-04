@@ -18,6 +18,7 @@ import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
 import { fmtDate, displayValue, displayCell } from "@/components/object-display"
+import PipelineStageCell, { type PipelineOption } from "@/components/pipeline-stage-cell"
 import type { ObjectColumnCatalog, ObjectProperty } from "@/lib/object-columns"
 
 // The TABLE body of a custom object's list. The chrome around it (views, search,
@@ -28,6 +29,8 @@ export interface RecordRow {
   id: string
   recordNumber: number | null
   values: Record<string, any>
+  pipelineId?: string | null
+  stageId?: string | null
   ownerId: string | null
   ownerName: string | null
   createdByName: string | null
@@ -54,6 +57,8 @@ interface Props {
   onColumnsChange: (cols: string[]) => void
   sort: { key: string; dir: "asc" | "desc" }
   onSortChange: (next: { key: string; dir: "asc" | "desc" }) => void
+  pipelines: PipelineOption[]
+  pipelineColorStyle: string
   serverMode?: boolean
   serverTotal?: number
   serverPage?: number
@@ -64,11 +69,17 @@ interface Props {
 export default function CustomObjectList({
   objectKey, singular, ownerLabel, properties, catalog, rows, totalRecords, users, userMap,
   canEdit, canDelete, columns, frozenCount, onColumnsChange, sort, onSortChange,
+  pipelines, pipelineColorStyle,
   serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, onServerPage,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const { primary, otherProps, allCols, assocByKey } = catalog
+
+  // Stage moves are applied optimistically so the row updates without a refetch;
+  // the server action is the one that validates the move.
+  const [stageOverride, setStageOverride] = useState<Record<string, { pipelineId: string; stageId: string }>>({})
+  const stageOf = (r: RecordRow) => stageOverride[r.id] ?? { pipelineId: r.pipelineId ?? null, stageId: r.stageId ?? null }
 
   // Columns render in the user's chosen order (not catalog order).
   const cols = columns.map((k) => allCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[]
@@ -151,7 +162,8 @@ export default function CustomObjectList({
                     <td style={cbFrozen ? { position: "sticky", left: 0, zIndex: 10 } : undefined} className={cn("px-3 py-2.5", cbFrozen && "bg-white")}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} className="rounded border-slate-300 cursor-pointer" /></td>
                     {colReorder.order.map((c) => {
                       const prop = otherProps.find((p) => p.id === c.key)
-                      const usesCell = c.key === "__owner" || !!prop
+                      const isPipelineCol = c.key === "__pipeline" || c.key === "__stage"
+                      const usesCell = c.key === "__owner" || isPipelineCol || !!prop
                       return (
                       <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }}
                         className={cn(usesCell ? "p-0 align-middle" : "px-3 py-2.5 truncate", c.key === "__id" ? "text-slate-400 font-mono text-xs" : "text-slate-600", frozenClass(fmap.get(c.key)))}>
@@ -166,6 +178,13 @@ export default function CustomObjectList({
                               canEdit={canEdit} userMap={userMap} users={users}
                               onSave={(uid) => setRecordOwner(`CO:${objectKey}`, r.id, (uid as string) || null)}
                               onSaveOwner={(uid) => setRecordOwner(`CO:${objectKey}`, r.id, uid)} />
+                          )
+                          : isPipelineCol ? (
+                            <PipelineStageCell objectType={`CO:${objectKey}`} recordId={r.id}
+                              pipelines={pipelines} {...stageOf(r)} canEdit={canEdit}
+                              show={c.key === "__pipeline" ? "pipeline" : "stage"}
+                              colorStyle={pipelineColorStyle}
+                              onSaved={(next) => setStageOverride((s) => ({ ...s, [r.id]: next }))} />
                           )
                           : c.key === "__created" ? fmtDate(r.createdAt)
                           : assocByKey[c.key] ? (readAssocValue(r as any, assocByKey[c.key]) || <span className="text-slate-300">—</span>)
