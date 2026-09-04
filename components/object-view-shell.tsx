@@ -33,6 +33,7 @@ import { activeConditionCount, decodeFilterParam, emptyFilter, matchesFilter, ty
 import { buildFilterFields, buildObjectColumns, type ObjectProperty } from "@/lib/object-columns"
 import { normalizeViewConfig, viewFingerprint, type ObjectViewConfig, type ObjectViewType } from "@/lib/object-views"
 import { displayValue, fmtDate } from "@/components/object-display"
+import { dateSortValue, numberSortValue } from "@/lib/date-values"
 import { recordName } from "@/lib/record-name"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import type { RecordFieldDef } from "@/lib/record-field-catalog"
@@ -271,9 +272,19 @@ export default function ObjectViewShell(props: Props) {
       return i < 0 ? Number.MAX_SAFE_INTEGER : i
     }
     const af = catalog.assocByKey[key]
-    if (af) { const v = readAssocValue(r as any, af); return af.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
+    if (af) {
+      const v = readAssocValue(r as any, af)
+      if (af.type === "number") return numberSortValue(v)
+      if (af.type === "date") return dateSortValue(v)
+      return v.toLowerCase()
+    }
     const p = catalog.otherProps.find((x) => x.id === key)
-    return p ? displayValue(p, r.values[key], userMap).toLowerCase() : ""
+    if (!p) return ""
+    // Sort by the underlying value, NOT the formatted label — "Aug 24, 2026" sorts
+    // alphabetically by month name, and "$1,000" sorts below "$200".
+    if (p.type === "DATE" || p.type === "DATE_TIME") return dateSortValue(r.values[key], p.type === "DATE_TIME")
+    if (p.type === "NUMBER") return numberSortValue(r.values[key])
+    return displayValue(p, r.values[key], userMap).toLowerCase()
   }, [properties, catalog, userMap])
 
   const sorted = useMemo(() => {

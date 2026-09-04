@@ -6,6 +6,7 @@
 import type { ReactNode } from "react"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
+import { dayNumber } from "@/lib/date-values"
 import type { ObjectProperty } from "@/lib/object-columns"
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -68,16 +69,6 @@ export function displayCell(p: ObjectProperty | undefined, v: any, userMap: Reco
 // "Email a day ago". Both work off whole days, and a calendar value is read from its
 // literal y/m/d parts — never rebuilt as a Date, which is what shifts it a day.
 
-function dayNumOf(v: unknown): number | null {
-  const s = String(v ?? "").trim()
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (iso) return Math.floor(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])) / 864e5)
-  const us = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
-  if (us) return Math.floor(Date.UTC(Number(us[3]), Number(us[1]) - 1, Number(us[2])) / 864e5)
-  const d = new Date(v as any)
-  return isNaN(d.getTime()) ? null : Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5)
-}
-
 function todayDayNum(): number {
   const n = new Date()
   return Math.floor(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 864e5)
@@ -85,7 +76,7 @@ function todayDayNum(): number {
 
 /** "61 days from now" / "3.4 months from now" / "12 days ago" / "today". */
 export function relativeDay(v: unknown): string {
-  const day = dayNumOf(v)
+  const day = dayNumber(v)
   if (day == null) return ""
   const diff = day - todayDayNum()
   if (diff === 0) return "today"
