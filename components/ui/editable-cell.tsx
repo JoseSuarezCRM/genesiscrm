@@ -8,6 +8,7 @@ import { OptionValue } from "@/components/option-value"
 import StyledSelect from "@/components/ui/styled-select"
 import DatePicker from "@/components/ui/date-picker"
 import PhoneInput from "@/components/phone-input"
+import { NotesTextarea } from "@/components/ui/notes-textarea"
 import { MultiSelectField } from "@/components/record-property-cards"
 import { formatNumber } from "@/lib/number-format"
 import { type RecordFieldDef } from "@/lib/record-field-catalog"
@@ -191,8 +192,8 @@ export function EditableCell({
           )}
         </>
       ) : def.type === "long_text" ? (
-        <textarea rows={3} value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} onBlur={() => commit(draft)}
-          onKeyDown={(e) => { if (e.key === "Escape") cancelEdit() }} className={input + " resize-none"} autoFocus />
+        <NotesTextarea rows={3} commit="input" value={String(draft ?? "")} onChange={setDraft} onBlur={(e) => commit(e.currentTarget.value)}
+          onKeyDown={(e) => { if (e.key === "Escape") cancelEdit() }} className={input + " min-h-0 resize-none"} autoFocus />
       ) : def.type === "phone" ? (
         <PhoneInput value={String(draft ?? "")} onChange={setDraft} onCommit={(v) => commit(v)} />
       ) : def.type === "date" || def.type === "datetime" ? (

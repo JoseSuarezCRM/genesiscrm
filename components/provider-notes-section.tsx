@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import {
   createProviderNote,
   updateProviderNote,
   deleteProviderNote,
 } from "@/app/actions/referring-doctors"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
 import { Loader2, Pencil, Trash2, Plus, Check, X } from "lucide-react"
 
 interface Note {
@@ -39,17 +39,24 @@ export default function ProviderNotesSection({ providerId, initialNotes }: Props
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
   const [isPending, startTransition] = useTransition()
+  // Notes commit on blur (so voice dictation isn't interrupted) — flush before saving,
+  // and track emptiness on input so the buttons don't lag behind.
+  const newRef = useRef<NotesTextareaHandle>(null)
+  const editRef = useRef<NotesTextareaHandle>(null)
+  const [newEmpty, setNewEmpty] = useState(true)
+  const [editEmpty, setEditEmpty] = useState(false)
 
   function handleAdd() {
-    if (!newText.trim()) return
+    const text = newRef.current?.flush() ?? newText
+    if (!text.trim()) return
     startTransition(async () => {
-      const result = await createProviderNote(providerId, newText)
+      const result = await createProviderNote(providerId, text)
       if (!result?.error) {
         // Optimistically add with placeholder — page will revalidate in background
         setNotes((prev) => [
           {
             id: `temp-${Date.now()}`,
-            content: newText.trim(),
+            content: text.trim(),
             createdAt: new Date(),
             updatedAt: new Date(),
             createdBy: { name: null, email: "" },
@@ -57,6 +64,7 @@ export default function ProviderNotesSection({ providerId, initialNotes }: Props
           ...prev,
         ])
         setNewText("")
+        setNewEmpty(true)
       }
     })
   }
@@ -64,16 +72,18 @@ export default function ProviderNotesSection({ providerId, initialNotes }: Props
   function startEdit(note: Note) {
     setEditingId(note.id)
     setEditText(note.content)
+    setEditEmpty(!note.content.trim())
   }
 
   function handleUpdate(noteId: string) {
-    if (!editText.trim()) return
+    const text = editRef.current?.flush() ?? editText
+    if (!text.trim()) return
     startTransition(async () => {
-      const result = await updateProviderNote(noteId, editText, providerId)
+      const result = await updateProviderNote(noteId, text, providerId)
       if (!result?.error) {
         setNotes((prev) =>
           prev.map((n) =>
-            n.id === noteId ? { ...n, content: editText.trim(), updatedAt: new Date() } : n
+            n.id === noteId ? { ...n, content: text.trim(), updatedAt: new Date() } : n
           )
         )
         setEditingId(null)
@@ -92,9 +102,11 @@ export default function ProviderNotesSection({ providerId, initialNotes }: Props
     <div className="space-y-4">
       {/* Add new note */}
       <div className="space-y-2">
-        <Textarea
+        <NotesTextarea
+          ref={newRef}
           value={newText}
-          onChange={(e) => setNewText(e.target.value)}
+          onChange={setNewText}
+          onInput={(e) => setNewEmpty(!e.currentTarget.value.trim())}
           placeholder="Add a note about this provider..."
           rows={3}
           onKeyDown={(e) => {
@@ -103,7 +115,7 @@ export default function ProviderNotesSection({ providerId, initialNotes }: Props
         />
         <Button
           onClick={handleAdd}
-          disabled={isPending || !newText.trim()}
+          disabled={isPending || newEmpty}
           size="sm"
         >
           {isPending && !editingId
@@ -122,9 +134,11 @@ export default function ProviderNotesSection({ providerId, initialNotes }: Props
             <div key={note.id} className="border rounded-lg p-4 bg-slate-50 space-y-2">
               {editingId === note.id ? (
                 <>
-                  <Textarea
+                  <NotesTextarea
+                    ref={editRef}
                     value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
+                    onChange={setEditText}
+                    onInput={(e) => setEditEmpty(!e.currentTarget.value.trim())}
                     rows={3}
                     autoFocus
                   />
@@ -132,7 +146,7 @@ export default function ProviderNotesSection({ providerId, initialNotes }: Props
                     <Button
                       size="sm"
                       onClick={() => handleUpdate(note.id)}
-                      disabled={isPending || !editText.trim()}
+                      disabled={isPending || editEmpty}
                     >
                       {isPending
                         ? <Loader2 className="h-4 w-4 animate-spin" />

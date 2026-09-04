@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Loader2, Send, X, FileText, Braces } from "lucide-react"
 import {
@@ -10,6 +10,7 @@ import {
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import TokenTextarea from "@/components/ui/token-textarea"
+import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import type { MessageTokenGroup } from "@/lib/message-tokens"
 import { cn } from "@/lib/utils"
@@ -71,6 +72,15 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   const [mtAttendees, setMtAttendees] = useState("")
   const [mtInvite, setMtInvite] = useState(true)
 
+  // The free-text bodies commit on blur so voice dictation isn't interrupted; submit
+  // reads them imperatively, and a cheap emptiness flag keeps the buttons in step
+  // (setState with the same boolean bails out, so it doesn't re-render per keystroke).
+  const noteRef = useRef<NotesTextareaHandle>(null)
+  const callRef = useRef<NotesTextareaHandle>(null)
+  const mtBodyRef = useRef<NotesTextareaHandle>(null)
+  const [noteEmpty, setNoteEmpty] = useState(true)
+  const [callEmpty, setCallEmpty] = useState(true)
+
   useEffect(() => {
     if (!canEdit) return
     getRecordContact(recordType, recordId).then((c) => {
@@ -102,7 +112,10 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   }
 
   const submit: Record<Composer, () => void> = {
-    NOTE: () => run(() => addRecordNote(recordType, recordId, note), () => setNote("")),
+    NOTE: () => {
+      const body = noteRef.current?.flush() ?? note
+      run(() => addRecordNote(recordType, recordId, body), () => { setNote(""); setNoteEmpty(true) })
+    },
     TASK: () => run(() => createTaskForRecord(recordType, recordId, { title: taskTitle, dueDate: taskDue || undefined, assignedToId: taskAssignee || undefined }),
       () => { setTaskTitle(""); setTaskDue(""); setTaskAssignee("") }),
     EMAIL: () => run(() => sendEmailFromRecord(recordType, recordId, {
@@ -111,12 +124,18 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
       attachments: emAttachments,
     }), () => { setEmSubject(""); setEmBody(""); setEmCc(""); setEmBcc(""); setShowCcBcc(false); setEmAttachments([]) }),
     SMS: () => run(() => sendSmsFromRecord(recordType, recordId, { to: smTo, body: smBody }), () => setSmBody("")),
-    CALL: () => run(() => logCall(recordType, recordId, { body: callBody, outcome: callOutcome }), () => setCallBody("")),
-    MEETING: () => run(() => logMeeting(recordType, recordId, {
-      title: mtTitle, start: mtStart, durationMins: Number(mtMins) || 30,
-      location: mtLocation || undefined, body: mtBody || undefined,
-      attendees: mtAttendees.split(/[,;\s]+/).filter(Boolean), sendInvite: mtInvite,
-    }), () => { setMtTitle(""); setMtStart(""); setMtLocation(""); setMtBody("") }),
+    CALL: () => {
+      const body = callRef.current?.flush() ?? callBody
+      run(() => logCall(recordType, recordId, { body, outcome: callOutcome }), () => { setCallBody(""); setCallEmpty(true) })
+    },
+    MEETING: () => {
+      const body = mtBodyRef.current?.flush() ?? mtBody
+      run(() => logMeeting(recordType, recordId, {
+        title: mtTitle, start: mtStart, durationMins: Number(mtMins) || 30,
+        location: mtLocation || undefined, body: body || undefined,
+        attendees: mtAttendees.split(/[,;\s]+/).filter(Boolean), sendInvite: mtInvite,
+      }), () => { setMtTitle(""); setMtStart(""); setMtLocation(""); setMtBody("") })
+    },
   }
 
   const SubmitBtn = ({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) => (
@@ -190,8 +209,10 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
 
           {open === "NOTE" && (
             <>
-              <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…" className={INPUT + " w-full resize-none"} />
-              <div className="flex"><SubmitBtn label="Add note" disabled={!note.trim()} onClick={submit.NOTE} /></div>
+              <NotesTextarea ref={noteRef} rows={3} value={note} onChange={setNote}
+                onInput={(e) => setNoteEmpty(!e.currentTarget.value.trim())}
+                placeholder="Add a note…" className={INPUT + " min-h-0 w-full resize-none"} />
+              <div className="flex"><SubmitBtn label="Add note" disabled={noteEmpty} onClick={submit.NOTE} /></div>
             </>
           )}
 
@@ -200,8 +221,10 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
               <StyledSelect value={callOutcome} onChange={(e) => setCallOutcome(e.target.value)} className={INPUT + " w-full"}>
                 {CALL_OUTCOMES.map((o) => <option key={o} value={o}>{o}</option>)}
               </StyledSelect>
-              <textarea rows={3} value={callBody} onChange={(e) => setCallBody(e.target.value)} placeholder="What was discussed?" className={INPUT + " w-full resize-none"} />
-              <div className="flex"><SubmitBtn label="Log call" disabled={!callBody.trim()} onClick={submit.CALL} /></div>
+              <NotesTextarea ref={callRef} rows={3} value={callBody} onChange={setCallBody}
+                onInput={(e) => setCallEmpty(!e.currentTarget.value.trim())}
+                placeholder="What was discussed?" className={INPUT + " min-h-0 w-full resize-none"} />
+              <div className="flex"><SubmitBtn label="Log call" disabled={callEmpty} onClick={submit.CALL} /></div>
             </>
           )}
 
@@ -230,7 +253,7 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
                 <input value={mtLocation} onChange={(e) => setMtLocation(e.target.value)} placeholder="Location / link" className={INPUT + " flex-1 min-w-[140px]"} />
               </div>
               <input value={mtAttendees} onChange={(e) => setMtAttendees(e.target.value)} placeholder="Attendee emails (comma separated)" className={INPUT + " w-full"} />
-              <textarea rows={2} value={mtBody} onChange={(e) => setMtBody(e.target.value)} placeholder="Agenda / notes…" className={INPUT + " w-full resize-none"} />
+              <NotesTextarea ref={mtBodyRef} rows={2} value={mtBody} onChange={setMtBody} placeholder="Agenda / notes…" className={INPUT + " min-h-0 w-full resize-none"} />
               <div className="flex items-center gap-2">
                 <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
                   <input type="checkbox" checked={mtInvite} onChange={(e) => setMtInvite(e.target.checked)} className="rounded border-slate-300" />

@@ -45,6 +45,8 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
   const [mapSource, setMapSource] = useState(sm?.sourcePropId ?? "")
   const [mapSubmitted, setMapSubmitted] = useState(sm?.submittedPropId ?? "")
   const [mapIntakeId, setMapIntakeId] = useState(sm?.intakeIdPropId ?? "")
+  const [winBefore, setWinBefore] = useState(String(sm?.beforeDays ?? 7))
+  const [winAfter, setWinAfter] = useState(String(sm?.afterDays ?? 30))
   const [mapMsg, setMapMsg] = useState<{ text: string; ok?: boolean } | null>(null)
 
   useEffect(() => { getSourceMappingOptions().then(setMapObjects).catch(() => setMapObjects([])) }, [])
@@ -67,7 +69,11 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
     setMapMsg(null)
     startTransition(async () => {
       const r = await saveIntakeqSourceMapping(mapComplete
-        ? { objectType: mapObj, dobPropId: mapDob, visitDatePropId: mapVisit, sourcePropId: mapSource, submittedPropId: mapSubmitted || undefined, intakeIdPropId: mapIntakeId || undefined }
+        ? {
+            objectType: mapObj, dobPropId: mapDob, visitDatePropId: mapVisit, sourcePropId: mapSource,
+            submittedPropId: mapSubmitted || undefined, intakeIdPropId: mapIntakeId || undefined,
+            beforeDays: Math.max(0, Number(winBefore) || 0), afterDays: Math.max(0, Number(winAfter) || 0),
+          }
         : null)
       setMapMsg(r.error ? { text: r.error } : { text: mapComplete ? "Mapping saved." : "Mapping cleared.", ok: true })
       router.refresh()
@@ -314,8 +320,8 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
         </div>
         <p className="text-xs text-slate-500 mb-3">
           Writes each patient&rsquo;s IntakeQ referral source onto their record. A record is matched to the
-          submission with the same <strong>date of birth</strong> that was submitted <strong>on the appointment
-          date or after it</strong> (nearest one wins, within 30 days).
+          submission with the same <strong>date of birth</strong> submitted within the window below — closest
+          to the appointment wins, and each submission is only used once.
         </p>
 
         {mapObjects === null ? (
@@ -342,14 +348,27 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
                 </select>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <span className="w-64">IntakeQ <strong>Submitted</strong> must be on/after</span>
+                <span className="w-64">IntakeQ <strong>Submitted</strong> must be near</span>
                 <select value={mapVisit} onChange={(e) => setMapVisit(e.target.value)} disabled={!selectedObj}
                   className="h-9 px-2 text-sm border border-slate-200 rounded-lg bg-white w-52 focus:outline-none focus:border-zinc-400 disabled:opacity-50">
                   <option value="">— Select property —</option>
                   {(selectedObj?.dateProps ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="w-64 text-slate-400">…submitted between</span>
+                <input type="number" min={0} max={365} value={winBefore} onChange={(e) => setWinBefore(e.target.value)}
+                  className="h-9 w-16 rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-zinc-400" />
+                <span className="text-slate-400">days before and</span>
+                <input type="number" min={0} max={365} value={winAfter} onChange={(e) => setWinAfter(e.target.value)}
+                  className="h-9 w-16 rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-zinc-400" />
+                <span className="text-slate-400">days after — closest wins</span>
+              </div>
             </div>
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              Most patients submit on the appointment day or after; the lookback catches pre-registrations.
+              Keep it short so an older visit&rsquo;s intake isn&rsquo;t attached to a later one.
+            </p>
 
             {/* Write: IntakeQ value → the property it's saved into */}
             <p className="mt-4 mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Then save onto the record</p>

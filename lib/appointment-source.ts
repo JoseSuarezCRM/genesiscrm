@@ -14,8 +14,10 @@ import { prisma } from "@/lib/prisma"
 import { getIntegration } from "@/lib/integration-store"
 import { chicagoYmd } from "@/lib/intakeq-weeks"
 
-// How many days after the appointment a submission may still belong to it.
-export const INTAKE_MATCH_WINDOW_DAYS = 30
+// How wide the search is around the appointment date. Patients normally fill the
+// intake on the visit day or after, but some pre-register — hence a short lookback.
+export const DEFAULT_AFTER_DAYS = 30
+export const DEFAULT_BEFORE_DAYS = 7
 
 export interface SourceMapping {
   objectType: string        // "CO:appointments" (registry key)
@@ -24,6 +26,17 @@ export interface SourceMapping {
   sourcePropId: string      // property the referral source is written to
   submittedPropId?: string  // optional: stores the matched submission's date
   intakeIdPropId?: string   // optional: stores the matched intakeId (audit)
+  beforeDays?: number       // how many days BEFORE the appointment to accept
+  afterDays?: number        // how many days AFTER the appointment to accept
+}
+
+export interface MatchWindow { before: number; after: number }
+
+export function windowOf(m: Pick<SourceMapping, "beforeDays" | "afterDays"> | null): MatchWindow {
+  return {
+    before: Math.max(0, m?.beforeDays ?? DEFAULT_BEFORE_DAYS),
+    after: Math.max(0, m?.afterDays ?? DEFAULT_AFTER_DAYS),
+  }
 }
 
 export async function getSourceMapping(): Promise<SourceMapping | null> {
@@ -98,16 +111,17 @@ interface PairMatch { intakeId: string; submittedAt: Date; category: string }
 
 /**
  * Pair targets (dob + appointment day) with IntakeQ submissions: same DOB, submitted
- * on/after the appointment day within the window, nearest first, one submission per
- * target and one target per submission. Returns targetIndex → match.
+ * inside the window around the appointment day (normally on/after, with a short
+ * lookback for pre-registrations), nearest first, one submission per target and one
+ * target per submission. Returns targetIndex → match.
  * Shared by the real attribution and the pre-import preview.
  */
-export async function pairWithSubmissions(targets: PairTarget[]): Promise<Map<number, PairMatch>> {
+export async function pairWithSubmissions(targets: PairTarget[], win: MatchWindow): Promise<Map<number, PairMatch>> {
   const out = new Map<number, PairMatch>()
   if (!targets.length) return out
 
   const minDay = Math.min(...targets.map((t) => t.day))
-  const since = new Date((minDay - 1) * 86400000)
+  const since = new Date((minDay - win.before - 1) * 86400000)
   const submissions: { intakeId: string; dateOfBirth: string | null; submittedAt: Date; category: string }[] =
     await (prisma as any).intakeReferralResponse.findMany({
       where: { submittedAt: { gte: since } },
@@ -129,13 +143,14 @@ export async function pairWithSubmissions(targets: PairTarget[]): Promise<Map<nu
   targets.forEach((t, idx) => {
     for (const s of byDob.get(t.dob) ?? []) {
       const gap = s.day - t.day
-      if (gap >= 0 && gap <= INTAKE_MATCH_WINDOW_DAYS) {
+      if (gap >= -win.before && gap <= win.after) {
         pairs.push({ idx, intakeId: s.intakeId, gap, submittedAt: s.submittedAt, category: s.category })
       }
     }
   })
 
-  pairs.sort((a, b) => a.gap - b.gap)
+  // Closest wins; on/after beats an equally-close pre-visit submission (the norm).
+  pairs.sort((a, b) => Math.abs(a.gap) - Math.abs(b.gap) || (a.gap >= 0 ? 0 : 1) - (b.gap >= 0 ? 0 : 1))
   const usedIntake = new Set<string>()
   for (const p of pairs) {
     if (out.has(p.idx) || usedIntake.has(p.intakeId)) continue
@@ -162,7 +177,7 @@ export async function previewSourceMatches(
     const day = recordDayNum(r.visitDate)
     if (dob && day != null) targets.push({ dob, day })
   }
-  const paired = await pairWithSubmissions(targets)
+  const paired = await pairWithSubmissions(targets, windowOf(mapping))
   return { eligible: targets.length, matched: paired.size }
 }
 
@@ -201,7 +216,7 @@ export async function attributeReferralSources(opts: {
 
   if (targets.length === 0) return { scanned: records.length, matched: 0, skipped: records.length }
 
-  const paired = await pairWithSubmissions(targets.map((t) => ({ dob: t.dob, day: t.day! })))
+  const paired = await pairWithSubmissions(targets.map((t) => ({ dob: t.dob, day: t.day! })), windowOf(mapping))
   let matched = 0
 
   for (const [idx, m] of Array.from(paired.entries())) {
