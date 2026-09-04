@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Phone, Loader2, Plus } from "lucide-react"
 import { listRecordCalls, logCall } from "@/app/actions/record-activity"
 import StyledSelect from "@/components/ui/styled-select"
+import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
 import { cn } from "@/lib/utils"
 
 const OUTCOMES = ["Connected", "Left voicemail", "No answer", "Busy", "Wrong number"]
@@ -21,14 +22,19 @@ export default function CallLogCard({ recordType, recordId, maxCalls = 3, canEdi
   const [adding, setAdding] = useState(false)
   const [outcome, setOutcome] = useState(OUTCOMES[0])
   const [notes, setNotes] = useState("")
+  // Notes commit on blur so voice dictation isn't interrupted — flush before saving,
+  // and track emptiness on input so the Log call button doesn't lag behind.
+  const notesRef = useRef<NotesTextareaHandle>(null)
+  const [notesEmpty, setNotesEmpty] = useState(true)
 
   useEffect(() => { listRecordCalls(recordType, recordId).then(setCalls as any) }, [recordType, recordId])
 
   function save() {
-    if (!notes.trim()) return
+    const body = notesRef.current?.flush() ?? notes
+    if (!body.trim()) return
     startTransition(async () => {
-      await logCall(recordType, recordId, { body: notes, outcome })
-      setNotes(""); setAdding(false)
+      await logCall(recordType, recordId, { body, outcome })
+      setNotes(""); setNotesEmpty(true); setAdding(false)
       setCalls(await listRecordCalls(recordType, recordId) as any)
       router.refresh()
     })
@@ -65,10 +71,11 @@ export default function CallLogCard({ recordType, recordId, maxCalls = 3, canEdi
             className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400">
             {OUTCOMES.map((o) => <option key={o} value={o}>{o}</option>)}
           </StyledSelect>
-          <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What was discussed?"
-            className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:border-zinc-400" />
+          <NotesTextarea ref={notesRef} rows={2} value={notes} onChange={setNotes}
+            onInput={(e) => setNotesEmpty(!e.currentTarget.value.trim())} placeholder="What was discussed?"
+            className="w-full min-h-0 text-sm border border-slate-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:border-zinc-400" />
           <div className="flex items-center gap-1">
-            <button onClick={save} disabled={isPending || !notes.trim()}
+            <button onClick={save} disabled={isPending || notesEmpty}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />} Log call
             </button>

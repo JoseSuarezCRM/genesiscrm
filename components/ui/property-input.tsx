@@ -3,6 +3,7 @@
 import StyledSelect from "@/components/ui/styled-select"
 import DatePicker from "@/components/ui/date-picker"
 import PhoneInput from "@/components/phone-input"
+import { NotesTextarea } from "@/components/ui/notes-textarea"
 import { MultiSelectField } from "@/components/record-property-cards"
 import { type RecordFieldDef } from "@/lib/record-field-catalog"
 
@@ -66,7 +67,9 @@ export function PropertyInput({ def, value, onChange, users = [], values, autoFo
     )
   }
   if (def.type === "long_text") return (
-    <textarea rows={3} autoFocus={autoFocus} className={input + " resize-none py-2 h-auto"} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
+    // commit="input" keeps the live value this control promises; the win is that
+    // React stops writing back into the field, which is what breaks voice dictation.
+    <NotesTextarea rows={3} commit="input" autoFocus={autoFocus} className={input + " min-h-0 resize-none py-2 h-auto"} value={String(value ?? "")} onChange={onChange} />
   )
   if (def.type === "phone") return <PhoneInput value={String(value ?? "")} onChange={onChange} />
   if (def.type === "date" || def.type === "datetime") return (

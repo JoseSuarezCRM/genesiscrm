@@ -14,6 +14,7 @@ import { reorderViews } from "@/app/actions/view-order"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   Plus, Pencil, Trash2, Loader2, CheckCircle2, Circle, AlertCircle, Search, X, Link2, Clock,
@@ -187,6 +188,7 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
   const [queues, setQueues] = useState(initialQueues)
   const [newQueue, setNewQueue] = useState<string | null>(null)
   const [err, setErr] = useState("")
+  const descRef = useRef<NotesTextareaHandle>(null)
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }))
 
   async function addQueue() {
@@ -204,7 +206,13 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
 
   return (
     <form
-      onSubmit={async (e) => { e.preventDefault(); if (!v.title.trim()) { setErr("Task title is required"); return } await onSubmit(v) }}
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (!v.title.trim()) { setErr("Task title is required"); return }
+        // Notes commits on blur (so voice dictation isn't interrupted) — read it
+        // straight from the field, since that setState hasn't landed yet.
+        await onSubmit({ ...v, description: descRef.current?.flush() ?? v.description })
+      }}
       className="space-y-4"
     >
       {/* Full-width scroll region (negative margin cancels the dialog's p-6 so the
@@ -297,12 +305,13 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
 
       <div className="space-y-1.5">
         <Label className={fieldLabel}>Notes</Label>
-        <textarea
+        <NotesTextarea
+          ref={descRef}
           value={v.description}
-          onChange={(e) => set("description", e.target.value)}
+          onChange={(val) => set("description", val)}
           placeholder="Add description…"
           rows={3}
-          className="flex w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+          className="flex min-h-0 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
         />
       </div>
       </div>

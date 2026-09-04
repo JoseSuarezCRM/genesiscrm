@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { CheckCircle2, Loader2 } from "lucide-react"
 
@@ -38,14 +38,18 @@ export default function PublicReferralForm() {
   const [patientDob, setPatientDob] = useState("")
   const [patientPhone, setPatientPhone] = useState("")
   const [reason, setReason] = useState("")
+  // Commits on blur so voice dictation isn't interrupted — read it here, since the
+  // submit tap's blur hasn't landed in state yet.
+  const reasonRef = useRef<NotesTextareaHandle>(null)
 
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle")
   const [errorMsg, setErrorMsg] = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const reasonText = reasonRef.current?.flush() ?? reason
     if (!providerName || !providerOrg || !providerNpi || !providerEmail ||
-        !patientFirstName || !patientLastName || !patientDob || !patientPhone || !reason) return
+        !patientFirstName || !patientLastName || !patientDob || !patientPhone || !reasonText) return
 
     setStatus("submitting")
     setErrorMsg("")
@@ -63,7 +67,7 @@ export default function PublicReferralForm() {
           patientLastName,
           patientDob,
           patientPhone,
-          reason,
+          reason: reasonText,
         }),
       })
 
@@ -166,9 +170,10 @@ export default function PublicReferralForm() {
             <PhoneInput value={patientPhone} onChange={setPatientPhone} />
           </Field>
           <Field label="Reason for Referral">
-            <Textarea
+            <NotesTextarea
+              ref={reasonRef}
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              onChange={setReason}
               placeholder="Describe the reason for this referral..."
               rows={5}
               required

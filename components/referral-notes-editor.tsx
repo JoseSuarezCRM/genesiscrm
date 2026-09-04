@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { updateReferralNotes } from "@/app/actions/referrals"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
 import { Loader2, Pencil, Save, X } from "lucide-react"
 
 export default function ReferralNotesEditor({
@@ -17,10 +17,14 @@ export default function ReferralNotesEditor({
   const [text, setText] = useState(initialNotes ?? "")
   const [saved, setSaved] = useState(false)
   const [isPending, startTransition] = useTransition()
+  // Commits on blur so voice dictation isn't interrupted; read it here because the
+  // button tap's blur hasn't landed in state yet.
+  const boxRef = useRef<NotesTextareaHandle>(null)
 
   function handleSave() {
+    const value = boxRef.current?.flush() ?? text
     startTransition(async () => {
-      await updateReferralNotes(referralId, text)
+      await updateReferralNotes(referralId, value)
       setSaved(true)
       setEditing(false)
       setTimeout(() => setSaved(false), 2000)
@@ -53,9 +57,10 @@ export default function ReferralNotesEditor({
 
   return (
     <div className="space-y-3">
-      <Textarea
+      <NotesTextarea
+        ref={boxRef}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={setText}
         placeholder="Add notes about this referral..."
         rows={4}
         autoFocus

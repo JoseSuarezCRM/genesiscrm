@@ -36,7 +36,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import ProviderTitleField from "@/components/provider-title-field"
 import { PhoneInput } from "@/components/ui/phone-input"
-import { Textarea } from "@/components/ui/textarea"
+import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
@@ -802,6 +802,11 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   const setTask = <K extends keyof ReturnType<typeof emptyTaskDraft>>(k: K, val: ReturnType<typeof emptyTaskDraft>[K]) => setTaskDraft((p) => ({ ...p, [k]: val }))
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  // Free-text boxes commit on blur (so voice dictation isn't interrupted); submit
+  // handlers flush them imperatively because blur→click lands in the same batch.
+  const notesRef = useRef<NotesTextareaHandle>(null)
+  const taskDescRef = useRef<NotesTextareaHandle>(null)
+  const reportMsgRef = useRef<NotesTextareaHandle>(null)
   const [search, setSearch] = useState("")
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards")
@@ -1019,6 +1024,10 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
   function handleSubmit(withTask = false) {
     setError(null)
+    // Read the blur-committed fields straight from the DOM: tapping the button blurs
+    // them, but that setState hasn't landed in `form` yet by the time we run.
+    const notes = notesRef.current?.flush() ?? form.notes
+    const taskDescription = taskDescRef.current?.flush() ?? taskDraft.description
     startTransition(async () => {
       const payload = {
         practiceId: form.practiceId || undefined,
@@ -1029,7 +1038,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         date: form.date,
         frontDesk: form.frontDesk || undefined,
         flyer: form.flyer || undefined,
-        notes: form.notes || undefined,
+        notes: notes || undefined,
         rating: form.rating ? Number(form.rating) : null,
         meetingRating: form.meetingRating ? Number(form.meetingRating) : null,
       }
@@ -1044,7 +1053,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
         const associations = followupAssocs().filter(a => !taskDraft.skipAssoc.has(a.key)).map(a => ({ type: a.type, id: a.id }))
         const tr = await createTask({
           title: taskDraft.title.trim() || form.nextStep.trim(),
-          description: taskDraft.description || undefined,
+          description: taskDescription || undefined,
           dueDate: taskDraft.dueDate || undefined,
           assignedToId: taskDraft.assignedToId || undefined,
           type: taskDraft.type, priority: taskDraft.priority,
@@ -1294,6 +1303,103 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     return rows
   }, [filtered, sortKey, sortDir])
 
+  // The card list is memoized on purpose: it doesn't depend on the dialog's form state,
+  // and re-reconciling every card on each keystroke is what makes typing (and iPad voice
+  // dictation) crawl on a long list. Handlers below only call setters, so they're safe
+  // to close over here — but anything else the cards read must be added to the deps.
+  const activityCards = useMemo(() => (
+    <div className="space-y-2">
+      {filtered.map(a => (
+        <div key={a.id} className="flex items-start gap-4 p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
+          <div className="shrink-0 w-20 text-center">
+            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{format(activityDay(a.date), "MMM")}</p>
+            <p className="text-2xl font-bold text-slate-800 leading-none">{format(activityDay(a.date), "d")}</p>
+            <p className="text-xs text-slate-400">{format(activityDay(a.date), "yyyy")}</p>
+            {hasActivityTime(a.date) && <p className="text-[11px] text-slate-400 mt-0.5 whitespace-nowrap">{fmtActivityTime(a.date)}</p>}
+            {(a.rating != null || a.meetingRating != null) && (
+              <div className="mt-2 space-y-1">
+                {a.rating != null && (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[9px] font-medium uppercase tracking-wide text-slate-400">Clinic</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.rating}</span>
+                  </div>
+                )}
+                {a.meetingRating != null && (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[9px] font-medium uppercase tracking-wide text-slate-400">Meeting</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.meetingRating}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {a.practice && (
+                <span className="flex items-center gap-1 text-sm font-semibold text-slate-800">
+                  <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />{a.practice.name}
+                </span>
+              )}
+              {a.location && (
+                <span className="flex items-center gap-1 text-xs text-slate-500">
+                  <MapPin className="h-3 w-3 shrink-0" />{a.location.name}
+                </span>
+              )}
+            </div>
+
+            {a.providers.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {a.providers.map(p => (
+                  <Badge key={p.doctor.id} variant="secondary" className="text-xs">
+                    <User className="h-3 w-3 mr-1" />
+                    {p.doctor.name}{p.doctor.title ? `, ${p.doctor.title}` : ""}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-slate-500">
+              {a.nextStep && <span><span className="font-medium text-slate-600">Next:</span> {a.nextStep}</span>}
+              {a.frontDesk && <span><span className="font-medium text-slate-600">Front desk:</span> {a.frontDesk}</span>}
+              {a.flyer && (() => {
+                const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
+                return t
+                  ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t.bg} ${t.color} ${t.border}`}>{t.value}</span>
+                  : <span><span className="font-medium text-slate-600">Type:</span> {a.flyer}</span>
+              })()}
+            </div>
+
+            {a.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {a.tags.map(tag => (
+                  <TagChip
+                    key={tag.id} tag={tag}
+                    onClick={() => toggleTagFilter(tag.id)}
+                    active={activeTagIds.includes(tag.id)}
+                    onColorChange={() => {}}
+                  />
+                ))}
+              </div>
+            )}
+
+            {a.notes && <ExpandableNotes text={a.notes} />}
+            <p className="text-xs text-slate-400">Logged by {a.createdBy.name ?? a.createdBy.email}</p>
+          </div>
+
+          <div className="flex gap-1 shrink-0">
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(a)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteId(a.id)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  ), [filtered, activeTagIds]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Render in chosen order, with the required "date" column first.
   const orderedActKeys = ["date", ...visibleCols.filter((k) => k !== "date")]
   const cols = (orderedActKeys.map((k) => allActivityCols.find((c) => c.key === k)).filter(Boolean) as typeof ACTIVITY_COLUMNS)
@@ -1336,8 +1442,9 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   }
   function sendReport() {
     if (reportRecipients.length === 0 || reportIds.length === 0) return
+    const message = reportMsgRef.current?.flush() ?? reportMessage
     startReport(async () => {
-      const res = await emailActivityReport({ activityIds: reportIds, to: reportRecipients, subject: reportSubject || undefined, message: reportMessage || undefined }) as any
+      const res = await emailActivityReport({ activityIds: reportIds, to: reportRecipients, subject: reportSubject || undefined, message: message || undefined }) as any
       if (res?.error) { showToast(res.error); return }
       setReportOpen(false); setReportTo(""); setReportSubject(""); setReportMessage("")
       showToast(`Report sent to ${res.recipients} recipient${res.recipients === 1 ? "" : "s"}`)
@@ -1755,98 +1862,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             </table>
           </div>
         </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map(a => (
-            <div key={a.id} className="flex items-start gap-4 p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-colors">
-              <div className="shrink-0 w-20 text-center">
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{format(activityDay(a.date), "MMM")}</p>
-                <p className="text-2xl font-bold text-slate-800 leading-none">{format(activityDay(a.date), "d")}</p>
-                <p className="text-xs text-slate-400">{format(activityDay(a.date), "yyyy")}</p>
-                {hasActivityTime(a.date) && <p className="text-[11px] text-slate-400 mt-0.5 whitespace-nowrap">{fmtActivityTime(a.date)}</p>}
-                {(a.rating != null || a.meetingRating != null) && (
-                  <div className="mt-2 space-y-1">
-                    {a.rating != null && (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-[9px] font-medium uppercase tracking-wide text-slate-400">Clinic</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.rating}</span>
-                      </div>
-                    )}
-                    {a.meetingRating != null && (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-[9px] font-medium uppercase tracking-wide text-slate-400">Meeting</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200">{a.meetingRating}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0 space-y-1.5">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {a.practice && (
-                    <span className="flex items-center gap-1 text-sm font-semibold text-slate-800">
-                      <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />{a.practice.name}
-                    </span>
-                  )}
-                  {a.location && (
-                    <span className="flex items-center gap-1 text-xs text-slate-500">
-                      <MapPin className="h-3 w-3 shrink-0" />{a.location.name}
-                    </span>
-                  )}
-                </div>
-
-                {a.providers.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {a.providers.map(p => (
-                      <Badge key={p.doctor.id} variant="secondary" className="text-xs">
-                        <User className="h-3 w-3 mr-1" />
-                        {p.doctor.name}{p.doctor.title ? `, ${p.doctor.title}` : ""}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-slate-500">
-                  {a.nextStep && <span><span className="font-medium text-slate-600">Next:</span> {a.nextStep}</span>}
-                  {a.frontDesk && <span><span className="font-medium text-slate-600">Front desk:</span> {a.frontDesk}</span>}
-                  {a.flyer && (() => {
-                    const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
-                    return t
-                      ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t.bg} ${t.color} ${t.border}`}>{t.value}</span>
-                      : <span><span className="font-medium text-slate-600">Type:</span> {a.flyer}</span>
-                  })()}
-                </div>
-
-                {a.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {a.tags.map(tag => (
-                      <TagChip
-                        key={tag.id} tag={tag}
-                        onClick={() => toggleTagFilter(tag.id)}
-                        active={activeTagIds.includes(tag.id)}
-                        onColorChange={() => {}}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {a.notes && <ExpandableNotes text={a.notes} />}
-                <p className="text-xs text-slate-400">Logged by {a.createdBy.name ?? a.createdBy.email}</p>
-              </div>
-
-              <div className="flex gap-1 shrink-0">
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(a)}>
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteId(a.id)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      ) : activityCards}
 
       {/* ── New / Edit Dialog ── */}
       <Dialog open={open} onOpenChange={v => !isPending && setOpen(v)}>
@@ -2003,7 +2019,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
             <div className="col-span-2 space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Notes</label>
-              <Textarea value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Enter notes here..." rows={4} />
+              <NotesTextarea ref={notesRef} value={form.notes} onChange={v => set("notes", v)} placeholder="Enter notes here..." rows={4} />
             </div>
           </div>
 
@@ -2072,7 +2088,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Description</label>
-                <Textarea value={taskDraft.description} onChange={e => setTask("description", e.target.value)} placeholder="Task details…" rows={3} />
+                <NotesTextarea ref={taskDescRef} value={taskDraft.description} onChange={v => setTask("description", v)} placeholder="Task details…" rows={3} />
               </div>
             </div>
           )}
@@ -2151,7 +2167,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
 
             <div>
               <label className="text-xs font-medium text-slate-600 block mb-1">Message <span className="text-slate-400 font-normal">(optional)</span></label>
-              <Textarea rows={3} value={reportMessage} onChange={e => setReportMessage(e.target.value)} placeholder="A short note to include at the top of the report…" />
+              <NotesTextarea ref={reportMsgRef} rows={3} value={reportMessage} onChange={setReportMessage} placeholder="A short note to include at the top of the report…" />
             </div>
             <p className="text-xs text-slate-400">Sends from your own email address. The report includes a summary plus each activity's details.</p>
           </div>

@@ -16,6 +16,7 @@ import PhoneInput from "@/components/phone-input"
 import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catalog"
 import { OptionValue } from "@/components/option-value"
 import StyledSelect from "@/components/ui/styled-select"
+import { NotesTextarea } from "@/components/ui/notes-textarea"
 import { useMenuFocusGuard } from "@/components/ui/use-menu-focus-guard"
 import DatePicker from "@/components/ui/date-picker"
 import { formatNumber } from "@/lib/number-format"
@@ -338,8 +339,8 @@ export function FieldRow({ f, value, values, recordId, entityType, canEdit, user
           )}
         </>
       ) : f.type === "long_text" ? (
-        <textarea rows={3} value={String(draft ?? "")} onChange={(e) => setDraft(e.target.value)} onBlur={() => commit(draft)}
-          onKeyDown={(e) => { if (e.key === "Escape") cancelEdit() }} className={input + " resize-none"} autoFocus />
+        <NotesTextarea rows={3} commit="input" value={String(draft ?? "")} onChange={setDraft} onBlur={(e) => commit(e.currentTarget.value)}
+          onKeyDown={(e) => { if (e.key === "Escape") cancelEdit() }} className={input + " min-h-0 resize-none"} autoFocus />
       ) : f.type === "phone" ? (
         <PhoneInput value={String(draft ?? "")} onChange={setDraft} onCommit={(v) => commit(v)} />
       ) : f.type === "date" || f.type === "datetime" ? (
