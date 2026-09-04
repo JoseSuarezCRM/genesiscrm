@@ -1,42 +1,30 @@
 "use client"
 
-import { useState, useTransition, useEffect, useRef, type ReactNode } from "react"
-import { OptionValue } from "@/components/option-value"
+import { useState, useTransition, useEffect } from "react"
 import Link from "next/link"
-import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { Plus, Trash2, Loader2, Check, Columns3, ChevronDown } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Trash2, Loader2, ChevronDown, ChevronUp } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
-import { ChevronUp } from "lucide-react"
-import { createCustomObjectRecord, bulkDeleteCustomObjectRecords, exportCustomObjectRecords } from "@/app/actions/custom-object-records"
-import type { CustomObjectProperty } from "@/app/actions/custom-objects"
-import StyledSelect from "@/components/ui/styled-select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import FilterBuilder from "@/components/ui/filter-builder"
-import ExportDialog from "@/components/ui/export-dialog"
-import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
-import { createCustomObjectView, updateCustomObjectView, deleteCustomObjectView } from "@/app/actions/custom-object-views"
-import { reorderViews } from "@/app/actions/view-order"
+import { bulkDeleteCustomObjectRecords } from "@/app/actions/custom-object-records"
 import { useCardReorder } from "@/components/use-card-reorder"
-import ColumnChooserModal from "@/components/ui/column-chooser"
-import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
-import { useColumnPrefs } from "@/components/ui/use-column-prefs"
+import { readAssocValue } from "@/lib/association-columns"
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
-import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields, decodeFilterParam } from "@/lib/filters"
-import { Search, Download, Globe, Users, UserCog, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { recordName, isPersonObject, personPartIds } from "@/lib/record-name"
-import { formatNumber } from "@/lib/number-format"
+import { recordName } from "@/lib/record-name"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
-import CreateRecordModal from "@/components/create-record-modal"
-import { type CreateFormField } from "@/app/actions/create-form"
-import { type RecordFieldDef } from "@/lib/record-field-catalog"
+import { fmtDate, displayValue, displayCell } from "@/components/object-display"
+import type { ObjectColumnCatalog, ObjectProperty } from "@/lib/object-columns"
 
-interface RecordRow {
+// The TABLE body of a custom object's list. The chrome around it (views, search,
+// filters, columns chooser, export, add) lives in ObjectViewShell, which owns the
+// view config and hands this the rows to render.
+
+export interface RecordRow {
   id: string
   recordNumber: number | null
   values: Record<string, any>
@@ -45,331 +33,81 @@ interface RecordRow {
   createdByName: string | null
   createdAt: string | Date
   updatedAt: string | Date
-  __assoc?: Record<string, any> // associated records attached server-side (association columns)
+  __assoc?: Record<string, any> // associated records attached server-side
 }
 
 interface Props {
   objectKey: string
   singular: string
-  plural: string
   ownerLabel: string
-  properties: CustomObjectProperty[]
-  records: RecordRow[]
+  properties: ObjectProperty[]
+  catalog: ObjectColumnCatalog
+  rows: RecordRow[]
+  /** Unfiltered count, so "no matches" reads differently from "nothing here yet". */
+  totalRecords: number
   users: { id: string; label: string }[]
+  userMap: Record<string, string>
   canEdit: boolean
   canDelete: boolean
-  savedViews?: SavedView[]
-  shareUsers?: ShareUser[]
-  shareTeams?: ShareTeam[]
-  // Server-side mode (large objects): `records` is one already-sorted/filtered page.
+  columns: string[]
+  frozenCount: number
+  onColumnsChange: (cols: string[]) => void
+  sort: { key: string; dir: "asc" | "desc" }
+  onSortChange: (next: { key: string; dir: "asc" | "desc" }) => void
   serverMode?: boolean
   serverTotal?: number
   serverPage?: number
   serverPageSize?: number
-  createFormConfig?: CreateFormField[] | null
-  isAdmin?: boolean
-  associations?: AssociationGroup[]
+  onServerPage?: (page: number) => void
 }
 
-interface SavedView {
-  id: string
-  name: string
-  config: { filter: FilterState; columns: string[] }
-  visibility?: string
-  isOwner?: boolean
-}
-
-function fmtDate(d: string | Date | null | undefined) {
-  if (!d) return "—"
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" })
-}
-
-function displayValue(p: CustomObjectProperty | undefined, v: any, userMap: Record<string, string>): string {
-  if (!p) return "—"
-  if (v === null || v === undefined || v === "") return "—"
-  switch (p.type) {
-    case "CHECKBOX": return v ? "Yes" : "No"
-    case "NUMBER": return formatNumber(v, (p as any).numberFormat)
-    case "DATE": return fmtDate(v)
-    case "DATE_TIME": return v ? new Date(v).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"
-    case "DROPDOWN": { const l = (p as any).optionLabels as Record<string, string> | undefined; return l?.[String(v)] ?? String(v) }
-    case "MULTI_SELECT": { const l = (p as any).optionLabels as Record<string, string> | undefined; return Array.isArray(v) ? v.map((x) => l?.[String(x)] ?? String(x)).join(", ") : String(v) }
-    case "USER": return userMap[v] ?? String(v)
-    default: return String(v)
-  }
-}
-
-// Styled cell (dot/badge for dropdowns); falls back to displayValue's text.
-function displayCell(p: CustomObjectProperty | undefined, v: any, userMap: Record<string, string>): ReactNode {
-  if (!p) return "—"
-  if ((p.type === "DROPDOWN" || p.type === "MULTI_SELECT") && v != null && v !== "" && !(Array.isArray(v) && v.length === 0)) {
-    return <OptionValue value={v} optionLabels={(p as any).optionLabels} optionColors={(p as any).optionColors} optionStyle={(p as any).optionStyle} />
-  }
-  return displayValue(p, v, userMap)
-}
-
-export default function CustomObjectList({ objectKey, singular, plural, ownerLabel, properties, records, users, canEdit, canDelete, savedViews = [], shareUsers = [], shareTeams = [], serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, createFormConfig = null, isAdmin = false, associations = [] }: Props) {
+export default function CustomObjectList({
+  objectKey, singular, ownerLabel, properties, catalog, rows, totalRecords, users, userMap,
+  canEdit, canDelete, columns, frozenCount, onColumnsChange, sort, onSortChange,
+  serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, onServerPage,
+}: Props) {
   const router = useRouter()
-  const pathname = usePathname()
-  const urlParams = useSearchParams()
-  const isServer = serverMode
-  // Push list state into the URL (server mode drives the query from it).
-  function pushParams(patch: Record<string, string | null>) {
-    const params = new URLSearchParams(urlParams.toString())
-    for (const [k, v] of Object.entries(patch)) { if (v === null || v === "") params.delete(k); else params.set(k, v) }
-    router.push(`${pathname}?${params.toString()}`)
-  }
   const [isPending, startTransition] = useTransition()
-  const userMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
+  const { primary, otherProps, allCols, assocByKey } = catalog
 
-  const primary = properties.find((p) => p.primary) ?? properties[0]
-  const isPerson = isPersonObject(properties)
-  const nameHeader = isPerson ? "Name" : (primary?.name ?? "Name")
-  // The Name column already shows first+last for person objects — don't repeat them.
-  const nameParts = personPartIds(properties)
-  const otherProps = properties.filter((p) => p.id !== primary?.id && !nameParts.includes(p.id))
-
-  // Columns: Record ID + Name (both toggleable) + property columns + owner + created.
-  const dataCols = [...otherProps.map((p) => ({ key: p.id, label: p.name })), { key: "__owner", label: ownerLabel }, { key: "__created", label: "Created" }]
-  const baseCols = [{ key: "__id", label: "Record ID" }, { key: "__name", label: nameHeader }, ...dataCols]
-  const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
-  const allCols = [...baseCols, ...assocColumns] // catalog incl. association columns (grouped)
-  const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs(`co_${objectKey}_cols_v2`, baseCols.map((c) => c.key))
-  const [colModalOpen, setColModalOpen] = useState(false)
   // Columns render in the user's chosen order (not catalog order).
-  const cols = (visibleCols.map((k) => allCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[])
-
-  // Filter + search + export.
-  const filterFields: FilterField[] = [
-    { key: "__recordNumber", label: "Record ID", type: "number", getValue: (r) => r.recordNumber },
-    { key: "__owner", label: ownerLabel, type: "select", options: users.map((u) => ({ value: u.id, label: u.label })), getValue: (r) => r.ownerId },
-    { key: "__created", label: "Created", type: "date", getValue: (r) => r.createdAt },
-    ...customPropertyFilterFields(properties.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })), "values"),
-  ]
-  // Filter/search seed from the URL in server mode so the UI reflects the query.
-  const [filter, setFilter] = useState<FilterState>(() => (isServer ? decodeFilterParam(urlParams.get("filter")) ?? emptyFilter() : emptyFilter()))
-  const [search, setSearch] = useState(() => (isServer ? urlParams.get("search") ?? "" : ""))
-  const [exportOpen, setExportOpen] = useState(false)
-
-  // Server mode: `records` is already the filtered+sorted page — render as-is.
-  const filtered = isServer ? records : records.filter((r) => {
-    const q = search.toLowerCase().trim()
-    if (q) {
-      const hay = Object.values(r.values).map((v) => (Array.isArray(v) ? v.join(" ") : String(v ?? ""))).join(" ").toLowerCase()
-      if (!hay.includes(q)) return false
-    }
-    return matchesFilter(r, filter, filterFields)
-  })
-  const filtersActive = activeConditionCount(filter, filterFields) > 0
+  const cols = columns.map((k) => allCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[]
 
   const { colWidth, startResize } = useColumnResize(`co_${objectKey}_colWidths`)
   // Drag column headers to reorder; the order (and frozen count) persist per user.
-  const colReorder = useCardReorder(cols, (c) => c.key, (ids) => setVisibleCols(ids))
+  const colReorder = useCardReorder(cols, (c) => c.key, (ids) => onColumnsChange(ids))
   // Frozen (sticky) columns: leading fixed __id/__name + the first data columns,
   // offset past the 40px row-select checkbox. widthOf mirrors the <colgroup>.
   const widthOf = (k: string) => k === "__id" ? (colWidth("__id") ?? 96) : k === "__name" ? (colWidth("__name") ?? 240) : (colWidth(k) ?? 180)
   const fmap = frozenMap(colReorder.order.map((c) => c.key), frozenCount, widthOf, 40)
   const cbFrozen = frozenCount > 0 // freeze the checkbox column whenever anything is frozen
-  const [sortKeyC, setSortKeyC] = useState<string>("__id")
-  const [sortDirC, setSortDirC] = useState<"asc" | "desc">("desc") // newest record first
-  const sortKey = isServer ? (urlParams.get("sort") ?? "__id") : sortKeyC
-  const sortDir: "asc" | "desc" = isServer ? (urlParams.get("dir") === "asc" ? "asc" : "desc") : sortDirC
-  // Text columns start A→Z; id/date columns start newest/highest first.
-  const toggleSort = (k: string) => {
-    const firstDir = k === "__id" || k === "__created" ? "desc" : "asc"
-    const nextDir = sortKey === k ? (sortDir === "asc" ? "desc" : "asc") : firstDir
-    if (isServer) { pushParams({ sort: k, dir: nextDir, page: "1" }); return }
-    if (sortKeyC === k) setSortDirC((d) => (d === "asc" ? "desc" : "asc")); else { setSortKeyC(k); setSortDirC(firstDir) }
-  }
-  const sortVal = (r: RecordRow, key: string): string | number => {
-    if (key === "__id") return r.recordNumber ?? 0
-    if (key === "__name") return (recordName(properties, r.values, "") || (primary ? displayValue(primary, r.values[primary.id], userMap) : "")).toLowerCase()
-    if (key === "__owner") return (r.ownerName ?? "").toLowerCase()
-    if (key === "__created") return new Date(r.createdAt).getTime()
-    if (assocByKey[key]) { const f = assocByKey[key]; const v = readAssocValue(r as any, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
-    const p = otherProps.find((x) => x.id === key)
-    return p ? displayValue(p, r.values[key], userMap).toLowerCase() : ""
-  }
-  const sorted = isServer ? filtered : [...filtered].sort((a, b) => {
-    const va = sortVal(a, sortKey), vb = sortVal(b, sortKey)
-    const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))
-    return sortDir === "asc" ? cmp : -cmp
-  })
-  const SortIcon = ({ k }: { k: string }) => sortKey === k ? (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : null
 
-  // Client-side pagination (25 / 50 / 100 per page). Server mode paginates via URL.
+  // Text columns start A→Z; id/date columns start newest/highest first.
+  function toggleSort(k: string) {
+    const firstDir: "asc" | "desc" = k === "__id" || k === "__created" ? "desc" : "asc"
+    onSortChange({ key: k, dir: sort.key === k ? (sort.dir === "asc" ? "desc" : "asc") : firstDir })
+  }
+  const SortIcon = ({ k }: { k: string }) => sort.key === k ? (sort.dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : null
+
+  // Client-side pagination (25 / 50 / 100 per page). Server mode paginates via the URL.
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  const clientPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const clientPages = Math.max(1, Math.ceil(rows.length / pageSize))
   const pageC = Math.min(page, clientPages)
-  const paged = isServer ? sorted : sorted.slice((pageC - 1) * pageSize, (pageC - 1) * pageSize + pageSize)
-  useEffect(() => { setPage(1) }, [search, filter, sortKey, sortDir, pageSize]) // reset on result/size change
-
-  // Server-mode search: debounce URL updates so typing doesn't spam the server.
-  useEffect(() => {
-    if (!isServer) return
-    const cur = urlParams.get("search") ?? ""
-    if (search === cur) return
-    const t = setTimeout(() => pushParams({ search: search || null, page: "1" }), 400)
-    return () => clearTimeout(t)
-  }, [search, isServer]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Server-mode filter: push the encoded filter to the URL when it changes.
-  function onFilterChange(next: FilterState) {
-    setFilter(next)
-    if (isServer) pushParams({ filter: activeConditionCount(next, filterFields) > 0 ? JSON.stringify(next) : null, page: "1" })
-  }
-  const totalPages = isServer ? Math.max(1, Math.ceil(serverTotal / serverPageSize)) : 1
-
-  // Saved views (applied in-memory).
-  const [showSaveForm, setShowSaveForm] = useState(false)
-  const [newViewName, setNewViewName] = useState("")
-  const [newViewAccess, setNewViewAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
-  const [savingView, setSavingView] = useState(false)
-  // The view the user last applied — kept even after they tweak columns/filters, so
-  // we can offer to save those changes back to it.
-  const [appliedViewId, setAppliedViewId] = useState<string | null>(null)
-  const currentKey = JSON.stringify({ filter, columns: visibleCols })
-  const matchedViewId = savedViews.find((v) => JSON.stringify({ filter: v.config.filter, columns: v.config.columns }) === currentKey)?.id
-    ?? (!filtersActive && !search ? "__default__" : null)
-  const activeViewId = appliedViewId ?? matchedViewId
-  const activeView = savedViews.find((v) => v.id === appliedViewId)
-  const viewDirty = !!activeView
-    && JSON.stringify({ filter, columns: visibleCols, frozen: frozenCount }) !== JSON.stringify({ filter: activeView.config.filter, columns: activeView.config.columns, frozen: (activeView.config as any).frozen ?? 0 })
-  function applyView(v: SavedView) { setFilter(v.config.filter ?? emptyFilter()); applyCols(v.config.columns ?? baseCols.map((c) => c.key), (v.config as any).frozen ?? 0); setSearch(""); setAppliedViewId(v.id) }
-  function applyDefault() { setFilter(emptyFilter()); applyCols(baseCols.map((c) => c.key), 0); setSearch(""); setAppliedViewId(null) }
-  function updateActiveView() {
-    if (!appliedViewId) return
-    setSavingView(true)
-    startTransition(async () => {
-      await updateCustomObjectView(appliedViewId, { filter, columns: visibleCols, frozen: frozenCount } as any)
-      setSavingView(false); router.refresh()
-    })
-  }
-  // Drag to reorder the view tabs (per-user order, persisted).
-  const viewReorder = useCardReorder(savedViews, (v) => v.id, (ids) => startTransition(() => { reorderViews("CUSTOM_OBJECT", objectKey, ids) }))
-  function saveView() {
-    if (!newViewName.trim()) return
-    setSavingView(true)
-    startTransition(async () => {
-      await createCustomObjectView(objectKey, newViewName.trim(), { filter, columns: visibleCols, frozen: frozenCount } as any, newViewAccess)
-      setSavingView(false); setShowSaveForm(false); setNewViewName(""); setNewViewAccess({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
-      router.refresh()
-    })
-  }
-  function deleteView(id: string) { startTransition(async () => { await deleteCustomObjectView(id); router.refresh() }) }
-
-  function buildExportRows(list: RecordRow[]) {
-    const headers = ["Record ID", primary?.name ?? "Name", ...cols.map((c) => c.label)]
-    const rows = list.map((r) => [
-      r.recordNumber != null ? `#${r.recordNumber}` : "",
-      primary ? displayValue(primary, r.values[primary.id], userMap) : "",
-      ...cols.map((c) => c.key === "__owner" ? (r.ownerName ?? "") : c.key === "__created" ? fmtDate(r.createdAt) : c.key === "__id" ? (r.recordNumber != null ? `#${r.recordNumber}` : "") : assocByKey[c.key] ? readAssocValue(r as any, assocByKey[c.key]) : (() => { const p = otherProps.find((x) => x.id === c.key); return p ? displayValue(p, r.values[c.key], userMap) : "" })()),
-    ])
-    return { headers, rows }
-  }
-  // Client mode: export the filtered rows. Server mode: fetch ALL matching rows.
-  const exportData = isServer
-    ? async () => buildExportRows(await exportCustomObjectRecords(objectKey, {
-        sort: sortKey, dir: sortDir, search,
-        filter: activeConditionCount(filter, filterFields) > 0 ? JSON.stringify(filter) : undefined,
-      }) as RecordRow[])
-    : () => buildExportRows(filtered)
+  const paged = serverMode ? rows : rows.slice((pageC - 1) * pageSize, (pageC - 1) * pageSize + pageSize)
+  useEffect(() => { setPage(1) }, [rows.length, sort.key, sort.dir, pageSize]) // reset on result/size change
+  const totalPages = serverMode ? Math.max(1, Math.ceil(serverTotal / serverPageSize)) : 1
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const allChecked = filtered.length > 0 && filtered.every((r) => selected.has(r.id))
+  const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.id))
   function toggleRow(id: string) { setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   async function bulkDelete() {
     if (!(await confirmDialog(`Delete ${selected.size} record${selected.size !== 1 ? "s" : ""}?`))) return
     startTransition(async () => { await bulkDeleteCustomObjectRecords(objectKey, Array.from(selected)); setSelected(new Set()); router.refresh() })
   }
 
-  const [addOpen, setAddOpen] = useState(false)
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <FilterBuilder fields={filterFields} value={filter} onChange={onFilterChange} />
-        <button onClick={() => setColModalOpen(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400">
-          <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
-        </button>
-        {viewDirty && (
-          <button onClick={updateActiveView} disabled={savingView} title={`Save changes to "${activeView?.name}"`}
-            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-blue-200 bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50">
-            {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save changes
-          </button>
-        )}
-        <button onClick={() => setExportOpen(true)} disabled={filtered.length === 0} title="Export current view to CSV"
-          className="ml-auto inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50">
-          <Download className="h-3.5 w-3.5" /> Export
-        </button>
-        {canEdit && (
-          <button onClick={() => setAddOpen(true)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
-            <Plus className="h-3.5 w-3.5" /> Add {singular}
-          </button>
-        )}
-      </div>
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-        <input type="text" placeholder={`Search ${plural.toLowerCase()}…`} value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      {isServer
-        ? (filtersActive || search) && <p className="text-xs text-slate-400 -mt-1">{serverTotal} {serverTotal === 1 ? singular.toLowerCase() : plural.toLowerCase()} match</p>
-        : (filtersActive || search) && <p className="text-xs text-slate-400 -mt-1">{filtered.length} of {records.length}</p>}
-
-      {/* Saved views */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={applyDefault}
-          className={cn("inline-flex items-center h-8 px-3 rounded-lg border text-sm font-medium transition-all", activeViewId === "__default__" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
-          Default
-        </button>
-        {viewReorder.order.map((v) => (
-          <div key={v.id}
-            {...viewReorder.handleProps(v.id)}
-            {...viewReorder.cardProps(v.id)}
-            className={cn("inline-flex items-center h-8 rounded-lg border text-sm font-medium overflow-hidden cursor-grab active:cursor-grabbing", viewReorder.dragging === v.id && "opacity-50", activeViewId === v.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400")}>
-            <button className={cn("pl-3 h-full", v.isOwner === false ? "pr-3" : "pr-1.5")} onClick={() => applyView(v)}>
-              {v.name}
-              {v.isOwner === false && v.visibility && v.visibility !== "PRIVATE" && (
-                <span className="ml-1.5 opacity-60">
-                  {v.visibility === "EVERYONE" ? <Globe className="inline h-3 w-3" /> : v.visibility === "TEAM" ? <Users className="inline h-3 w-3" /> : <UserCog className="inline h-3 w-3" />}
-                </span>
-              )}
-            </button>
-            {v.isOwner !== false && (
-              <button onClick={() => deleteView(v.id)} title="Delete view" className={cn("pr-2 pl-0.5 h-full", activeViewId === v.id ? "hover:text-zinc-300" : "hover:text-red-500")}><X className="h-3 w-3" /></button>
-            )}
-          </div>
-        ))}
-        <div className="relative">
-          <button onClick={() => setShowSaveForm((v) => !v)}
-            className="h-8 px-3 rounded-lg text-sm border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-500 hover:text-zinc-600 flex items-center gap-1.5">
-            <Plus className="h-3.5 w-3.5" /> {viewDirty ? "Save as new" : "Save view"}
-          </button>
-          {showSaveForm && (
-            <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-3 space-y-3">
-              <p className="text-xs text-slate-500">Saves the current filters and columns.</p>
-              <input autoFocus value={newViewName} onChange={(e) => setNewViewName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") saveView(); if (e.key === "Escape") setShowSaveForm(false) }}
-                placeholder="View name…" className="w-full h-9 px-3 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400" />
-              <ViewAccessSelector value={newViewAccess} onChange={setNewViewAccess} users={shareUsers} teams={shareTeams} />
-              <div className="flex gap-2 pt-1">
-                <button onClick={saveView} disabled={savingView || !newViewName.trim()}
-                  className="flex-1 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
-                  {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save view
-                </button>
-                <button onClick={() => { setShowSaveForm(false); setNewViewName("") }} className="h-9 px-3 text-sm text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-lg">Cancel</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
         {canDelete && (
           <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}>
@@ -378,9 +116,9 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
         )}
       </BulkActionBar>
 
-      {filtered.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="bg-white border rounded-xl py-16 text-center text-slate-400">
-          {records.length === 0 ? `No ${singular.toLowerCase()} records yet.` : "No records match your search or filters."}
+          {totalRecords === 0 ? `No ${singular.toLowerCase()} records yet.` : "No records match your search or filters."}
         </div>
       ) : (
         <div className="bg-white border rounded-xl overflow-hidden">
@@ -393,7 +131,7 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 30 } : undefined} className={cn("px-3 py-2 w-10", cbFrozen && "bg-slate-50")}>
-                    <input type="checkbox" checked={allChecked} onChange={() => setSelected(allChecked ? new Set() : new Set(filtered.map((r) => r.id)))} className="rounded border-slate-300 cursor-pointer" />
+                    <input type="checkbox" checked={allChecked} onChange={() => setSelected(allChecked ? new Set() : new Set(rows.map((r) => r.id)))} className="rounded border-slate-300 cursor-pointer" />
                   </th>
                   {colReorder.order.map((c) => (
                     <th key={c.key}
@@ -432,11 +170,11 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
                           : c.key === "__created" ? fmtDate(r.createdAt)
                           : assocByKey[c.key] ? (readAssocValue(r as any, assocByKey[c.key]) || <span className="text-slate-300">—</span>)
                           : prop ? (
-                            <EditableCell def={cpToFieldDef(prop, prop.id)} value={r.values[c.key]} values={r.values}
+                            <EditableCell def={cpToFieldDef(prop as any, prop.id)} value={r.values[c.key]} values={r.values}
                               canEdit={canEdit} userMap={userMap}
                               onSave={(v) => updateRecordField(`CO:${objectKey}`, r.id, c.key, v)} />
                           )
-                          : displayCell(prop!, r.values[c.key], userMap)}
+                          : displayCell(prop, r.values[c.key], userMap)}
                       </td>
                     )})}
                   </tr>
@@ -448,9 +186,9 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
       )}
 
       {/* Client-side pagination (25 / 50 / 100 per page) */}
-      {!isServer && sorted.length > 0 && (
+      {!serverMode && rows.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
-          <span>Showing {(pageC - 1) * pageSize + 1}–{Math.min(sorted.length, (pageC - 1) * pageSize + pageSize)} of {sorted.length}</span>
+          <span>Showing {(pageC - 1) * pageSize + 1}–{Math.min(rows.length, (pageC - 1) * pageSize + pageSize)} of {rows.length}</span>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-1.5 text-xs text-slate-400">Per page
               <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="h-8 px-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-700 focus:outline-none">
@@ -469,56 +207,18 @@ export default function CustomObjectList({ objectKey, singular, plural, ownerLab
       )}
 
       {/* Server-side pagination */}
-      {isServer && serverTotal > serverPageSize && (
+      {serverMode && serverTotal > serverPageSize && (
         <div className="flex items-center justify-between text-sm text-slate-500">
           <span>Showing {(serverPage - 1) * serverPageSize + 1}–{Math.min(serverTotal, serverPage * serverPageSize)} of {serverTotal}</span>
           <div className="flex items-center gap-1">
-            <button disabled={serverPage <= 1} onClick={() => pushParams({ page: String(serverPage - 1) })}
+            <button disabled={serverPage <= 1} onClick={() => onServerPage?.(serverPage - 1)}
               className="h-8 px-2.5 inline-flex items-center rounded-lg border border-slate-200 bg-white hover:border-slate-400 disabled:opacity-40">Prev</button>
             <span className="px-2 tabular-nums">Page {serverPage} of {totalPages}</span>
-            <button disabled={serverPage >= totalPages} onClick={() => pushParams({ page: String(serverPage + 1) })}
+            <button disabled={serverPage >= totalPages} onClick={() => onServerPage?.(serverPage + 1)}
               className="h-8 px-2.5 inline-flex items-center rounded-lg border border-slate-200 bg-white hover:border-slate-400 disabled:opacity-40">Next</button>
           </div>
         </div>
       )}
-
-      {canEdit && addOpen && (() => {
-        // Catalog = every property (as a RecordFieldDef) + the owner field.
-        const catalog: RecordFieldDef[] = [
-          ...properties.map((p) => ({ ...cpToFieldDef(p, p.id), required: !!(p as any).required || !!p.primary })),
-          { key: "__owner", label: ownerLabel, type: "user" as const },
-        ]
-        return (
-          <CreateRecordModal
-            objectType={`CO:${objectKey}`}
-            title={`Add ${singular}`}
-            catalog={catalog}
-            config={createFormConfig}
-            users={users}
-            canEditForm={isAdmin}
-            onClose={() => setAddOpen(false)}
-            onSaved={() => { setAddOpen(false); router.refresh() }}
-            onConfigChanged={() => router.refresh()}
-            onSubmit={async (values) => {
-              const { __owner, ...propValues } = values
-              return await createCustomObjectRecord(objectKey, propValues, (__owner as string) || undefined) as any
-            }}
-          />
-        )
-      })()}
-
-      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={plural} defaultName={objectKey} getData={exportData} count={isServer ? serverTotal : undefined} />
-
-      <ColumnChooserModal
-        open={colModalOpen}
-        onClose={() => setColModalOpen(false)}
-        columns={allCols}
-        selected={visibleCols}
-        frozen={frozenCount}
-        onApply={(sel, fr) => applyCols(sel, fr)}
-        createHref="/settings/objects"
-      />
     </div>
   )
 }
-

@@ -31,19 +31,21 @@ const ACTIONS: { key: Composer; label: string; icon: typeof StickyNote }[] = [
 const CALL_OUTCOMES = ["Connected", "Left voicemail", "No answer", "Busy", "Wrong number"]
 const INPUT = "text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-zinc-400"
 
-export default function RecordEngagementBar({ recordType, recordId, users = [], canEdit, compact = false, onLogged }: {
+export default function RecordEngagementBar({ recordType, recordId, users = [], canEdit, compact = false, initialComposer = null, onLogged }: {
   recordType: string
   recordId: string
   users?: { id: string; label: string }[]
   canEdit: boolean
   /** Tighter spacing for narrow columns (e.g. the left column of a record page). */
   compact?: boolean
+  /** Open straight into one composer — used by the board card's quick actions. */
+  initialComposer?: Composer | null
   /** Fired after an engagement is saved — e.g. to switch the middle column to Activities. */
   onLogged?: () => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [open, setOpen] = useState<Composer | null>(null)
+  const [open, setOpen] = useState<Composer | null>(initialComposer)
   const [error, setError] = useState<string | null>(null)
 
   const [note, setNote] = useState("")

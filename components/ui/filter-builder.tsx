@@ -15,6 +15,11 @@ interface Props {
   fields: FilterField[]
   value: FilterState
   onChange: (next: FilterState) => void
+  /** Controlled open state — lets a second trigger ("Advanced filters") drive the panel. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Hide the built-in Filter button when another control opens the panel. */
+  hideTrigger?: boolean
 }
 
 // ─── Searchable multi-select (for `is any of` / `is none of`) ────────────────
@@ -238,8 +243,15 @@ export function FilterEditor({ fields, value, onChange }: Props) {
   )
 }
 
-export default function FilterBuilder({ fields, value, onChange }: Props) {
-  const [open, setOpen] = useState(false)
+export default function FilterBuilder({ fields, value, onChange, open: openProp, onOpenChange, hideTrigger = false }: Props) {
+  const [openState, setOpenState] = useState(false)
+  const controlled = openProp !== undefined
+  const open = controlled ? openProp : openState
+  const setOpen = (next: boolean | ((o: boolean) => boolean)) => {
+    const v = typeof next === "function" ? next(open) : next
+    if (!controlled) setOpenState(v)
+    onOpenChange?.(v)
+  }
   // Flip the panel to right-aligned when left-aligned would overflow the viewport
   // (the Filter button often sits on the right of a toolbar).
   const [alignRight, setAlignRight] = useState(false)
@@ -269,14 +281,16 @@ export default function FilterBuilder({ fields, value, onChange }: Props) {
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)}
-        className={cn(
-          "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-colors",
-          count > 0 ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
-        )}>
-        <Filter className="h-3.5 w-3.5" /> Filter
-        {count > 0 && <span className="ml-0.5 h-4 min-w-4 px-1 rounded-full bg-white/20 text-[10px] inline-flex items-center justify-center">{count}</span>}
-      </button>
+      {!hideTrigger && (
+        <button type="button" onClick={() => setOpen((o) => !o)}
+          className={cn(
+            "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-colors",
+            count > 0 ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+          )}>
+          <Filter className="h-3.5 w-3.5" /> Filter
+          {count > 0 && <span className="ml-0.5 h-4 min-w-4 px-1 rounded-full bg-white/20 text-[10px] inline-flex items-center justify-center">{count}</span>}
+        </button>
+      )}
 
       {open && (
         <div className={cn("absolute top-11 z-50 w-[740px] max-w-[94vw] max-h-[75vh] overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-2xl p-5", alignRight ? "right-0" : "left-0")}>

@@ -35,7 +35,7 @@ export async function moveRecordStage(recordType: string, recordId: string, pipe
   if (moved) await runTrigger_RecordPropertyChanged(recordType, recordId, { stageId }, session.user.id).catch(() => {})
   if (recordType.startsWith("CO:")) {
     const key = recordType.slice(3)
-    revalidatePath(`/objects/${key}/board`)
+    revalidatePath(`/objects/${key}`) // the board is a view type on the list page
     revalidatePath(`/objects/${key}/${recordId}`)
   } else if (recordType === "REFERRAL") {
     revalidatePath(`/referrals/${recordId}`)

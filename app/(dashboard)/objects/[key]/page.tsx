@@ -7,16 +7,15 @@ import { listCustomObjectRecords, countCustomObjectRecords, queryCustomObjectRec
 import { CO_SERVER_THRESHOLD } from "@/lib/custom-object-config"
 import { getCustomObjectViews } from "@/app/actions/custom-object-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
-import CustomObjectList from "@/components/custom-object-list"
+import ObjectViewShell from "@/components/object-view-shell"
 import { getCreateForm } from "@/app/actions/create-form"
 import { pipelinesForObject } from "@/lib/stages/core"
+import { getPipelineColorStyle } from "@/app/actions/pipelines"
 import { associationColumnDefs, attachAssociatedRecords } from "@/lib/association-columns"
-import Link from "next/link"
-import { LayoutGrid } from "lucide-react"
 
 interface Props {
   params: { key: string }
-  searchParams: { page?: string; sort?: string; dir?: string; search?: string; filter?: string }
+  searchParams: { page?: string; sort?: string; dir?: string; search?: string; filter?: string; view?: string; pipeline?: string; viewId?: string }
 }
 
 export default async function CustomObjectListPage({ params, searchParams }: Props) {
@@ -33,12 +32,13 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
   const totalRecords = await countCustomObjectRecords(params.key)
   const serverMode = totalRecords > CO_SERVER_THRESHOLD
 
-  const [users, savedViews, shareOptions, createFormConfig, pipelines] = await Promise.all([
+  const [users, savedViews, shareOptions, createFormConfig, pipelines, pipelineColorStyle] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
     getCustomObjectViews(params.key),
     getViewShareOptions(),
     getCreateForm(`CO:${params.key}`),
     pipelinesForObject(`CO:${params.key}`),
+    getPipelineColorStyle(`CO:${params.key}`),
   ])
 
   const pageData = serverMode
@@ -53,26 +53,15 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
   if (associations.length) await attachAssociatedRecords(`CO:${params.key}`, pageData.rows as any[])
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{def.plural}</h1>
-          <p className="text-sm text-slate-500">{totalRecords} {totalRecords === 1 ? def.singular.toLowerCase() : def.plural.toLowerCase()}</p>
-        </div>
-        {pipelines.length > 0 && (
-          <Link href={`/objects/${params.key}/board`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-sm font-medium text-zinc-700 hover:border-zinc-400">
-            <LayoutGrid className="h-3.5 w-3.5" /> Board
-          </Link>
-        )}
-      </div>
-
-      <CustomObjectList
+    <div className="p-6">
+      <ObjectViewShell
         objectKey={def.key}
         singular={def.singular}
         plural={def.plural}
         ownerLabel={def.ownerLabel}
-        properties={def.properties}
+        properties={def.properties as any}
         records={pageData.rows as any}
+        totalRecords={totalRecords}
         users={users.map((u) => ({ id: u.id, label: u.name ?? u.email }))}
         canEdit={canEdit}
         canDelete={canDelete}
@@ -86,6 +75,8 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
         createFormConfig={createFormConfig}
         isAdmin={user?.role === "ADMIN"}
         associations={associations}
+        pipelines={pipelines.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+        pipelineColorStyle={pipelineColorStyle}
       />
     </div>
   )
