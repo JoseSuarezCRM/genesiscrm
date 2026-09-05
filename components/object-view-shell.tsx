@@ -523,8 +523,7 @@ export default function ObjectViewShell(props: Props) {
       {toolbarOpen && (
         <QuickFilterBar fields={filterFields} keys={cfg.quickFilters} value={cfg.filter}
           onChange={onFilterChange}
-          onKeysChange={(keys) => setCfg((c) => ({ ...c, quickFilters: keys }))}
-          onOpenAdvanced={() => setFiltersOpen(true)} />
+          onKeysChange={(keys) => setCfg((c) => ({ ...c, quickFilters: keys }))} />
       )}
 
       {/* ── Body + settings panel ── */}

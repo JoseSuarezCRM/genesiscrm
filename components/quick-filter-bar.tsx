@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ChevronDown, Plus, Pencil, Check, Search, X, SlidersHorizontal } from "lucide-react"
+import { ChevronDown, Plus, Pencil, Check, Search, X } from "lucide-react"
 import { DATE_PRESET_GROUPS } from "@/lib/reporting/date-presets"
 import { OPERATORS, uid, type Condition, type FilterField, type FilterState } from "@/lib/filters"
 import { cn } from "@/lib/utils"
@@ -178,13 +178,15 @@ function Chip({ field, state, onChange, onRemove }: {
   )
 }
 
-export default function QuickFilterBar({ fields, keys, value, onChange, onKeysChange, onOpenAdvanced }: {
+// Advanced filtering lives on the toolbar's Filter button (the shared FilterBuilder
+// trigger every list uses, and the one carrying the active-condition badge) — this row
+// deliberately has no second entry point to it.
+export default function QuickFilterBar({ fields, keys, value, onChange, onKeysChange }: {
   fields: FilterField[]
   keys: string[]
   value: FilterState
   onChange: (next: FilterState) => void
   onKeysChange: (next: string[]) => void
-  onOpenAdvanced: () => void
 }) {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -245,10 +247,6 @@ export default function QuickFilterBar({ fields, keys, value, onChange, onKeysCh
         )}
       </div>
 
-      <button onClick={onOpenAdvanced}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-500 hover:text-slate-900">
-        <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced filters
-      </button>
     </div>
   )
 }
