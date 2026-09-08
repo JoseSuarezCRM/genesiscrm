@@ -45,6 +45,7 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
     ? await queryCustomObjectRecords(params.key, {
         page: parseInt(searchParams.page ?? "1"), sort: searchParams.sort,
         dir: searchParams.dir === "asc" ? "asc" : "desc", search: searchParams.search, filter: searchParams.filter,
+        pipeline: searchParams.pipeline,
       })
     : { rows: await listCustomObjectRecords(params.key), total: totalRecords, page: 1, pageSize: 0 }
 

@@ -167,8 +167,12 @@ export default function ObjectViewShell(props: Props) {
   useEffect(() => {
     pushParams({
       view: cfg.type === "table" ? null : cfg.type,
-      pipeline: cfg.type === "table" ? null : cfg.pipelineId,
+      // Always carried: server mode filters the table by it, and it makes "Copy link
+      // to view" reproduce the pipeline the viewer was scoped to.
+      pipeline: cfg.pipelineId,
       viewId: appliedViewId,
+      // A narrower set may not have the page the viewer was on.
+      ...(serverMode ? { page: "1" } : {}),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.type, cfg.pipelineId, appliedViewId])
@@ -250,13 +254,16 @@ export default function ObjectViewShell(props: Props) {
     if (serverMode) return records
     const q = search.toLowerCase().trim()
     return records.filter((r) => {
+      // The pipeline selector scopes the whole view. On a table, no pipeline means
+      // "all pipelines" — unlike a board, which always renders exactly one.
+      if (cfg.pipelineId && r.pipelineId !== cfg.pipelineId) return false
       if (q) {
         const hay = Object.values(r.values).map((v) => (Array.isArray(v) ? v.join(" ") : String(v ?? ""))).join(" ").toLowerCase()
         if (!hay.includes(q)) return false
       }
       return matchesFilter(r, cfg.filter, filterFields)
     })
-  }, [records, search, cfg.filter, filterFields, serverMode])
+  }, [records, search, cfg.filter, cfg.pipelineId, filterFields, serverMode])
 
   const sortVal = useCallback((r: RecordRow, key: string): string | number => {
     if (key === "__id" || key === "__recordNumber") return r.recordNumber ?? 0
@@ -474,8 +481,11 @@ export default function ObjectViewShell(props: Props) {
           open={sortOpen} onOpenChange={setSortOpen} />
 
         <div className="ml-auto flex items-center gap-2">
-          {cfg.type !== "table" && pipelines.length > 0 && (
-            <PipelineSelector pipelines={pipelines} activePipelineId={cfg.pipelineId ?? board?.pipeline?.id ?? null}
+          {pipelines.length > 0 && (
+            // On a table, no pipeline means "all pipelines"; a board/calendar renders
+            // exactly one, so there it falls back to whichever one loaded.
+            <PipelineSelector pipelines={pipelines}
+              activePipelineId={cfg.type === "table" ? cfg.pipelineId : (cfg.pipelineId ?? board?.pipeline?.id ?? null)}
               managePath={`/settings/pipelines?object=CO:${objectKey}`} colorStyle={pipelineColorStyle}
               onSelect={(id) => setCfg((c) => ({ ...c, pipelineId: id }))} />
           )}
@@ -527,7 +537,9 @@ export default function ObjectViewShell(props: Props) {
       )}
 
       {/* ── Body + settings panel ── */}
-      <div className="flex items-start gap-4">
+      {/* No gap here: the panel carries its own left margin so the space collapses
+          with it, instead of snapping 16px wide when it finishes closing. */}
+      <div className="flex items-start">
         <div className="min-w-0 flex-1">
           {cfg.type === "table" && (
             <CustomObjectList

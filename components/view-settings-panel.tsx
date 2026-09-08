@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   X, ChevronRight, ChevronLeft, Table2, LayoutGrid, CalendarDays, Link2, Users, Download,
   Save, RotateCcw, Check, Loader2, Columns3,
@@ -86,7 +86,26 @@ export default function ViewSettingsPanel({
   onOpenColumns: () => void
 }) {
   const [sub, setSub] = useState<Sub>(null)
-  if (!open) return null
+
+  // Slide in/out instead of snapping the table sideways. The panel is INLINE (it
+  // pushes the list over), so what animates is its width — a transform alone would
+  // leave a hole where the panel is about to sit. Stays mounted until the exit ends.
+  const [render, setRender] = useState(open)
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    if (open) {
+      setRender(true)
+      const r = requestAnimationFrame(() => setShown(true))
+      return () => cancelAnimationFrame(r)
+    }
+    setShown(false)
+    const t = setTimeout(() => setRender(false), 200)
+    return () => clearTimeout(t)
+  }, [open])
+  // Reopening lands back on the top level, not whatever sub-panel was last used.
+  useEffect(() => { if (!open) setSub(null) }, [open])
+
+  if (!render) return null
 
   const numeric = numericProperties(properties)
   const dates = dateProperties(properties)
@@ -112,7 +131,13 @@ export default function ViewSettingsPanel({
   )
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col self-start overflow-hidden rounded-xl border border-zinc-200 bg-white">
+    <aside className={cn(
+      "shrink-0 self-start overflow-hidden rounded-xl border bg-white transition-all duration-200 ease-out",
+      shown ? "ml-4 w-80 border-zinc-200 opacity-100" : "ml-0 w-0 border-transparent opacity-0",
+    )}>
+      {/* Fixed width inside the collapsing shell so the content doesn't reflow
+          (and jitter) while the width animates. */}
+      <div className="flex w-80 flex-col">
       {sub === "board" ? (
         <>
           {header("Board settings", () => setSub(null))}
@@ -236,7 +261,9 @@ export default function ViewSettingsPanel({
           <div className="space-y-0.5 overflow-y-auto p-3">
             <button onClick={() => onConfigChange({ ...config, pipelineId: null })}
               className={cn("flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm hover:bg-zinc-50", !config.pipelineId && "font-medium")}>
-              First pipeline {!config.pipelineId && <Check className="h-4 w-4 text-blue-600" />}
+              {/* A table can show every pipeline at once; a board renders one set of columns. */}
+              {config.type === "table" ? "All pipelines" : "First pipeline"}
+              {!config.pipelineId && <Check className="h-4 w-4 text-blue-600" />}
             </button>
             {pipelines.map((p) => (
               <button key={p.id} onClick={() => onConfigChange({ ...config, pipelineId: p.id })}
@@ -293,9 +320,10 @@ export default function ViewSettingsPanel({
             </div>
 
             <Section title="Data">
-              {config.type !== "table" && (
+              {pipelines.length > 0 && (
                 <Row label="Pipeline" onClick={() => setSub("pipeline")}
-                  value={pipelines.find((p) => p.id === config.pipelineId)?.name ?? "First pipeline"} />
+                  value={pipelines.find((p) => p.id === config.pipelineId)?.name
+                    ?? (config.type === "table" ? "All pipelines" : "First pipeline")} />
               )}
               <Row label="Filters" onClick={onOpenFilters} />
               <Row label="Sort by" onClick={onOpenSort} />
@@ -323,6 +351,7 @@ export default function ViewSettingsPanel({
           </div>
         </>
       )}
+      </div>
     </aside>
   )
 }

@@ -90,7 +90,7 @@ export async function countCustomObjectRecords(objectKey: string): Promise<numbe
 // search, sort, and paginate in the database so a huge object stays fast and
 // the sort holds across pages. Sorting a built-in column is a plain orderBy;
 // sorting a custom (JSON) property is done over the matching set.
-export async function queryCustomObjectRecords(objectKey: string, opts: { page?: number; sort?: string; dir?: "asc" | "desc"; search?: string; filter?: string }): Promise<CustomRecordsPage> {
+export async function queryCustomObjectRecords(objectKey: string, opts: { page?: number; sort?: string; dir?: "asc" | "desc"; search?: string; filter?: string; pipeline?: string }): Promise<CustomRecordsPage> {
   await requireAccess(objKey(objectKey), "VIEW")
   const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
   if (!def) return { rows: [], total: 0, page: 1, pageSize: CO_PAGE_SIZE }
@@ -106,7 +106,12 @@ export async function queryCustomObjectRecords(objectKey: string, opts: { page?:
     ? { OR: properties.filter((p) => ["TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL"].includes(p.type) || p.id === primary?.id)
         .map((p) => ({ values: { path: [p.id], string_contains: search } })) }
     : {}
-  const where: any = { objectDefId: def.id, AND: [filterWhere, searchWhere].filter((w) => w && Object.keys(w).length > 0) }
+  const where: any = {
+    objectDefId: def.id,
+    // The pipeline selector scopes the list; absent means every pipeline.
+    ...(opts.pipeline ? { pipelineId: opts.pipeline } : {}),
+    AND: [filterWhere, searchWhere].filter((w) => w && Object.keys(w).length > 0),
+  }
 
   const total = await (prisma as any).customObjectRecord.count({ where })
 
