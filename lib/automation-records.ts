@@ -122,7 +122,11 @@ export async function setRecordProperty(type: string, id: string, property: stri
 // Create a record in an object (v1: custom objects only). Assigns the next
 // sequential Record ID and returns the new record's id. Un-gated — callers (the
 // automation engine) enforce their own access.
-export async function createRecordFor(type: string, values: Record<string, unknown>, opts: { ownerId?: string | null; createdById?: string | null } = {}): Promise<string> {
+export async function createRecordFor(
+  type: string,
+  values: Record<string, unknown>,
+  opts: { ownerId?: string | null; createdById?: string | null; pipelineId?: string | null; stageId?: string | null } = {},
+): Promise<string> {
   if (!isCustomObject(type)) throw new Error(`Create record isn't supported for "${type}" yet — pick a custom object.`)
   const key = type.slice(3)
   const def = await (prisma as any).customObjectDef.findUnique({ where: { key }, select: { id: true } })
@@ -135,9 +139,22 @@ export async function createRecordFor(type: string, values: Record<string, unkno
       values: values ?? {},
       ownerId: opts.ownerId ?? null,
       createdById: opts.createdById ?? null,
+      pipelineId: opts.pipelineId ?? null,
+      stageId: opts.stageId ?? null,
     },
     select: { id: true },
   })
+  // Log the entry as a real stage transition, not just the column — otherwise the
+  // record sits in a stage with no history, and time-in-stage, the board and the
+  // duration properties all read empty for it.
+  if (opts.pipelineId && opts.stageId) {
+    await (prisma as any).stageTransition.create({
+      data: {
+        recordType: type, recordId: rec.id, pipelineId: opts.pipelineId,
+        fromStageId: null, toStageId: opts.stageId, byUserId: opts.createdById ?? null,
+      },
+    }).catch(() => {})
+  }
   return rec.id
 }
 
