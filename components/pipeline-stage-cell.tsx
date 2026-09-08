@@ -6,6 +6,7 @@ import { Loader2, X } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
 import { PipelineChip } from "@/components/pipeline-chip"
 import { moveRecordStage } from "@/app/actions/stages"
+import { getPipelines } from "@/app/actions/pipelines"
 import { showToast } from "@/components/toast"
 
 // Inline "Edit pipeline and stage" for a list row.
@@ -22,26 +23,33 @@ export interface PipelineOption {
 }
 
 export default function PipelineStageCell({
-  objectType, recordId, pipelines, pipelineId, stageId, canEdit, show, colorStyle = "dot", onSaved,
+  objectType, recordId, pipelines: given, pipelineId, stageId, canEdit, show, colorStyle = "dot",
+  renderTrigger, onSaved,
 }: {
   objectType: string          // "CO:<key>"
   recordId: string
-  pipelines: PipelineOption[]
+  /** Omit to have the popover load them on first open (record pages, where the
+   *  page would otherwise have to thread pipelines through every property row). */
+  pipelines?: PipelineOption[]
   pipelineId: string | null
   stageId: string | null
   canEdit: boolean
   /** Which half this cell renders — the popover edits both either way. */
   show: "pipeline" | "stage"
   colorStyle?: string
+  /** Custom trigger, so a property row can style it as a value instead of a cell. */
+  renderTrigger?: (args: { label: React.ReactNode; onClick: () => void; disabled: boolean }) => React.ReactNode
   onSaved: (next: { pipelineId: string; stageId: string }) => void
 }) {
+  const [fetched, setFetched] = useState<PipelineOption[] | null>(null)
+  const pipelines = given ?? fetched ?? []
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   const [draftPipeline, setDraftPipeline] = useState(pipelineId ?? pipelines[0]?.id ?? "")
   const [draftStage, setDraftStage] = useState(stageId ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const btnRef = useRef<any>(null) // the trigger element — button, or the wrapper for a custom one
   const panelRef = useRef<HTMLDivElement>(null)
 
   const pipeline = pipelines.find((p) => p.id === pipelineId) ?? null
@@ -79,9 +87,19 @@ export default function PipelineStageCell({
     }
   }, [open])
 
-  function startEdit() {
-    if (!canEdit || pipelines.length === 0) return
-    setDraftPipeline(pipelineId ?? pipelines[0]?.id ?? "")
+  async function startEdit() {
+    if (!canEdit) return
+    let list = pipelines
+    if (!given && !fetched) {
+      const rows = await getPipelines(objectType).catch(() => [])
+      list = (rows as any[]).map((p) => ({
+        id: p.id, name: p.name, color: p.color,
+        stages: (p.stages ?? []).map((s: any) => ({ id: s.id, name: s.name, color: s.color })),
+      }))
+      setFetched(list)
+    }
+    if (list.length === 0) return
+    setDraftPipeline(pipelineId ?? list[0]?.id ?? "")
     setDraftStage(stageId ?? "")
     setError(null)
     setOpen(true)
@@ -107,12 +125,22 @@ export default function PipelineStageCell({
     ? (pipeline ? <PipelineChip name={pipeline.name} color={pipeline.color} style={colorStyle} /> : <span className="text-slate-300">—</span>)
     : (stage ? <PipelineChip name={stage.name} color={stage.color ?? "#94a3b8"} style={colorStyle} /> : <span className="text-slate-300">—</span>)
 
+  const disabled = !canEdit || (!!given && given.length === 0)
+
   return (
     <>
-      <button ref={btnRef} onClick={startEdit} disabled={!canEdit || pipelines.length === 0}
-        className="flex h-full w-full items-center px-3 py-2.5 text-left hover:bg-slate-50 disabled:cursor-default disabled:hover:bg-transparent">
-        <span className="min-w-0 truncate">{label}</span>
-      </button>
+      {renderTrigger ? (
+        // A custom trigger needs a real box to anchor the popover to, so it gets a
+        // block wrapper rather than `contents` (which has no layout box at all).
+        <span ref={btnRef} className="block">
+          {renderTrigger({ label, onClick: startEdit, disabled })}
+        </span>
+      ) : (
+        <button ref={btnRef as React.RefObject<HTMLButtonElement>} onClick={startEdit} disabled={disabled}
+          className="flex h-full w-full items-center px-3 py-2.5 text-left hover:bg-slate-50 disabled:cursor-default disabled:hover:bg-transparent">
+          <span className="min-w-0 truncate">{label}</span>
+        </button>
+      )}
 
       {open && pos && typeof document !== "undefined" && createPortal(
         <div ref={panelRef} className="fixed z-[100] w-[300px] rounded-xl border border-slate-200 bg-white p-4 shadow-2xl"
