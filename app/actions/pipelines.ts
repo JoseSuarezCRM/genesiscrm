@@ -24,7 +24,7 @@ export async function setPipelineColorStyle(objectType: string, colorStyle: stri
   await (prisma as any).pipelineSettings.upsert({
     where: { objectType }, create: { objectType, colorStyle: style }, update: { colorStyle: style },
   })
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -53,7 +53,7 @@ export async function createPipeline(data: { name: string; color: string; object
     },
   })
   revalidatePath("/referrals")
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { pipeline }
 }
 
@@ -79,7 +79,7 @@ export async function setStageConditionalFields(objectType: string, stageId: str
     const newRule = equals.length ? { controllingKey: "stageId", equals } : null
     await prisma.customProperty.update({ where: { id: p.id }, data: { visibilityRule: newRule as any } })
   }
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   revalidatePath("/referrals")
   return { success: true }
 }
@@ -104,7 +104,7 @@ export async function setPipelineRule(pipelineId: string, fromStageId: string, t
       update: { toStageIds },
     })
   }
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -113,7 +113,7 @@ export async function setStageRequiredFields(stageId: string, propertyIds: strin
   await requireAccess("PIPELINES", "EDIT")
   await requireAdmin()
   await (prisma as any).pipelineStage.update({ where: { id: stageId }, data: { requiredPropertyIds: propertyIds } })
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -121,7 +121,7 @@ export async function reorderPipelines(objectType: string, ids: string[]) {
   await requireAccess("PIPELINES", "EDIT")
   await requireAdmin()
   await Promise.all(ids.map((id, i) => (prisma as any).pipeline.updateMany({ where: { id, objectType }, data: { order: i } })))
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -132,7 +132,7 @@ export async function setDefaultPipeline(objectType: string, id: string) {
   const rows = await prisma.pipeline.findMany({ where: { objectType }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true } })
   const ids = [id, ...rows.map((r) => r.id).filter((x) => x !== id)]
   await Promise.all(ids.map((pid, i) => prisma.pipeline.update({ where: { id: pid }, data: { order: i } })))
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -152,7 +152,7 @@ export async function clonePipeline(id: string) {
     },
     include: { stages: true, _count: { select: { stages: true } } },
   })
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { pipeline: created }
 }
 
@@ -168,7 +168,7 @@ export async function upsertStage(pipelineId: string, stage: { id?: string; name
     const max = await (prisma as any).pipelineStage.aggregate({ where: { pipelineId }, _max: { order: true } })
     await (prisma as any).pipelineStage.create({ data: { ...data, pipelineId, order: (max._max.order ?? -1) + 1 } })
   }
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -176,7 +176,7 @@ export async function reorderStages(pipelineId: string, ids: string[]) {
   await requireAccess("PIPELINES", "EDIT")
   await requireAdmin()
   await Promise.all(ids.map((id, i) => (prisma as any).pipelineStage.updateMany({ where: { id, pipelineId }, data: { order: i } })))
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -187,7 +187,7 @@ export async function deleteStage(id: string) {
   await (prisma as any).customObjectRecord.updateMany({ where: { stageId: id }, data: { stageId: null } }).catch(() => {})
   await (prisma as any).referral.updateMany({ where: { stageId: id } as any, data: { stageId: null } as any }).catch(() => {})
   await (prisma as any).pipelineStage.delete({ where: { id } })
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
@@ -202,7 +202,7 @@ export async function updatePipeline(id: string, data: { name?: string; color?: 
     },
   })
   revalidatePath("/referrals")
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { pipeline }
 }
 
@@ -215,6 +215,6 @@ export async function deletePipeline(id: string) {
   if (count > 0) return { error: `Cannot delete — ${count} record${count !== 1 ? "s" : ""} are assigned to this pipeline.` }
   await prisma.pipeline.delete({ where: { id } }) // stages cascade
   revalidatePath("/referrals")
-  revalidatePath("/settings/pipelines")
+  revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
