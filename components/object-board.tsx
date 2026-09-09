@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { ChevronLeft, ChevronRight, Clock, StickyNote, Mail, CheckSquare, X, Info } from "lucide-react"
+import { ChevronLeft, ChevronRight, Clock, StickyNote, Mail, CheckSquare, X, Info, Link2 } from "lucide-react"
 import { moveRecordStage } from "@/app/actions/stages"
 import type { ObjectBoardCard, ObjectBoardStage } from "@/app/actions/object-board"
 import { PipelineChip } from "@/components/pipeline-chip"
@@ -30,6 +30,8 @@ interface Props {
   canEdit: boolean
   truncated?: boolean
   onConfigChange: (next: BoardConfig) => void
+  /** Fired after a stage move sticks, so the shell can reload the board's own data. */
+  onMoved?: () => void
 }
 
 // ── Metrics ──────────────────────────────────────────────────────────────────
@@ -106,58 +108,68 @@ function BoardCard({ card, stage, properties, userMap, config, hrefBase, onDragS
     .map((id) => properties.find((p) => p.id === id))
     .filter((p): p is ObjectProperty => !!p)
 
+  const showFooter = config.showLastActivity || config.showActions
+
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={cn(
-        "group rounded-lg border border-zinc-200 bg-white p-3 shadow-sm transition-colors cursor-grab active:cursor-grabbing hover:border-zinc-300",
-        dragging && "opacity-50",
+        "group rounded-lg border bg-white transition-all cursor-grab active:cursor-grabbing",
+        dragging
+          ? "border-zinc-300 opacity-40 shadow-lg"
+          : "border-zinc-200 shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:border-zinc-300 hover:shadow-md",
       )}
     >
-      <div className="flex items-start gap-1.5">
-        <Link href={`${hrefBase}/${card.id}`} className="min-w-0 flex-1 text-sm font-semibold text-teal-800 hover:underline">
-          {card.title}
-        </Link>
-        {config.showTimeInStage && card.enteredAt && (
-          <span title={timeInStage(card.enteredAt)} className="mt-0.5 shrink-0 text-zinc-400">
-            <Clock className="h-3.5 w-3.5" />
-          </span>
+      <div className="p-3">
+        <div className="flex items-start gap-1.5">
+          <Link href={`${hrefBase}/${card.id}`} onClick={(e) => e.stopPropagation()}
+            className="min-w-0 flex-1 truncate text-sm font-semibold leading-5 text-teal-700 hover:text-teal-900 hover:underline">
+            {card.title}
+          </Link>
+          {config.showTimeInStage && card.enteredAt && (
+            <span title={timeInStage(card.enteredAt)} className="mt-0.5 shrink-0 text-zinc-400">
+              <Clock className="h-3.5 w-3.5" />
+            </span>
+          )}
+        </div>
+
+        {lines.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {lines.map((p) => {
+              const v = card.values?.[p.id]
+              const empty = v === null || v === undefined || v === ""
+              const rel = !empty && (p.type === "DATE" || p.type === "DATE_TIME") ? relativeDay(v) : ""
+              return (
+                <div key={p.id} className="flex gap-1 text-xs leading-4">
+                  <span className="shrink-0 text-zinc-500">{p.name}:</span>
+                  <span className="min-w-0 text-zinc-800">
+                    {empty ? <span className="text-zinc-300">—</span> : displayCell(p, v, userMap)}
+                    {rel && <span className="text-zinc-400"> ({rel})</span>}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
 
-      {lines.length > 0 && (
-        <div className="mt-1.5 space-y-0.5">
-          {lines.map((p) => {
-            const v = card.values?.[p.id]
-            const empty = v === null || v === undefined || v === ""
-            const rel = !empty && (p.type === "DATE" || p.type === "DATE_TIME") ? relativeDay(v) : ""
-            return (
-              <p key={p.id} className="text-xs text-zinc-600">
-                <span className="text-zinc-500">{p.name}:</span>{" "}
-                {empty ? <span className="text-zinc-300">—</span> : displayCell(p, v, userMap)}
-                {rel && <span className="text-zinc-400"> ({rel})</span>}
-              </p>
-            )
-          })}
-        </div>
-      )}
-
       {config.showChips && card.chips.length > 0 && (
         <>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-100 px-3 py-2">
             {card.chips.slice(0, 3).map((c) => (
               <span key={`${c.type}:${c.name}`} title={c.typeLabel}
-                className="inline-flex max-w-full items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[11px] font-medium text-violet-700">
+                className="inline-flex max-w-full items-center rounded bg-emerald-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">
                 <span className="truncate">{c.name}</span>
               </span>
             ))}
           </div>
-          <div className="mt-2 flex items-center gap-1 border-t border-zinc-100 pt-2">
+          <div className="flex items-center gap-1 border-t border-zinc-100 px-3 py-2">
+            <Link2 className="h-3 w-3 shrink-0 text-zinc-300" />
             {card.chips.slice(0, 4).map((c) => (
               <span key={`av-${c.type}:${c.name}`} title={`${c.typeLabel}: ${c.name}`}
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[9px] font-semibold text-zinc-500">
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-zinc-100 text-[9px] font-semibold text-zinc-500 ring-1 ring-white">
                 {initialsOf(c.name)}
               </span>
             ))}
@@ -165,11 +177,11 @@ function BoardCard({ card, stage, properties, userMap, config, hrefBase, onDragS
         </>
       )}
 
-      {(config.showLastActivity || config.showActions) && (
-        <div className="mt-2 flex items-center justify-between gap-2">
+      {showFooter && (
+        <div className="flex min-h-[2rem] items-center justify-between gap-2 border-t border-zinc-100 px-3 py-1.5">
           {config.showLastActivity && card.lastActivity ? (
             <p className="min-w-0 truncate text-[11px] text-zinc-500">
-              <span className="font-medium text-zinc-600">{card.lastActivity.kind}</span> {relativeAgo(card.lastActivity.at)}
+              <span className="font-medium text-zinc-700">{card.lastActivity.kind}</span> {relativeAgo(card.lastActivity.at)}
             </p>
           ) : <span />}
           {config.showActions && (
@@ -189,7 +201,7 @@ function BoardCard({ card, stage, properties, userMap, config, hrefBase, onDragS
 
 export default function ObjectBoard({
   objectType, hrefBase, pipelineId, stages, cards: initial, properties, userMap, users,
-  config, colorStyle = "dot", canEdit, truncated = false, onConfigChange,
+  config, colorStyle = "dot", canEdit, truncated = false, onConfigChange, onMoved,
 }: Props) {
   const [cards, setCards] = useState(initial)
   const [dragId, setDragId] = useState<string | null>(null)
@@ -198,9 +210,12 @@ export default function ObjectBoard({
   const [quick, setQuick] = useState<{ card: ObjectBoardCard; composer: "NOTE" | "EMAIL" | "TASK" } | null>(null)
 
   // Adopt a fresh server page (pipeline switch, refresh) without losing the optimistic
-  // move that's already on screen — React's "adjust state when a prop changes" pattern.
-  const [seenCards, setSeenCards] = useState(initial)
-  if (initial !== seenCards) { setSeenCards(initial); setCards(initial) }
+  // move that's already on screen. Compare the CONTENT, not the array identity: a
+  // re-render carrying the same cards must be a no-op, or a successful drop — which
+  // revalidates the page — would snap the card back to the stage it came from.
+  const signature = initial.map((c) => `${c.id}:${c.stageId ?? ""}`).join("|")
+  const [seenSig, setSeenSig] = useState(signature)
+  if (signature !== seenSig) { setSeenSig(signature); setCards(initial) }
 
   function onDrop(stageId: string) {
     setOver(null)
@@ -214,12 +229,18 @@ export default function ObjectBoard({
     moveRecordStage(objectType, id, pipelineId, stageId)
       .then((res) => {
         if ((res as any)?.error) {
-          // Pipeline rules and required-to-enter fields are enforced server-side.
+          // Pipeline rules and required-to-enter fields are enforced server-side —
+          // only a real rejection puts the card back.
           setCards((cs) => cs.map((c) => (c.id === id ? { ...c, stageId: prevStage, enteredAt: prevEntered } : c)))
           setError((res as any).error)
+          return
         }
+        onMoved?.()
       })
-      .catch(() => {})
+      .catch(() => {
+        setCards((cs) => cs.map((c) => (c.id === id ? { ...c, stageId: prevStage, enteredAt: prevEntered } : c)))
+        setError("Couldn't save that move — check your connection and try again.")
+      })
   }
 
   const collapsed = new Set(config.collapsedStageIds)
@@ -273,22 +294,23 @@ export default function ObjectBoard({
               onDragOver={(e) => { e.preventDefault(); setOver(col.id) }}
               onDragLeave={() => setOver((o) => (o === col.id ? null : o))}
               onDrop={() => onDrop(col.id)}
-              className={cn(
-                "flex w-72 shrink-0 flex-col rounded-xl border bg-zinc-50",
-                over === col.id ? "border-blue-400 ring-2 ring-blue-200" : "border-zinc-200",
-              )}>
-              <div className="group/col flex items-center justify-between gap-1 border-b border-zinc-200 px-3 py-2">
-                <span className="min-w-0 truncate text-sm font-semibold text-zinc-800">
+              className="flex w-72 shrink-0 flex-col rounded-xl border border-zinc-200 bg-zinc-50/70">
+              <div className="group/col flex items-center gap-1.5 border-b border-zinc-200 px-3 py-2.5">
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">
                   <PipelineChip name={col.name} color={col.color ?? "#94a3b8"} style={col.id === UNASSIGNED ? "dot" : colorStyle} />
                 </span>
-                <span className="shrink-0 text-xs text-zinc-400">{colCards.length}</span>
+                <span className="shrink-0 rounded-full bg-zinc-200/70 px-1.5 text-xs font-medium tabular-nums text-zinc-600">{colCards.length}</span>
                 <button title="Collapse column" onClick={() => toggleCollapsed(col.id)}
-                  className="shrink-0 rounded p-0.5 text-zinc-300 opacity-0 transition-opacity hover:bg-zinc-200 hover:text-zinc-600 group-hover/col:opacity-100">
+                  className="shrink-0 rounded p-0.5 text-zinc-400 opacity-0 transition-opacity hover:bg-zinc-200 hover:text-zinc-700 group-hover/col:opacity-100">
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </button>
               </div>
 
-              <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ minHeight: 120, maxHeight: "calc(100vh - 24rem)" }}>
+              {/* Dashed outline marks the drop area while a card is over the column. */}
+              <div className={cn(
+                "m-2 flex-1 space-y-2 overflow-y-auto rounded-lg border-2 border-dashed p-1 transition-colors",
+                over === col.id && dragId ? "border-zinc-400 bg-white/60" : "border-transparent",
+              )} style={{ minHeight: 140, maxHeight: "calc(100vh - 24rem)" }}>
                 {colCards.map((c) => (
                   <BoardCard key={c.id} card={c} stage={col.stage} properties={properties} userMap={userMap}
                     config={config} hrefBase={hrefBase}
@@ -297,17 +319,21 @@ export default function ObjectBoard({
                     onDragEnd={() => setDragId(null)}
                     onQuickAction={(composer) => setQuick({ card: c, composer })} />
                 ))}
-                {colCards.length === 0 && <p className="px-1 py-6 text-center text-xs text-zinc-300">{canEdit ? "Drop here" : "No records"}</p>}
+                {colCards.length === 0 && (
+                  <p className="px-1 py-8 text-center text-xs text-zinc-400">
+                    {dragId && canEdit ? "Drop here" : "No records"}
+                  </p>
+                )}
               </div>
 
               {metrics.length > 0 && (
-                <div className="space-y-0.5 border-t border-zinc-200 px-3 py-2">
+                <div className="space-y-1 border-t border-zinc-200 px-3 py-2">
                   {metrics.map((m, i) => {
                     const line = metricLine(m, colCards, col.stage, properties)
                     if (!line) return null
                     return (
-                      <p key={i} className="flex items-center gap-1.5 text-xs">
-                        <span className="font-semibold text-zinc-800">{line.value}</span>
+                      <p key={i} className="flex items-baseline gap-1.5 text-xs">
+                        <span className="font-semibold tabular-nums text-zinc-900">{line.value}</span>
                         <span className="text-zinc-300">|</span>
                         <span className="truncate text-zinc-500">{line.label}</span>
                       </p>

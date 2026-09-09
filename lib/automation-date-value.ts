@@ -9,6 +9,7 @@
 //     timezone and the display timezone disagree.
 
 import { dayNumber } from "@/lib/date-values"
+import { chicagoYmd } from "@/lib/intakeq-weeks"
 
 export type DateOffsetUnit = "days" | "weeks" | "months" | "years"
 
@@ -71,7 +72,10 @@ export function resolveRelativeDate(
 ): string | null {
   let base: number | null
   if (spec.base === "now") {
-    base = Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 864e5)
+    // The CLINIC's day, not the server's. `now.getDate()` reads whatever timezone the
+    // function happens to run in, so a workflow firing late in the evening produced a
+    // date one day out. chicagoYmd makes the answer the same wherever it executes.
+    base = dayNumber(chicagoYmd(now))
   } else {
     base = dayNumber(readBaseProperty(spec.base))
   }

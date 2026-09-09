@@ -57,11 +57,13 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 export default function ViewSettingsPanel({
-  open, onClose, config, onConfigChange, name, onRename, properties, pipelines,
+  open, initialSub = null, onClose, config, onConfigChange, name, onRename, properties, pipelines,
   canRename, viewId, access, onAccessChange, shareUsers, shareTeams, canShare,
   dirty, saving, onSave, onReset, onExport, onOpenFilters, onOpenSort, onOpenColumns,
 }: {
   open: boolean
+  /** Open straight onto a sub-panel — the toolbar's "Cards" button jumps to board settings. */
+  initialSub?: Sub
   onClose: () => void
   config: ObjectViewConfig
   onConfigChange: (next: ObjectViewConfig) => void
@@ -85,7 +87,7 @@ export default function ViewSettingsPanel({
   onOpenSort: () => void
   onOpenColumns: () => void
 }) {
-  const [sub, setSub] = useState<Sub>(null)
+  const [sub, setSub] = useState<Sub>(initialSub)
 
   // Slide in/out instead of snapping the table sideways. The panel is INLINE (it
   // pushes the list over), so what animates is its width — a transform alone would
@@ -102,8 +104,9 @@ export default function ViewSettingsPanel({
     const t = setTimeout(() => setRender(false), 200)
     return () => clearTimeout(t)
   }, [open])
-  // Reopening lands back on the top level, not whatever sub-panel was last used.
-  useEffect(() => { if (!open) setSub(null) }, [open])
+  // Reopening lands where the opener asked for — the top level, or straight onto a
+  // sub-panel — not on whatever pane was last used.
+  useEffect(() => { if (open) setSub(initialSub) }, [open, initialSub])
 
   if (!render) return null
 

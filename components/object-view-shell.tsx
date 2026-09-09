@@ -31,7 +31,7 @@ import { getObjectBoardData, type ObjectBoardData } from "@/app/actions/object-b
 import { readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { activeConditionCount, decodeFilterParam, emptyFilter, matchesFilter, type FilterState } from "@/lib/filters"
 import { buildFilterFields, buildObjectColumns, type ObjectProperty } from "@/lib/object-columns"
-import { normalizeViewConfig, viewFingerprint, type ObjectViewConfig, type ObjectViewType } from "@/lib/object-views"
+import { autoBoardConfig, normalizeViewConfig, viewFingerprint, type ObjectViewConfig, type ObjectViewType } from "@/lib/object-views"
 import { displayValue, fmtDate } from "@/components/object-display"
 import { dateSortValue, numberSortValue } from "@/lib/date-values"
 import { recordName } from "@/lib/record-name"
@@ -93,7 +93,16 @@ export default function ObjectViewShell(props: Props) {
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u.label])), [users])
 
   const catalog = useMemo(() => buildObjectColumns(properties, ownerLabel, associations, pipelines.length > 0), [properties, ownerLabel, associations, pipelines.length])
-  const filterFields = useMemo(() => buildFilterFields(properties, ownerLabel, users), [properties, ownerLabel, users])
+  // Memoized on the CONTENT, not the array identities. The server component hands
+  // down fresh `properties`/`users` arrays on every revalidate, and an identity-based
+  // memo would cascade into boardCards and wipe the board's optimistic stage move.
+  const propSig = properties.map((p) => p.id).join(",")
+  const userSig = users.map((u) => u.id).join(",")
+  const filterFields = useMemo(
+    () => buildFilterFields(properties, ownerLabel, users),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [propSig, userSig, ownerLabel],
+  )
   const defaultColumns = useMemo(() => catalog.baseCols.map((c) => c.key), [catalog])
 
   // ── View state ─────────────────────────────────────────────────────────────
@@ -120,6 +129,8 @@ export default function ObjectViewShell(props: Props) {
   const [savedFingerprint, setSavedFingerprint] = useState<string | null>(null)
 
   const [panelOpen, setPanelOpen] = useState(false)
+  // Which pane the settings panel opens onto (the "Cards" button jumps to board settings).
+  const [panelSub, setPanelSub] = useState<"board" | null>(null)
   const [toolbarOpen, setToolbarOpen] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
@@ -132,6 +143,19 @@ export default function ObjectViewShell(props: Props) {
   const [savingView, setSavingView] = useState(false)
 
   const dirty = savedFingerprint !== null && viewFingerprint(cfg) !== savedFingerprint
+
+  // Switching to a board that has never been set up seeds sensible card properties and
+  // metrics — an unconfigured board is otherwise a column of bare titles. Only on the
+  // transition into board view, so clearing every property while you're there sticks.
+  const applyConfig = useCallback((next: ObjectViewConfig | ((c: ObjectViewConfig) => ObjectViewConfig)) => {
+    setCfg((cur) => {
+      const n = typeof next === "function" ? next(cur) : next
+      if (n.type === "board" && cur.type !== "board" && n.board.cardProperties.length === 0) {
+        return { ...n, board: { ...autoBoardConfig(properties), ...{ collapsedStageIds: n.board.collapsedStageIds } } }
+      }
+      return n
+    })
+  }, [properties])
 
   // The unsaved (default) view survives a reload, the way the column prefs used to.
   // Loaded in an effect, not the initializer, so SSR and the first render agree.
@@ -329,6 +353,9 @@ export default function ObjectViewShell(props: Props) {
   // ── Board data ─────────────────────────────────────────────────────────────
   const [board, setBoard] = useState<ObjectBoardData | null>(null)
   const [boardLoading, setBoardLoading] = useState(false)
+  // Bumped after a stage move so the board reloads its own data instead of living on
+  // the optimistic copy — the page's revalidate doesn't reach this client-side fetch.
+  const [boardNonce, setBoardNonce] = useState(0)
   useEffect(() => {
     if (cfg.type !== "board") return
     let cancelled = false
@@ -342,7 +369,7 @@ export default function ObjectViewShell(props: Props) {
       .catch(() => { if (!cancelled) setBoard(null) })
       .finally(() => { if (!cancelled) setBoardLoading(false) })
     return () => { cancelled = true }
-  }, [objectKey, cfg.type, cfg.pipelineId, cfg.board.showChips, cfg.board.showLastActivity])
+  }, [objectKey, cfg.type, cfg.pipelineId, cfg.board.showChips, cfg.board.showLastActivity, boardNonce])
 
   // The board applies the same filters + search as the table, so switching view type
   // never silently changes which records you're looking at.
@@ -493,7 +520,7 @@ export default function ObjectViewShell(props: Props) {
             {(["table", "board", "calendar"] as ObjectViewType[]).map((t) => {
               const Icon = TYPE_ICON[t]
               return (
-                <button key={t} title={t[0].toUpperCase() + t.slice(1)} onClick={() => setCfg((c) => ({ ...c, type: t }))}
+                <button key={t} title={t[0].toUpperCase() + t.slice(1)} onClick={() => applyConfig((c) => ({ ...c, type: t }))}
                   className={cn("flex h-8 w-9 items-center justify-center border-r border-zinc-200 last:border-r-0",
                     cfg.type === t ? "bg-zinc-900 text-white" : "bg-white text-zinc-500 hover:bg-zinc-50")}>
                   <Icon className="h-3.5 w-3.5" />
@@ -507,6 +534,13 @@ export default function ObjectViewShell(props: Props) {
               <Columns3 className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 opacity-50" />
             </button>
           )}
+          {/* The board's equivalent of Columns — what each card shows. */}
+          {cfg.type === "board" && (
+            <button onClick={() => { setPanelSub("board"); setPanelOpen(true) }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium text-zinc-600 hover:border-zinc-400">
+              <LayoutGrid className="h-3.5 w-3.5" /> Cards <ChevronDown className="h-3 w-3 opacity-50" />
+            </button>
+          )}
           <button onClick={() => setExportOpen(true)} disabled={sorted.length === 0} title="Export this view (Ctrl+Shift+X)"
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50">
             <Download className="h-3.5 w-3.5" /> Export
@@ -518,7 +552,7 @@ export default function ObjectViewShell(props: Props) {
               {savingView ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save changes
             </button>
           )}
-          <button onClick={() => setPanelOpen((o) => !o)} title="View settings"
+          <button onClick={() => { setPanelSub(null); setPanelOpen((o) => !o) }} title="View settings"
             className={cn("inline-flex h-8 w-8 items-center justify-center rounded-lg border",
               panelOpen ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-400")}>
             <Settings className="h-3.5 w-3.5" />
@@ -573,7 +607,8 @@ export default function ObjectViewShell(props: Props) {
                 properties={properties} userMap={userMap} users={users}
                 config={cfg.board} colorStyle={pipelineColorStyle} canEdit={canEdit}
                 truncated={board.truncated}
-                onConfigChange={(b) => setCfg((c) => ({ ...c, board: b }))} />
+                onConfigChange={(b) => setCfg((c) => ({ ...c, board: b }))}
+                onMoved={() => setBoardNonce((n) => n + 1)} />
             ) : null
           )}
 
@@ -585,8 +620,8 @@ export default function ObjectViewShell(props: Props) {
         </div>
 
         <ViewSettingsPanel
-          open={panelOpen} onClose={() => setPanelOpen(false)}
-          config={cfg} onConfigChange={setCfg}
+          open={panelOpen} initialSub={panelSub} onClose={() => setPanelOpen(false)}
+          config={cfg} onConfigChange={applyConfig}
           name={name} onRename={commitRename} canRename={!!appliedViewId && appliedView?.isOwner !== false}
           properties={properties} pipelines={pipelines}
           viewId={appliedViewId}

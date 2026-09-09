@@ -71,10 +71,37 @@ export interface ObjectViewConfig {
   calendar: CalendarConfig
 }
 
+/**
+ * What a board shows before anyone configures it. A blank card is useless, so pick the
+ * properties that carry the most signal — a number (usually an amount), a date, then a
+ * dropdown/text — and fall back to a record count for the footer when the object has
+ * no number to total. Callers pass the object's properties; with none, the old empty
+ * defaults apply and the board still renders.
+ */
+export function autoBoardConfig(properties: { id: string; type: string; primary?: boolean }[]): BoardConfig {
+  const usable = properties.filter((p) => !p.primary) // the primary is already the card title
+  const pick = (...types: string[]) => usable.filter((p) => types.includes(p.type)).map((p) => p.id)
+  const cardProperties = Array.from(new Set([
+    ...pick("NUMBER").slice(0, 1),
+    ...pick("DATE", "DATE_TIME").slice(0, 1),
+    ...pick("DROPDOWN").slice(0, 1),
+    ...pick("TEXT", "EMAIL", "PHONE").slice(0, 1),
+  ])).slice(0, 4)
+
+  const firstNumber = pick("NUMBER")[0] ?? null
+  return {
+    ...defaultBoardConfig(),
+    cardProperties,
+    metrics: firstNumber
+      ? [{ propertyId: firstNumber, agg: "sum" }, { propertyId: firstNumber, agg: "avg" }]
+      : [{ propertyId: null, agg: "count" }],
+  }
+}
+
 export function defaultBoardConfig(): BoardConfig {
   return {
     cardProperties: [],
-    metrics: [{ propertyId: null, agg: "sum" }, { propertyId: null, agg: "avg" }],
+    metrics: [{ propertyId: null, agg: "count" }],
     showMetrics: true,
     showChips: true,
     showLastActivity: true,
