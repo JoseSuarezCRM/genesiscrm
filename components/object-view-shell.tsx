@@ -108,8 +108,12 @@ export default function ObjectViewShell(props: Props) {
   // ── View state ─────────────────────────────────────────────────────────────
   const [appliedViewId, setAppliedViewId] = useState<string | null>(urlParams.get("viewId"))
   const appliedView = savedViews.find((v) => v.id === appliedViewId) ?? null
+  // Reloading a saved view must bring back everything it stored — the calendar's date
+  // property, the board's card setup, its columns. Only a few of those live in the URL,
+  // so the view's own config is the base and URL params layer on top of it.
+  const seededView = savedViews.find((v) => v.id === urlParams.get("viewId")) ?? null
   const [cfg, setCfg] = useState<ObjectViewConfig>(() => {
-    const base = normalizeViewConfig(null, defaultColumns)
+    const base = normalizeViewConfig(seededView?.config ?? null, defaultColumns)
     const seedType = urlParams.get("view") as ObjectViewType | null
     const seedFilter = serverMode ? decodeFilterParam(urlParams.get("filter")) : null
     const seedSort = serverMode && urlParams.get("sort")
@@ -124,9 +128,17 @@ export default function ObjectViewShell(props: Props) {
     }
   })
   const [name, setName] = useState(appliedView?.name ?? "")
-  const [access, setAccess] = useState<ViewAccessValue>({ visibility: "PRIVATE", teamId: null, sharedUserIds: [] })
+  const [access, setAccess] = useState<ViewAccessValue>(() => ({
+    visibility: (seededView?.visibility as any) ?? "PRIVATE",
+    teamId: seededView?.teamId ?? null,
+    sharedUserIds: seededView?.sharedUserIds ?? [],
+  }))
   const [search, setSearch] = useState(() => (serverMode ? urlParams.get("search") ?? "" : ""))
-  const [savedFingerprint, setSavedFingerprint] = useState<string | null>(null)
+  // Baseline for dirty-tracking: what the view holds on disk, so Save changes and
+  // Reset work on a reloaded view instead of staying dead.
+  const [savedFingerprint, setSavedFingerprint] = useState<string | null>(
+    seededView ? viewFingerprint(normalizeViewConfig(seededView.config, defaultColumns)) : null,
+  )
 
   const [panelOpen, setPanelOpen] = useState(false)
   // Which pane the settings panel opens onto (the "Cards" button jumps to board settings).
