@@ -595,6 +595,7 @@ export default function ObjectViewShell(props: Props) {
               columns={cfg.columns} frozenCount={cfg.frozen}
               onColumnsChange={(c) => setCfg((s) => ({ ...s, columns: c }))}
               sort={cfg.sort} onSortChange={(s) => setCfg((c) => ({ ...c, sort: s }))}
+              summaries={cfg.summaries} onSummariesChange={(s) => setCfg((c) => ({ ...c, summaries: s }))}
               pipelines={pipelines} pipelineColorStyle={pipelineColorStyle}
               serverMode={serverMode} serverTotal={serverTotal} serverPage={serverPage} serverPageSize={serverPageSize}
               onServerPage={(p) => pushParams({ page: String(p) })} />

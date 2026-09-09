@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition, useEffect, useMemo, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Trash2, Loader2, ChevronDown, ChevronUp } from "lucide-react"
+import { Trash2, Loader2, ChevronDown, ChevronUp, Check } from "lucide-react"
 import BulkActionBar, { bulkDanger } from "@/components/ui/bulk-action-bar"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
@@ -18,6 +18,8 @@ import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
 import { setRecordOwner } from "@/app/actions/record-owner"
 import { fmtDate, displayValue, displayCell } from "@/components/object-display"
+import { formatNumber } from "@/lib/number-format"
+import { aggsFor, summarize, summaryLabel, type SummaryAgg } from "@/lib/column-summary"
 import PipelineStageCell, { type PipelineOption } from "@/components/pipeline-stage-cell"
 import type { ObjectColumnCatalog, ObjectProperty } from "@/lib/object-columns"
 
@@ -57,6 +59,9 @@ interface Props {
   onColumnsChange: (cols: string[]) => void
   sort: { key: string; dir: "asc" | "desc" }
   onSortChange: (next: { key: string; dir: "asc" | "desc" }) => void
+  /** Footer totals per column key; the user picks each one from the summary row. */
+  summaries: Record<string, SummaryAgg>
+  onSummariesChange: (next: Record<string, SummaryAgg>) => void
   pipelines: PipelineOption[]
   pipelineColorStyle: string
   serverMode?: boolean
@@ -66,10 +71,72 @@ interface Props {
   onServerPage?: (page: number) => void
 }
 
+/**
+ * One footer cell: shows the column's total and opens a menu to change what it
+ * measures. Blank columns render an affordance that only appears on hover, so the row
+ * stays quiet until someone wants a number from it.
+ */
+function SummaryCell({ colKey, label, numeric, agg, rows, valueOf, numberFormat, onChange }: {
+  colKey: string
+  label: string
+  numeric: boolean
+  agg: SummaryAgg
+  rows: RecordRow[]
+  valueOf: (r: RecordRow, key: string) => unknown
+  numberFormat?: string | null
+  onChange: (agg: SummaryAgg) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open])
+
+  const result = agg === "none" ? null : summarize(rows.map((r) => valueOf(r, colKey)), agg)
+  const shown = result?.value == null
+    ? (agg === "none" ? "" : "—")
+    : result.formatted
+      ? formatNumber(agg === "avg" ? Math.round(result.value * 100) / 100 : result.value, numberFormat as any)
+      : String(result.value)
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen((o) => !o)} title={`Summarize ${label}`}
+        className={cn(
+          "flex w-full items-baseline justify-end gap-1 px-3 py-1.5 text-right text-xs hover:bg-slate-100",
+          agg === "none" && "text-transparent hover:text-slate-400",
+        )}>
+        {agg === "none" ? (
+          <span className="inline-flex items-center gap-0.5">Summarize <ChevronDown className="h-3 w-3" /></span>
+        ) : (
+          <>
+            <span className="truncate text-slate-400">{summaryLabel(agg)}</span>
+            <span className="font-semibold tabular-nums text-slate-800">{shown}</span>
+          </>
+        )}
+      </button>
+      {open && (
+        <div className="absolute bottom-full right-0 z-50 mb-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+          {aggsFor(numeric).map((a) => (
+            <button key={a.value} onClick={() => { onChange(a.value); setOpen(false) }}
+              className={cn("flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-slate-50", agg === a.value && "font-medium")}>
+              {a.label}
+              {agg === a.value && <Check className="h-3.5 w-3.5 text-blue-600" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CustomObjectList({
   objectKey, singular, ownerLabel, properties, catalog, rows, totalRecords, users, userMap,
   canEdit, canDelete, columns, frozenCount, onColumnsChange, sort, onSortChange,
-  pipelines, pipelineColorStyle,
+  summaries, onSummariesChange, pipelines, pipelineColorStyle,
   serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, onServerPage,
 }: Props) {
   const router = useRouter()
@@ -108,6 +175,22 @@ export default function CustomObjectList({
   const paged = serverMode ? rows : rows.slice((pageC - 1) * pageSize, (pageC - 1) * pageSize + pageSize)
   useEffect(() => { setPage(1) }, [rows.length, sort.key, sort.dir, pageSize]) // reset on result/size change
   const totalPages = serverMode ? Math.max(1, Math.ceil(serverTotal / serverPageSize)) : 1
+
+  // Summaries read the raw values, not the rendered text. In client mode `rows` is the
+  // whole filtered set; in server mode it's one page, which the note under the table says.
+  const summaryRows = rows
+  const numericCols = useMemo(
+    () => new Set(otherProps.filter((p) => p.type === "NUMBER").map((p) => p.id)),
+    [otherProps],
+  )
+  const numberFormatOf = (key: string) => (otherProps.find((p) => p.id === key) as any)?.numberFormat ?? null
+  const summaryValueOf = (r: RecordRow, key: string): unknown => {
+    if (key === "__id") return r.recordNumber
+    if (key === "__owner") return r.ownerId
+    if (key === "__created") return r.createdAt
+    if (assocByKey[key]) return readAssocValue(r as any, assocByKey[key])
+    return r.values?.[key]
+  }
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.id))
@@ -199,8 +282,33 @@ export default function CustomObjectList({
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-200 bg-slate-50/70">
+                  <td className={cn("px-3 py-1.5", cbFrozen && "sticky left-0 z-10 bg-slate-50")} />
+                  {colReorder.order.map((c) => (
+                    <td key={c.key} style={{ maxWidth: widthOf(c.key), ...frozenCellStyle(fmap.get(c.key)) }}
+                      className={cn("p-0", frozenClass(fmap.get(c.key), "bg-slate-50"))}>
+                      <SummaryCell colKey={c.key} label={c.label}
+                        numeric={numericCols.has(c.key)}
+                        agg={summaries[c.key] ?? "none"}
+                        rows={summaryRows} valueOf={summaryValueOf}
+                        numberFormat={numberFormatOf(c.key)}
+                        onChange={(agg) => {
+                          const next = { ...summaries }
+                          if (agg === "none") delete next[c.key]; else next[c.key] = agg
+                          onSummariesChange(next)
+                        }} />
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
             </table>
           </div>
+          {serverMode && Object.keys(summaries).length > 0 && (
+            <p className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400">
+              Totals cover this page — this object is large enough to load a page at a time.
+            </p>
+          )}
         </div>
       )}
 

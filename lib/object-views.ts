@@ -9,6 +9,7 @@
 // upgrades those in place on read, so old tabs keep working untouched.
 
 import { emptyFilter, type FilterState } from "@/lib/filters"
+import { SUMMARY_AGGS, type SummaryAgg } from "@/lib/column-summary"
 
 export type ObjectViewType = "table" | "board" | "calendar"
 
@@ -66,6 +67,8 @@ export interface ObjectViewConfig {
   quickFilters: string[]
   columns: string[]
   frozen: number
+  /** Table footer totals, keyed by column key — "cp_x" → "sum". */
+  summaries: Record<string, SummaryAgg>
   pipelineId: string | null
   board: BoardConfig
   calendar: CalendarConfig
@@ -123,6 +126,7 @@ export function defaultViewConfig(columns: string[] = []): ObjectViewConfig {
     quickFilters: [],
     columns,
     frozen: 0,
+    summaries: {},
     pipelineId: null,
     board: defaultBoardConfig(),
     calendar: defaultCalendarConfig(),
@@ -131,6 +135,17 @@ export function defaultViewConfig(columns: string[] = []): ObjectViewConfig {
 
 function asArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []
+}
+
+function normalizeSummaries(v: unknown): Record<string, SummaryAgg> {
+  if (!v || typeof v !== "object") return {}
+  const out: Record<string, SummaryAgg> = {}
+  for (const [k, agg] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof agg === "string" && agg !== "none" && SUMMARY_AGGS.some((a) => a.value === agg)) {
+      out[k] = agg as SummaryAgg
+    }
+  }
+  return out
 }
 
 function normalizeMetric(m: any): BoardMetric {
@@ -167,6 +182,7 @@ export function normalizeViewConfig(raw: unknown, fallbackColumns: string[] = []
     quickFilters: asArray(c.quickFilters),
     columns: Array.isArray(c.columns) && c.columns.length ? asArray(c.columns) : base.columns,
     frozen: typeof c.frozen === "number" ? c.frozen : 0,
+    summaries: normalizeSummaries(c.summaries),
     pipelineId: typeof c.pipelineId === "string" ? c.pipelineId : null,
     board,
     calendar,
@@ -177,7 +193,7 @@ export function normalizeViewConfig(raw: unknown, fallbackColumns: string[] = []
 export function viewFingerprint(c: ObjectViewConfig): string {
   return JSON.stringify({
     type: c.type, filter: c.filter, sort: c.sort, quickFilters: c.quickFilters,
-    columns: c.columns, frozen: c.frozen, pipelineId: c.pipelineId,
+    columns: c.columns, frozen: c.frozen, summaries: c.summaries, pipelineId: c.pipelineId,
     board: c.board, calendar: c.calendar,
   })
 }
