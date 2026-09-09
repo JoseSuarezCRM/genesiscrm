@@ -8,6 +8,7 @@ import { runTrigger_RecordCreated, runTrigger_RecordPropertyChanged, runTrigger_
 import { filterStateToWhere } from "@/lib/filter-to-prisma"
 import { decodeFilterParam, customPropertyFilterFields, type FilterField } from "@/lib/filters"
 import { attachAssociatedRecords } from "@/lib/association-columns"
+import { summarize } from "@/lib/column-summary"
 
 // Records are gated by the object's own permission key: "CO:<objectKey>".
 function objKey(key: string) { return `CO:${key}` }
@@ -90,6 +91,91 @@ export async function countCustomObjectRecords(objectKey: string): Promise<numbe
 // search, sort, and paginate in the database so a huge object stays fast and
 // the sort holds across pages. Sorting a built-in column is a plain orderBy;
 // sorting a custom (JSON) property is done over the matching set.
+// The `where` behind a server-mode list: pipeline scope + advanced filter + search.
+// Every reader of that set — the page, the count, the export, the footer totals —
+// builds it here, so a total can never be computed over a different set than the rows.
+function listWhere(
+  objectDefId: string,
+  properties: any[],
+  primary: any,
+  opts: { search?: string; filter?: string; pipeline?: string },
+): any {
+  const filterWhere = filterStateToWhere(decodeFilterParam(opts.filter), serverFilterFields(properties))
+  const search = (opts.search ?? "").trim()
+  const searchWhere = search
+    ? { OR: properties.filter((p) => ["TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL"].includes(p.type) || p.id === primary?.id)
+        .map((p) => ({ values: { path: [p.id], string_contains: search } })) }
+    : {}
+  return {
+    objectDefId,
+    // The pipeline selector scopes the list; absent means every pipeline.
+    ...(opts.pipeline ? { pipelineId: opts.pipeline } : {}),
+    AND: [filterWhere, searchWhere].filter((w) => w && Object.keys(w).length > 0),
+  }
+}
+
+export interface ColumnSummaries {
+  /** Column key → the aggregated value, or null when there's nothing to total. */
+  values: Record<string, { value: number | null; formatted: boolean }>
+  /** How many records the totals cover — the whole filtered set, not one page. */
+  scanned: number
+  /** True when the set was larger than the scan cap, so the totals are partial. */
+  capped: boolean
+}
+
+// Totals cover the WHOLE filtered set, so the number under a column means the same
+// thing on page 1 and page 12. Read in chunks and reduced as we go: only the
+// aggregates cross the wire, and peak memory stays at one chunk rather than the
+// entire object. Prisma can't aggregate inside a JSON bag, and the bag legitimately
+// holds "8504" as well as 8504, so the arithmetic has to happen in JS anyway.
+const SUMMARY_CHUNK = 1000
+const SUMMARY_SCAN_CAP = 50000
+
+export async function summarizeCustomObjectRecords(
+  objectKey: string,
+  opts: { search?: string; filter?: string; pipeline?: string; summaries: Record<string, string> },
+): Promise<ColumnSummaries> {
+  await requireAccess(objKey(objectKey), "VIEW")
+  const keys = Object.keys(opts.summaries ?? {})
+  if (!keys.length) return { values: {}, scanned: 0, capped: false }
+
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
+  if (!def) return { values: {}, scanned: 0, capped: false }
+  const properties: any[] = (def.properties as any[]) ?? []
+  const primary = properties.find((p) => p.primary) ?? properties[0]
+  const where = listWhere(def.id, properties, primary, opts)
+
+  const collected: Record<string, unknown[]> = Object.fromEntries(keys.map((k) => [k, []]))
+  let scanned = 0
+  let capped = false
+  for (let skip = 0; ; skip += SUMMARY_CHUNK) {
+    if (skip >= SUMMARY_SCAN_CAP) { capped = true; break }
+    const chunk = await (prisma as any).customObjectRecord.findMany({
+      where,
+      select: { values: true, recordNumber: true, ownerId: true, createdAt: true },
+      orderBy: { id: "asc" }, // a stable order, so chunks can't overlap or skip rows
+      skip, take: SUMMARY_CHUNK,
+    })
+    if (!chunk.length) break
+    for (const r of chunk) {
+      scanned++
+      for (const k of keys) {
+        collected[k].push(
+          k === "__id" ? r.recordNumber
+            : k === "__owner" ? r.ownerId
+            : k === "__created" ? r.createdAt
+            : (r.values ?? {})[k],
+        )
+      }
+    }
+    if (chunk.length < SUMMARY_CHUNK) break
+  }
+
+  const values: ColumnSummaries["values"] = {}
+  for (const k of keys) values[k] = summarize(collected[k], opts.summaries[k] as any)
+  return { values, scanned, capped }
+}
+
 export async function queryCustomObjectRecords(objectKey: string, opts: { page?: number; sort?: string; dir?: "asc" | "desc"; search?: string; filter?: string; pipeline?: string }): Promise<CustomRecordsPage> {
   await requireAccess(objKey(objectKey), "VIEW")
   const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
@@ -100,18 +186,7 @@ export async function queryCustomObjectRecords(objectKey: string, opts: { page?:
   const dir: "asc" | "desc" = opts.dir === "asc" ? "asc" : "desc"
   const skip = (page - 1) * CO_PAGE_SIZE
 
-  const filterWhere = filterStateToWhere(decodeFilterParam(opts.filter), serverFilterFields(properties))
-  const search = (opts.search ?? "").trim()
-  const searchWhere = search
-    ? { OR: properties.filter((p) => ["TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL"].includes(p.type) || p.id === primary?.id)
-        .map((p) => ({ values: { path: [p.id], string_contains: search } })) }
-    : {}
-  const where: any = {
-    objectDefId: def.id,
-    // The pipeline selector scopes the list; absent means every pipeline.
-    ...(opts.pipeline ? { pipelineId: opts.pipeline } : {}),
-    AND: [filterWhere, searchWhere].filter((w) => w && Object.keys(w).length > 0),
-  }
+  const where = listWhere(def.id, properties, primary, opts)
 
   const total = await (prisma as any).customObjectRecord.count({ where })
 

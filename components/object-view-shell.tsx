@@ -26,7 +26,7 @@ import {
   renameCustomObjectView, setCustomObjectViewAccess,
 } from "@/app/actions/custom-object-views"
 import { reorderViews } from "@/app/actions/view-order"
-import { createCustomObjectRecord, exportCustomObjectRecords } from "@/app/actions/custom-object-records"
+import { createCustomObjectRecord, exportCustomObjectRecords, summarizeCustomObjectRecords, type ColumnSummaries } from "@/app/actions/custom-object-records"
 import { getObjectBoardData, type ObjectBoardData } from "@/app/actions/object-board"
 import { readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { activeConditionCount, decodeFilterParam, emptyFilter, matchesFilter, type FilterState } from "@/lib/filters"
@@ -394,6 +394,35 @@ export default function ObjectViewShell(props: Props) {
     })
   }, [board, search, cfg.filter, filterFields])
 
+  // ── Column totals (server mode) ────────────────────────────────────────────
+  // The table holds one page at a time, so the footer is computed over the whole
+  // filtered set on the server — a "Sum" that changed as you paged would be worse
+  // than no sum at all.
+  const [serverSummaries, setServerSummaries] = useState<ColumnSummaries | null>(null)
+  const [summariesLoading, setSummariesLoading] = useState(false)
+  const summaryKeys = JSON.stringify(cfg.summaries)
+  useEffect(() => {
+    if (!serverMode || cfg.type !== "table" || Object.keys(cfg.summaries).length === 0) {
+      setServerSummaries(null)
+      return
+    }
+    let cancelled = false
+    setSummariesLoading(true)
+    const t = setTimeout(() => {
+      summarizeCustomObjectRecords(objectKey, {
+        search,
+        filter: filtersActive ? JSON.stringify(cfg.filter) : undefined,
+        pipeline: cfg.pipelineId ?? undefined,
+        summaries: cfg.summaries,
+      })
+        .then((res) => { if (!cancelled) setServerSummaries(res) })
+        .catch(() => { if (!cancelled) setServerSummaries(null) })
+        .finally(() => { if (!cancelled) setSummariesLoading(false) })
+    }, 300) // let typing settle before scanning the object
+    return () => { cancelled = true; clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [objectKey, serverMode, cfg.type, summaryKeys, search, cfg.filter, cfg.pipelineId])
+
   // ── Export ─────────────────────────────────────────────────────────────────
   const cols = cfg.columns.map((k) => catalog.allCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[]
   function buildExportRows(list: RecordRow[]) {
@@ -596,6 +625,7 @@ export default function ObjectViewShell(props: Props) {
               onColumnsChange={(c) => setCfg((s) => ({ ...s, columns: c }))}
               sort={cfg.sort} onSortChange={(s) => setCfg((c) => ({ ...c, sort: s }))}
               summaries={cfg.summaries} onSummariesChange={(s) => setCfg((c) => ({ ...c, summaries: s }))}
+              serverSummaries={serverSummaries} summariesLoading={summariesLoading}
               pipelines={pipelines} pipelineColorStyle={pipelineColorStyle}
               serverMode={serverMode} serverTotal={serverTotal} serverPage={serverPage} serverPageSize={serverPageSize}
               onServerPage={(p) => pushParams({ page: String(p) })} />

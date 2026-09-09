@@ -62,6 +62,9 @@ interface Props {
   /** Footer totals per column key; the user picks each one from the summary row. */
   summaries: Record<string, SummaryAgg>
   onSummariesChange: (next: Record<string, SummaryAgg>) => void
+  /** Server-computed totals over the WHOLE filtered set (server mode only). */
+  serverSummaries?: { values: Record<string, { value: number | null; formatted: boolean }>; scanned: number; capped: boolean } | null
+  summariesLoading?: boolean
   pipelines: PipelineOption[]
   pipelineColorStyle: string
   serverMode?: boolean
@@ -76,7 +79,7 @@ interface Props {
  * measures. Blank columns render an affordance that only appears on hover, so the row
  * stays quiet until someone wants a number from it.
  */
-function SummaryCell({ colKey, label, numeric, agg, rows, valueOf, numberFormat, onChange }: {
+function SummaryCell({ colKey, label, numeric, agg, rows, valueOf, numberFormat, precomputed, loading, onChange }: {
   colKey: string
   label: string
   numeric: boolean
@@ -84,6 +87,9 @@ function SummaryCell({ colKey, label, numeric, agg, rows, valueOf, numberFormat,
   rows: RecordRow[]
   valueOf: (r: RecordRow, key: string) => unknown
   numberFormat?: string | null
+  /** Server-computed result for this column, when the list is paginated. */
+  precomputed?: { value: number | null; formatted: boolean } | null
+  loading?: boolean
   onChange: (agg: SummaryAgg) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -95,8 +101,10 @@ function SummaryCell({ colKey, label, numeric, agg, rows, valueOf, numberFormat,
     return () => document.removeEventListener("mousedown", onDoc)
   }, [open])
 
-  const result = agg === "none" ? null : summarize(rows.map((r) => valueOf(r, colKey)), agg)
-  const shown = result?.value == null
+  // In server mode the total arrives precomputed over every matching record; only
+  // client mode reduces the rows it already holds.
+  const result = agg === "none" ? null : (precomputed ?? summarize(rows.map((r) => valueOf(r, colKey)), agg))
+  const shown = loading && agg !== "none" ? "…" : result?.value == null
     ? (agg === "none" ? "" : "—")
     : result.formatted
       ? formatNumber(agg === "avg" ? Math.round(result.value * 100) / 100 : result.value, numberFormat as any)
@@ -136,7 +144,8 @@ function SummaryCell({ colKey, label, numeric, agg, rows, valueOf, numberFormat,
 export default function CustomObjectList({
   objectKey, singular, ownerLabel, properties, catalog, rows, totalRecords, users, userMap,
   canEdit, canDelete, columns, frozenCount, onColumnsChange, sort, onSortChange,
-  summaries, onSummariesChange, pipelines, pipelineColorStyle,
+  summaries, onSummariesChange, serverSummaries = null, summariesLoading = false,
+  pipelines, pipelineColorStyle,
   serverMode = false, serverTotal = 0, serverPage = 1, serverPageSize = 50, onServerPage,
 }: Props) {
   const router = useRouter()
@@ -293,6 +302,8 @@ export default function CustomObjectList({
                         agg={summaries[c.key] ?? "none"}
                         rows={summaryRows} valueOf={summaryValueOf}
                         numberFormat={numberFormatOf(c.key)}
+                        precomputed={serverMode ? serverSummaries?.values[c.key] ?? null : null}
+                        loading={serverMode && summariesLoading}
                         onChange={(agg) => {
                           const next = { ...summaries }
                           if (agg === "none") delete next[c.key]; else next[c.key] = agg
@@ -304,9 +315,11 @@ export default function CustomObjectList({
               </tfoot>
             </table>
           </div>
-          {serverMode && Object.keys(summaries).length > 0 && (
+          {serverMode && Object.keys(summaries).length > 0 && serverSummaries && (
             <p className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400">
-              Totals cover this page — this object is large enough to load a page at a time.
+              {serverSummaries.capped
+                ? `Totals cover the first ${serverSummaries.scanned.toLocaleString()} matching records.`
+                : `Totals cover all ${serverSummaries.scanned.toLocaleString()} matching records, not just this page.`}
             </p>
           )}
         </div>
