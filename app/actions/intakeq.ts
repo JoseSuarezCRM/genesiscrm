@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { isIntakeqConfigured, listQuestionnaires } from "@/lib/intakeq"
 import { backfillRange } from "@/lib/intakeq-ingest"
-import { REFERRAL_CATEGORIES, UNMAPPED } from "@/lib/intakeq-referral"
+import { REFERRAL_CATEGORIES, UNMAPPED, REPORT_FORM, DEFAULT_INTAKE_FORMS, isTargetQuestionnaire } from "@/lib/intakeq-referral"
 import { periodOf, recentPeriods, periodLabel, periodStartDate, defaultPeriodCount, chicagoYmd, type Granularity, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { encryptSecret, maskTail, randomToken, hasEncryptionKey } from "@/lib/crypto"
 import { getIntegration } from "@/lib/integration-store"
@@ -36,7 +36,14 @@ export async function getReferralSourceReport(granularity: Granularity = "week")
 
   const [rows, latest, totalStored] = await Promise.all([
     (prisma as any).intakeReferralResponse.findMany({
-      where: { submittedAt: { gte: since }, category: { not: "Unanswered" } },
+      // Full Intake only. Other ingested forms (FD/admin) feed appointment
+      // attribution, but counting them here would change the weekly totals and
+      // break comparison against previous weeks.
+      where: {
+        submittedAt: { gte: since },
+        category: { not: "Unanswered" },
+        questionnaireName: { contains: REPORT_FORM, mode: "insensitive" },
+      },
       select: { submittedAt: true, category: true },
     }),
     (prisma as any).intakeReferralResponse.findFirst({ orderBy: { submittedAt: "desc" }, select: { submittedAt: true } }),
@@ -221,6 +228,10 @@ export interface IntegrationSettings {
   emailReport: IntakeEmailReportConfig
   // Where the matched referral source gets written (object + properties).
   sourceMapping: SourceMapping | null
+  // Which IntakeQ forms get ingested (loose name fragments).
+  intakeForms: string[]
+  // The form the weekly report counts — everything else is attribution-only.
+  reportForm: string
 }
 
 export async function getIntegrationSettings(): Promise<IntegrationSettings> {
@@ -239,6 +250,8 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
     hour: cfg.hour ?? 6,
     window: cfg.window ?? "prior_week",
     lastRunAt: cfg.lastRunAt ?? null,
+    intakeForms: Array.isArray(cfg.intakeForms) && cfg.intakeForms.length ? cfg.intakeForms : [...DEFAULT_INTAKE_FORMS],
+    reportForm: REPORT_FORM,
     emailReport: {
       enabled: cfg.emailReport?.enabled ?? false,
       recipients: cfg.emailReport?.recipients ?? [],
@@ -299,6 +312,50 @@ export async function runSourceAttribution(): Promise<AttributionResult> {
   const res = await attributeReferralSources({ onlyMissing: true })
   revalidatePath("/settings/integrations/intakeq")
   return res
+}
+
+/**
+ * Which IntakeQ forms get ingested. Matched loosely against the form name, so a
+ * fragment ("full intake") survives the yearly rename. Everything ingested feeds
+ * appointment attribution; the weekly report still counts Full Intake only.
+ */
+export async function saveIntakeForms(forms: string[]): Promise<{ ok?: boolean; error?: string }> {
+  await requireAccess("REPORTS", "EDIT")
+  const clean = (forms ?? []).map((f) => f.trim()).filter(Boolean)
+  if (!clean.length) return { error: "Keep at least one form — an empty list would stop all ingestion." }
+  try {
+    const row = await getIntegration()
+    const cfg = (row?.config ?? {}) as any
+    await (prisma as any).integration.upsert({
+      where: { provider: "intakeq" },
+      create: { provider: "intakeq", config: { intakeForms: clean } },
+      update: { config: { ...cfg, intakeForms: clean } },
+    })
+    revalidatePath("/settings/integrations/intakeq")
+    return { ok: true }
+  } catch (e: any) { return { error: e?.message ?? "Couldn't save the form list." } }
+}
+
+/**
+ * The real form names in IntakeQ, each flagged with whether the current list would
+ * ingest it — so a rename that silently stopped a form shows up here instead of as
+ * missing data weeks later.
+ */
+export async function checkIntakeForms(forms: string[]): Promise<{ items?: { name: string; archived: boolean; matched: boolean }[]; error?: string }> {
+  await requireAccess("REPORTS", "EDIT")
+  if (!(await isIntakeqConfigured())) return { error: "IntakeQ API key isn't configured yet." }
+  try {
+    const list = await listQuestionnaires()
+    return {
+      items: list.map((q) => ({
+        name: q.Name,
+        archived: !!q.Archived,
+        matched: isTargetQuestionnaire(q.Name, forms),
+      })),
+    }
+  } catch (e: any) {
+    return { error: e?.message ?? "Couldn't reach IntakeQ." }
+  }
 }
 
 // Save the scheduled-pull settings (when it runs + which date window to reconcile).

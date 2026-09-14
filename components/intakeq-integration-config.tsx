@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarClock, Mail, Link2 } from "lucide-react"
-import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, saveIntakeqReportSchedule, sendIntakeReportNow, getSourceMappingOptions, saveIntakeqSourceMapping, runSourceAttribution, type IntegrationSettings, type SourceMappingObject } from "@/app/actions/intakeq"
+import { KeyRound, Webhook, Loader2, Copy, Check, ShieldAlert, Power, CalendarClock, Mail, Link2, FileText } from "lucide-react"
+import { saveIntakeqApiKey, generateWebhookSecret, setIntakeqEnabled, disconnectIntakeq, saveIntakeqSchedule, saveIntakeqReportSchedule, sendIntakeReportNow, getSourceMappingOptions, saveIntakeqSourceMapping, runSourceAttribution, saveIntakeForms, checkIntakeForms, type IntegrationSettings, type SourceMappingObject } from "@/app/actions/intakeq"
 import { INTAKE_WINDOWS, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { cn } from "@/lib/utils"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
@@ -19,6 +19,36 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
   const [err, setErr] = useState<string | null>(null)
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Which IntakeQ forms get ingested
+  const [formsText, setFormsText] = useState((settings.intakeForms ?? []).join("\n"))
+  const [formsMsg, setFormsMsg] = useState<{ text: string; ok?: boolean } | null>(null)
+  const [formCheck, setFormCheck] = useState<{ name: string; archived: boolean; matched: boolean }[] | null>(null)
+  const [checking, setChecking] = useState(false)
+
+  const formsList = () => formsText.split("\n").map((f) => f.trim()).filter(Boolean)
+
+  function saveForms() {
+    setFormsMsg(null)
+    startTransition(async () => {
+      const res = await saveIntakeForms(formsList())
+      if (res.error) { setFormsMsg({ text: res.error }); return }
+      setFormsMsg({ text: "Saved", ok: true })
+      setFormCheck(null) // the list changed — the old check no longer reflects it
+      router.refresh()
+    })
+  }
+
+  async function checkForms() {
+    setChecking(true); setFormsMsg(null)
+    const res = await checkIntakeForms(formsList()).catch(() => ({ error: "Couldn't reach IntakeQ." }))
+    setChecking(false)
+    if ("error" in res && res.error) { setFormsMsg({ text: res.error }); return }
+    const items = (res as any).items ?? []
+    setFormCheck(items)
+    const hits = items.filter((f: any) => f.matched && !f.archived).length
+    setFormsMsg({ text: `${hits} of ${items.filter((f: any) => !f.archived).length} active forms match`, ok: hits > 0 })
+  }
 
   // Scheduled pull
   const [frequency, setFrequency] = useState<"daily" | "weekly">(settings.frequency)
@@ -215,6 +245,56 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
             {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Webhook className="h-3.5 w-3.5" />}
             {settings.hasWebhookSecret ? "Regenerate secret & URL" : "Generate secret & URL"}
           </button>
+        )}
+      </div>
+
+      {/* Forms to ingest */}
+      <div className={card}>
+        <div className="flex items-center gap-2 mb-1">
+          <FileText className="h-4 w-4 text-slate-400" />
+          <h3 className="text-sm font-semibold text-slate-800">Forms to ingest</h3>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">
+          One per line. Matched loosely and case-insensitively against the form name, so
+          &ldquo;full intake&rdquo; still catches &ldquo;GOSM 2027 Full Intake&rdquo; after a rename.
+          Everything listed here feeds appointment attribution on the reconciliation upload; the weekly
+          referral-source report still counts <strong>{settings.reportForm}</strong> only.
+        </p>
+        <textarea
+          value={formsText}
+          onChange={(e) => setFormsText(e.target.value)}
+          rows={Math.max(3, formsText.split("\n").length)}
+          spellCheck={false}
+          placeholder={"full intake\nfd/admin"}
+          className="w-full px-3 py-2 text-sm font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+        />
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          <button onClick={saveForms} disabled={pending} className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save forms
+          </button>
+          <button onClick={checkForms} disabled={checking}
+            className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-slate-400 disabled:opacity-50">
+            {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Check against IntakeQ
+          </button>
+          {formsMsg && <span className={cn("text-xs", formsMsg.ok ? "text-emerald-600" : "text-red-600")}>{formsMsg.text}</span>}
+        </div>
+
+        {/* Every real form in IntakeQ, flagged with whether this list would ingest it —
+            so a rename that silently stopped a form is visible here, not weeks later. */}
+        {formCheck && (
+          <div className="mt-3 rounded-lg border border-slate-200 divide-y divide-slate-100">
+            {formCheck.filter((f) => !f.archived).map((f) => (
+              <div key={f.name} className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm">
+                <span className="truncate text-slate-700">{f.name}</span>
+                <span className={cn("shrink-0 text-xs font-medium", f.matched ? "text-emerald-600" : "text-slate-400")}>
+                  {f.matched ? "Ingested" : "Not ingested"}
+                </span>
+              </div>
+            ))}
+            {formCheck.filter((f) => !f.archived).length === 0 && (
+              <p className="px-3 py-2 text-xs text-slate-400">IntakeQ returned no active forms.</p>
+            )}
+          </div>
         )}
       </div>
 

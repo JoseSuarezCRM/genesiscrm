@@ -26,10 +26,28 @@ export const REFERRAL_CATEGORIES = [
 export const UNMAPPED = "Unmapped"
 export const UNANSWERED = "Unanswered"
 
-// Only intakes from this questionnaire are counted. Matched loosely ("full
-// intake") so a year bump in the name doesn't silently drop everything.
-export function isTargetQuestionnaire(name: string | null | undefined): boolean {
-  return norm(name ?? "").includes("full intake")
+// Which IntakeQ forms get ingested, as loose name fragments — a year bump in the
+// name ("GOSM 2026 Full Intake" → 2027) must not silently drop everything. Admins
+// can override this list in Settings; this is the fallback.
+export const DEFAULT_INTAKE_FORMS = ["full intake", "fd/admin"] as const
+
+// The form the weekly referral-source report counts. Deliberately narrower than
+// what's ingested: other forms feed appointment attribution, but including them in
+// the report would change the weekly totals and break week-over-week comparison.
+export const REPORT_FORM = "Full Intake"
+
+// Is this form one we ingest? Fragments are normalised the same way as the name, so
+// "FD/admin" matches "FD/Admin", "FD - Admin" and so on.
+export function isTargetQuestionnaire(
+  name: string | null | undefined,
+  forms: readonly string[] = DEFAULT_INTAKE_FORMS,
+): boolean {
+  const n = norm(name ?? "")
+  if (!n) return false
+  return forms.some((f) => {
+    const frag = norm(f)
+    return !!frag && n.includes(frag)
+  })
 }
 
 function norm(s: string): string {
@@ -91,8 +109,11 @@ export interface ParsedIntake {
 
 // Extract the referral-source answer from a full intake, or null if this intake
 // isn't from the target questionnaire (so it's ignored entirely).
-export function parseIntakeReferral(intake: FullIntake): ParsedIntake | null {
-  if (!isTargetQuestionnaire(intake.QuestionnaireName)) return null
+export function parseIntakeReferral(
+  intake: FullIntake,
+  forms: readonly string[] = DEFAULT_INTAKE_FORMS,
+): ParsedIntake | null {
+  if (!isTargetQuestionnaire(intake.QuestionnaireName, forms)) return null
   const questions = (intake.Questions ?? []).filter((q) => isReferralQuestion(q.Text))
   // The form shows an English and a Spanish block; only the chosen language's
   // question carries an answer.

@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
-import { REFERRAL_CATEGORIES } from "@/lib/intakeq-referral"
+import { REFERRAL_CATEGORIES, REPORT_FORM } from "@/lib/intakeq-referral"
 import { chicagoYmd, resolveIntakeWindow, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { getIntegration } from "@/lib/integration-store"
 
@@ -15,7 +15,12 @@ function dayLabelShort(ymd: string): string {
 // Build the referral-source HTML table (categories × days) for a YMD range.
 async function buildFromDays(startDate: string, endDate: string, days: string[], startMs: number, endMs: number) {
   const rows = await (prisma as any).intakeReferralResponse.findMany({
-    where: { submittedAt: { gte: new Date(startMs - 86400000), lte: new Date(endMs + 2 * 86400000) }, category: { not: "Unanswered" } },
+    // Full Intake only — matches the on-screen report; see getReferralSourceReport.
+    where: {
+      submittedAt: { gte: new Date(startMs - 86400000), lte: new Date(endMs + 2 * 86400000) },
+      category: { not: "Unanswered" },
+      questionnaireName: { contains: REPORT_FORM, mode: "insensitive" },
+    },
     select: { submittedAt: true, category: true },
   })
   const idx = Object.fromEntries(days.map((d, i) => [d, i]))
