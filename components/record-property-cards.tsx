@@ -17,6 +17,7 @@ import { type RecordFieldDef, isPropertyVisible } from "@/lib/record-field-catal
 import { OptionValue } from "@/components/option-value"
 import StyledSelect from "@/components/ui/styled-select"
 import { NotesTextarea } from "@/components/ui/notes-textarea"
+import PipelineStageCell from "@/components/pipeline-stage-cell"
 import { useMenuFocusGuard } from "@/components/ui/use-menu-focus-guard"
 import DatePicker from "@/components/ui/date-picker"
 import { formatNumber } from "@/lib/number-format"
@@ -59,7 +60,12 @@ function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): Re
   // Date-only is stored at UTC midnight (a pure calendar day) — render its UTC
   // parts so the shown day matches the picker regardless of the viewer's timezone.
   if (f.type === "date") return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
-  if (f.type === "number") return formatNumber(v, f.numberFormat as any)
+  if (f.type === "number") {
+    // Time-in-stage fields carry a unit; one decimal reads better than "0 days"
+    // for something that's only been in a stage a few hours.
+    if (f.unit) return `${Number(v).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${f.unit}`
+    return formatNumber(v, f.numberFormat as any)
+  }
   if (f.type === "select") return <OptionValue value={v} optionLabels={f.optionLabels} optionColors={f.optionColors} optionStyle={f.optionStyle} />
   const lbl = f.optionLabels
   if (Array.isArray(v)) return v.map((x) => lbl?.[String(x)] ?? String(x)).join(", ")
@@ -252,6 +258,31 @@ export function FieldRow({ f, value, values, recordId, entityType, canEdit, user
     setEditing(true)
   }
   function cancelEdit() { doneRef.current = true; setEditing(false) }
+
+  // Pipeline / Stage: edited TOGETHER through the shared popover, never as two
+  // independent selects — a stage belongs to one pipeline, and the write has to go
+  // through moveRecordStage (transition rules, required fields, the transition log)
+  // rather than updateRecordField, which would just drop a key in the values bag.
+  if (f.key === "__pipeline" || f.key === "__stage") {
+    return (
+      <div className="py-2 space-y-1">
+        {Label}
+        <PipelineStageCell
+          objectType={entityType} recordId={recordId}
+          pipelineId={(values.__pipeline as string) || null}
+          stageId={(values.__stage as string) || null}
+          canEdit={canEdit} show={f.key === "__pipeline" ? "pipeline" : "stage"}
+          onSaved={() => router.refresh()}
+          renderTrigger={({ onClick, disabled }) => (
+            <button onClick={onClick} disabled={disabled}
+              className="block w-full rounded px-1 -mx-1 py-0.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-default disabled:hover:bg-transparent">
+              {display(f, value, userMap)}
+            </button>
+          )}
+        />
+      </div>
+    )
+  }
 
   // Record Owner: an always-on dropdown (built-in + custom objects go through setRecordOwner).
   if (f.type === "user") {

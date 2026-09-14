@@ -11,8 +11,10 @@ interface Pipeline { id: string; name: string; color: string }
 
 // Searchable pipeline dropdown (replaces the horizontal tabs). Preserves the
 // other list filters and just swaps the `pipeline` param.
-export default function PipelineSelector({ pipelines, activePipelineId, managePath = "/settings/pipelines", colorStyle = "dot" }: {
+export default function PipelineSelector({ pipelines, activePipelineId, managePath = "/settings/pipelines", colorStyle = "dot", onSelect }: {
   pipelines: Pipeline[]; activePipelineId: string | null; managePath?: string; colorStyle?: string
+  /** Handle the choice in state instead of navigating (used by the object view shell). */
+  onSelect?: (id: string | null) => void
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -35,7 +37,11 @@ export default function PipelineSelector({ pipelines, activePipelineId, managePa
     const qs = p.toString()
     return qs ? `${pathname}?${qs}` : pathname
   }
-  function go(id: string | null) { setOpen(false); router.push(hrefFor(id)) }
+  function go(id: string | null) {
+    setOpen(false)
+    if (onSelect) { onSelect(id); return }
+    router.push(hrefFor(id))
+  }
 
   const active = pipelines.find((p) => p.id === activePipelineId)
   const label = active ? active.name : "All pipelines"

@@ -22,20 +22,26 @@ export default async function WorkflowEditorPage({ params }: Props) {
     orderBy: { order: "asc" },
     select: { key: true, singular: true, plural: true, properties: true },
   })
-  // Stages per custom object (so workflows can branch on / watch the Stage property).
+  // Pipelines + their stages per custom object, so workflows can watch or branch on
+  // Stage and Pipeline. Kept grouped (not flattened) so a stage can be shown with the
+  // pipeline it belongs to — two pipelines may well both have a "New".
   const coPipelines = await (prisma as any).pipeline.findMany({
     where: { objectType: { startsWith: "CO:" }, isActive: true },
     orderBy: [{ order: "asc" }],
-    select: { objectType: true, stages: { orderBy: { order: "asc" }, select: { id: true, name: true } } },
+    select: { id: true, name: true, objectType: true, stages: { orderBy: { order: "asc" }, select: { id: true, name: true } } },
   }).catch(() => [])
-  const stagesByObject: Record<string, { id: string; name: string }[]> = {}
-  for (const p of coPipelines) (stagesByObject[p.objectType] ??= []).push(...p.stages)
+  const pipelinesByObject: Record<string, { id: string; name: string; stages: { id: string; name: string }[] }[]> = {}
+  for (const p of coPipelines) (pipelinesByObject[p.objectType] ??= []).push({ id: p.id, name: p.name, stages: p.stages })
 
-  const customObjects = customObjectDefs.map((d: any) => ({
-    key: d.key, singular: d.singular, plural: d.plural,
-    stages: stagesByObject[`CO:${d.key}`] ?? [],
-    properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, internalName: p.internalName ?? null, type: p.type, options: p.options ?? [], optionLabels: p.optionLabels ?? {} })),
-  }))
+  const customObjects = customObjectDefs.map((d: any) => {
+    const pls = pipelinesByObject[`CO:${d.key}`] ?? []
+    return {
+      key: d.key, singular: d.singular, plural: d.plural,
+      pipelines: pls,
+      stages: pls.flatMap((p) => p.stages), // kept for older readers
+      properties: ((d.properties as any[]) ?? []).map((p) => ({ id: p.id, name: p.name, internalName: p.internalName ?? null, type: p.type, options: p.options ?? [], optionLabels: p.optionLabels ?? {} })),
+    }
+  })
 
   // Group custom properties by entity type so the editor can show the right
   // set based on which object the workflow runs on.

@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma"
 import { RECORD_FIELDS, type RecordFieldType } from "@/lib/record-field-catalog"
 import { recordPermKey } from "@/lib/record-perm-key"
+import { stageDurationFieldsFor } from "@/lib/stages/duration-fields"
 import { STATUS_LABELS } from "@/lib/utils"
 import type { ReportField, ReportFieldType } from "./types"
 
@@ -143,27 +144,15 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
   return fields
 }
 
-// Synthetic duration fields (in days) for a stage-enabled object: time in current
-// stage, time to close, and per stage cumulative + latest time.
+// Synthetic duration fields (in days) for a stage-enabled object. The list itself
+// lives in lib/stages/duration-fields.ts because a record's property catalog shows
+// exactly the same measures — this only wraps them in ReportField shape.
 async function stageDurationFields(objectKey: string): Promise<ReportField[]> {
-  const pipelines = await (prisma as any).pipeline.findMany({
-    where: { objectType: objectKey, isActive: true },
-    select: { stages: { orderBy: { order: "asc" }, select: { id: true, name: true } } },
-  }).catch(() => [])
-  const stages = pipelines.flatMap((p: any) => p.stages as { id: string; name: string }[])
-  if (stages.length === 0) return []
-  const out: ReportField[] = [
-    { key: "__stage.current", label: "Time in current stage", type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "current" } },
-    { key: "__stage.toClose", label: "Time to close", type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "toClose" } },
-  ]
-  const seen = new Set<string>()
-  for (const s of stages) {
-    if (seen.has(s.id)) continue
-    seen.add(s.id)
-    out.push({ key: `__stage.cum.${s.id}`, label: `Cumulative time in "${s.name}"`, type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "cumulative", stageId: s.id } })
-    out.push({ key: `__stage.latest.${s.id}`, label: `Latest time in "${s.name}"`, type: "number", source: objectKey, column: "__stage", stageDuration: { kind: "latest", stageId: s.id } })
-  }
-  return out
+  const defs = await stageDurationFieldsFor(objectKey)
+  return defs.map((d) => ({
+    key: d.key, label: d.label, type: "number", source: objectKey, column: "__stage",
+    stageDuration: { kind: d.kind, stageId: d.stageId },
+  }))
 }
 
 // Every object a user can report on, including custom objects, with a label.

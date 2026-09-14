@@ -16,6 +16,7 @@ import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib
 import { frozenMap, frozenHeadStyle, frozenCellStyle, frozenClass } from "@/lib/frozen-columns"
 import { OptionValue } from "@/components/option-value"
 import { formatNumber } from "@/lib/number-format"
+import { dateSortValue, numberSortValue } from "@/lib/date-values"
 import { EditableCell } from "@/components/ui/editable-cell"
 import { cpToFieldDef } from "@/lib/cp-field-def"
 import { updateRecordField } from "@/app/actions/record-fields"
@@ -1289,7 +1290,14 @@ export default function ActivityManager({ activities, practices, allDoctors, all
       case "tags": return a.tags.map(t => t.name).join(", ").toLowerCase()
       case "loggedBy": return (a.createdBy.name ?? a.createdBy.email).toLowerCase()
       default:
-        if (assocByKey[key]) { const f = assocByKey[key]; const v = readAssocValue(a, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
+        if (assocByKey[key]) {
+          const f = assocByKey[key]; const v = readAssocValue(a, f)
+          // Dates and numbers must compare as values — the rendered label sorts
+          // "Aug" before "Mar" and "$1,000" below "$200".
+          if (f.type === "number") return numberSortValue(v)
+          if (f.type === "date") return dateSortValue(v)
+          return v.toLowerCase()
+        }
         return ""
     }
   }

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NotesTextarea, type NotesTextareaHandle } from "@/components/ui/notes-textarea"
+import { dateSortValue, numberSortValue } from "@/lib/date-values"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   Plus, Pencil, Trash2, Loader2, CheckCircle2, Circle, AlertCircle, Search, X, Link2, Clock,
@@ -528,7 +529,13 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
     if (k === "priority") return PRIORITY_ORDER[t.priority] ?? 9
     if (k === "dueDate") return t.dueDate ? new Date(t.dueDate).getTime() : Number.MAX_SAFE_INTEGER
     if (k === "created") return new Date(t.createdAt).getTime()
-    if (assocByKey[k]) { const f = assocByKey[k]; const v = readAssocValue(t, f); return f.type === "number" ? (parseFloat(v) || 0) : v.toLowerCase() }
+    if (assocByKey[k]) {
+      const f = assocByKey[k]; const v = readAssocValue(t, f)
+      // Compare values, not rendered labels — see lib/date-values.ts.
+      if (f.type === "number") return numberSortValue(v)
+      if (f.type === "date") return dateSortValue(v)
+      return v.toLowerCase()
+    }
     return ""
   }
   const sorted = [...filtered].sort((a, b) => {

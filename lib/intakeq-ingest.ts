@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getIntake, listIntakeSummaries, IntakeqRateLimitError, type IntakeSummary } from "@/lib/intakeq"
 import { parseIntakeReferral, isTargetQuestionnaire } from "@/lib/intakeq-referral"
+import { getIntakeForms } from "@/lib/integration-store"
 
 // The patient's name from an IntakeQ intake/summary. IntakeQ isn't consistent
 // about where the name lives (and the summary endpoint may omit it entirely), so
@@ -50,9 +51,12 @@ function intakeClientDob(intake: Record<string, any>): string | null {
 // Fetch one intake, categorize its referral answer, and upsert it (idempotent by
 // intakeId, so webhook re-deliveries and backfill overlap don't double-count).
 // Returns the stored category, or null if the intake isn't a target form.
-export async function ingestIntake(intakeId: string): Promise<string | null> {
+export async function ingestIntake(intakeId: string, forms?: readonly string[]): Promise<string | null> {
   const intake = await getIntake(intakeId)
-  const parsed = parseIntakeReferral(intake)
+  // A caller looping over many intakes passes the configured list in; a one-off
+  // (the webhook) loads it here.
+  const allowed = forms ?? (await getIntakeForms())
+  const parsed = parseIntakeReferral(intake, allowed)
   if (!parsed) return null
 
   const submittedAt = intake.DateSubmitted
@@ -106,6 +110,8 @@ export async function backfillRange(
   // (server-side drain), else the small default (a single UI/cron batch).
   const max = opts.max ?? (opts.budgetMs ? Number.POSITIVE_INFINITY : BACKFILL_MAX)
   const startedAt = Date.now()
+  // Loaded once per run so every intake in this batch is judged by the same list.
+  const allowedForms = await getIntakeForms()
   // Candidate ids from the summary endpoint (1 request per 100 rows), filtered to
   // submitted target-questionnaire forms.
   const candidates: string[] = []
@@ -115,7 +121,7 @@ export async function backfillRange(
       const rows = await listIntakeSummaries({ startDate, endDate, page })
       if (!rows.length) break
       for (const r of rows) {
-        if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName)) {
+        if (r.DateSubmitted && isTargetQuestionnaire(r.QuestionnaireName, allowedForms)) {
           candidates.push(r.Id)
           const nm = intakeClientName(r)
           if (nm) nameById.set(r.Id, nm)
@@ -160,7 +166,7 @@ export async function backfillRange(
     if (opts.budgetMs && Date.now() - startedAt >= opts.budgetMs) break
     try {
       if (w.kind === "ingest") {
-        await ingestIntake(w.id)
+        await ingestIntake(w.id, allowedForms)
       } else {
         const intake = await getIntake(w.id)
         const nm = intakeClientName(intake as any)

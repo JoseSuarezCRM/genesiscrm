@@ -27,6 +27,12 @@ function delegateFor(type: CPEntity): any {
 export async function updateRecordField(entityType: string, recordId: string, field: string, value: unknown) {
   // Custom objects keep every property in a JSON values bag.
   if (entityType.startsWith("CO:")) {
+    // Pipeline and stage are columns on the record, not bag entries — writing them
+    // here would store a dead key and leave the record where it was. They move
+    // through moveRecordStage, which also enforces the pipeline's rules.
+    if (field === "__pipeline" || field === "__stage") {
+      return { error: "Use the pipeline and stage control to move this record." }
+    }
     await requireAccess(entityType, "EDIT")
     const session = await auth()
     const uid = (session?.user as any)?.id ?? null

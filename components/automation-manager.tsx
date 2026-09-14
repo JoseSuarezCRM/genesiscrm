@@ -27,6 +27,7 @@ import { RichTextEditor, tokensFromStrings, type PersonalizationToken } from "@/
 import TokenTextarea from "@/components/ui/token-textarea"
 import { EmailAttachments, type AttachmentRef } from "@/components/email-attachments"
 import { listActiveDocumentTemplates } from "@/app/actions/document-templates"
+import { DATE_OFFSET_UNITS } from "@/lib/automation-date-value"
 import {
   type AutomationGraph, type GraphNode, type Slot, type ScheduleConfig,
   newNodeId, insertAt, deleteNode, updateNode, pruneUnreachable, legacyToGraph, waitLabel, WEEKDAY_NAMES,
@@ -972,7 +973,7 @@ function ActionConfigFields({
   // Properties of the workflow's object that SET_PROPERTY can write to.
   writableProps?: PropertyDef[]
   // Custom objects (with their properties) a CREATE_RECORD action can target.
-  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
+  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[]; pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[] }[]
   // Document templates (for this workflow's object) the email can attach.
   documentTemplates?: { id: string; name: string }[]
 }) {
@@ -1054,7 +1055,9 @@ function ActionConfigFields({
 
   if (type === ("CREATE_RECORD" as AutomationAction)) {
     const targetObj = objectCatalog.find(o => `CO:${o.key}` === (config.objectKey as string))
-    type FieldRow = { property: string; source?: "value" | "field"; field?: string; value?: unknown }
+    const targetPipelines = targetObj?.pipelines ?? []
+    const targetStages = targetPipelines.find(p => p.id === (config.pipelineId as string))?.stages ?? []
+    type FieldRow = { property: string; source?: "value" | "field" | "date"; field?: string; value?: unknown }
     const fields = Array.isArray(config.fields) ? (config.fields as FieldRow[]) : []
     const setFields = (next: FieldRow[]) => set("fields", next)
     const patchRow = (i: number, patch: Partial<FieldRow>) => setFields(fields.map((x, j) => j === i ? { ...x, ...patch } : x))
@@ -1062,11 +1065,39 @@ function ActionConfigFields({
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Create a record in</label>
-          <StyledSelect className="w-full" value={(config.objectKey as string) || ""} onChange={e => onChange({ ...config, objectKey: e.target.value, fields: [] })}>
+          <StyledSelect className="w-full" value={(config.objectKey as string) || ""}
+            onChange={e => onChange({ ...config, objectKey: e.target.value, fields: [], pipelineId: "", stageId: "" })}>
             <option value="">Select a custom object…</option>
             {objectCatalog.map(o => <option key={o.key} value={`CO:${o.key}`}>{o.label}</option>)}
           </StyledSelect>
         </div>
+
+        {/* Which pipeline/stage the new record starts in. Optional — leave blank to
+            create it outside any pipeline. Stage narrows to the chosen pipeline. */}
+        {targetPipelines.length > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Pipeline <span className="text-slate-400 font-normal">(optional)</span></label>
+              <StyledSelect className="w-full" value={(config.pipelineId as string) || ""}
+                onChange={e => {
+                  const pid = e.target.value
+                  const stages = targetPipelines.find(p => p.id === pid)?.stages ?? []
+                  onChange({ ...config, pipelineId: pid, stageId: pid ? (stages[0]?.id ?? "") : "" })
+                }}>
+                <option value="">No pipeline</option>
+                {targetPipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </StyledSelect>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Starting stage</label>
+              <StyledSelect className="w-full" value={(config.stageId as string) || ""} disabled={!config.pipelineId}
+                onChange={e => set("stageId", e.target.value)}>
+                <option value="">{config.pipelineId ? "Select a stage…" : "Pick a pipeline first"}</option>
+                {targetStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </StyledSelect>
+            </div>
+          </div>
+        )}
 
         {targetObj && (
           <div className="space-y-2">
@@ -1080,6 +1111,10 @@ function ActionConfigFields({
               const prop = targetObj.properties.find(p => p.id === f.property)
               const opts = (prop?.options ?? []).map(o => ({ value: o, label: prop?.optionLabels?.[o] ?? o }))
               const isField = f.source === "field"
+              const isDate = f.source === "date"
+              const isDateProp = prop?.type === "DATE" || prop?.type === "DATE_TIME"
+              const rel = (isDate && f.value && typeof f.value === "object" ? f.value : { base: "now", offset: { n: 1, unit: "years" } }) as { base: string; offset: { n: number; unit: string } }
+              const setRel = (patch: Partial<{ base: string; offset: { n: number; unit: string } }>) => patchRow(i, { value: { ...rel, ...patch } })
               return (
                 <div key={i} className="space-y-1.5 rounded-lg border border-slate-100 p-2">
                   <div className="flex items-center gap-2">
@@ -1092,10 +1127,17 @@ function ActionConfigFields({
                   </div>
                   <div className="flex items-center gap-2 pl-1">
                     <span className="text-xs text-slate-400 shrink-0">set to</span>
-                    {/* Source: a custom value, or copy a property off the triggering record. */}
-                    <StyledSelect className="flex-1" value={isField ? (f.field || "") : "__value"}
-                      onChange={e => e.target.value === "__value" ? patchRow(i, { source: "value", field: undefined }) : patchRow(i, { source: "field", field: e.target.value })}>
+                    {/* Source: a custom value, a date relative to now/a property, or a
+                        property copied off the triggering record. */}
+                    <StyledSelect className="flex-1" value={isDate ? "__date" : isField ? (f.field || "") : "__value"}
+                      onChange={e => {
+                        const v = e.target.value
+                        if (v === "__value") patchRow(i, { source: "value", field: undefined, value: "" })
+                        else if (v === "__date") patchRow(i, { source: "date", field: undefined, value: { base: "now", offset: { n: 1, unit: "years" } } })
+                        else patchRow(i, { source: "field", field: v })
+                      }}>
                       <option value="__value">A custom value</option>
+                      {isDateProp && <option value="__date">A date relative to…</option>}
                       {writableProps.length > 0 && (
                         <optgroup label="Copy from the triggering record">
                           {writableProps.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
@@ -1103,7 +1145,7 @@ function ActionConfigFields({
                       )}
                     </StyledSelect>
                     {/* When it's a custom value, the input matches the property's type. */}
-                    {!isField && (
+                    {!isField && !isDate && (
                       prop?.type === "DROPDOWN" ? (
                         <StyledSelect className="flex-1" value={(f.value as string) || ""} onChange={e => patchRow(i, { value: e.target.value })}>
                           <option value="">Select a value…</option>
@@ -1126,6 +1168,30 @@ function ActionConfigFields({
                       )
                     )}
                   </div>
+                  {isDate && (
+                    <div className="flex flex-wrap items-center gap-2 pl-1">
+                      <input type="number" className="h-9 w-20 px-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-zinc-400"
+                        value={rel.offset?.n ?? 1}
+                        onChange={e => setRel({ offset: { n: Number(e.target.value), unit: rel.offset?.unit ?? "years" } })} />
+                      <StyledSelect className="w-28" value={rel.offset?.unit ?? "years"}
+                        onChange={e => setRel({ offset: { n: rel.offset?.n ?? 1, unit: e.target.value } })}>
+                        {DATE_OFFSET_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                      </StyledSelect>
+                      <span className="text-xs text-slate-400">after</span>
+                      <StyledSelect className="flex-1 min-w-[170px]" value={rel.base ?? "now"} onChange={e => setRel({ base: e.target.value })}>
+                        <option value="now">when the workflow runs</option>
+                        {dateProps.length > 0 && (
+                          <optgroup label="A date on the triggering record">
+                            {dateProps.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                          </optgroup>
+                        )}
+                      </StyledSelect>
+                      <p className="w-full text-[11px] text-slate-400">
+                        Use a negative number for a date before it. Months and years land on the same day of
+                        the month, clamped when that month is shorter.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -2133,7 +2199,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   pipelines: Pipeline[]; customDefs: PropertyDef[]; propDefs: PropertyDef[]; actions: AutomationAction[]; tokens: string[]
   fieldTokens?: PersonalizationToken[]
   templates?: MessageTemplateOption[]
-  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[] }[]
+  objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[]; pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[] }[]
   documentTemplates?: { id: string; name: string }[]
   // Candidate jump targets for a "Go to step" node (every other step).
   gotoTargets?: { id: string; label: string }[]
@@ -2418,11 +2484,20 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
   const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
   // A custom object's properties come from its definition, not the static catalog.
   const customObjectDef = customObjects.find(c => `CO:${c.key}` === objectKey)
-  const coStages = ((customObjectDef as any)?.stages ?? []) as { id: string; name: string }[]
+  const coPipelines = ((customObjectDef as any)?.pipelines ?? []) as { id: string; name: string; stages: { id: string; name: string }[] }[]
+  const coStages = coPipelines.length
+    ? coPipelines.flatMap((p) => p.stages.map((s) => ({ ...s, pipelineName: p.name })))
+    : (((customObjectDef as any)?.stages ?? []) as { id: string; name: string }[]).map((s) => ({ ...s, pipelineName: "" }))
+  // Qualify a stage with its pipeline once there's more than one — two pipelines
+  // commonly share stage names, and the id alone tells the user nothing.
+  const stageLabel = (s: { name: string; pipelineName?: string }) =>
+    coPipelines.length > 1 && s.pipelineName ? `${s.pipelineName} — ${s.name}` : s.name
   const propDefs: PropertyDef[] = customObjectDef
     ? [
-        // Pipeline Stage — a native select whose options are the object's stages.
-        ...(coStages.length ? [{ id: "stageId", label: "Stage", type: "select" as const, path: "stageId", options: coStages.map(s => ({ value: s.id, label: s.name })) }] : []),
+        // Pipeline + Stage are columns on the record, not entries in its property bag,
+        // so they'd never appear from the definition alone — inject them here.
+        ...(coPipelines.length ? [{ id: "pipelineId", label: "Pipeline", type: "select" as const, path: "pipelineId", options: coPipelines.map(p => ({ value: p.id, label: p.name })) }] : []),
+        ...(coStages.length ? [{ id: "stageId", label: "Stage", type: "select" as const, path: "stageId", options: coStages.map(s => ({ value: s.id, label: stageLabel(s) })) }] : []),
         ...(customObjectDef.properties ?? []).map(p => ({
           id: p.id,
           label: p.name,
@@ -2662,7 +2737,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           users={users} tags={tags} practices={practices} locations={locations}
           pipelines={pipelines} customDefs={customDefs} propDefs={propDefs} actions={objectActions} tokens={objectTokens}
           fieldTokens={objectFieldTokens} templates={templates}
-          objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [] }))}
+          objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [], pipelines: (c as any).pipelines ?? [] }))}
           documentTemplates={docTemplates}
           gotoTargets={Object.values(graph.nodes).filter(n => n.kind !== "goto" && n.id !== editingNode.id).map(n => ({ id: n.id, label: nodeSummary(n) }))}
         />

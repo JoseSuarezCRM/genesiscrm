@@ -10,6 +10,9 @@
 import { prisma } from "@/lib/prisma"
 import { getCardLayouts } from "@/app/actions/card-layouts"
 import { RECORD_FIELDS, defaultCardFor, SURGERY_CLINICAL_FIELDS, type RecordFieldDef, type RecordFieldType } from "@/lib/record-field-catalog"
+import { pipelinesForObject } from "@/lib/stages/core"
+import { computeStageDurations } from "@/lib/stages/durations"
+import { stageDurationFieldsFor, durationValue } from "@/lib/stages/duration-fields"
 
 const CP_TYPE: Record<string, RecordFieldType> = {
   TEXT: "text", LONG_TEXT: "long_text", NUMBER: "number", EMAIL: "email",
@@ -36,18 +39,58 @@ const RECORD_DETAILS_FIELDS = ["__owner", "__createdBy", "__createdAt", "__updat
 // record's JSON bag, cards from RecordCard — identical shape to a built-in.
 async function loadCustomObjectCards(objectType: string, record: Record<string, any>, ownerLabel: string) {
   const key = objectType.slice(3)
-  const [def, rows] = await Promise.all([
+  const [def, rows, pipelines, durationDefs, transitions] = await Promise.all([
     (prisma as any).customObjectDef.findUnique({ where: { key } }),
     (prisma as any).recordCard.findMany({ where: { objectType }, orderBy: { order: "asc" } }),
+    pipelinesForObject(objectType),
+    stageDurationFieldsFor(objectType),
+    (prisma as any).stageTransition.findMany({
+      where: { recordType: objectType, recordId: record.id },
+      orderBy: { enteredAt: "asc" }, select: { toStageId: true, enteredAt: true },
+    }).catch(() => []),
   ])
   const props: any[] = (def?.properties as any[]) ?? []
 
+  // Pipeline + stage + time-in-stage are real properties, so they can be searched,
+  // put on a card and exported like anything else. They only exist once the object
+  // has a pipeline — an object without one shows no empty "Pipeline —" row.
+  const hasPipelines = pipelines.length > 0
+  const recordPipelineId: string | null = record.pipelineId ?? null
+  const recordStages = pipelines.find((p) => p.id === recordPipelineId)?.stages ?? []
+  const stageFields: RecordFieldDef[] = hasPipelines ? [
+    {
+      key: "__pipeline", label: "Pipeline", type: "select", optionStyle: "dot",
+      options: pipelines.map((p) => p.id),
+      optionLabels: Object.fromEntries(pipelines.map((p) => [p.id, p.name])),
+      optionColors: Object.fromEntries(pipelines.map((p) => [p.id, p.color])),
+    },
+    {
+      key: "__stage", label: "Stage", type: "select", optionStyle: "dot",
+      // Only the record's own pipeline's stages are valid choices.
+      options: recordStages.map((s) => s.id),
+      optionLabels: Object.fromEntries(recordStages.map((s) => [s.id, s.name])),
+      optionColors: Object.fromEntries(recordStages.filter((s) => s.color).map((s) => [s.id, s.color as string])),
+    },
+  ] : []
+
   const catalog: RecordFieldDef[] = [
     ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", multi: p.type === "MULTI_SELECT", options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined, optionColors: (p as any).optionColors ?? undefined, optionStyle: (p as any).optionStyle ?? undefined, visibilityRule: (p as any).visibilityRule ?? undefined, numberFormat: (p as any).numberFormat ?? undefined })),
+    ...stageFields,
+    ...durationDefs.map((d) => ({ key: d.key, label: d.label, type: "number" as const, readOnly: true, unit: "days" })),
     ...metaCatalog(ownerLabel || `${def?.singular ?? "Record"} Owner`, true),
   ]
 
   const values: Record<string, any> = { ...((record.values as Record<string, any>) ?? {}) }
+  if (hasPipelines) {
+    values.__pipeline = recordPipelineId ?? ""
+    values.__stage = record.stageId ?? ""
+    // One pass over the transition log feeds every duration field.
+    const sd = computeStageDurations(
+      transitions.map((t: any) => ({ toStageId: t.toStageId, enteredAt: t.enteredAt })),
+      pipelines.flatMap((p) => p.stages),
+    )
+    for (const d of durationDefs) values[d.key] = durationValue(sd, d)
+  }
   values.__owner = record.ownerId ?? null
   values.__recordId = record.recordNumber != null ? `#${record.recordNumber}` : "—"
   values.__createdBy = record.createdByName ?? null

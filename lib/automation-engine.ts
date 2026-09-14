@@ -12,6 +12,7 @@ import { findProcedureLocation } from "@/lib/surgery-procedures"
 import { type RecordRef, loadRecord, loadAllRecords, recordLabel as genericRecordLabel, setRecordProperty, setRecordOwner as setGenericOwner, createRecordFor } from "@/lib/automation-records"
 import { ensureAssociationDef, ensureAssociation } from "@/lib/object-associations"
 import { workflowObjectFor } from "@/lib/workflow-objects"
+import { isRelativeDateValue, resolveRelativeDate } from "@/lib/automation-date-value"
 
 // A record created by a workflow can fire its own "record created" workflows; cap
 // the chain so a misconfigured loop stops instead of running away.
@@ -821,7 +822,11 @@ async function runSingleAction(
     const property = cfg.property as string
     if (!property) return "Set property: no property selected"
     const raw = cfg.value
-    const value = typeof raw === "string" ? resolveTemplate(raw, vars) : raw
+    // Same relative-date spec the create-record fields accept.
+    const value = isRelativeDateValue(raw)
+      ? resolveRelativeDate(raw, (key) => readRecordProp(record, key))
+      : typeof raw === "string" ? resolveTemplate(raw, vars) : raw
+    if (value === null && isRelativeDateValue(raw)) return "Set property: the date it's relative to is empty"
     try {
       await setRecordProperty(target.type, target.id, property, value)
     } catch (err: any) {
@@ -878,6 +883,9 @@ async function runSingleAction(
       let resolved: unknown
       if (f.source === "field" && f.field) {
         resolved = readRecordProp(record, f.field)
+      } else if (f.source === "date" && isRelativeDateValue(f.value)) {
+        // "One year from when this ran", or an offset off a date on the trigger record.
+        resolved = resolveRelativeDate(f.value, (key) => readRecordProp(record, key))
       } else {
         resolved = typeof f.value === "string" ? resolveTemplate(f.value, vars) : f.value
       }
@@ -888,9 +896,16 @@ async function runSingleAction(
     const ownerRaw = (cfg.ownerId as string) || ""
     const ownerId = ownerRaw === "triggering_user" ? (triggeredByUserId ?? null) : (ownerRaw || null)
 
+    // Enroll the new record in a pipeline/stage, when the workflow asked for one.
+    const newPipelineId = (cfg.pipelineId as string) || null
+    const newStageId = (cfg.stageId as string) || null
+
     let newId: string
     try {
-      newId = await createRecordFor(objectKey, values, { ownerId, createdById: triggeredByUserId ?? null })
+      newId = await createRecordFor(objectKey, values, {
+        ownerId, createdById: triggeredByUserId ?? null,
+        pipelineId: newPipelineId, stageId: newPipelineId ? newStageId : null,
+      })
     } catch (err: any) {
       return `Create record failed: ${err.message}`
     }

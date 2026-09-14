@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation"
 import { upsertStage, deleteStage, reorderStages, updatePipeline, deletePipeline, setStageConditionalFields, setPipelineRule, setStageRequiredFields } from "@/app/actions/pipelines"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { useCardReorder } from "@/components/use-card-reorder"
-import { ChevronLeft, ChevronDown, Plus, Check, X, Copy, GripVertical, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronDown, Plus, Check, X, Copy, GripVertical, Trash2, Loader2 } from "lucide-react"
+import { showToast } from "@/components/toast"
 
 interface Stage { id: string; name: string; order: number; probability: number | null; isClosed: boolean; isWon: boolean; color: string | null; recordCount: number; requiredPropertyIds?: string[] }
 interface Sibling { id: string; name: string }
@@ -50,6 +51,17 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
     })
   }
   const [reqFields, setReqFields] = useState<Record<string, string[]>>(Object.fromEntries(initial.map((s) => [s.id, s.requiredPropertyIds ?? []])))
+
+  // Adopt fresh server data after router.refresh(). Without this the state seeded on
+  // mount stays put, so an added stage saves but never appears — and you click again.
+  const [seen, setSeen] = useState(initial)
+  if (initial !== seen) {
+    setSeen(initial)
+    setStages(initial)
+    setReqFields(Object.fromEntries(initial.map((s) => [s.id, s.requiredPropertyIds ?? []])))
+    setRules(initialRules)
+    setPRules(initialPipelineRules)
+  }
   function toggleReq(stageId: string, propId: string) {
     setReqFields((prev) => {
       const cur = prev[stageId] ?? []
@@ -92,10 +104,19 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
     const name = draftName.trim(); if (!name) { setEditId(null); return }
     saveStage(id, { name }); setEditId(null)
   }
+  const [addPending, setAddPending] = useState(false)
   function addStage() {
-    const name = newName.trim(); if (!name) return
-    setAdding(false); setNewName("")
-    startTransition(async () => { await upsertStage(pipeline.id, { name }); router.refresh() })
+    const name = newName.trim(); if (!name || addPending) return
+    setAddPending(true)
+    startTransition(async () => {
+      const res = await upsertStage(pipeline.id, { name }).catch(() => ({ error: "Couldn't add that stage." }))
+      setAddPending(false)
+      // Surface a rejection instead of quietly closing the row, which reads as
+      // "nothing happened" and invites a second click (and a duplicate stage).
+      if ((res as any)?.error) { showToast((res as any).error); return }
+      setAdding(false); setNewName("")
+      router.refresh()
+    })
   }
   async function removeStage(s: Stage) {
     if (!(await confirmDialog(`Delete stage "${s.name}"? Records in it keep their pipeline but lose the stage.`))) return
@@ -222,7 +243,9 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
                       <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") addStage(); if (e.key === "Escape") setAdding(false) }}
                         placeholder="Stage name…" className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-blue-500" />
-                      <button onClick={addStage} disabled={!newName.trim()} className="rounded-md bg-blue-600 p-1.5 text-white hover:bg-blue-700 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
+                      <button onClick={addStage} disabled={!newName.trim() || addPending} className="rounded-md bg-blue-600 p-1.5 text-white hover:bg-blue-700 disabled:opacity-50">
+                        {addPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      </button>
                       <button onClick={() => setAdding(false)} className="p-1.5 text-slate-400 hover:text-slate-600"><X className="h-3.5 w-3.5" /></button>
                     </div>
                   ) : (

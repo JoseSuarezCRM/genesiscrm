@@ -35,6 +35,8 @@ export interface RecordFieldDef {
   visibilityRule?: { controllingKey: string; equals: string[] } | null
   // NUMBER only: "currency" renders the value as USD currency; otherwise plain.
   numberFormat?: string | null
+  // Appended after a read-only number when displayed — e.g. "days" for time-in-stage.
+  unit?: string
   // Coerce the committed value before saving — e.g. a select whose values are
   // numbers (activity rating is an Int column). "number" → Number(value).
   coerce?: "number"
