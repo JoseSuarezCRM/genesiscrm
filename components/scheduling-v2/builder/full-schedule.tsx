@@ -437,9 +437,16 @@ function WeekCard({
         for (const p of data.providers) {
           if (!providerActive(p, weekStart)) continue
           if (isOnPTO(p.init, date, data.ptoEntries, data.recurringRules)) {
-            // PTO and recurring rules are managed elsewhere, so they show without a ×.
-            const fromRule = !data.ptoEntries.some((e) => e.person === p.init)
-            chips.push(<OffChip key={p.init} init={p.init} reason={fromRule ? "Recurring" : "PTO"} />)
+            // PTO and recurring rules are managed on their own tab, so these show
+            // without a ×. Which of the two it is depends on the entry covering
+            // *this* date, not on whether the person has PTO booked at all.
+            const booked = data.ptoEntries.some((e) => {
+              if (e.person !== p.init) return false
+              const from = d(e.startDate)
+              const to = d(e.endDate || e.startDate)
+              return !!from && !!to && date >= from && date <= to
+            })
+            chips.push(<OffChip key={p.init} init={p.init} reason={booked ? "PTO" : "Recurring"} />)
             continue
           }
           const ovIdx = data.scheduleOverrides.findIndex(
