@@ -20,6 +20,7 @@ import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitB
 import { cn } from "@/lib/utils"
 import DatePicker from "@/components/ui/date-picker"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
+import { showErrorToast } from "@/components/toast"
 import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
@@ -2919,30 +2920,48 @@ function triggerSummary(config: Record<string, unknown>): string {
 
 // ─── Workflow list row ────────────────────────────────────────────────────────
 
-function WorkflowTableRow({ auto }: { auto: Automation }) {
+// Next redacts a thrown Server Action's message in production — the client only
+// gets a digest — so a caught failure can't name its own cause. The controls are
+// permission-gated above, which is what actually prevents the common case; this
+// is the backstop for everything else.
+const ACTION_FAILED = "That action couldn't be completed. You may not have permission."
+
+function WorkflowTableRow({ auto, canEdit, canDelete }: { auto: Automation; canEdit: boolean; canDelete: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   function handleToggle() {
     startTransition(async () => {
-      await toggleAutomation(auto.id, !auto.isActive)
-      router.refresh()
+      try {
+        await toggleAutomation(auto.id, !auto.isActive)
+        router.refresh()
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
   async function handleDelete() {
     if (!(await confirmDialog(`Delete workflow "${auto.name}"? This cannot be undone.`))) return
     startTransition(async () => {
-      await deleteAutomation(auto.id)
-      router.refresh()
+      try {
+        await deleteAutomation(auto.id)
+        router.refresh()
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
   function handleClone() {
     startTransition(async () => {
-      const res = await cloneAutomation(auto.id)
-      if (res?.id) router.push(`/automations/${res.id}`)
-      else router.refresh()
+      try {
+        const res = await cloneAutomation(auto.id)
+        if (res?.id) router.push(`/automations/${res.id}`)
+        else router.refresh()
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
@@ -2956,12 +2975,19 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
         </Link>
       </td>
       <td className="px-4 py-3">
-        <button onClick={handleToggle} disabled={isPending}
-          className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
-          title={auto.isActive ? "Turn off" : "Turn on"}>
-          <span className={cn("w-2 h-2 rounded-full", auto.isActive ? "bg-emerald-500" : "bg-slate-300")} />
-          <span className={auto.isActive ? "text-emerald-700" : "text-slate-400"}>{auto.isActive ? "On" : "Off"}</span>
-        </button>
+        {canEdit ? (
+          <button onClick={handleToggle} disabled={isPending}
+            className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
+            title={auto.isActive ? "Turn off" : "Turn on"}>
+            <span className={cn("w-2 h-2 rounded-full", auto.isActive ? "bg-emerald-500" : "bg-slate-300")} />
+            <span className={auto.isActive ? "text-emerald-700" : "text-slate-400"}>{auto.isActive ? "On" : "Off"}</span>
+          </button>
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs font-medium">
+            <span className={cn("w-2 h-2 rounded-full", auto.isActive ? "bg-emerald-500" : "bg-slate-300")} />
+            <span className={auto.isActive ? "text-emerald-700" : "text-slate-400"}>{auto.isActive ? "On" : "Off"}</span>
+          </span>
+        )}
       </td>
       <td className="px-4 py-3 text-sm text-slate-500 max-w-[260px] truncate">{auto.description || "—"}</td>
       <td className="px-4 py-3">
@@ -2981,14 +3007,18 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
             className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
             <ScrollText className="h-3.5 w-3.5" />
           </Link>
-          <button onClick={handleClone} disabled={isPending}
-            className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Clone workflow">
-            <Copy className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={handleDelete} disabled={isPending}
-            className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {canEdit && (
+            <button onClick={handleClone} disabled={isPending}
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Clone workflow">
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {canDelete && (
+            <button onClick={handleDelete} disabled={isPending}
+              className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </td>
     </tr>
@@ -2997,7 +3027,11 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
 
 // ─── Main component: workflows list ──────────────────────────────────────────
 
-export default function AutomationManager({ automations }: { automations: Automation[] }) {
+export default function AutomationManager({ automations, canEdit = false, canDelete = false }: {
+  automations: Automation[]
+  canEdit?: boolean
+  canDelete?: boolean
+}) {
   const [search, setSearch] = useState("")
   const [objectFilter, setObjectFilter] = useState("")
   const [runPending, startRunTransition] = useTransition()
@@ -3006,9 +3040,13 @@ export default function AutomationManager({ automations }: { automations: Automa
   function handleRunScheduled() {
     setRunMsg("")
     startRunTransition(async () => {
-      await runScheduledAutomationsAction()
-      setRunMsg("Scheduled checks completed.")
-      setTimeout(() => setRunMsg(""), 4000)
+      try {
+        await runScheduledAutomationsAction()
+        setRunMsg("Scheduled checks completed.")
+        setTimeout(() => setRunMsg(""), 4000)
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
@@ -3032,22 +3070,26 @@ export default function AutomationManager({ automations }: { automations: Automa
           <option value="">All object types</option>
           {WORKFLOW_OBJECTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
         </StyledSelect>
-        <button
-          onClick={handleRunScheduled}
-          disabled={runPending}
-          className="flex items-center gap-2 px-3 py-2 text-sm rounded-md border bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 transition-colors"
-        >
-          <Play className="h-3.5 w-3.5" />
-          {runPending ? "Running…" : "Run scheduled checks"}
-        </button>
+        {canEdit && (
+          <button
+            onClick={handleRunScheduled}
+            disabled={runPending}
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded-md border bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 transition-colors"
+          >
+            <Play className="h-3.5 w-3.5" />
+            {runPending ? "Running…" : "Run scheduled checks"}
+          </button>
+        )}
         {runMsg && <span className="text-xs text-green-600">{runMsg}</span>}
-        <Link
-          href="/automations/new"
-          className="ml-auto flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Create workflow
-        </Link>
+        {canEdit && (
+          <Link
+            href="/automations/new"
+            className="ml-auto flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Create workflow
+          </Link>
+        )}
       </div>
 
       {automations.length === 0 ? (
@@ -3057,9 +3099,11 @@ export default function AutomationManager({ automations }: { automations: Automa
           <p className="text-xs text-slate-400 mt-1 max-w-sm">
             Create workflows to automatically create tasks, send notifications, update statuses, and more based on events.
           </p>
-          <Link href="/automations/new" className="mt-4 flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" /> Create your first workflow
-          </Link>
+          {canEdit && (
+            <Link href="/automations/new" className="mt-4 flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+              <Plus className="h-4 w-4" /> Create your first workflow
+            </Link>
+          )}
         </div>
       ) : (
         <div className="bg-white border rounded-lg overflow-hidden">
@@ -3077,7 +3121,7 @@ export default function AutomationManager({ automations }: { automations: Automa
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map(auto => <WorkflowTableRow key={auto.id} auto={auto} />)}
+                {rows.map(auto => <WorkflowTableRow key={auto.id} auto={auto} canEdit={canEdit} canDelete={canDelete} />)}
               </tbody>
             </table>
           </div>

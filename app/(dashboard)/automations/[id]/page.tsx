@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
+import { requireView } from "@/lib/auth-guard"
+import { userCanLevel } from "@/lib/permissions"
 import { WorkflowEditor } from "@/components/automation-manager"
 
 interface Props {
@@ -7,6 +9,14 @@ interface Props {
 }
 
 export default async function WorkflowEditorPage({ params }: Props) {
+  // This route had no guard at all, so anyone could deep-link into the editor.
+  const session = await requireView("AUTOMATIONS")
+  // Creating is an edit; without it "/automations/new" would open a form whose
+  // save can only ever be refused.
+  if (params.id === "new" && !userCanLevel(session?.user as any, "AUTOMATIONS", "EDIT")) {
+    redirect("/automations")
+  }
+
   const [users, tags, practices, locations, pipelines, customProps, templates] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     prisma.tag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
