@@ -8,24 +8,23 @@
  */
 
 import { absolutizeMediaUrls } from "@/lib/media-url"
+import { withSignature } from "@/lib/email-signature"
+import { listSharedMailboxes, senderEmailFor } from "@/lib/shared-mailboxes"
 
-export type EmailSender = "referrals" | "surgery" | "tpl"
+// A saved sender value: one of the original three keys, or any shared mailbox
+// address. Kept loose because the set of mailboxes is data now (SharedMailbox),
+// not a fixed union — see lib/shared-mailboxes.ts.
+export type EmailSender = string
 
-export const EMAIL_SENDER_OPTIONS: { value: EmailSender; label: string }[] = [
-  { value: "referrals", label: "Referrals@genesisortho.com" },
-  { value: "surgery",   label: "surgery@genesisortho.com" },
-  { value: "tpl",       label: "tpl@genesisortho.com" },
-]
-
-const SENDER_EMAILS: Record<EmailSender, string> = {
-  referrals: process.env.MS_FROM_EMAIL          ?? "Referrals@genesisortho.com",
-  surgery:   process.env.MS_SURGERY_FROM_EMAIL  ?? "surgery@genesisortho.com",
-  tpl:       process.env.MS_TPL_FROM_EMAIL      ?? "tpl@genesisortho.com",
+// The sender options, read from the SharedMailbox table.
+export async function emailSenderOptions(): Promise<{ value: string; label: string }[]> {
+  const boxes = await listSharedMailboxes()
+  return boxes.map((m) => ({ value: m.legacyKey ?? m.email, label: m.email }))
 }
 
-// The from-address for a given sender key (used e.g. as the ICS organizer).
-export function senderEmail(sender?: EmailSender): string {
-  return SENDER_EMAILS[sender ?? "referrals"]
+// The from-address for a saved sender value (used e.g. as the ICS organizer).
+export async function senderEmail(sender?: EmailSender): Promise<string> {
+  return senderEmailFor(sender)
 }
 
 // Single token cache — same Azure app for all three mailboxes
@@ -117,13 +116,16 @@ export async function sendEmail(
   to: string | string[],
   subject: string,
   html: string,
-  options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender; fromEmail?: string; attachments?: EmailAttachment[] }
+  options?: { cc?: string[]; bcc?: string[]; sender?: EmailSender; fromEmail?: string; attachments?: EmailAttachment[]; signature?: false }
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // An explicit fromEmail (e.g. a user's own mailbox) overrides the sender key.
+    const fromEmail = options?.fromEmail || (await senderEmailFor(options?.sender))
+    // Signature first: it may carry a logo, and the absolutize pass below has to
+    // see it too or that image arrives broken.
+    if (options?.signature !== false) html = await withSignature(html, fromEmail)
     // Recipients can't resolve relative /api/media/<id> image srcs — make absolute.
     html = absolutizeMediaUrls(html)
-    // An explicit fromEmail (e.g. a user's own mailbox) overrides the sender key.
-    const fromEmail = options?.fromEmail || SENDER_EMAILS[options?.sender ?? "referrals"]
     const token = await getAccessToken()
     const toList = Array.isArray(to) ? to : [to]
     const toRecipients = toList.map(a => ({ emailAddress: { address: a } }))
@@ -194,7 +196,10 @@ export async function sendCalendarInvite(
   fromEmail?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const from = fromEmail || SENDER_EMAILS[sender ?? "referrals"]
+    const from = fromEmail || (await senderEmailFor(sender))
+    // The invite body is signed too — it's a person-to-person message with an
+    // .ics rider, not a system notification.
+    html = absolutizeMediaUrls(await withSignature(html, from))
     const token = await getAccessToken()
     const boundary = "gomtg" + Math.random().toString(36).slice(2)
     const mime = [
@@ -289,10 +294,11 @@ export async function fetchInboundMessages(mailbox: string, sinceIso: string): P
 // ── Threaded send + reply ────────────────────────────────────────────────────
 // Create a draft then send it, so we capture the conversationId / message ids and
 // can later match replies and reply in-thread. Needs Mail.ReadWrite + Mail.Send.
-export async function sendEmailTracked(fromEmail: string, to: string, subject: string, html: string, options?: { cc?: string[]; bcc?: string[]; attachments?: EmailAttachment[] }): Promise<{
+export async function sendEmailTracked(fromEmail: string, to: string, subject: string, html: string, options?: { cc?: string[]; bcc?: string[]; attachments?: EmailAttachment[]; signature?: false }): Promise<{
   success: boolean; error?: string; conversationId?: string; internetMessageId?: string; graphMessageId?: string
 }> {
   try {
+    if (options?.signature !== false) html = await withSignature(html, fromEmail)
     html = absolutizeMediaUrls(html)
     const token = await getAccessToken()
     const base = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}`
@@ -325,8 +331,12 @@ export async function sendEmailTracked(fromEmail: string, to: string, subject: s
 }
 
 // Reply to a message, keeping it in the same thread (sends immediately).
-export async function replyToMessage(mailbox: string, graphMessageId: string, html: string): Promise<{ success: boolean; error?: string }> {
+export async function replyToMessage(mailbox: string, graphMessageId: string, html: string, options?: { signature?: false }): Promise<{ success: boolean; error?: string }> {
   try {
+    // Outlook signs replies too, so a thread reads the same whether it was
+    // answered from the CRM or from someone's inbox.
+    if (options?.signature !== false) html = await withSignature(html, mailbox)
+    html = absolutizeMediaUrls(html)
     const token = await getAccessToken()
     const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages/${graphMessageId}/reply`, {
       method: "POST",

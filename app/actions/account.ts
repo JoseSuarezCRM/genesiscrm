@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
 import { availableSendersFor, resolveFromEmail, type SenderChoice } from "@/lib/email-senders"
-import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
+import { emailSenderOptions } from "@/lib/graph-mailer"
+import { listSharedMailboxes } from "@/lib/shared-mailboxes"
 import { revalidatePath } from "next/cache"
 
 // Sender options for workflow/sequence email steps: the record owner, the shared
@@ -19,7 +20,7 @@ export async function getWorkflowSenderOptions(): Promise<{ value: string; label
   })
   return [
     { value: "record_owner", label: "Record owner (assigned or creator)" },
-    ...EMAIL_SENDER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    ...(await emailSenderOptions()),
     ...users.map((u) => ({ value: u.email, label: u.email })),
   ]
 }
@@ -30,7 +31,7 @@ export async function getMySenders(): Promise<SenderChoice[]> {
   const id = (session?.user as any)?.id
   if (!id) return []
   const u = await prisma.user.findUnique({ where: { id }, select: { role: true, email: true, emailSendingEnabled: true } })
-  return availableSendersFor(u)
+  return availableSendersFor(u, await listSharedMailboxes())
 }
 
 // Resolve + enforce a chosen sender value to a concrete from-address for the
@@ -40,7 +41,7 @@ export async function resolveMyFromEmail(value?: string | null): Promise<string 
   const id = (session?.user as any)?.id
   if (!id) return null
   const u = await prisma.user.findUnique({ where: { id }, select: { role: true, email: true, emailSendingEnabled: true } })
-  return resolveFromEmail(u, value)
+  return resolveFromEmail(u, value, await listSharedMailboxes())
 }
 
 // Toggle whether the current user can send app email from their own mailbox.

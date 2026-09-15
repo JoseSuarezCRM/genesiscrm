@@ -668,7 +668,7 @@ async function runSingleAction(
     // Track the send on the enrolled record's timeline (mirrors sendEmailFromRecord).
     const emailRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
     if (emailRef) {
-      const fromAddr = from.fromEmail ?? senderEmail(from.senderKey)
+      const fromAddr = from.fromEmail ?? (await senderEmail(from.senderKey))
       try {
         const logged = await prisma.directEmail.create({
           data: {
@@ -726,7 +726,7 @@ async function runSingleAction(
     const durationMinutes = Math.max(5, Number(cfg.durationMinutes) || 30)
     const end = new Date(start.getTime() + durationMinutes * 60000)
     const from = await resolveWorkflowSender(cfg.sender, record, referralId)
-    const organizer = from.fromEmail ?? senderEmail(from.senderKey)
+    const organizer = from.fromEmail ?? (await senderEmail(from.senderKey))
     const uid = `${referralId ?? "rec"}-${start.getTime()}-${Math.random().toString(36).slice(2, 8)}@genesisortho.com`
 
     // A calendar invite can't be sent to its own organizer — Microsoft strips the

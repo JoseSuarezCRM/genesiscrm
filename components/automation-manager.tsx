@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
 import DatePicker from "@/components/ui/date-picker"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { showErrorToast } from "@/components/toast"
-import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
+import { getSharedMailboxOptions } from "@/app/actions/shared-mailboxes"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings, type PersonalizationToken } from "@/components/rich-text-editor"
@@ -959,7 +959,7 @@ function RecipientRows({
 interface MessageTemplateOption { id: string; name: string; channel: string }
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [], documentTemplates = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [], documentTemplates = [], sharedMailboxes = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -977,6 +977,8 @@ function ActionConfigFields({
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[]; pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[] }[]
   // Document templates (for this workflow's object) the email can attach.
   documentTemplates?: { id: string; name: string }[]
+  // Shared org mailboxes an email/invite action can send as (from SharedMailbox).
+  sharedMailboxes?: { value: string; label: string }[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
 
@@ -1222,7 +1224,7 @@ function ActionConfigFields({
     <>
       <option value="record_owner">Record owner (assigned or creator)</option>
       <optgroup label="Shared mailboxes">
-        {EMAIL_SENDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {sharedMailboxes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </optgroup>
       {users.length > 0 && (
         <optgroup label="People">
@@ -2192,7 +2194,7 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [], gotoTargets = [] }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [], sharedMailboxes = [], gotoTargets = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
@@ -2202,6 +2204,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   templates?: MessageTemplateOption[]
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[]; pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[] }[]
   documentTemplates?: { id: string; name: string }[]
+  sharedMailboxes?: { value: string; label: string }[]
   // Candidate jump targets for a "Go to step" node (every other step).
   gotoTargets?: { id: string; label: string }[]
 }) {
@@ -2233,7 +2236,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} documentTemplates={documentTemplates} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} documentTemplates={documentTemplates} sharedMailboxes={sharedMailboxes} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -2480,6 +2483,15 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
     listActiveDocumentTemplates(objectKey).then((t) => { if (!cancel) setDocTemplates(t) }).catch(() => {})
     return () => { cancel = true }
   }, [objectKey])
+
+  // Shared mailboxes an email/invite step can send as. These are rows now, not a
+  // fixed list, so they're fetched rather than imported.
+  const [sharedMailboxes, setSharedMailboxes] = useState<{ value: string; label: string }[]>([])
+  useEffect(() => {
+    let cancel = false
+    getSharedMailboxOptions().then((m) => { if (!cancel) setSharedMailboxes(m) }).catch(() => {})
+    return () => { cancel = true }
+  }, [])
 
   const allObjects = workflowObjectsWith(customObjects)
   const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
@@ -2740,6 +2752,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           fieldTokens={objectFieldTokens} templates={templates}
           objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [], pipelines: (c as any).pipelines ?? [] }))}
           documentTemplates={docTemplates}
+          sharedMailboxes={sharedMailboxes}
           gotoTargets={Object.values(graph.nodes).filter(n => n.kind !== "goto" && n.id !== editingNode.id).map(n => ({ id: n.id, label: nodeSummary(n) }))}
         />
       )}
