@@ -2,36 +2,36 @@
 
 import { useState } from "react"
 import { SubTabs } from "@/components/scheduling-v2/shared"
+import FullSchedule from "@/components/scheduling-v2/builder/full-schedule"
 import VisitCount from "@/components/scheduling-v2/builder/visits"
-import ABSchedule from "@/components/scheduling-v2/builder/ab-schedule"
 import PtoExceptions from "@/components/scheduling-v2/builder/pto"
 import TaskAssignments from "@/components/scheduling-v2/builder/tasks"
+import ABSchedule from "@/components/scheduling-v2/builder/ab-schedule"
 import StaffingRules from "@/components/scheduling-v2/builder/staffing-rules"
-import MySchedule from "@/components/scheduling-v2/builder/my-schedule"
-import Optimizer from "@/components/scheduling-v2/builder/optimizer"
+import SurgeryLog from "@/components/scheduling-v2/builder/surgery-log"
 
 const TABS = [
+  { key: "admin", label: "Full Schedule" },
   { key: "visits", label: "Visit Count" },
-  { key: "provsched", label: "🩺 Provider A/B Schedule" },
-  { key: "pto", label: "☀ PTO / Exceptions" },
+  { key: "pto", label: "PTO / Exceptions" },
   { key: "tasks", label: "Task Assignments" },
+  { key: "provsched", label: "Provider A/B" },
   { key: "staffrules", label: "Staffing Rules" },
-  { key: "myschedule", label: "My Schedule" },
-  { key: "optimizer", label: "🤖 AI Optimizer" },
+  { key: "surgery", label: "Surgery Shadowing" },
 ]
 
 export default function ScheduleBuilderPage() {
-  const [tab, setTab] = useState("visits")
+  const [tab, setTab] = useState("admin")
   return (
     <div className="section">
       <SubTabs tabs={TABS} active={tab} onChange={setTab} />
+      {tab === "admin" && <FullSchedule />}
       {tab === "visits" && <VisitCount />}
-      {tab === "provsched" && <ABSchedule />}
       {tab === "pto" && <PtoExceptions />}
       {tab === "tasks" && <TaskAssignments />}
+      {tab === "provsched" && <ABSchedule />}
       {tab === "staffrules" && <StaffingRules />}
-      {tab === "myschedule" && <MySchedule />}
-      {tab === "optimizer" && <Optimizer />}
+      {tab === "surgery" && <SurgeryLog />}
     </div>
   )
 }

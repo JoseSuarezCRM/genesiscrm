@@ -54,14 +54,13 @@ const schedulingItems: NavItem[] = [
   { href: "/scheduler/staff",   label: "Staff Roster" },
 ]
 
+// The Operations Planner keeps its own nested sidebar, so the CRM's global nav
+// links only at its four sections.
 const schedulingV2Items: NavItem[] = [
-  { href: "/scheduling-v2",                 label: "Overview" },
-  { href: "/scheduling-v2/roster",          label: "Roster" },
-  { href: "/scheduling-v2/master-schedule", label: "Master Schedule" },
+  { href: "/scheduling-v2",                  label: "Master Schedule" },
   { href: "/scheduling-v2/schedule-builder", label: "Schedule Builder" },
-  { href: "/scheduling-v2/interns",         label: "Intern / MA / FD Hub" },
-  { href: "/scheduling-v2/xrt",             label: "XRT Hub" },
-  { href: "/scheduling-v2/growth",          label: "Growth" },
+  { href: "/scheduling-v2/roster",           label: "Roster" },
+  { href: "/scheduling-v2/settings",         label: "Settings" },
 ]
 
 const surgeryItems: NavItem[] = [
