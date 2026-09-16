@@ -45,14 +45,20 @@ export function invalidateMailboxCache() {
 export async function listSharedMailboxes(): Promise<SharedMailboxInfo[]> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.rows
   try {
-    const rows = await (prisma as any).sharedMailbox.findMany({
-      where: { enabled: true },
-      orderBy: [{ order: "asc" }, { email: "asc" }],
-      select: { id: true, email: true, label: true, legacyKey: true, signatureHtml: true },
-    })
-    // An empty table means the seed hasn't run yet — don't strip every sender
-    // option out of the UI on the strength of that.
-    const out: SharedMailboxInfo[] = rows.length ? rows : FALLBACK
+    // Both counts, because "no enabled rows" and "no rows at all" mean opposite
+    // things: the first is someone deliberately turning every mailbox off, the
+    // second is a database that hasn't been seeded. Keying the fallback off the
+    // enabled list alone would resurrect the hardcoded mailboxes the moment
+    // someone switched the last one off.
+    const [rows, total] = await Promise.all([
+      (prisma as any).sharedMailbox.findMany({
+        where: { enabled: true },
+        orderBy: [{ order: "asc" }, { email: "asc" }],
+        select: { id: true, email: true, label: true, legacyKey: true, signatureHtml: true },
+      }),
+      (prisma as any).sharedMailbox.count(),
+    ])
+    const out: SharedMailboxInfo[] = total === 0 ? FALLBACK : rows
     cache = { at: Date.now(), rows: out }
     return out
   } catch {

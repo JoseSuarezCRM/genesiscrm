@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { Loader2, Plus, Send, Trash2, PenLine } from "lucide-react"
 import SignatureEditorModal from "@/components/signature-editor-modal"
+import Switch from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { showToast, showErrorToast } from "@/components/toast"
 import { saveOrgSignature, type SignatureState } from "@/app/actions/email-signatures"
@@ -161,6 +163,24 @@ function MailboxesCard({ rows }: { rows: MailboxRow[] }) {
 function MailboxRowView({ row }: { row: MailboxRow }) {
   const [editing, setEditing] = useState(false)
   const [pending, start] = useTransition()
+  // Held locally so the switch answers immediately: the server action revalidates
+  // the page, but waiting for that round trip makes the toggle feel stuck.
+  // Reverted if the write fails, so it never shows a state the server doesn't have.
+  const [enabled, setEnabled] = useState(row.enabled)
+  useEffect(() => setEnabled(row.enabled), [row.enabled])
+
+  const toggleEnabled = (next: boolean) => {
+    setEnabled(next)
+    start(async () => {
+      try {
+        await updateSharedMailbox(row.id, { enabled: next })
+        showToast(next ? `${row.email} can now be used as a sender.` : `${row.email} is no longer offered as a sender.`)
+      } catch {
+        setEnabled(!next)
+        showErrorToast("Couldn't change that mailbox.")
+      }
+    })
+  }
 
   const saveSignature = async (html: string): Promise<boolean> => {
     try {
@@ -199,11 +219,13 @@ function MailboxRowView({ row }: { row: MailboxRow }) {
 
   return (
     <div className="px-5 py-3 flex items-center gap-3">
-      <div className="min-w-0 flex-1">
+      <div className={cn("min-w-0 flex-1", !enabled && "opacity-50")}>
         <div className="text-sm font-medium text-slate-900 truncate">{row.email}</div>
         <div className="text-xs text-slate-400">
           {row.label}
-          {hasOwn ? " · has its own signature" : " · uses the organization signature"}
+          {enabled
+            ? hasOwn ? " · has its own signature" : " · uses the organization signature"
+            : " · not offered as a sender"}
         </div>
       </div>
 
@@ -215,13 +237,17 @@ function MailboxRowView({ row }: { row: MailboxRow }) {
         {hasOwn ? "Edit signature" : "Add signature"}
       </button>
 
-      <label className="flex items-center gap-1.5 text-xs text-slate-500">
-        <input
-          type="checkbox" checked={row.enabled} className="h-3.5 w-3.5 rounded border-slate-300"
-          onChange={(e) => start(async () => { await updateSharedMailbox(row.id, { enabled: e.target.checked }) })}
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={enabled}
+          disabled={pending}
+          label={`${enabled ? "Disable" : "Enable"} ${row.email}`}
+          onChange={toggleEnabled}
         />
-        Available
-      </label>
+        <span className={cn("w-8 text-xs font-medium", enabled ? "text-slate-600" : "text-slate-400")}>
+          {enabled ? "On" : "Off"}
+        </span>
+      </div>
       <button
         onClick={test} disabled={pending} title="Send a test to yourself"
         className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 disabled:opacity-50"
