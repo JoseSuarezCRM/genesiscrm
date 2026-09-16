@@ -89,8 +89,12 @@ export async function deleteSharedMailbox(id: string) {
  *
  * The Azure app has org-wide Mail.Send, so any real @genesisortho.com mailbox
  * should work — but a typo'd address would otherwise sit there looking fine and
- * fail silently inside a 2am cron. Sent without a signature: the point is to
- * test the address, not to preview the footer.
+ * fail silently inside a 2am cron.
+ *
+ * The signature rides along deliberately. This button is the only way to see a
+ * *shared mailbox's* signature as a recipient gets it — logos embedded, rendered
+ * by a real mail client rather than by our preview — so suppressing it would
+ * leave that untestable.
  */
 export async function testSharedMailbox(id: string) {
   const session = await requireAdmin()
@@ -99,12 +103,15 @@ export async function testSharedMailbox(id: string) {
   const to = (session.user as any).email as string
   if (!to) return { error: "Your account has no email address to send the test to." }
 
+  const hasOwn = !!String(box.signatureHtml ?? "").trim()
   const res = await sendEmail(
     to,
     `Test send from ${box.email}`,
-    `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b">` +
-    `This confirms the CRM can send as <strong>${box.email}</strong>.</p>`,
-    { fromEmail: box.email, signature: false },
+    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1e293b">` +
+    `<p>This confirms the CRM can send as <strong>${box.email}</strong>.</p>` +
+    `<p style="color:#64748b;font-size:13px">Below is the ${hasOwn ? "mailbox's own" : "organization"} ` +
+    `signature, exactly as a recipient sees it.</p></div>`,
+    { fromEmail: box.email },
   )
   if (!res.success) return { error: res.error ?? "The test send failed." }
   return { success: true, sentTo: to }
