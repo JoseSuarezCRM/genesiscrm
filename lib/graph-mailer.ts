@@ -77,6 +77,13 @@ export interface EmailAttachment {
   contentType: string
   url?: string
   contentBase64?: string
+  /**
+   * Embed in the message body rather than listing it as a file to download —
+   * the mechanism Outlook uses for signature logos. The body references it as
+   * `<img src="cid:<contentId>">`, and the two strings must match exactly.
+   */
+  isInline?: boolean
+  contentId?: string
 }
 
 // Graph's simple sendMail carries a whole message in one request, and Microsoft
@@ -120,8 +127,11 @@ async function buildGraphAttachments(
       name: att.name,
       contentType: att.contentType || "application/octet-stream",
       contentBytes: bytes.toString("base64"),
+      ...(att.isInline ? { isInline: true, contentId: att.contentId ?? att.name } : {}),
     }
-    if (bytes.length >= INLINE_ATTACHMENT_LIMIT) large.push({ att, bytes })
+    // An embedded image belongs in the body no matter its size — routing it
+    // through an upload session would detach it from the cid: it's referenced by.
+    if (bytes.length >= INLINE_ATTACHMENT_LIMIT && !att.isInline) large.push({ att, bytes })
     else inline.push(entry)
   }
   return { inline, large, failed }
@@ -235,7 +245,14 @@ export async function sendEmail(
     const fromEmail = options?.fromEmail || (await senderEmailFor(options?.sender))
     // Signature first: it may carry a logo, and the absolutize pass below has to
     // see it too or that image arrives broken.
-    if (options?.signature !== false) html = await withSignature(html, fromEmail)
+    // Signature first: its images become inline cid: attachments, and the
+    // absolutize pass below must not turn those back into URLs.
+    let signatureAttachments: EmailAttachment[] = []
+    if (options?.signature !== false) {
+      const sig = await withSignature(html, fromEmail)
+      html = sig.html
+      signatureAttachments = sig.inlineAttachments
+    }
     // Recipients can't resolve relative /api/media/<id> image srcs — make absolute.
     html = absolutizeMediaUrls(html)
     const token = await getAccessToken()
@@ -243,8 +260,9 @@ export async function sendEmail(
     const toRecipients = toList.map(a => ({ emailAddress: { address: a } }))
     const ccRecipients = (options?.cc ?? []).map(a => ({ emailAddress: { address: a } }))
     const bccRecipients = (options?.bcc ?? []).map(a => ({ emailAddress: { address: a } }))
-    const built = options?.attachments?.length
-      ? await buildGraphAttachments(options.attachments)
+    const allAttachments = [...(options?.attachments ?? []), ...signatureAttachments]
+    const built = allAttachments.length
+      ? await buildGraphAttachments(allAttachments)
       : { inline: [], large: [], failed: [] }
     const attachments = built.inline
     const skipped: string[] = [...built.failed]
@@ -323,8 +341,10 @@ export async function sendCalendarInvite(
   try {
     const from = fromEmail || (await senderEmailFor(sender))
     // The invite body is signed too — it's a person-to-person message with an
-    // .ics rider, not a system notification.
-    html = absolutizeMediaUrls(await withSignature(html, from))
+    // .ics rider, not a system notification. Images stay as URLs: this path
+    // hand-builds a MIME message with no place to put inline attachments.
+    const invSig = await withSignature(html, from, { embedImages: false })
+    html = absolutizeMediaUrls(invSig.html)
     const token = await getAccessToken()
     const boundary = "gomtg" + Math.random().toString(36).slice(2)
     const mime = [
@@ -424,14 +444,20 @@ export async function sendEmailTracked(fromEmail: string, to: string, subject: s
   skippedAttachments?: string[]
 }> {
   try {
-    if (options?.signature !== false) html = await withSignature(html, fromEmail)
+    let signatureAttachments: EmailAttachment[] = []
+    if (options?.signature !== false) {
+      const sig = await withSignature(html, fromEmail)
+      html = sig.html
+      signatureAttachments = sig.inlineAttachments
+    }
     html = absolutizeMediaUrls(html)
     const token = await getAccessToken()
     const base = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(fromEmail)}`
     const ccRecipients = (options?.cc ?? []).map((a) => ({ emailAddress: { address: a } }))
     const bccRecipients = (options?.bcc ?? []).map((a) => ({ emailAddress: { address: a } }))
-    const built = options?.attachments?.length
-      ? await buildGraphAttachments(options.attachments)
+    const allAttachments = [...(options?.attachments ?? []), ...signatureAttachments]
+    const built = allAttachments.length
+      ? await buildGraphAttachments(allAttachments)
       : { inline: [], large: [], failed: [] }
     const attachments = built.inline
     // This path already builds a draft, so large files upload into that draft
@@ -478,13 +504,26 @@ export async function replyToMessage(mailbox: string, graphMessageId: string, ht
   try {
     // Outlook signs replies too, so a thread reads the same whether it was
     // answered from the CRM or from someone's inbox.
-    if (options?.signature !== false) html = await withSignature(html, mailbox)
+    let signatureAttachments: EmailAttachment[] = []
+    if (options?.signature !== false) {
+      const sig = await withSignature(html, mailbox)
+      html = sig.html
+      signatureAttachments = sig.inlineAttachments
+    }
     html = absolutizeMediaUrls(html)
     const token = await getAccessToken()
+    const built = signatureAttachments.length
+      ? await buildGraphAttachments(signatureAttachments)
+      : { inline: [], large: [], failed: [] }
     const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages/${graphMessageId}/reply`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ message: { body: { contentType: "HTML", content: html } } }),
+      body: JSON.stringify({
+        message: {
+          body: { contentType: "HTML", content: html },
+          ...(built.inline.length ? { attachments: built.inline } : {}),
+        },
+      }),
     })
     if (!res.ok && res.status !== 202) return { success: false, error: `Reply failed: ${(await res.text()).slice(0, 200)}` }
     return { success: true }

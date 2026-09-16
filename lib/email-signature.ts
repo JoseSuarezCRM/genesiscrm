@@ -19,6 +19,8 @@
 
 import { prisma } from "@/lib/prisma"
 import { findMailboxByEmail } from "@/lib/shared-mailboxes"
+import { mediaIdFromUrl } from "@/lib/media-url"
+import type { EmailAttachment } from "@/lib/graph-mailer"
 
 export const ORG_SIGNATURE_ID = "org"
 
@@ -94,7 +96,82 @@ export function appendSignature(html: string, signature: string): string {
   )
 }
 
-/** Resolve and attach in one step — what the send paths call. */
-export async function withSignature(html: string, fromEmail: string | null | undefined): Promise<string> {
-  return appendSignature(html, await signatureForSender(fromEmail))
+/**
+ * Resolve, attach, and embed the signature's images — what the send paths call.
+ *
+ * The images become inline `cid:` attachments rather than staying as URLs,
+ * because Outlook blocks remote images by default: a hosted logo shows as a
+ * placeholder until the recipient clicks "Download pictures", which on a
+ * signature they never do. This is the same mechanism Outlook itself uses.
+ *
+ * Only the *signature's* images are embedded. A marketing broadcast's banners
+ * stay remote — embedding those in every copy would bloat the message and cost
+ * deliverability.
+ */
+export async function withSignature(
+  html: string,
+  fromEmail: string | null | undefined,
+  opts: { embedImages?: boolean } = {},
+): Promise<{ html: string; inlineAttachments: EmailAttachment[] }> {
+  const sig = await signatureForSender(fromEmail)
+  if (!sig) return { html, inlineAttachments: [] }
+  // A caller that can't carry attachments (the raw-MIME calendar invite) must
+  // opt out: cid: references with nothing behind them are worse than remote
+  // images, which at least load for recipients who allow them.
+  if (opts.embedImages === false) return { html: appendSignature(html, sig), inlineAttachments: [] }
+  const { html: embedded, inlineAttachments } = await embedSignatureImages(sig)
+  return { html: appendSignature(html, embedded), inlineAttachments }
+}
+
+/**
+ * Swap `/api/media/<id>` image srcs in signature HTML for `cid:` references and
+ * return the bytes to attach alongside.
+ *
+ * An asset whose bytes can't be read keeps its original src — a storage hiccup
+ * degrades to a remote image, which is what happened before this existed, rather
+ * than breaking the send.
+ */
+export async function embedSignatureImages(
+  signatureHtml: string,
+): Promise<{ html: string; inlineAttachments: EmailAttachment[] }> {
+  const ids: string[] = []
+  const re = /src="([^"]*\/api\/media\/[A-Za-z0-9_-]+)"/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(signatureHtml)) !== null) {
+    const id = mediaIdFromUrl(m[1])
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  if (!ids.length) return { html: signatureHtml, inlineAttachments: [] }
+
+  const inlineAttachments: EmailAttachment[] = []
+  const embeddedIds = new Set<string>()
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN
+
+  for (const id of ids) {
+    try {
+      const asset = await prisma.mediaAsset.findUnique({
+        where: { id }, select: { name: true, blobUrl: true, contentType: true },
+      })
+      if (!asset) continue
+      const res = await fetch(asset.blobUrl, blobToken ? { headers: { Authorization: `Bearer ${blobToken}` } } : undefined)
+      if (!res.ok) continue
+      const bytes = Buffer.from(await res.arrayBuffer())
+      inlineAttachments.push({
+        name: asset.name || `${id}.png`,
+        contentType: asset.contentType || "image/png",
+        contentBase64: bytes.toString("base64"),
+        isInline: true,
+        contentId: `media-${id}`,
+      })
+      embeddedIds.add(id)
+    } catch {
+      // Leave this one as a URL.
+    }
+  }
+
+  const html = signatureHtml.replace(
+    /src="([^"]*\/api\/media\/([A-Za-z0-9_-]+))"/g,
+    (whole, _url, id) => (embeddedIds.has(id) ? `src="cid:media-${id}"` : whole),
+  )
+  return { html, inlineAttachments }
 }
