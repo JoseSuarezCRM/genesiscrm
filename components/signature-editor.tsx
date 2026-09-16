@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Image as ImageIcon, Loader2, Check, Code2, Type, AlertTriangle, Upload, Download } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { MediaPicker } from "@/components/media-picker"
-import { sanitizeSignatureHtml } from "@/lib/sanitize-signature"
+import DOMPurify from "isomorphic-dompurify"
 import { importSignatureImages } from "@/app/actions/signature-images"
 import { cn } from "@/lib/utils"
 
@@ -94,6 +94,15 @@ export default function SignatureEditor({
       .filter((i) => !MEDIA_SRC.test(i.src) && !i.src.startsWith("data:") && !/^https?:\/\//i.test(i.src))
       .map((i) => ({ src: i.src, label: labelFor(i.src, i.alt) }))),
     [images],
+  )
+
+  // Client-side DOMPurify: in the browser this resolves to plain dompurify and
+  // runs against the real DOM, so none of jsdom comes along. The server has its
+  // own dependency-free pass in lib/sanitize-signature.ts — that one is what
+  // actually gates what gets stored.
+  const previewHtml = useMemo(
+    () => DOMPurify.sanitize(value, { ADD_ATTR: ["target"], ADD_TAGS: ["style"], FORCE_BODY: true }) as unknown as string,
+    [value],
   )
 
   const replaceSrc = (from: string, to: string) => {
@@ -313,7 +322,7 @@ export default function SignatureEditor({
                 marginTop: 18, paddingTop: 12, borderTop: "1px solid #e2e8f0",
                 fontFamily: "Arial, Helvetica, sans-serif", fontSize: 13, lineHeight: 1.5, color: "#334155",
               }}
-              dangerouslySetInnerHTML={{ __html: sanitizeSignatureHtml(value) }}
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
             />
           </div>
         </div>

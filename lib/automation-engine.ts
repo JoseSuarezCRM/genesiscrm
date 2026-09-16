@@ -240,12 +240,30 @@ function stepLabel(type: string, cfg: Record<string, unknown>): string {
   return base
 }
 
+/**
+ * What the run history calls the enrolled record.
+ *
+ * `record_name` comes first because it's the only one that's right for every
+ * object: runRecordTrigger resolves it through the shared recordLabel(), which
+ * knows a referral is patientFirstName + patientLastName and a custom object is
+ * its primary property. `patient_name` is set by the referral-specific triggers
+ * instead, so the two never collide.
+ *
+ * The first/last fallback is here because a Referral has no `patientName`
+ * column — without it a referral with neither var set lands on "record", which
+ * is what the whole history used to say.
+ */
 function recordLabelFor(record: Record<string, unknown> | null, vars: TemplateVars): string {
-  return (vars.patient_name as string)
-    ?? (record?.patientName as string)
-    ?? (record?.name as string)
-    ?? (record?.email as string)
-    ?? "record"
+  const first = record?.patientFirstName as string | undefined
+  const last = record?.patientLastName as string | undefined
+  const fullName = [first, last].filter(Boolean).join(" ").trim()
+  return (vars.record_name as string)
+    || (vars.patient_name as string)
+    || (record?.patientName as string)
+    || (record?.name as string)
+    || fullName
+    || (record?.email as string)
+    || "record"
 }
 
 // Top-level executor: graph (visual flow) → flow (if/else) → single action.
