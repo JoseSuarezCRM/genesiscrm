@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Loader2, Plus, Send, Trash2, ChevronDown, ChevronRight } from "lucide-react"
-import SignatureEditor from "@/components/signature-editor"
+import { Loader2, Plus, Send, Trash2, PenLine } from "lucide-react"
+import SignatureEditorModal from "@/components/signature-editor-modal"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { showToast, showErrorToast } from "@/components/toast"
 import { saveOrgSignature, type SignatureState } from "@/app/actions/email-signatures"
@@ -36,18 +36,17 @@ export default function EmailSettingsManager({
 
 function OrgSignatureCard({ initial }: { initial: SignatureState }) {
   const [html, setHtml] = useState(initial.html)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [editing, setEditing] = useState(false)
 
-  const save = async () => {
-    setSaving(true); setSaved(false)
+  const save = async (next: string): Promise<boolean> => {
     try {
-      await saveOrgSignature({ html, enabled: true })
-      setSaved(true); setTimeout(() => setSaved(false), 2500)
+      await saveOrgSignature({ html: next, enabled: true })
+      setHtml(next)
+      showToast("Organization signature saved.")
+      return true
     } catch {
       showErrorToast("Couldn't save the signature.")
-    } finally {
-      setSaving(false)
+      return false
     }
   }
 
@@ -61,9 +60,27 @@ function OrgSignatureCard({ initial }: { initial: SignatureState }) {
           way to read them.
         </p>
       </div>
-      <div className="p-5">
-        <SignatureEditor value={html} onChange={(v) => { setHtml(v); setSaved(false) }} onSave={save} saving={saving} saved={saved} />
+      <div className="flex items-center gap-3 p-5">
+        <button
+          onClick={() => setEditing(true)}
+          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:border-slate-300"
+        >
+          <PenLine className="h-3.5 w-3.5" />
+          {html.trim() ? "Edit signature" : "Create signature"}
+        </button>
+        <span className="text-xs text-slate-400">
+          {html.trim() ? "Set — opens in a full window" : "Not set yet"}
+        </span>
       </div>
+
+      <SignatureEditorModal
+        open={editing}
+        onClose={() => setEditing(false)}
+        title="Organization signature"
+        subtitle="Used whenever a sender has no signature of their own, including automated mail."
+        initialHtml={html}
+        onSave={save}
+      />
     </section>
   )
 }
@@ -142,21 +159,17 @@ function MailboxesCard({ rows }: { rows: MailboxRow[] }) {
 }
 
 function MailboxRowView({ row }: { row: MailboxRow }) {
-  const [open, setOpen] = useState(false)
-  const [html, setHtml] = useState(row.signatureHtml ?? "")
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [pending, start] = useTransition()
 
-  const save = async () => {
-    setSaving(true); setSaved(false)
+  const saveSignature = async (html: string): Promise<boolean> => {
     try {
       await updateSharedMailbox(row.id, { signatureHtml: html })
-      setSaved(true); setTimeout(() => setSaved(false), 2500)
+      showToast(`Signature saved for ${row.email}.`)
+      return true
     } catch {
       showErrorToast("Couldn't save the signature.")
-    } finally {
-      setSaving(false)
+      return false
     }
   }
 
@@ -182,51 +195,54 @@ function MailboxRowView({ row }: { row: MailboxRow }) {
     })
   }
 
+  const hasOwn = !!row.signatureHtml?.trim()
+
   return (
-    <div>
-      <div className="px-5 py-3 flex items-center gap-3">
-        <button onClick={() => setOpen((o) => !o)} className="text-slate-400 hover:text-slate-600">
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-slate-900 truncate">{row.email}</div>
-          <div className="text-xs text-slate-400">
-            {row.label}
-            {row.signatureHtml?.trim() ? " · has its own signature" : " · uses the organization signature"}
-          </div>
+    <div className="px-5 py-3 flex items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-slate-900 truncate">{row.email}</div>
+        <div className="text-xs text-slate-400">
+          {row.label}
+          {hasOwn ? " · has its own signature" : " · uses the organization signature"}
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">
-          <input
-            type="checkbox" checked={row.enabled} className="h-3.5 w-3.5 rounded border-slate-300"
-            onChange={(e) => start(async () => { await updateSharedMailbox(row.id, { enabled: e.target.checked }) })}
-          />
-          Available
-        </label>
-        <button
-          onClick={test} disabled={pending} title="Send a test to yourself"
-          className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 disabled:opacity-50"
-        >
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={() => void remove()} disabled={pending} title="Remove"
-          className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 disabled:opacity-50"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
       </div>
 
-      {open && (
-        <div className="px-5 pb-5 pl-12">
-          <p className="text-xs text-slate-400 mb-2">
-            Leave blank to use the organization signature.
-          </p>
-          <SignatureEditor
-            value={html} onChange={(v) => { setHtml(v); setSaved(false) }}
-            onSave={save} saving={saving} saved={saved} minHeight={120}
-          />
-        </div>
-      )}
+      <button
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300"
+      >
+        <PenLine className="h-3 w-3" />
+        {hasOwn ? "Edit signature" : "Add signature"}
+      </button>
+
+      <label className="flex items-center gap-1.5 text-xs text-slate-500">
+        <input
+          type="checkbox" checked={row.enabled} className="h-3.5 w-3.5 rounded border-slate-300"
+          onChange={(e) => start(async () => { await updateSharedMailbox(row.id, { enabled: e.target.checked }) })}
+        />
+        Available
+      </label>
+      <button
+        onClick={test} disabled={pending} title="Send a test to yourself"
+        className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 disabled:opacity-50"
+      >
+        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+      </button>
+      <button
+        onClick={() => void remove()} disabled={pending} title="Remove"
+        className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 disabled:opacity-50"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+
+      <SignatureEditorModal
+        open={editing}
+        onClose={() => setEditing(false)}
+        title={row.email}
+        subtitle="Leave blank to use the organization signature."
+        initialHtml={row.signatureHtml ?? ""}
+        onSave={saveSignature}
+      />
     </div>
   )
 }

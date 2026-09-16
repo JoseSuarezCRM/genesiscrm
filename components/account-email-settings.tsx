@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Mail, Loader2, Check, Send } from "lucide-react"
+import { Mail, Loader2, Check, Send, PenLine } from "lucide-react"
 import { sendMyTestEmail } from "@/app/actions/account"
 import { getMySignature, saveMySignature } from "@/app/actions/email-signatures"
-import SignatureEditor from "@/components/signature-editor"
+import SignatureEditorModal from "@/components/signature-editor-modal"
+import { showErrorToast } from "@/components/toast"
 
 export default function AccountEmailSettings({ email }: { email: string }) {
   const [testing, setTesting] = useState(false)
@@ -70,8 +71,7 @@ function MySignature() {
   const [html, setHtml] = useState("")
   const [useOrg, setUseOrg] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     getMySignature()
@@ -80,14 +80,14 @@ function MySignature() {
       .finally(() => setLoading(false))
   }, [])
 
-  const persist = async (nextHtml: string, nextUseOrg: boolean) => {
-    setSaving(true); setSaved(false)
+  const persist = async (nextHtml: string, nextUseOrg: boolean): Promise<boolean> => {
     try {
       await saveMySignature({ html: nextHtml, enabled: !nextUseOrg })
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    } finally {
-      setSaving(false)
+      setHtml(nextHtml)
+      return true
+    } catch {
+      showErrorToast("Couldn't save your signature.")
+      return false
     }
   }
 
@@ -120,14 +120,28 @@ function MySignature() {
       </label>
 
       {!useOrg && (
-        <SignatureEditor
-          value={html}
-          onChange={(v) => { setHtml(v); setSaved(false) }}
-          onSave={() => void persist(html, useOrg)}
-          saving={saving}
-          saved={saved}
-        />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:border-slate-300"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            {html.trim() ? "Edit signature" : "Create signature"}
+          </button>
+          <span className="text-xs text-slate-400">
+            {html.trim() ? "Set — opens in a full window" : "Not set yet"}
+          </span>
+        </div>
       )}
+
+      <SignatureEditorModal
+        open={editing}
+        onClose={() => setEditing(false)}
+        title="Your email signature"
+        subtitle="Added to the bottom of email you send from the CRM."
+        initialHtml={html}
+        onSave={(next) => persist(next, useOrg)}
+      />
     </div>
   )
 }

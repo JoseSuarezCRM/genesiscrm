@@ -59,6 +59,7 @@ export default function SignatureEditor({
   saving,
   saved,
   minHeight = 160,
+  hideSaveButton = false,
 }: {
   value: string
   onChange: (html: string) => void
@@ -66,6 +67,8 @@ export default function SignatureEditor({
   saving?: boolean
   saved?: boolean
   minHeight?: number
+  /** The modal puts Save in its footer, so the inline one would be a duplicate. */
+  hideSaveButton?: boolean
 }) {
   const [mode, setMode] = useState<"design" | "html">("design")
   const [picking, setPicking] = useState(false)
@@ -318,15 +321,17 @@ export default function SignatureEditor({
           <ImageIcon className="h-3.5 w-3.5" />
           Add image
         </button>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-slate-900 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : null}
-          {saving ? "Saving…" : saved ? "Saved" : "Save signature"}
-        </button>
+        {!hideSaveButton && (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-slate-900 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5" /> : null}
+            {saving ? "Saving…" : saved ? "Saved" : "Save signature"}
+          </button>
+        )}
       </div>
 
       {value.trim() && (
