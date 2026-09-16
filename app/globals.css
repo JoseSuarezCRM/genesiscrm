@@ -59,3 +59,33 @@
 .react-grid-placeholder {
   border-radius: 0.75rem !important;
 }
+
+/* Editing surfaces that hold EMAIL html (a pasted signature, say) need Tailwind's
+   preflight undone within them. Email markup is table-based and assumes the
+   browser defaults a mail client gives it:
+
+   - border-box eats a cell's padding out of its declared width, so a 130px name
+     cell with 48px of padding leaves 82px and the text wraps
+   - img{display:block} stacks inline logos vertically instead of in a row
+   - border-collapse:collapse overrides what the signature asks for
+
+   The preview is an iframe and needs none of this; this is only so the Design
+   tab isn't visibly wrong while you type. */
+.email-html .rte-content,
+.email-html .rte-content * {
+  box-sizing: content-box;
+}
+.email-html .rte-content img {
+  display: inline-block;
+  max-width: none;
+  vertical-align: baseline;
+}
+.email-html .rte-content table {
+  border-collapse: separate;
+}
+/* The editable area's own link/list styling is for typed prose; an email
+   signature brings its own and shouldn't be overridden. */
+.email-html .rte-content a {
+  color: inherit;
+  text-decoration: inherit;
+}

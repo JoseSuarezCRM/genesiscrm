@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Image as ImageIcon, Loader2, Check, Code2, Type, AlertTriangle, Upload, Download } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { MediaPicker } from "@/components/media-picker"
+import EmailHtmlPreview from "@/components/email-html-preview"
 import { sanitizeSignatureHtml } from "@/lib/sanitize-signature"
 import { importSignatureImages } from "@/app/actions/signature-images"
 import { cn } from "@/lib/utils"
@@ -102,6 +103,18 @@ export default function SignatureEditor({
   // require()s jsdom at module scope — and jsdom's dependencies are ESM-only, so
   // on a Node that can't require() an ES module the whole route 500s.
   const previewHtml = useMemo(() => sanitizeSignatureHtml(value), [value])
+
+  // A <style> tag inside a contenteditable is still parsed by the browser and
+  // applied to the whole document — so previewing a signature that says
+  // `a{text-decoration:none}` would restyle every link in the CRM. Keep the
+  // blocks out of the editor and re-attach them on the way back out, so the
+  // author's CSS survives without ever going live in the page.
+  const styleBlocks = useMemo(() => value.match(/<style[^>]*>[\s\S]*?<\/style>/gi) ?? [], [value])
+  const bodyOnly = useMemo(
+    () => value.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ""),
+    [value],
+  )
+  const onDesignChange = (next: string) => onChange(styleBlocks.join("") + next)
 
   const replaceSrc = (from: string, to: string) => {
     // Escape the old src: it may contain regex metacharacters.
@@ -206,7 +219,13 @@ export default function SignatureEditor({
           into the DOM on mount, so the remount is what re-seeds it after an edit
           made in HTML mode. */}
       {mode === "design" ? (
-        <RichTextEditor value={value} onChange={onChange} minHeight={minHeight} placeholder="Your name, title, phone…" />
+        <RichTextEditor
+          value={bodyOnly}
+          onChange={onDesignChange}
+          minHeight={minHeight}
+          placeholder="Your name, title, phone…"
+          className="email-html"
+        />
       ) : (
         <textarea
           value={value}
@@ -315,13 +334,9 @@ export default function SignatureEditor({
           <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1.5">Preview</div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 overflow-x-auto">
             <div className="text-sm text-slate-400 italic mb-3">…your message ends here.</div>
-            <div
-              style={{
-                marginTop: 18, paddingTop: 12, borderTop: "1px solid #e2e8f0",
-                fontFamily: "Arial, Helvetica, sans-serif", fontSize: 13, lineHeight: 1.5, color: "#334155",
-              }}
-              dangerouslySetInnerHTML={{ __html: previewHtml }}
-            />
+            <div style={{ marginTop: 18, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
+              <EmailHtmlPreview html={previewHtml} />
+            </div>
           </div>
         </div>
       )}
