@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import DOMPurify from "isomorphic-dompurify"
-import { Image as ImageIcon, Loader2, Check, Code2, Type, AlertTriangle, Upload } from "lucide-react"
+import { Image as ImageIcon, Loader2, Check, Code2, Type, AlertTriangle, Upload, Download } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { MediaPicker } from "@/components/media-picker"
+import { sanitizeSignatureHtml } from "@/lib/sanitize-signature"
+import { importSignatureImages } from "@/app/actions/signature-images"
 import { cn } from "@/lib/utils"
 
 // The signature authoring control, shared by Settings → My Account (personal),
@@ -50,11 +51,6 @@ function labelFor(src: string, alt: string): string {
   return (tail.split("?")[0] || src).slice(0, 60)
 }
 
-/** Strip anything executable. Inline styles and tables survive — email needs them. */
-function sanitizeSignature(html: string): string {
-  return DOMPurify.sanitize(html, { ADD_ATTR: ["target"] })
-}
-
 export default function SignatureEditor({
   value,
   onChange,
@@ -74,16 +70,29 @@ export default function SignatureEditor({
   const [picking, setPicking] = useState(false)
   const [fixing, setFixing] = useState<string | null>(null)
   const [autoFixing, setAutoFixing] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const images = useMemo(() => findImages(value), [value])
-  const broken: BrokenImage[] = useMemo(
-    () =>
-      images
-        .filter((i) => !MEDIA_SRC.test(i.src) && !i.src.startsWith("data:"))
-        .map((i) => ({ src: i.src, label: labelFor(i.src, i.alt) }))
-        // One row per distinct src — the same logo twice is one upload.
-        .filter((b, idx, arr) => arr.findIndex((x) => x.src === b.src) === idx),
+  const dedupe = (list: BrokenImage[]) =>
+    // One row per distinct src — the same logo twice is one fix.
+    list.filter((b, idx, arr) => arr.findIndex((x) => x.src === b.src) === idx)
+
+  // Hosted elsewhere but publicly reachable: the server can fetch these, so they
+  // only need importing, not re-uploading.
+  const remote: BrokenImage[] = useMemo(
+    () => dedupe(images
+      .filter((i) => /^https?:\/\//i.test(i.src) && !MEDIA_SRC.test(i.src))
+      .map((i) => ({ src: i.src, label: labelFor(i.src, i.alt) }))),
+    [images],
+  )
+  // cid:, file: or a bare path — nothing can fetch these, so the file is the
+  // only way in.
+  const unfetchable: BrokenImage[] = useMemo(
+    () => dedupe(images
+      .filter((i) => !MEDIA_SRC.test(i.src) && !i.src.startsWith("data:") && !/^https?:\/\//i.test(i.src))
+      .map((i) => ({ src: i.src, label: labelFor(i.src, i.alt) }))),
     [images],
   )
 
@@ -132,6 +141,23 @@ export default function SignatureEditor({
   const insertImage = (url: string) => {
     setPicking(false)
     onChange(`${value}<p><img src="${url}" alt="" style="max-width:320px;height:auto;border:0;" /></p>`)
+  }
+
+  const runImport = async () => {
+    setImporting(true); setImportMsg(null)
+    try {
+      const res = await importSignatureImages(value)
+      if (res.html !== value) onChange(res.html)
+      setImportMsg(
+        res.failed.length
+          ? `Imported ${res.imported}. Couldn't fetch ${res.failed.length}: ${res.failed.map((f) => f.reason).join(", ")}`
+          : `Imported ${res.imported} image${res.imported === 1 ? "" : "s"}.`,
+      )
+    } catch {
+      setImportMsg("Import failed.")
+    } finally {
+      setImporting(false)
+    }
   }
 
   const onPickFile = async (src: string, file: File | undefined) => {
@@ -185,13 +211,46 @@ export default function SignatureEditor({
         />
       )}
 
-      {broken.length > 0 && (
+      {remote.length > 0 && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Download className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+            <div className="text-xs text-blue-900">
+              <p className="font-semibold">
+                {remote.length} image{remote.length === 1 ? "" : "s"} hosted elsewhere
+              </p>
+              <p className="mt-0.5 text-blue-800">
+                These load today, but only for recipients who allow remote images — and Outlook blocks
+                them by default. Import them and they travel inside the message instead, so they always
+                show.
+              </p>
+              <p className="mt-1 truncate text-blue-700" title={remote.map((r) => r.src).join(", ")}>
+                {remote.map((r) => r.label).join(" · ")}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pl-6">
+            <button
+              type="button"
+              onClick={() => void runImport()}
+              disabled={importing}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-blue-300 bg-white text-xs font-medium text-blue-900 hover:border-blue-400 disabled:opacity-50"
+            >
+              {importing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+              {importing ? "Importing…" : "Import images"}
+            </button>
+            {importMsg && <span className="text-xs text-blue-700">{importMsg}</span>}
+          </div>
+        </div>
+      )}
+
+      {unfetchable.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2.5">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
             <div className="text-xs text-amber-900">
               <p className="font-semibold">
-                {broken.length} image{broken.length === 1 ? "" : "s"} can&apos;t be loaded
+                {unfetchable.length} image{unfetchable.length === 1 ? "" : "s"} can&apos;t be loaded
               </p>
               <p className="mt-0.5 text-amber-800">
                 Outlook keeps signature images in a separate folder and attaches them to each message, so
@@ -200,7 +259,7 @@ export default function SignatureEditor({
               </p>
             </div>
           </div>
-          {broken.map((b) => (
+          {unfetchable.map((b) => (
             <div key={b.src} className="flex items-center gap-2 pl-6">
               <span className="flex-1 truncate text-xs text-amber-900" title={b.src}>{b.label}</span>
               <input
@@ -254,7 +313,7 @@ export default function SignatureEditor({
                 marginTop: 18, paddingTop: 12, borderTop: "1px solid #e2e8f0",
                 fontFamily: "Arial, Helvetica, sans-serif", fontSize: 13, lineHeight: 1.5, color: "#334155",
               }}
-              dangerouslySetInnerHTML={{ __html: sanitizeSignature(value) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeSignatureHtml(value) }}
             />
           </div>
         </div>
@@ -264,5 +323,3 @@ export default function SignatureEditor({
     </div>
   )
 }
-
-export { sanitizeSignature }
