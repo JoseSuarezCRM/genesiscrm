@@ -210,7 +210,10 @@ async function fetchReferralForEngine(referralId: string) {
 
 // ─── Action executor ──────────────────────────────────────────────────────────
 
-export interface RunStep { label: string; status: "ok" | "failed"; error?: string }
+// `note` carries something worth saying about a step that still succeeded —
+// e.g. which attachments were too large to send. An `error` fails the step; a
+// note does not.
+export interface RunStep { label: string; status: "ok" | "failed"; error?: string; note?: string }
 export interface RunLog { recordLabel: string; steps: RunStep[]; ok: boolean }
 
 const ACTION_STEP_LABELS: Record<string, string> = {
@@ -269,7 +272,12 @@ async function executeAction(
   const steps: RunStep[] = []
   const run = async (type: AutomationAction, cfg: Record<string, unknown>) => {
     const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record, recordRef, depth)
-    steps.push({ label: stepLabel(type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
+    const error = typeof issue === "string" ? issue : undefined
+    const note = issue && typeof issue === "object" ? issue.note : undefined
+    steps.push({
+      label: stepLabel(type, cfg), status: error ? "failed" : "ok",
+      ...(error ? { error } : {}), ...(note ? { note } : {}),
+    })
   }
 
   const graph = automation.graph as AutomationGraph | null | undefined
@@ -385,7 +393,12 @@ export async function runDueWorkflowResumes() {
       const cfg = (a.config ?? {}) as Record<string, unknown>
       const ref = r.recordType && r.recordId ? { type: r.recordType, id: r.recordId } : null
       const issue = await runSingleAction(a.type as AutomationAction, cfg, r.referralId, vars, undefined, record, ref)
-      steps.push({ label: stepLabel(a.type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
+      const error = typeof issue === "string" ? issue : undefined
+      const note = issue && typeof issue === "object" ? issue.note : undefined
+      steps.push({
+        label: stepLabel(a.type, cfg), status: error ? "failed" : "ok",
+        ...(error ? { error } : {}), ...(note ? { note } : {}),
+      })
     }
 
     if (resumeAt && resumeNodeId) {
@@ -472,7 +485,7 @@ async function runSingleAction(
   record?: Record<string, unknown> | null,
   recordRef?: RecordRef | null,
   depth = 0,
-): Promise<string | null> {
+): Promise<string | { note: string } | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
   // Resolve every native + custom token for the triggering record via the shared
   // per-object resolver, so {patient_name}, {surgery_date}, custom internal names,
@@ -655,6 +668,23 @@ async function runSingleAction(
       }
     }
 
+    // The record's own documents (scans, forms, letters), if the step asks for
+    // them. Appended after the generated PDFs so the exclusion list sees those
+    // names: a generated PDF is saved back onto the record, so on a later run it
+    // is also a record document and would otherwise attach twice.
+    let attachedDocCount = 0
+    if (cfg.attachRecordDocuments && docRef) {
+      const { recordDocumentsFor } = await import("@/lib/record-documents")
+      const docs = await recordDocumentsFor(docRef.type, docRef.id, {
+        nameContains: (cfg.recordDocumentsFilter as string) || null,
+        excludeNames: emailAttachments.map((a: any) => a.name).filter(Boolean),
+      })
+      for (const d of docs) {
+        emailAttachments.push({ name: d.name, contentType: d.contentType, url: d.url })
+      }
+      attachedDocCount = docs.length
+    }
+
     const from = await resolveWorkflowSender(cfg.sender, record, referralId)
     const result = await sendEmail(toEmails, subject, html, {
       cc: ccEmails, bcc: bccEmails,
@@ -664,6 +694,11 @@ async function runSingleAction(
     if (!result.success) {
       return `Email failed to ${toEmails.join(", ")} from ${from.fromEmail ?? from.senderKey}: ${result.error ?? "unknown error"}`
     }
+    // A document that didn't send must never be invisible — name it in the run log.
+    const attachNote = [
+      attachedDocCount ? `${attachedDocCount} record document${attachedDocCount === 1 ? "" : "s"} attached` : "",
+      result.skippedAttachments?.length ? `NOT attached (too large or unreadable): ${result.skippedAttachments.join(", ")}` : "",
+    ].filter(Boolean).join("; ")
 
     // Track the send on the enrolled record's timeline (mirrors sendEmailFromRecord).
     const emailRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
@@ -685,6 +720,8 @@ async function runSingleAction(
         })
       } catch { /* logging must never fail the send */ }
     }
+
+    if (attachNote) return { note: attachNote }
   }
 
   if ((automation.actionType as string) === "SEND_MEETING_INVITE") {

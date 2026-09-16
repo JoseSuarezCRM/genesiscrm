@@ -6,7 +6,7 @@ import { ChevronLeft, RefreshCw, CheckCircle2, AlertCircle, ChevronRight, Flag }
 import { getAutomationRuns } from "@/app/actions/automations"
 import { cn } from "@/lib/utils"
 
-interface Step { label: string; status: "ok" | "failed"; error?: string }
+interface Step { label: string; status: "ok" | "failed"; error?: string; note?: string }
 interface RunMeta { recordLabel?: string; recordType?: string; steps?: Step[] }
 interface Run {
   id: string
@@ -114,6 +114,7 @@ export default function WorkflowLogsClient({
                             <div className="min-w-0">
                               <span className="text-sm text-slate-700">{s.label}</span>
                               {s.error && <p className="text-xs text-red-600 break-words">{s.error}</p>}
+                              {s.note && <p className="text-xs text-amber-600 break-words">{s.note}</p>}
                             </div>
                           </li>
                         ))}

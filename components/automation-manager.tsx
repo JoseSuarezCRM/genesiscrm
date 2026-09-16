@@ -1596,6 +1596,41 @@ function ActionConfigFields({
             />
           </div>
         )}
+
+        {/* The files already on the enrolled record — whatever they are at run time. */}
+        <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!config.attachRecordDocuments}
+              onChange={e => set("attachRecordDocuments", e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300"
+            />
+            <span>
+              <span className="text-sm font-medium text-slate-700">Attach the record&apos;s documents</span>
+              <span className="block text-xs text-slate-400">
+                Every file on the enrolled record when the workflow runs — scans, forms, letters.
+              </span>
+            </span>
+          </label>
+          {!!config.attachRecordDocuments && (
+            <div className="pl-6">
+              <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                Only files whose name contains <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={(config.recordDocumentsFilter as string) ?? ""}
+                onChange={e => set("recordDocumentsFilter", e.target.value)}
+                placeholder="e.g. LOP — leave blank for all files"
+                className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-sm"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Files over ~3 MB are sent separately; any that can&apos;t be sent are named in the run log.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     )
   }

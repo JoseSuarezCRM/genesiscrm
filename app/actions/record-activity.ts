@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
 import { stageMeta } from "@/lib/task-meta"
-import { userCan } from "@/lib/permissions"
+import { userCan, userCanLevel } from "@/lib/permissions"
 import { sendEmail, sendEmailTracked, replyToMessage, sendCalendarInvite, type EmailAttachment } from "@/lib/graph-mailer"
 import { buildIcs } from "@/lib/ics"
 import { sendSMS } from "@/lib/twilio"
@@ -320,6 +320,21 @@ export async function getRecordContact(recordType: string, recordId: string) {
   const session = await auth()
   if (!session?.user) return { emails: [], phones: [] }
   return contactInfoFor(recordType, recordId)
+}
+
+/**
+ * The record's own documents, as attachment refs the composer can show and let
+ * the sender remove individually — better than attaching them invisibly.
+ *
+ * The blobUrl goes to the client here. That's the same exposure the composer
+ * already has for uploaded attachments, and it's not a usable link on its own:
+ * the private Blob store only serves bytes to a request carrying the token.
+ */
+export async function getRecordDocumentsForEmail(recordType: string, recordId: string) {
+  const session = await auth()
+  if (!session?.user || !userCanLevel(session.user as any, permKeyFor(recordType), "VIEW")) return []
+  const { recordDocumentsFor } = await import("@/lib/record-documents")
+  return recordDocumentsFor(recordType, recordId)
 }
 
 // Email sent straight from the record — always from the current user's own address.
