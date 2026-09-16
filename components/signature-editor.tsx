@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Image as ImageIcon, Loader2, Check, Code2, Type, AlertTriangle, Upload, Download } from "lucide-react"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { MediaPicker } from "@/components/media-picker"
-import DOMPurify from "isomorphic-dompurify"
+import { sanitizeSignatureHtml } from "@/lib/sanitize-signature"
 import { importSignatureImages } from "@/app/actions/signature-images"
 import { cn } from "@/lib/utils"
 
@@ -96,14 +96,12 @@ export default function SignatureEditor({
     [images],
   )
 
-  // Client-side DOMPurify: in the browser this resolves to plain dompurify and
-  // runs against the real DOM, so none of jsdom comes along. The server has its
-  // own dependency-free pass in lib/sanitize-signature.ts — that one is what
-  // actually gates what gets stored.
-  const previewHtml = useMemo(
-    () => DOMPurify.sanitize(value, { ADD_ATTR: ["target"], ADD_TAGS: ["style"], FORCE_BODY: true }) as unknown as string,
-    [value],
-  )
+  // The same sanitiser the server applies on save, so the preview shows exactly
+  // what gets stored. It's deliberately NOT isomorphic-dompurify: Next renders
+  // client components on the server using that package's node build, which
+  // require()s jsdom at module scope — and jsdom's dependencies are ESM-only, so
+  // on a Node that can't require() an ES module the whole route 500s.
+  const previewHtml = useMemo(() => sanitizeSignatureHtml(value), [value])
 
   const replaceSrc = (from: string, to: string) => {
     // Escape the old src: it may contain regex metacharacters.

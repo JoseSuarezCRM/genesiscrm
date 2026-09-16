@@ -1,7 +1,6 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import DOMPurify from "isomorphic-dompurify"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { sendEmail } from "@/lib/graph-mailer"
@@ -9,6 +8,7 @@ import {
   listSharedMailboxes, invalidateMailboxCache, ensureSeeded,
 } from "@/lib/shared-mailboxes"
 import { invalidateSignatureCache } from "@/lib/email-signature"
+import { sanitizeSignatureHtml } from "@/lib/sanitize-signature"
 
 async function requireAdmin() {
   const session = await auth()
@@ -64,7 +64,7 @@ export async function updateSharedMailbox(
   // Same rule as the org/personal signatures: raw HTML in, nothing executable stored.
   const signatureHtml = data.signatureHtml == null
     ? data.signatureHtml
-    : DOMPurify.sanitize(data.signatureHtml, { ADD_ATTR: ["target"] })
+    : sanitizeSignatureHtml(data.signatureHtml)
   await (prisma as any).sharedMailbox.update({
     where: { id },
     data: { ...data, ...(data.signatureHtml !== undefined ? { signatureHtml } : {}), updatedById: (session.user as any).id ?? null },

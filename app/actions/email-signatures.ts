@@ -1,10 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import DOMPurify from "isomorphic-dompurify"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { ORG_SIGNATURE_ID, invalidateSignatureCache } from "@/lib/email-signature"
+import { sanitizeSignatureHtml } from "@/lib/sanitize-signature"
 
 // Signatures are authored in two places: an admin sets the organization default
 // (and each shared mailbox's own), and each person can override theirs in My
@@ -34,21 +34,11 @@ async function read(id: string): Promise<SignatureState> {
   return { html: row?.html ?? "", enabled: row?.enabled ?? true }
 }
 
-/**
- * Strip anything executable before storing. Signatures accept raw HTML — pasted
- * straight from Outlook — and the stored value is rendered back into the app's
- * preview as well as into outgoing mail, so this runs on the server where it
- * can't be skipped. Inline styles and tables survive; email depends on them.
- *
- * On save, deliberately not on send: `cid:` srcs are generated at send time and
- * DOMPurify would drop them.
- */
-function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html ?? "", { ADD_ATTR: ["target"] })
-}
-
 async function write(id: string, state: SignatureState, userId: string | null) {
-  const html = sanitizeHtml(state.html)
+  // Sanitised on save, where it can't be skipped by calling the action
+  // directly — and on save rather than on send, because cid: srcs are
+  // generated afterwards and would be stripped.
+  const html = sanitizeSignatureHtml(state.html)
   await (prisma as any).emailSignature.upsert({
     where: { id },
     create: { id, html, enabled: state.enabled, updatedById: userId },
