@@ -1,9 +1,14 @@
 // The files a record holds, in a shape the mailer can attach.
 //
-// Two stores, for historical reasons: referrals keep theirs in `Document`
-// (referralId FK, behind DocumentList), everything else uses `RecordAttachment`
-// (recordType + recordId, behind the Attachments card). A caller shouldn't have
-// to know which, so this reads whichever applies.
+// THREE stores, for historical reasons, and missing one is silent — the record
+// simply appears to have no documents:
+//
+//   REFERRAL  →  Document         (referralId)   behind DocumentList
+//   SURGERY   →  SurgeryDocument  (caseId)       behind the case's Documents card
+//   anything  →  RecordAttachment (recordType+recordId) behind the Attachments card
+//
+// A caller shouldn't have to know which, so this reads whichever applies. If a
+// new object ever gets its own table, it belongs here too.
 //
 // Both hold **private** Blob URLs, and buildGraphAttachments already fetches
 // those with the Blob token — so the raw blobUrl is what gets returned here, not
@@ -50,6 +55,18 @@ export async function recordDocumentsFor(
     if (recordType === "REFERRAL") {
       const rows = await prisma.document.findMany({
         where: { referralId: recordId },
+        orderBy: { createdAt: "desc" },
+        select: { fileName: true, fileUrl: true, contentType: true, fileSize: true },
+      })
+      docs = rows.map((r) => ({
+        name: r.fileName,
+        url: r.fileUrl,
+        contentType: r.contentType || "application/octet-stream",
+        size: r.fileSize ?? 0,
+      }))
+    } else if (recordType === "SURGERY") {
+      const rows = await prisma.surgeryDocument.findMany({
+        where: { caseId: recordId },
         orderBy: { createdAt: "desc" },
         select: { fileName: true, fileUrl: true, contentType: true, fileSize: true },
       })

@@ -43,6 +43,11 @@ function findImages(html: string): { src: string; alt: string }[] {
   return out
 }
 
+/** An image src is substituted by regex, and a URL is full of metacharacters. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 /** A readable name for an image we can't load — its alt, or the tail of its src. */
 function labelFor(src: string, alt: string): string {
   if (alt.trim()) return alt.trim()
@@ -77,6 +82,9 @@ export default function SignatureEditor({
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const allFilesRef = useRef<HTMLInputElement>(null)
+  const [fixingAll, setFixingAll] = useState(false)
+  const [fixProgress, setFixProgress] = useState("")
 
   const images = useMemo(() => findImages(value), [value])
   const dedupe = (list: BrokenImage[]) =>
@@ -119,11 +127,8 @@ export default function SignatureEditor({
   )
   const onDesignChange = (next: string) => onChange(styleBlocks.join("") + next)
 
-  const replaceSrc = (from: string, to: string) => {
-    // Escape the old src: it may contain regex metacharacters.
-    const esc = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    onChange(value.replace(new RegExp(esc, "g"), to))
-  }
+  const replaceSrc = (from: string, to: string) =>
+    onChange(value.replace(new RegExp(escapeRegex(from), "g"), to))
 
   const upload = async (file: File): Promise<string | null> => {
     const fd = new FormData()
@@ -148,10 +153,7 @@ export default function SignatureEditor({
           const blob = await (await fetch(img.src)).blob()
           const ext = (blob.type.split("/")[1] || "png").replace("+xml", "")
           const url = await upload(new File([blob], `signature-image.${ext}`, { type: blob.type }))
-          if (url) {
-            const esc = img.src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-            next = next.replace(new RegExp(esc, "g"), url)
-          }
+          if (url) next = next.replace(new RegExp(escapeRegex(img.src), "g"), url)
         } catch { /* leave it; the fixer will list it */ }
       }
       if (!cancelled && next !== value) onChange(next)
@@ -180,6 +182,31 @@ export default function SignatureEditor({
       setImportMsg("Import failed.")
     } finally {
       setImporting(false)
+    }
+  }
+
+  // Assign a multi-selection to the unresolved images in order, so eight logos
+  // are one pick rather than eight. Order is the order they appear in the HTML,
+  // which is the order the panel lists them, so what you pick matches what you
+  // see. Extra files beyond the unresolved count are ignored.
+  const onPickAll = async (files: FileList | null) => {
+    const list = Array.from(files ?? [])
+    if (!list.length) return
+    setFixingAll(true)
+    try {
+      let next = value
+      const targets = unfetchable.slice(0, list.length)
+      for (let i = 0; i < targets.length; i++) {
+        setFixProgress(`${i + 1} of ${targets.length}`)
+        const url = await upload(list[i])
+        if (!url) continue
+        next = next.replace(new RegExp(escapeRegex(targets[i].src), "g"), url)
+      }
+      if (next !== value) onChange(next)
+    } finally {
+      setFixingAll(false)
+      setFixProgress("")
+      if (allFilesRef.current) allFilesRef.current.value = ""
     }
   }
 
@@ -283,11 +310,32 @@ export default function SignatureEditor({
               </p>
               <p className="mt-0.5 text-amber-800">
                 Outlook keeps signature images in a separate folder and attaches them to each message, so
-                pasted HTML only points at them. Upload each one here — until you do,{" "}
+                pasted HTML only points at them. Upload them here — until you do,{" "}
                 <strong>recipients will see broken images too</strong>.
               </p>
             </div>
           </div>
+          {unfetchable.length > 1 && (
+            <div className="pl-6">
+              <input
+                ref={allFilesRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => void onPickAll(e.target.files)}
+              />
+              <button
+                type="button"
+                onClick={() => allFilesRef.current?.click()}
+                disabled={fixingAll}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-amber-300 bg-white text-xs font-medium text-amber-900 hover:border-amber-400 disabled:opacity-50"
+              >
+                {fixingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                {fixingAll ? `Uploading ${fixProgress}` : `Upload all ${unfetchable.length} in order`}
+              </button>
+            </div>
+          )}
           {unfetchable.map((b) => (
             <div key={b.src} className="flex items-center gap-2 pl-6">
               <span className="flex-1 truncate text-xs text-amber-900" title={b.src}>{b.label}</span>

@@ -236,6 +236,7 @@ export default function SurgeryDetailClient({ surgeryCase, only }: { surgeryCase
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState("")
+  const [uploadProgress, setUploadProgress] = useState("")
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null)
 
   function handleStatusChange(status: string) {
@@ -295,22 +296,33 @@ export default function SurgeryDetailClient({ surgeryCase, only }: { surgeryCase
     })
   }
 
+  // Uploads every selected file, one request each (the route takes one), and
+  // refreshes once at the end. A file that fails doesn't stop the rest — it's
+  // named instead, so a bad scan in a batch of five doesn't lose the other four.
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
     setUploadError("")
     setUploading(true)
-    const fd = new FormData()
-    fd.append("file", file)
+    const failed: string[] = []
     try {
-      const res = await fetch(`/api/surgery/${surgeryCase.id}/documents`, { method: "POST", body: fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Upload failed")
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgress(files.length > 1 ? `${i + 1} of ${files.length}` : "")
+        const fd = new FormData()
+        fd.append("file", files[i])
+        try {
+          const res = await fetch(`/api/surgery/${surgeryCase.id}/documents`, { method: "POST", body: fd })
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(json.error ?? "Upload failed")
+        } catch (err: any) {
+          failed.push(`${files[i].name} (${err.message})`)
+        }
+      }
+      if (failed.length) setUploadError(`Couldn't upload: ${failed.join(", ")}`)
       router.refresh()
-    } catch (err: any) {
-      setUploadError(err.message)
     } finally {
       setUploading(false)
+      setUploadProgress("")
       if (fileRef.current) fileRef.current.value = ""
     }
   }
@@ -414,9 +426,10 @@ export default function SurgeryDetailClient({ surgeryCase, only }: { surgeryCase
   const documentsBody = (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" className="hidden" onChange={handleFileUpload} />
+        <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" className="hidden" onChange={handleFileUpload} />
         <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Upload className="h-4 w-4 mr-1.5" />} Upload
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Upload className="h-4 w-4 mr-1.5" />}
+          {uploading ? (uploadProgress ? `Uploading ${uploadProgress}` : "Uploading…") : "Upload"}
         </Button>
       </div>
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
