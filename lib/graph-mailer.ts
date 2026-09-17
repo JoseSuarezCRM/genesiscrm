@@ -86,10 +86,21 @@ export interface EmailAttachment {
   contentId?: string
 }
 
-// Graph's simple sendMail carries a whole message in one request, and Microsoft
-// caps that at ~4 MB. Anything at or above this goes through an upload session
-// against a draft instead (see sendViaDraft).
-const INLINE_ATTACHMENT_LIMIT = 3 * 1024 * 1024
+// Graph's simple sendMail carries the whole message in one request, and Microsoft
+// caps that at ~4 MB. Attachments are base64 in that request, so they cost 4/3 of
+// their bytes on the wire.
+//
+// The budget is for the message, not for each file: five 800 KB PDFs each pass a
+// per-file check and then bust the request together, which Graph rejects outright
+// — a bounced send rather than a short one. So this tracks a running total and
+// pushes the overflow to the draft path.
+// Graph's request cap is ~4 MB; this leaves ~0.5 MB for the body and JSON
+// overhead, which is generous — even a signature-heavy body is ~15 KB. Being
+// more conservative than this costs real files: at 3 MB a 117 KB PDF was missing
+// the cut by a rounding error.
+const MESSAGE_BUDGET = Math.floor(3.5 * 1024 * 1024) // encoded
+const BASE64_RATIO = 4 / 3
+const encodedSize = (bytes: number) => Math.ceil(bytes * BASE64_RATIO)
 
 // Upload-session slices must be a multiple of 320 KiB; 4 MB is the documented max.
 const UPLOAD_SLICE = 320 * 1024 * 10 // 3.2 MB
@@ -119,20 +130,33 @@ async function buildGraphAttachments(
   const inline: any[] = []
   const large: { att: EmailAttachment; bytes: Buffer }[] = []
   const failed: string[] = []
-  for (const att of attachments) {
+  let used = 0
+
+  // Embedded images first: they're referenced by cid: from the body, so they have
+  // to be in the message itself and get first claim on the budget. They're small
+  // (logos), and an upload session would detach them from their reference.
+  const ordered = [...attachments].sort((a, b) => Number(!!b.isInline) - Number(!!a.isInline))
+
+  for (const att of ordered) {
     const bytes = await attachmentBytes(att)
     if (!bytes) { failed.push(att.name); continue }
-    const entry = {
+    const cost = encodedSize(bytes.length)
+
+    if (!att.isInline && used + cost > MESSAGE_BUDGET) {
+      // Too big on its own, or too big given what's already packed. Either way it
+      // can only travel via a draft.
+      large.push({ att, bytes })
+      continue
+    }
+
+    inline.push({
       "@odata.type": "#microsoft.graph.fileAttachment",
       name: att.name,
       contentType: att.contentType || "application/octet-stream",
       contentBytes: bytes.toString("base64"),
       ...(att.isInline ? { isInline: true, contentId: att.contentId ?? att.name } : {}),
-    }
-    // An embedded image belongs in the body no matter its size — routing it
-    // through an upload session would detach it from the cid: it's referenced by.
-    if (bytes.length >= INLINE_ATTACHMENT_LIMIT && !att.isInline) large.push({ att, bytes })
-    else inline.push(entry)
+    })
+    used += cost
   }
   return { inline, large, failed }
 }

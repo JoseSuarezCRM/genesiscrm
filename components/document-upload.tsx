@@ -9,32 +9,39 @@ export default function DocumentUpload({ referralId }: { referralId: string }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState("")
   const router = useRouter()
 
+  // Every selected file, one request each (the route takes one), refreshed once
+  // at the end. A file that fails is named rather than aborting the batch.
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
 
     setError(null)
 
     startTransition(async () => {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("referralId", referralId)
-
-      const res = await fetch("/api/documents/upload", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data.error ?? "Upload failed.")
-      } else {
-        router.refresh()
+      const failed: string[] = []
+      for (let i = 0; i < files.length; i++) {
+        setProgress(files.length > 1 ? `${i + 1} of ${files.length}` : "")
+        const formData = new FormData()
+        formData.append("file", files[i])
+        formData.append("referralId", referralId)
+        try {
+          const res = await fetch("/api/documents/upload", { method: "POST", body: formData })
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}))
+            failed.push(`${files[i].name} (${data.error ?? `HTTP ${res.status}`})`)
+          }
+        } catch {
+          failed.push(`${files[i].name} (network error)`)
+        }
       }
+      setProgress("")
+      if (failed.length) setError(`Couldn't upload: ${failed.join(", ")}`)
+      router.refresh()
 
-      // Reset input so same file can be re-selected
+      // Reset input so the same file can be re-selected
       if (inputRef.current) inputRef.current.value = ""
     })
   }
@@ -45,6 +52,7 @@ export default function DocumentUpload({ referralId }: { referralId: string }) {
       <input
         ref={inputRef}
         type="file"
+        multiple
         accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
         className="hidden"
         onChange={handleFileChange}
@@ -61,7 +69,7 @@ export default function DocumentUpload({ referralId }: { referralId: string }) {
         ) : (
           <Upload className="h-4 w-4 mr-1.5" />
         )}
-        Upload
+        {isPending ? (progress ? `Uploading ${progress}` : "Uploading…") : "Upload"}
       </Button>
     </div>
   )
