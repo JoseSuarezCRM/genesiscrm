@@ -210,7 +210,10 @@ async function fetchReferralForEngine(referralId: string) {
 
 // ─── Action executor ──────────────────────────────────────────────────────────
 
-export interface RunStep { label: string; status: "ok" | "failed"; error?: string }
+// `note` carries something worth saying about a step that still succeeded —
+// e.g. which attachments were too large to send. An `error` fails the step; a
+// note does not.
+export interface RunStep { label: string; status: "ok" | "failed"; error?: string; note?: string }
 export interface RunLog { recordLabel: string; steps: RunStep[]; ok: boolean }
 
 const ACTION_STEP_LABELS: Record<string, string> = {
@@ -237,12 +240,30 @@ function stepLabel(type: string, cfg: Record<string, unknown>): string {
   return base
 }
 
+/**
+ * What the run history calls the enrolled record.
+ *
+ * `record_name` comes first because it's the only one that's right for every
+ * object: runRecordTrigger resolves it through the shared recordLabel(), which
+ * knows a referral is patientFirstName + patientLastName and a custom object is
+ * its primary property. `patient_name` is set by the referral-specific triggers
+ * instead, so the two never collide.
+ *
+ * The first/last fallback is here because a Referral has no `patientName`
+ * column — without it a referral with neither var set lands on "record", which
+ * is what the whole history used to say.
+ */
 function recordLabelFor(record: Record<string, unknown> | null, vars: TemplateVars): string {
-  return (vars.patient_name as string)
-    ?? (record?.patientName as string)
-    ?? (record?.name as string)
-    ?? (record?.email as string)
-    ?? "record"
+  const first = record?.patientFirstName as string | undefined
+  const last = record?.patientLastName as string | undefined
+  const fullName = [first, last].filter(Boolean).join(" ").trim()
+  return (vars.record_name as string)
+    || (vars.patient_name as string)
+    || (record?.patientName as string)
+    || (record?.name as string)
+    || fullName
+    || (record?.email as string)
+    || "record"
 }
 
 // Top-level executor: graph (visual flow) → flow (if/else) → single action.
@@ -269,7 +290,12 @@ async function executeAction(
   const steps: RunStep[] = []
   const run = async (type: AutomationAction, cfg: Record<string, unknown>) => {
     const issue = await runSingleAction(type, cfg, referralId, vars, triggeredByUserId, record, recordRef, depth)
-    steps.push({ label: stepLabel(type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
+    const error = typeof issue === "string" ? issue : undefined
+    const note = issue && typeof issue === "object" ? issue.note : undefined
+    steps.push({
+      label: stepLabel(type, cfg), status: error ? "failed" : "ok",
+      ...(error ? { error } : {}), ...(note ? { note } : {}),
+    })
   }
 
   const graph = automation.graph as AutomationGraph | null | undefined
@@ -385,7 +411,12 @@ export async function runDueWorkflowResumes() {
       const cfg = (a.config ?? {}) as Record<string, unknown>
       const ref = r.recordType && r.recordId ? { type: r.recordType, id: r.recordId } : null
       const issue = await runSingleAction(a.type as AutomationAction, cfg, r.referralId, vars, undefined, record, ref)
-      steps.push({ label: stepLabel(a.type, cfg), status: issue ? "failed" : "ok", ...(issue ? { error: issue } : {}) })
+      const error = typeof issue === "string" ? issue : undefined
+      const note = issue && typeof issue === "object" ? issue.note : undefined
+      steps.push({
+        label: stepLabel(a.type, cfg), status: error ? "failed" : "ok",
+        ...(error ? { error } : {}), ...(note ? { note } : {}),
+      })
     }
 
     if (resumeAt && resumeNodeId) {
@@ -472,7 +503,7 @@ async function runSingleAction(
   record?: Record<string, unknown> | null,
   recordRef?: RecordRef | null,
   depth = 0,
-): Promise<string | null> {
+): Promise<string | { note: string } | null> {
   const automation = { actionType } // local alias so existing `automation.actionType` checks still read
   // Resolve every native + custom token for the triggering record via the shared
   // per-object resolver, so {patient_name}, {surgery_date}, custom internal names,
@@ -655,6 +686,23 @@ async function runSingleAction(
       }
     }
 
+    // The record's own documents (scans, forms, letters), if the step asks for
+    // them. Appended after the generated PDFs so the exclusion list sees those
+    // names: a generated PDF is saved back onto the record, so on a later run it
+    // is also a record document and would otherwise attach twice.
+    let attachedDocCount = 0
+    if (cfg.attachRecordDocuments && docRef) {
+      const { recordDocumentsFor } = await import("@/lib/record-documents")
+      const docs = await recordDocumentsFor(docRef.type, docRef.id, {
+        nameContains: (cfg.recordDocumentsFilter as string) || null,
+        excludeNames: emailAttachments.map((a: any) => a.name).filter(Boolean),
+      })
+      for (const d of docs) {
+        emailAttachments.push({ name: d.name, contentType: d.contentType, url: d.url })
+      }
+      attachedDocCount = docs.length
+    }
+
     const from = await resolveWorkflowSender(cfg.sender, record, referralId)
     const result = await sendEmail(toEmails, subject, html, {
       cc: ccEmails, bcc: bccEmails,
@@ -664,11 +712,16 @@ async function runSingleAction(
     if (!result.success) {
       return `Email failed to ${toEmails.join(", ")} from ${from.fromEmail ?? from.senderKey}: ${result.error ?? "unknown error"}`
     }
+    // A document that didn't send must never be invisible — name it in the run log.
+    const attachNote = [
+      attachedDocCount ? `${attachedDocCount} record document${attachedDocCount === 1 ? "" : "s"} attached` : "",
+      result.skippedAttachments?.length ? `NOT attached (too large or unreadable): ${result.skippedAttachments.join(", ")}` : "",
+    ].filter(Boolean).join("; ")
 
     // Track the send on the enrolled record's timeline (mirrors sendEmailFromRecord).
     const emailRef = recordRef ?? (referralId ? { type: "REFERRAL", id: referralId } : null)
     if (emailRef) {
-      const fromAddr = from.fromEmail ?? senderEmail(from.senderKey)
+      const fromAddr = from.fromEmail ?? (await senderEmail(from.senderKey))
       try {
         const logged = await prisma.directEmail.create({
           data: {
@@ -685,6 +738,8 @@ async function runSingleAction(
         })
       } catch { /* logging must never fail the send */ }
     }
+
+    if (attachNote) return { note: attachNote }
   }
 
   if ((automation.actionType as string) === "SEND_MEETING_INVITE") {
@@ -726,7 +781,7 @@ async function runSingleAction(
     const durationMinutes = Math.max(5, Number(cfg.durationMinutes) || 30)
     const end = new Date(start.getTime() + durationMinutes * 60000)
     const from = await resolveWorkflowSender(cfg.sender, record, referralId)
-    const organizer = from.fromEmail ?? senderEmail(from.senderKey)
+    const organizer = from.fromEmail ?? (await senderEmail(from.senderKey))
     const uid = `${referralId ?? "rec"}-${start.getTime()}-${Math.random().toString(36).slice(2, 8)}@genesisortho.com`
 
     // A calendar invite can't be sent to its own organizer — Microsoft strips the

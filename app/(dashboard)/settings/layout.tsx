@@ -26,6 +26,7 @@ const settingsSections = [
   {
     title: "Tools",
     items: [
+      { href: "/settings/email", label: "Email" },
       { href: "/settings/outreach", label: "Outreach Templates" },
       { href: "/settings/embed", label: "Embed Referral Form" },
       { href: "/settings/duplicates", label: "Duplicate Detection" },

@@ -42,7 +42,6 @@ export default function SettingsPage() {
             value={data.settings.startWeek}
             onChange={(e) => set("startWeek", e.target.value)}
           />
-          <span className="help">Anchors the whole A/B rotation.</span>
         </div>
       </div>
     </div>

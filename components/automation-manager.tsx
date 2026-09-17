@@ -20,7 +20,8 @@ import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitB
 import { cn } from "@/lib/utils"
 import DatePicker from "@/components/ui/date-picker"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
-import { EMAIL_SENDER_OPTIONS } from "@/lib/graph-mailer"
+import { showErrorToast } from "@/components/toast"
+import { getSharedMailboxOptions } from "@/app/actions/shared-mailboxes"
 import Link from "next/link"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor, tokensFromStrings, type PersonalizationToken } from "@/components/rich-text-editor"
@@ -958,7 +959,7 @@ function RecipientRows({
 interface MessageTemplateOption { id: string; name: string; channel: string }
 
 function ActionConfigFields({
-  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [], documentTemplates = [],
+  type, config, onChange, users, tags, tokens = TEMPLATE_VARS, fieldTokens, dateProps = [], templates = [], writableProps = [], objectCatalog = [], documentTemplates = [], sharedMailboxes = [],
 }: {
   type: AutomationAction
   config: Record<string, unknown>
@@ -976,6 +977,8 @@ function ActionConfigFields({
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[]; pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[] }[]
   // Document templates (for this workflow's object) the email can attach.
   documentTemplates?: { id: string; name: string }[]
+  // Shared org mailboxes an email/invite action can send as (from SharedMailbox).
+  sharedMailboxes?: { value: string; label: string }[]
 }) {
   const set = (key: string, val: unknown) => onChange({ ...config, [key]: val })
 
@@ -1221,7 +1224,7 @@ function ActionConfigFields({
     <>
       <option value="record_owner">Record owner (assigned or creator)</option>
       <optgroup label="Shared mailboxes">
-        {EMAIL_SENDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {sharedMailboxes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </optgroup>
       {users.length > 0 && (
         <optgroup label="People">
@@ -1593,6 +1596,41 @@ function ActionConfigFields({
             />
           </div>
         )}
+
+        {/* The files already on the enrolled record — whatever they are at run time. */}
+        <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!config.attachRecordDocuments}
+              onChange={e => set("attachRecordDocuments", e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300"
+            />
+            <span>
+              <span className="text-sm font-medium text-slate-700">Attach the record&apos;s documents</span>
+              <span className="block text-xs text-slate-400">
+                Every file on the enrolled record when the workflow runs — scans, forms, letters.
+              </span>
+            </span>
+          </label>
+          {!!config.attachRecordDocuments && (
+            <div className="pl-6">
+              <label className="text-xs font-medium text-slate-600 block mb-1.5">
+                Only files whose name contains <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={(config.recordDocumentsFilter as string) ?? ""}
+                onChange={e => set("recordDocumentsFilter", e.target.value)}
+                placeholder="e.g. LOP — leave blank for all files"
+                className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-sm"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Files over ~3 MB are sent separately; any that can&apos;t be sent are named in the run log.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -2191,7 +2229,7 @@ function NodeChip({ title, subtitle, icon, tone, onClick, onDelete, onClone, onC
   )
 }
 
-function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [], gotoTargets = [] }: {
+function NodeEditModal({ node, onSave, onClose, users, tags, practices, locations, pipelines, customDefs, propDefs, actions, tokens, fieldTokens, templates = [], objectCatalog = [], documentTemplates = [], sharedMailboxes = [], gotoTargets = [] }: {
   node: GraphNode
   onSave: (n: GraphNode) => void
   onClose: () => void
@@ -2201,6 +2239,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
   templates?: MessageTemplateOption[]
   objectCatalog?: { key: string; label: string; properties: { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }[]; pipelines?: { id: string; name: string; stages: { id: string; name: string }[] }[] }[]
   documentTemplates?: { id: string; name: string }[]
+  sharedMailboxes?: { value: string; label: string }[]
   // Candidate jump targets for a "Go to step" node (every other step).
   gotoTargets?: { id: string; label: string }[]
 }) {
@@ -2232,7 +2271,7 @@ function NodeEditModal({ node, onSave, onClose, users, tags, practices, location
                 {actions.map(a => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </StyledSelect>
               <ActionConfigFields type={draft.actionType as AutomationAction} config={draft.config}
-                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} documentTemplates={documentTemplates} />
+                onChange={cfg => setDraft({ ...draft, config: cfg })} users={users} tags={tags} tokens={tokens} fieldTokens={fieldTokens} dateProps={dateProps} templates={templates} writableProps={writableProps} objectCatalog={objectCatalog} documentTemplates={documentTemplates} sharedMailboxes={sharedMailboxes} />
             </>
           ) : draft.kind === "delay" ? (
             <>
@@ -2479,6 +2518,15 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
     listActiveDocumentTemplates(objectKey).then((t) => { if (!cancel) setDocTemplates(t) }).catch(() => {})
     return () => { cancel = true }
   }, [objectKey])
+
+  // Shared mailboxes an email/invite step can send as. These are rows now, not a
+  // fixed list, so they're fetched rather than imported.
+  const [sharedMailboxes, setSharedMailboxes] = useState<{ value: string; label: string }[]>([])
+  useEffect(() => {
+    let cancel = false
+    getSharedMailboxOptions().then((m) => { if (!cancel) setSharedMailboxes(m) }).catch(() => {})
+    return () => { cancel = true }
+  }, [])
 
   const allObjects = workflowObjectsWith(customObjects)
   const objectDef = allObjects.find(o => o.key === objectKey) ?? allObjects[0]
@@ -2739,6 +2787,7 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           fieldTokens={objectFieldTokens} templates={templates}
           objectCatalog={customObjects.map(c => ({ key: c.key, label: c.plural ?? c.singular ?? c.key, properties: c.properties ?? [], pipelines: (c as any).pipelines ?? [] }))}
           documentTemplates={docTemplates}
+          sharedMailboxes={sharedMailboxes}
           gotoTargets={Object.values(graph.nodes).filter(n => n.kind !== "goto" && n.id !== editingNode.id).map(n => ({ id: n.id, label: nodeSummary(n) }))}
         />
       )}
@@ -2919,30 +2968,48 @@ function triggerSummary(config: Record<string, unknown>): string {
 
 // ─── Workflow list row ────────────────────────────────────────────────────────
 
-function WorkflowTableRow({ auto }: { auto: Automation }) {
+// Next redacts a thrown Server Action's message in production — the client only
+// gets a digest — so a caught failure can't name its own cause. The controls are
+// permission-gated above, which is what actually prevents the common case; this
+// is the backstop for everything else.
+const ACTION_FAILED = "That action couldn't be completed. You may not have permission."
+
+function WorkflowTableRow({ auto, canEdit, canDelete }: { auto: Automation; canEdit: boolean; canDelete: boolean }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   function handleToggle() {
     startTransition(async () => {
-      await toggleAutomation(auto.id, !auto.isActive)
-      router.refresh()
+      try {
+        await toggleAutomation(auto.id, !auto.isActive)
+        router.refresh()
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
   async function handleDelete() {
     if (!(await confirmDialog(`Delete workflow "${auto.name}"? This cannot be undone.`))) return
     startTransition(async () => {
-      await deleteAutomation(auto.id)
-      router.refresh()
+      try {
+        await deleteAutomation(auto.id)
+        router.refresh()
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
   function handleClone() {
     startTransition(async () => {
-      const res = await cloneAutomation(auto.id)
-      if (res?.id) router.push(`/automations/${res.id}`)
-      else router.refresh()
+      try {
+        const res = await cloneAutomation(auto.id)
+        if (res?.id) router.push(`/automations/${res.id}`)
+        else router.refresh()
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
@@ -2956,12 +3023,19 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
         </Link>
       </td>
       <td className="px-4 py-3">
-        <button onClick={handleToggle} disabled={isPending}
-          className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
-          title={auto.isActive ? "Turn off" : "Turn on"}>
-          <span className={cn("w-2 h-2 rounded-full", auto.isActive ? "bg-emerald-500" : "bg-slate-300")} />
-          <span className={auto.isActive ? "text-emerald-700" : "text-slate-400"}>{auto.isActive ? "On" : "Off"}</span>
-        </button>
+        {canEdit ? (
+          <button onClick={handleToggle} disabled={isPending}
+            className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
+            title={auto.isActive ? "Turn off" : "Turn on"}>
+            <span className={cn("w-2 h-2 rounded-full", auto.isActive ? "bg-emerald-500" : "bg-slate-300")} />
+            <span className={auto.isActive ? "text-emerald-700" : "text-slate-400"}>{auto.isActive ? "On" : "Off"}</span>
+          </button>
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs font-medium">
+            <span className={cn("w-2 h-2 rounded-full", auto.isActive ? "bg-emerald-500" : "bg-slate-300")} />
+            <span className={auto.isActive ? "text-emerald-700" : "text-slate-400"}>{auto.isActive ? "On" : "Off"}</span>
+          </span>
+        )}
       </td>
       <td className="px-4 py-3 text-sm text-slate-500 max-w-[260px] truncate">{auto.description || "—"}</td>
       <td className="px-4 py-3">
@@ -2981,14 +3055,18 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
             className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
             <ScrollText className="h-3.5 w-3.5" />
           </Link>
-          <button onClick={handleClone} disabled={isPending}
-            className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Clone workflow">
-            <Copy className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={handleDelete} disabled={isPending}
-            className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {canEdit && (
+            <button onClick={handleClone} disabled={isPending}
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Clone workflow">
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {canDelete && (
+            <button onClick={handleDelete} disabled={isPending}
+              className="p-1.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </td>
     </tr>
@@ -2997,7 +3075,11 @@ function WorkflowTableRow({ auto }: { auto: Automation }) {
 
 // ─── Main component: workflows list ──────────────────────────────────────────
 
-export default function AutomationManager({ automations }: { automations: Automation[] }) {
+export default function AutomationManager({ automations, canEdit = false, canDelete = false }: {
+  automations: Automation[]
+  canEdit?: boolean
+  canDelete?: boolean
+}) {
   const [search, setSearch] = useState("")
   const [objectFilter, setObjectFilter] = useState("")
   const [runPending, startRunTransition] = useTransition()
@@ -3006,9 +3088,13 @@ export default function AutomationManager({ automations }: { automations: Automa
   function handleRunScheduled() {
     setRunMsg("")
     startRunTransition(async () => {
-      await runScheduledAutomationsAction()
-      setRunMsg("Scheduled checks completed.")
-      setTimeout(() => setRunMsg(""), 4000)
+      try {
+        await runScheduledAutomationsAction()
+        setRunMsg("Scheduled checks completed.")
+        setTimeout(() => setRunMsg(""), 4000)
+      } catch {
+        showErrorToast(ACTION_FAILED)
+      }
     })
   }
 
@@ -3032,22 +3118,26 @@ export default function AutomationManager({ automations }: { automations: Automa
           <option value="">All object types</option>
           {WORKFLOW_OBJECTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
         </StyledSelect>
-        <button
-          onClick={handleRunScheduled}
-          disabled={runPending}
-          className="flex items-center gap-2 px-3 py-2 text-sm rounded-md border bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 transition-colors"
-        >
-          <Play className="h-3.5 w-3.5" />
-          {runPending ? "Running…" : "Run scheduled checks"}
-        </button>
+        {canEdit && (
+          <button
+            onClick={handleRunScheduled}
+            disabled={runPending}
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded-md border bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 transition-colors"
+          >
+            <Play className="h-3.5 w-3.5" />
+            {runPending ? "Running…" : "Run scheduled checks"}
+          </button>
+        )}
         {runMsg && <span className="text-xs text-green-600">{runMsg}</span>}
-        <Link
-          href="/automations/new"
-          className="ml-auto flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Create workflow
-        </Link>
+        {canEdit && (
+          <Link
+            href="/automations/new"
+            className="ml-auto flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Create workflow
+          </Link>
+        )}
       </div>
 
       {automations.length === 0 ? (
@@ -3057,9 +3147,11 @@ export default function AutomationManager({ automations }: { automations: Automa
           <p className="text-xs text-slate-400 mt-1 max-w-sm">
             Create workflows to automatically create tasks, send notifications, update statuses, and more based on events.
           </p>
-          <Link href="/automations/new" className="mt-4 flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-            <Plus className="h-4 w-4" /> Create your first workflow
-          </Link>
+          {canEdit && (
+            <Link href="/automations/new" className="mt-4 flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+              <Plus className="h-4 w-4" /> Create your first workflow
+            </Link>
+          )}
         </div>
       ) : (
         <div className="bg-white border rounded-lg overflow-hidden">
@@ -3077,7 +3169,7 @@ export default function AutomationManager({ automations }: { automations: Automa
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map(auto => <WorkflowTableRow key={auto.id} auto={auto} />)}
+                {rows.map(auto => <WorkflowTableRow key={auto.id} auto={auto} canEdit={canEdit} canDelete={canDelete} />)}
               </tbody>
             </table>
           </div>

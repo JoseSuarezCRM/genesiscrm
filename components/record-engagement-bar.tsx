@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Loader2, Send, X, FileText, Braces } from "lucide-react"
+import { StickyNote, CheckSquare, Mail, MessageSquare, CalendarClock, Phone, Loader2, Send, X, FileText, Braces, Paperclip } from "lucide-react"
 import {
   addRecordNote, createTaskForRecord,
   getRecordContact, getComposeTemplates, getRecordTokenGroups, sendEmailFromRecord, sendSmsFromRecord, logCall, logMeeting,
+  getRecordDocumentsForEmail,
 } from "@/app/actions/record-activity"
 import StyledSelect from "@/components/ui/styled-select"
 import { RichTextEditor } from "@/components/rich-text-editor"
@@ -82,6 +83,10 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
   const mtBodyRef = useRef<NotesTextareaHandle>(null)
   const [noteEmpty, setNoteEmpty] = useState(true)
   const [callEmpty, setCallEmpty] = useState(true)
+  // The record's own files. Loaded as a count first so the button can say how
+  // many there are without fetching every URL up front.
+  const [recordDocCount, setRecordDocCount] = useState(0)
+  const [loadingDocs, setLoadingDocs] = useState(false)
 
   useEffect(() => {
     if (!canEdit) return
@@ -92,7 +97,27 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
     getComposeTemplates(recordType, recordId, "EMAIL" as any).then(setEmailTpls).catch(() => {})
     getComposeTemplates(recordType, recordId, "SMS" as any).then(setSmsTpls).catch(() => {})
     getRecordTokenGroups(recordType, recordId).then(setTokenGroups).catch(() => {})
+    getRecordDocumentsForEmail(recordType, recordId).then((d) => setRecordDocCount(d.length)).catch(() => {})
   }, [recordType, recordId, canEdit])
+
+  // Add the record's documents to whatever is already attached, skipping any
+  // already there so a second click doesn't duplicate them. They land as normal
+  // chips, so the sender can drop any of them before sending.
+  async function attachRecordDocs() {
+    setLoadingDocs(true)
+    try {
+      const docs = await getRecordDocumentsForEmail(recordType, recordId)
+      setEmAttachments((prev) => {
+        const have = new Set(prev.map((a) => a.name.toLowerCase()))
+        const add = docs
+          .filter((d) => !have.has(d.name.toLowerCase()))
+          .map((d) => ({ name: d.name, contentType: d.contentType, url: d.url, size: d.size }))
+        return [...prev, ...add]
+      })
+    } finally {
+      setLoadingDocs(false)
+    }
+  }
 
   function applyTemplate(t: Tpl, channel: "EMAIL" | "SMS") {
     if (channel === "EMAIL") { if (t.subject) setEmSubject(t.subject); setEmBody(/<[a-z!/][^>]*>/i.test(t.body) ? t.body : t.body.replace(/\n/g, "<br>")) }
@@ -299,6 +324,19 @@ export default function RecordEngagementBar({ recordType, recordId, users = [], 
                   <input value={emSubject} onChange={(e) => setEmSubject(e.target.value)} placeholder="Subject" className={INPUT + " w-full"} />
                   <RichTextEditor value={emBody} onChange={setEmBody} placeholder="Write your message…" minHeight={180} tokenGroups={tokenGroups} className="w-full" />
                   <EmailAttachments value={emAttachments} onChange={setEmAttachments} />
+                  {recordDocCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={attachRecordDocs}
+                      disabled={loadingDocs}
+                      className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      {loadingDocs
+                        ? "Attaching…"
+                        : `Attach all documents on this record (${recordDocCount})`}
+                    </button>
+                  )}
                   <div className="flex items-center pt-1">
                     <p className="text-xs text-slate-400">Sends from your own email address.</p>
                     <SubmitBtn label="Send email" disabled={!emTo.trim() || !emSubject.trim() || emBodyEmpty} onClick={submit.EMAIL} />

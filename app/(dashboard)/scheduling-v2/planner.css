@@ -418,19 +418,23 @@
 /* ---- In-app layout overrides -------------------------------------------
    The prototype's .sidebar is position:fixed at left:0, which would sit on top
    of the CRM's own sidebar; .main-content assumes it owns the viewport height.
-   Inside the dashboard both become ordinary flex children instead. */
+   Inside the dashboard both become ordinary flex children instead.
+
+   The rail stays vertical at every width, as it does in the prototype — only its
+   width shrinks, via the ported 900/768 breakpoints above. Don't add a breakpoint
+   that collapses it to a row: those measure the viewport, but the planner only
+   gets what the CRM's own sidebar leaves, so any such rule fires far too early.
+
+   This block must stay LAST in the file. It has the same specificity as the
+   900/768 media queries, so source order is what lets it override their
+   margin-left/width and keep the flex layout intact. */
 .gosm10 .app-layout{display:flex;height:100%;width:100%;min-height:0}
 .gosm10 .sidebar{position:sticky;top:0;left:auto;height:100%;max-height:100%;z-index:1;flex-shrink:0;border-radius:0}
 .gosm10 .main-content{margin-left:0;width:auto;flex:1;min-width:0;height:100%;overflow-y:auto;padding:24px 28px 80px}
 
-@media(max-width:1100px){
-.gosm10 .app-layout{flex-direction:column}
-.gosm10 .sidebar{width:100%;height:auto;flex-direction:row;align-items:center;gap:8px;border-right:none;border-bottom:1px solid var(--border);overflow-x:auto;position:static}
-.gosm10 .sidebar-header{border-bottom:none;border-right:1px solid var(--border);padding:10px 14px}
-.gosm10 .sidebar-nav{display:flex;gap:4px;flex:1;overflow-x:auto;padding:8px}
-.gosm10 .sidebar-item{margin-bottom:0;white-space:nowrap}
-.gosm10 .main-content{margin-left:0;width:100%;padding:18px 18px 60px}
-}
+/* The prototype's nav items are <div>s; here they're next/link <a>s, which are
+   inline — without this their padding and active pill wouldn't box correctly. */
+.gosm10 .sidebar-item{display:block}
 
 /* The toast host is rendered inside the planner, so anchor it to the viewport
    rather than the scrolled panel. */

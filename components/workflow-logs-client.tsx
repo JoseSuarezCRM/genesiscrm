@@ -4,9 +4,10 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { ChevronLeft, RefreshCw, CheckCircle2, AlertCircle, ChevronRight, Flag } from "lucide-react"
 import { getAutomationRuns } from "@/app/actions/automations"
+import { recordHref } from "@/lib/record-href"
 import { cn } from "@/lib/utils"
 
-interface Step { label: string; status: "ok" | "failed"; error?: string }
+interface Step { label: string; status: "ok" | "failed"; error?: string; note?: string }
 interface RunMeta { recordLabel?: string; recordType?: string; steps?: Step[] }
 interface Run {
   id: string
@@ -75,7 +76,15 @@ export default function WorkflowLogsClient({
                       : <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-800 truncate">
-                        {run.meta?.recordLabel ?? run.contextId}
+                        {(() => {
+                          const label = run.meta?.recordLabel ?? run.contextId
+                          const href = recordHref(run.contextType, run.contextId)
+                          // No href for an object with no detail page — render
+                          // plain text rather than a link that goes nowhere.
+                          return href
+                            ? <Link href={href} className="hover:text-blue-600 hover:underline">{label}</Link>
+                            : label
+                        })()}
                       </p>
                       <p className="text-xs text-slate-400">
                         {new Date(run.triggeredAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
@@ -114,6 +123,7 @@ export default function WorkflowLogsClient({
                             <div className="min-w-0">
                               <span className="text-sm text-slate-700">{s.label}</span>
                               {s.error && <p className="text-xs text-red-600 break-words">{s.error}</p>}
+                              {s.note && <p className="text-xs text-amber-600 break-words">{s.note}</p>}
                             </div>
                           </li>
                         ))}

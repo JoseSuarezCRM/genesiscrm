@@ -1814,3 +1814,38 @@ model MediaAsset {
 
   @@index([createdAt])
 }
+
+// A shared org mailbox the app can send as (referrals@, surgery@, tpl@, …).
+// These used to be three hardcoded env vars; as rows an admin can add one without
+// a deploy, and each carries its own email signature.
+//
+// legacyKey preserves the old identifiers: workflow actions, broadcasts and
+// sequence steps have `sender: "surgery"` saved in their JSON config, and those
+// must keep resolving.
+model SharedMailbox {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  label         String
+  signatureHtml String?
+  enabled       Boolean  @default(true)
+  order         Int      @default(0)
+  legacyKey     String?  @unique // "referrals" | "surgery" | "tpl"
+  updatedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// An email signature. `id` is either the literal "org" (the organization default)
+// or a user's id (their personal override) — which is why there's no relation to
+// User; no FK can express "this column is sometimes a sentinel". A row left over
+// from a deleted user is inert.
+//
+// enabled=false on a personal row means "fall back to the org default", which is
+// what the toggle in My Account writes.
+model EmailSignature {
+  id          String   @id
+  html        String
+  enabled     Boolean  @default(true)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
