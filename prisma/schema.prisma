@@ -1849,3 +1849,58 @@ model EmailSignature {
   updatedById String?
   updatedAt   DateTime @updatedAt
 }
+
+// A public website for one of Genesis's own surgeons.
+//
+// Deliberately NOT ReferringDoctor — that table is *referring* providers, the
+// outside doctors who send patients in. These are the practice's own surgeons,
+// who had no record type before this.
+//
+// The site content is authored here and rendered by a separate public app, which
+// reads `publishedContent` over a scoped ApiToken and never touches this
+// database. A marketing site is the most-scanned surface an org puts online, so
+// the boundary is the point: a flaw in a public page can't reach PHI.
+model SurgeonSite {
+  id     String            @id @default(cuid())
+  slug   String            @unique // url segment and internal key, e.g. "nolan-horner"
+  domain String?           @unique // the custom domain this site answers on
+  status SurgeonSiteStatus @default(DRAFT)
+  // Where REDIRECTED sends visitors — usually the main practice site, so old
+  // links and search results don't dead-end when someone leaves.
+  redirectUrl String?
+
+  name       String // "Nolan Horner"
+  credential String? // "MD", "DO", "PA-C"
+  headshotId String? // MediaAsset id; served publicly via /api/media/<id>
+
+  // The parts the design varies: cities line, specialty eyebrow, positioning
+  // paragraph, about body, CTA labels and targets, office phone, booking URL.
+  // JSON while the ported design is still settling — the shape is typed in
+  // lib/surgeon-site.ts rather than pinned in columns that would need a push to
+  // change.
+  content Json @default("{}")
+
+  seoTitle       String?
+  seoDescription String?
+  ogImageId      String?
+
+  // What the public app actually reads. Editing the fields above changes
+  // nothing live until someone publishes, which is also what makes preview
+  // simply "render the draft instead".
+  publishedContent Json?
+  publishedAt      DateTime?
+
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+}
+
+enum SurgeonSiteStatus {
+  DRAFT // not public; 404s unless previewing
+  PUBLISHED // live
+  REDIRECTED // 301 to redirectUrl
+  RETIRED // 410 Gone — tells search engines to drop it, unlike a 404
+}
