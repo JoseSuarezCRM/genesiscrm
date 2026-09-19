@@ -102,6 +102,15 @@ export interface SurgeonSiteContent {
   title: string
   /** Origin, no trailing slash. Every canonical and schema URL derives from it. */
   baseUrl: string
+  /**
+   * Extra hosts the site also answers on while its real domain still points
+   * elsewhere — a workers.dev address, a staging subdomain.
+   *
+   * Canonical URLs keep pointing at `baseUrl`, and the site app marks pages
+   * served on these hosts `noindex`: a crawlable duplicate of a live site
+   * competes with it or is read as duplicated content.
+   */
+  previewDomains?: string[]
 
   // ── Credentials and biography. Never inherited. ───────────────────────────
   credentials: SurgeonCredential[]
@@ -164,6 +173,7 @@ export function emptyContent(): SurgeonSiteContent {
     credential: "MD",
     title: "",
     baseUrl: "",
+    previewDomains: [],
     credentials: [],
     medicalLegalCredentials: [],
     alumniOf: [],

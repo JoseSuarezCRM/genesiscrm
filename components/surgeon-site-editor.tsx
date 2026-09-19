@@ -186,6 +186,23 @@ export function SurgeonSiteEditor(props: {
           <Field label="Search Console token" hint="Per domain, not per surgeon. Each site needs its own.">
             <Input value={content.searchConsoleToken ?? ""} onChange={(v) => set("searchConsoleToken", v)} />
           </Field>
+          <Field
+            label="Preview hosts"
+            hint="Extra addresses this site answers on while the real domain points elsewhere. One per line. These are kept out of search."
+            wide
+          >
+            <Textarea
+              value={(content.previewDomains ?? []).join("\n")}
+              onChange={(v) =>
+                set(
+                  "previewDomains",
+                  v.split("\n").map((x) => x.trim()).filter(Boolean),
+                )
+              }
+              rows={2}
+              placeholder="something.workers.dev"
+            />
+          </Field>
           <Field label="Redirect destination" hint="Where visitors go if this site is set to Redirected.">
             <Input value={redirectUrl} onChange={(v) => { setRedirectUrl(v); setSaved(false) }} placeholder="https://genesisortho.com/" />
           </Field>
