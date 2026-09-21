@@ -257,8 +257,9 @@ export default function IntakeqIntegrationConfig({ settings }: { settings: Integ
         <p className="text-xs text-slate-500 mb-3">
           One per line. Matched loosely and case-insensitively against the form name, so
           &ldquo;full intake&rdquo; still catches &ldquo;GOSM 2027 Full Intake&rdquo; after a rename.
-          Everything listed here feeds appointment attribution on the reconciliation upload; the weekly
-          referral-source report still counts <strong>{settings.reportForm}</strong> only.
+          Everything listed here is counted in the referral-source report and feeds appointment
+          attribution on the reconciliation upload. Use the form selector on the Report tab to look
+          at one form at a time.
         </p>
         <textarea
           value={formsText}

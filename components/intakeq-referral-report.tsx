@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap, Square, CalendarRange } from "lucide-react"
+import { Download, RefreshCw, Loader2, AlertTriangle, CheckCircle2, PlugZap, Square, CalendarRange, FileText } from "lucide-react"
 import { startIntakeBackfill, stopIntakeBackfill, getIntakeBackfillStatus, getReferralSourceReport, type ReferralSourceReport, type IntakeBackfillStatus } from "@/app/actions/intakeq"
 import type { Granularity } from "@/lib/intakeq-weeks"
 import IntakeqEmailReport from "@/components/intakeq-email-report"
@@ -32,13 +32,25 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [report, setReport] = useState(initial)
   const [granularity, setGranularity] = useState<Granularity>(initial.granularity)
+  const [form, setForm] = useState(initial.form)
   const [loadingReport, setLoadingReport] = useState(false)
 
-  async function reloadReport(g: Granularity = granularity) {
+  // The backfill poller lives in an interval created once, so it closes over the
+  // state of the render that started it. Calling reloadReport() with no arguments
+  // from in there resolved the defaults against *that* render — so changing the
+  // granularity mid-backfill was silently reverted 4s later while the dropdown
+  // still showed the new value. Refs give the interval the current selection.
+  const granularityRef = useRef(granularity)
+  const formRef = useRef(form)
+  useEffect(() => { granularityRef.current = granularity }, [granularity])
+  useEffect(() => { formRef.current = form }, [form])
+
+  async function reloadReport(g: Granularity = granularity, f: string = form) {
     setLoadingReport(true)
-    try { setReport(await getReferralSourceReport(g)) } finally { setLoadingReport(false) }
+    try { setReport(await getReferralSourceReport(g, f)) } finally { setLoadingReport(false) }
   }
-  function changeGranularity(g: Granularity) { setGranularity(g); reloadReport(g) }
+  function changeGranularity(g: Granularity) { setGranularity(g); reloadReport(g, form) }
+  function changeForm(f: string) { setForm(f); reloadReport(granularity, f) }
 
   const { weeks, categories, grid } = report
   // Show an Unmapped row when there are uncategorized answers, so the totals match
@@ -57,7 +69,7 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
       const s = await getIntakeBackfillStatus().catch(() => null)
       if (!s) return
       setJob(s)
-      await reloadReport()
+      await reloadReport(granularityRef.current, formRef.current)
       if (!s.active) {
         stopPolling()
         setMsg(s.done ? `Done — ${s.processed} submission${s.processed === 1 ? "" : "s"} processed.`
@@ -104,7 +116,8 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
     const csv = [header, ...lines, totals].map((r) => r.map(esc).join(",")).join("\n")
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
     const a = document.createElement("a")
-    a.href = url; a.download = `referral-sources-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
+    const slug = form === "all" ? "all-forms" : form.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+    a.href = url; a.download = `referral-sources-${slug}-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -166,6 +179,17 @@ export default function IntakeqReferralReport({ initial, canEdit }: { initial: R
           </div>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {/* Counts in the labels so the split is self-explanatory — this is what
+              makes a form's contribution visible rather than merely counted. */}
+          <div className="inline-flex items-center gap-1.5 text-sm text-slate-600">
+            <FileText className="h-3.5 w-3.5 text-slate-400" />
+            <select value={form} onChange={(e) => changeForm(e.target.value)} disabled={loadingReport}
+              className="h-8 pl-2 pr-7 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-zinc-400">
+              {report.formOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label} ({o.count.toLocaleString()})</option>
+              ))}
+            </select>
+          </div>
           <div className="inline-flex items-center gap-1.5 text-sm text-slate-600">
             <CalendarRange className="h-3.5 w-3.5 text-slate-400" />
             <select value={granularity} onChange={(e) => changeGranularity(e.target.value as Granularity)} disabled={loadingReport}
