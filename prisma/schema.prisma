@@ -98,9 +98,9 @@ enum AutomationTrigger {
   RECORD_PROPERTY_CHANGED
   RECORD_OWNER_CHANGED
   // Engagement triggers
-  SMS_RECEIVED       // inbound text from a patient
-  ENGAGEMENT_LOGGED  // note / call / meeting logged on a record
-  TASK_OVERDUE       // task past its due date and still open
+  SMS_RECEIVED // inbound text from a patient
+  ENGAGEMENT_LOGGED // note / call / meeting logged on a record
+  TASK_OVERDUE // task past its due date and still open
 }
 
 enum AutomationAction {
@@ -186,24 +186,24 @@ enum CustomPropertyEntityType {
 }
 
 model CustomProperty {
-  id           String                     @id @default(cuid())
-  name         String                     // e.g., "Surgery Type", "Insurance Plan"
-  internalName String?                    // token slug, e.g. "surgery_type" (unique per entity)
-  type         CustomPropertyType
-  entityType   CustomPropertyEntityType
-  required     Boolean                    @default(false)
-  unique       Boolean                    @default(false)  // require unique values across records
-  description  String?
-  defaultValue String?                                     // pre-filled on new records
-  options      String[]                   @default([])  // DROPDOWN/MULTI_SELECT: the stable internal VALUES records store
-  optionLabels Json?                                       // { [value]: displayLabel } — rename labels without breaking records
-  optionColors Json?                                       // DROPDOWN/MULTI_SELECT: { [value]: hexColor }
-  optionStyle  String?                                     // DROPDOWN/MULTI_SELECT: "default" | "dot" | "badge"
-  conditional  Json?                                       // { controllingPropertyId, rules: { value: [opts] } }
-  visibilityRule Json?                                      // { controllingKey, equals: [values] } — show only when the controlling field's value is one of these
-  numberFormat String?                                      // NUMBER only: "currency" or null (plain)
-  createdAt    DateTime                   @default(now())
-  updatedAt    DateTime                   @updatedAt
+  id             String                   @id @default(cuid())
+  name           String // e.g., "Surgery Type", "Insurance Plan"
+  internalName   String? // token slug, e.g. "surgery_type" (unique per entity)
+  type           CustomPropertyType
+  entityType     CustomPropertyEntityType
+  required       Boolean                  @default(false)
+  unique         Boolean                  @default(false) // require unique values across records
+  description    String?
+  defaultValue   String? // pre-filled on new records
+  options        String[]                 @default([]) // DROPDOWN/MULTI_SELECT: the stable internal VALUES records store
+  optionLabels   Json? // { [value]: displayLabel } — rename labels without breaking records
+  optionColors   Json? // DROPDOWN/MULTI_SELECT: { [value]: hexColor }
+  optionStyle    String? // DROPDOWN/MULTI_SELECT: "default" | "dot" | "badge"
+  conditional    Json? // { controllingPropertyId, rules: { value: [opts] } }
+  visibilityRule Json? // { controllingKey, equals: [values] } — show only when the controlling field's value is one of these
+  numberFormat   String? // NUMBER only: "currency" or null (plain)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
   @@unique([name, entityType])
   @@unique([internalName, entityType])
@@ -213,38 +213,38 @@ model CustomProperty {
 // An admin-defined object type. Its property schema lives in `properties` (JSON)
 // so no per-object table is needed. Records are CustomObjectRecord rows.
 model CustomObjectDef {
-  id          String   @id @default(cuid())
-  key         String   @unique              // url slug, e.g. "visits"
-  singular    String                        // "Visit"
-  plural      String                        // "Visits"
-  icon        String?                       // lucide icon name
-  ownerLabel  String                        // "Visit Owner"
+  id          String               @id @default(cuid())
+  key         String               @unique // url slug, e.g. "visits"
+  singular    String // "Visit"
+  plural      String // "Visits"
+  icon        String? // lucide icon name
+  ownerLabel  String // "Visit Owner"
   // [{ id, name, type, options?, required?, primary? }] — the record schema.
-  properties  Json     @default("[]")
+  properties  Json                 @default("[]")
   // [{ id, title, column: "LEFT"|"MIDDLE", propertyIds: string[] }] — detail card layout.
-  cards       Json     @default("[]")
-  order       Int      @default(0)          // nav ordering
+  cards       Json                 @default("[]")
+  order       Int                  @default(0) // nav ordering
   createdById String?
-  createdBy   User?    @relation("CustomObjectDefCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy   User?                @relation("CustomObjectDefCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   records     CustomObjectRecord[]
 }
 
 model CustomObjectRecord {
   id             String          @id @default(cuid())
-  recordNumber   Int?            // per-object sequential "Record ID" (unique id)
+  recordNumber   Int? // per-object sequential "Record ID" (unique id)
   objectDefId    String
   objectDef      CustomObjectDef @relation(fields: [objectDefId], references: [id], onDelete: Cascade)
   values         Json            @default("{}") // { propertyId: value }
-  pipelineId     String?         // current pipeline (stages feature)
-  stageId        String?         // current stage within the pipeline
+  pipelineId     String? // current pipeline (stages feature)
+  stageId        String? // current stage within the pipeline
   // Default properties every record gets:
-  ownerId        String?         // Record Owner (defaults to creator)
+  ownerId        String? // Record Owner (defaults to creator)
   owner          User?           @relation("CustomObjectRecordOwner", fields: [ownerId], references: [id])
   createdById    String?
   createdBy      User?           @relation("CustomObjectRecordCreatedBy", fields: [createdById], references: [id])
-  updatedById    String?         // resolved to a name at read time
+  updatedById    String? // resolved to a name at read time
   lastViewedById String?
   lastViewedAt   DateTime?
   createdAt      DateTime        @default(now())
@@ -278,7 +278,7 @@ model RecordAttachment {
   recordType  String
   recordId    String
   name        String
-  blobUrl     String   // private Blob url (read server-side with the token)
+  blobUrl     String // private Blob url (read server-side with the token)
   contentType String
   size        Int      @default(0)
   createdById String?
@@ -332,7 +332,7 @@ model AssociationCardPref {
   cardType   String
   visible    Boolean @default(true)
   order      Int     @default(0)
-  fields     Json?   // ordered field keys of the associated object to show on the card
+  fields     Json? // ordered field keys of the associated object to show on the card
 
   @@unique([objectType, cardType])
 }
@@ -353,13 +353,13 @@ model ObjectAssociation {
 // A record-import run, kept so it can be undone (delete created records, restore
 // prior values on updated ones, remove associations it added).
 model ImportRun {
-  id          String   @id @default(cuid())
-  objectKey   String   // custom object key imported into
-  status      String   @default("active") // active | undone
-  created     Int      @default(0)
-  updated     Int      @default(0)
+  id          String    @id @default(cuid())
+  objectKey   String // custom object key imported into
+  status      String    @default("active") // active | undone
+  created     Int       @default(0)
+  updated     Int       @default(0)
   createdById String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   undoneAt    DateTime?
 
   @@index([objectKey, createdAt])
@@ -368,9 +368,9 @@ model ImportRun {
 // One created/updated record in an import run. `before` holds the prior values of
 // exactly the fields the import wrote (for restore); null on creates.
 model ImportRunChange {
-  id       String  @id @default(cuid())
+  id       String @id @default(cuid())
   runId    String
-  kind     String  // create | update
+  kind     String // create | update
   recordId String
   before   Json?
 
@@ -391,11 +391,11 @@ model ImportRunAssoc {
 
 model CustomObjectView {
   id            String   @id @default(cuid())
-  objectKey     String                    // which custom object this view belongs to
+  objectKey     String // which custom object this view belongs to
   name          String
   userId        String
   user          User     @relation("CustomObjectViewCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
-  config        Json                       // { filter, columns }
+  config        Json // { filter, columns }
   visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[] @default([])
@@ -406,66 +406,66 @@ model CustomObjectView {
 }
 
 model PropertyDisplayConfig {
-  id               String                     @id @default(cuid())
+  id               String                   @id @default(cuid())
   customPropertyId String
   entityType       CustomPropertyEntityType
-  visible          Boolean                    @default(true)
-  order            Int                        @default(0)
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
+  visible          Boolean                  @default(true)
+  order            Int                      @default(0)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   @@unique([customPropertyId, entityType])
 }
 
 model CardLayout {
-  id               String                     @id @default(cuid())
-  entityType       CustomPropertyEntityType
-  cardName         String
-  title            String
-  fields           String[]                   @default([])
-  section          String                     @default("RIGHT") // LEFT (properties sidebar) or RIGHT (associated objects)
-  columns          Int                        @default(1) // fields laid out N-across (middle column)
-  kind             String                     @default("PROPERTIES") // PROPERTIES | CALL_LOG
-  config           Json?                       // card-type settings (e.g. { maxCalls })
-  visible          Boolean                    @default(true)
-  order            Int                        @default(0)
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
+  id         String                   @id @default(cuid())
+  entityType CustomPropertyEntityType
+  cardName   String
+  title      String
+  fields     String[]                 @default([])
+  section    String                   @default("RIGHT") // LEFT (properties sidebar) or RIGHT (associated objects)
+  columns    Int                      @default(1) // fields laid out N-across (middle column)
+  kind       String                   @default("PROPERTIES") // PROPERTIES | CALL_LOG
+  config     Json? // card-type settings (e.g. { maxCalls })
+  visible    Boolean                  @default(true)
+  order      Int                      @default(0)
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
 
   @@unique([entityType, cardName])
 }
 
 model User {
-  id                    String         @id @default(cuid())
-  email                 String         @unique
+  id                    String                 @id @default(cuid())
+  email                 String                 @unique
   name                  String?
   password              String
-  role                  Role           @default(STAFF)
-  permissions           String[]       @default([])
-  createdAt             DateTime       @default(now())
+  role                  Role                   @default(STAFF)
+  permissions           String[]               @default([])
+  createdAt             DateTime               @default(now())
   // HIPAA security fields
-  failedLoginAttempts   Int            @default(0)
+  failedLoginAttempts   Int                    @default(0)
   lockedUntil           DateTime?
   lastLoginAt           DateTime?
-  isActive              Boolean        @default(true)
+  isActive              Boolean                @default(true)
   // Invite flow: a pending user is created with isActive=false + a token; they
   // set their own password via the accept-invite link, which activates them.
-  inviteToken           String?        @unique
+  inviteToken           String?                @unique
   inviteTokenExpires    DateTime?
   // Notification preferences
-  notifyOnEmbedReferral Boolean        @default(false)
+  notifyOnEmbedReferral Boolean                @default(false)
   // When on, the user can send app emails from their own @genesisortho.com
   // mailbox (via the org's Microsoft 365 connection — no separate credentials).
-  emailSendingEnabled   Boolean        @default(false)
-  referralsCreated      Referral[]     @relation("ReferralCreatedBy")
-  referralsAssigned     Referral[]     @relation("ReferralAssignedTo")
+  emailSendingEnabled   Boolean                @default(false)
+  referralsCreated      Referral[]             @relation("ReferralCreatedBy")
+  referralsAssigned     Referral[]             @relation("ReferralAssignedTo")
   providerNotes         ProviderNote[]
   auditLogs             AuditLog[]
   outreachMessages      OutreachMessage[]
   emailBroadcasts       EmailBroadcast[]
   callAttempts          CallAttempt[]
-  tasksCreated          Task[]         @relation("TaskCreatedBy")
-  tasksAssigned         Task[]         @relation("TaskAssignedTo")
+  tasksCreated          Task[]                 @relation("TaskCreatedBy")
+  tasksAssigned         Task[]                 @relation("TaskAssignedTo")
   notifications         Notification[]
   automations           Automation[]
   activities            Activity[]
@@ -479,32 +479,33 @@ model User {
   taskViews             TaskView[]
   referralViews         ReferralView[]
   viewOrders            UserViewOrder[]
-  savedReports          SavedReport[]        @relation("SavedReportCreatedBy")
-  dashboards            Dashboard[]          @relation("DashboardCreatedBy")
-  surgeryCases          SurgeryCase[]        @relation("SurgeryCaseCreatedBy")
-  surgeryCallAttempts   SurgeryCallAttempt[] @relation("SurgeryCallAttemptCalledBy")
-  surgeryDocuments      SurgeryDocument[]    @relation("SurgeryDocumentUploadedBy")
-  customObjectDefs      CustomObjectDef[]    @relation("CustomObjectDefCreatedBy")
-  customRecordsCreated  CustomObjectRecord[] @relation("CustomObjectRecordCreatedBy")
-  customRecordsOwned    CustomObjectRecord[] @relation("CustomObjectRecordOwner")
-  customObjectViews     CustomObjectView[]   @relation("CustomObjectViewCreatedBy")
-  recordNotes           RecordNote[]         @relation("RecordNoteCreatedBy")
+  savedReports          SavedReport[]          @relation("SavedReportCreatedBy")
+  dashboards            Dashboard[]            @relation("DashboardCreatedBy")
+  surgeryCases          SurgeryCase[]          @relation("SurgeryCaseCreatedBy")
+  surgeryCallAttempts   SurgeryCallAttempt[]   @relation("SurgeryCallAttemptCalledBy")
+  surgeryDocuments      SurgeryDocument[]      @relation("SurgeryDocumentUploadedBy")
+  customObjectDefs      CustomObjectDef[]      @relation("CustomObjectDefCreatedBy")
+  customRecordsCreated  CustomObjectRecord[]   @relation("CustomObjectRecordCreatedBy")
+  customRecordsOwned    CustomObjectRecord[]   @relation("CustomObjectRecordOwner")
+  customObjectViews     CustomObjectView[]     @relation("CustomObjectViewCreatedBy")
+  segments              Segment[]              @relation("SegmentCreatedBy")
+  recordNotes           RecordNote[]           @relation("RecordNoteCreatedBy")
 
   // Record ownership + audit trail on the built-in objects
-  providersOwned        ReferringDoctor[]    @relation("ProviderOwner")
-  providersCreated      ReferringDoctor[]    @relation("ProviderCreatedBy")
-  providersUpdated      ReferringDoctor[]    @relation("ProviderUpdatedBy")
-  practicesOwned        ReferringPractice[]  @relation("PracticeOwner")
-  practicesCreated      ReferringPractice[]  @relation("PracticeCreatedBy")
-  practicesUpdated      ReferringPractice[]  @relation("PracticeUpdatedBy")
-  locationsOwned        PracticeLocation[]   @relation("LocationOwner")
-  locationsCreated      PracticeLocation[]   @relation("LocationCreatedBy")
-  locationsUpdated      PracticeLocation[]   @relation("LocationUpdatedBy")
-  surgeryCasesOwned     SurgeryCase[]        @relation("SurgeryCaseOwner")
-  surgeryCasesUpdated   SurgeryCase[]        @relation("SurgeryCaseUpdatedBy")
-  activitiesOwned       Activity[]           @relation("ActivityOwner")
-  activitiesUpdated     Activity[]           @relation("ActivityUpdatedBy")
-  tasksUpdated          Task[]               @relation("TaskUpdatedBy")
+  providersOwned      ReferringDoctor[]   @relation("ProviderOwner")
+  providersCreated    ReferringDoctor[]   @relation("ProviderCreatedBy")
+  providersUpdated    ReferringDoctor[]   @relation("ProviderUpdatedBy")
+  practicesOwned      ReferringPractice[] @relation("PracticeOwner")
+  practicesCreated    ReferringPractice[] @relation("PracticeCreatedBy")
+  practicesUpdated    ReferringPractice[] @relation("PracticeUpdatedBy")
+  locationsOwned      PracticeLocation[]  @relation("LocationOwner")
+  locationsCreated    PracticeLocation[]  @relation("LocationCreatedBy")
+  locationsUpdated    PracticeLocation[]  @relation("LocationUpdatedBy")
+  surgeryCasesOwned   SurgeryCase[]       @relation("SurgeryCaseOwner")
+  surgeryCasesUpdated SurgeryCase[]       @relation("SurgeryCaseUpdatedBy")
+  activitiesOwned     Activity[]          @relation("ActivityOwner")
+  activitiesUpdated   Activity[]          @relation("ActivityUpdatedBy")
+  tasksUpdated        Task[]              @relation("TaskUpdatedBy")
 }
 
 model Team {
@@ -528,39 +529,39 @@ model TeamMember {
 }
 
 model ReferringPractice {
-  id                 String             @id @default(cuid())
-  name               String
-  phone              String?
-  fax                String?
-  address            String?
-  customProperties   Json               @default("{}") // custom property values
-  ownerId            String?
-  owner              User?              @relation("PracticeOwner", fields: [ownerId], references: [id])
-  createdById        String?
-  createdBy          User?              @relation("PracticeCreatedBy", fields: [createdById], references: [id])
-  updatedById        String?
-  updatedBy          User?              @relation("PracticeUpdatedBy", fields: [updatedById], references: [id])
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @default(now()) @updatedAt
-  locations          PracticeLocation[]
-  doctors            ReferringDoctor[]
-  referrals          Referral[]
-  activities         Activity[]
+  id               String             @id @default(cuid())
+  name             String
+  phone            String?
+  fax              String?
+  address          String?
+  customProperties Json               @default("{}") // custom property values
+  ownerId          String?
+  owner            User?              @relation("PracticeOwner", fields: [ownerId], references: [id])
+  createdById      String?
+  createdBy        User?              @relation("PracticeCreatedBy", fields: [createdById], references: [id])
+  updatedById      String?
+  updatedBy        User?              @relation("PracticeUpdatedBy", fields: [updatedById], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @default(now()) @updatedAt
+  locations        PracticeLocation[]
+  doctors          ReferringDoctor[]
+  referrals        Referral[]
+  activities       Activity[]
 }
 
 // A specific office/campus of a practice
 model PracticeLocation {
   id               String            @id @default(cuid())
-  name             String            // e.g. "Main Office", "North Campus"
+  name             String // e.g. "Main Office", "North Campus"
   phone            String?
   fax              String?
   address          String?
   customProperties Json              @default("{}") // custom property values
-  practiceId String
-  practice   ReferringPractice @relation(fields: [practiceId], references: [id])
-  doctors    DoctorLocation[]
-  referrals  Referral[]
-  activities Activity[]
+  practiceId       String
+  practice         ReferringPractice @relation(fields: [practiceId], references: [id])
+  doctors          DoctorLocation[]
+  referrals        Referral[]
+  activities       Activity[]
 
   ownerId     String?
   owner       User?    @relation("LocationOwner", fields: [ownerId], references: [id])
@@ -579,22 +580,22 @@ enum ContactType {
 
 // A provider — belongs to one practice, can work at multiple locations
 model ReferringDoctor {
-  id                 String             @id @default(cuid())
-  name               String
-  title              String?            // MD, DO, NP, PA-C, DPM, etc.
-  npi                String?            // National Provider Identifier (10 digits)
-  specialty          String?
-  phone              String?
-  officePhone        String?            // office / practice direct line
-  email              String?
-  contactType        ContactType        @default(PROVIDER)
-  customProperties   Json               @default("{}") // custom property values
-  practiceId         String
-  practice           ReferringPractice  @relation(fields: [practiceId], references: [id])
-  locations          DoctorLocation[]
-  referrals          Referral[]
-  providerNotes      ProviderNote[]
-  activities         ActivityProvider[]
+  id               String             @id @default(cuid())
+  name             String
+  title            String? // MD, DO, NP, PA-C, DPM, etc.
+  npi              String? // National Provider Identifier (10 digits)
+  specialty        String?
+  phone            String?
+  officePhone      String? // office / practice direct line
+  email            String?
+  contactType      ContactType        @default(PROVIDER)
+  customProperties Json               @default("{}") // custom property values
+  practiceId       String
+  practice         ReferringPractice  @relation(fields: [practiceId], references: [id])
+  locations        DoctorLocation[]
+  referrals        Referral[]
+  providerNotes    ProviderNote[]
+  activities       ActivityProvider[]
 
   ownerId     String?
   owner       User?    @relation("ProviderOwner", fields: [ownerId], references: [id])
@@ -649,18 +650,18 @@ model PipelineRule {
 // An ordered stage within a pipeline. Records move through stages; every move is
 // logged as a StageTransition so we can compute time-in-stage durations.
 model PipelineStage {
-  id          String   @id @default(cuid())
-  pipelineId  String
-  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  name        String
-  order       Int      @default(0)
-  probability Int?     // 0–100 win probability shown in the manager
-  isClosed    Boolean  @default(false) // a terminal stage (won or lost)
-  isWon       Boolean  @default(false) // a closed-won stage
-  color       String?
+  id                  String   @id @default(cuid())
+  pipelineId          String
+  pipeline            Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name                String
+  order               Int      @default(0)
+  probability         Int? // 0–100 win probability shown in the manager
+  isClosed            Boolean  @default(false) // a terminal stage (won or lost)
+  isWon               Boolean  @default(false) // a closed-won stage
+  color               String?
   // Property ids that must be filled before a record can enter this stage.
   requiredPropertyIds String[] @default([])
-  createdAt   DateTime @default(now())
+  createdAt           DateTime @default(now())
 
   @@index([pipelineId])
 }
@@ -682,29 +683,29 @@ model StageTransition {
 }
 
 model Referral {
-  id                  String             @id @default(cuid())
+  id                  String               @id @default(cuid())
   // Patient info
   patientFirstName    String
   patientLastName     String
-  patientMrn          String?            // Medical Record Number (from referring source/fax)
-  genesisMrn          String?            // Internal Genesis Ortho MRN
+  patientMrn          String? // Medical Record Number (from referring source/fax)
+  genesisMrn          String? // Internal Genesis Ortho MRN
   patientPhone        String?
   patientEmail        String?
   patientDob          DateTime?
   // Referring source (cascading: Practice > Location > Doctor)
-  referringPracticeId  String?
-  referringPractice    ReferringPractice? @relation(fields: [referringPracticeId], references: [id])
-  referringLocationId  String?
-  referringLocation    PracticeLocation?  @relation(fields: [referringLocationId], references: [id])
-  referringDoctorId    String?
-  referringDoctor      ReferringDoctor?   @relation(fields: [referringDoctorId], references: [id])
-  referringDoctorName  String?            // free-text fallback if doctor not in system
-  referringNpi         String?            // NPI of the referring provider
-  referringPhone       String?            // direct contact for the referring source
-  referringAddress     String?            // address of the referring source
+  referringPracticeId String?
+  referringPractice   ReferringPractice?   @relation(fields: [referringPracticeId], references: [id])
+  referringLocationId String?
+  referringLocation   PracticeLocation?    @relation(fields: [referringLocationId], references: [id])
+  referringDoctorId   String?
+  referringDoctor     ReferringDoctor?     @relation(fields: [referringDoctorId], references: [id])
+  referringDoctorName String? // free-text fallback if doctor not in system
+  referringNpi        String? // NPI of the referring provider
+  referringPhone      String? // direct contact for the referring source
+  referringAddress    String? // address of the referring source
   // Status pipeline
-  status              ReferralStatus     @default(NEW)
-  referralDate        DateTime           @default(now())
+  status              ReferralStatus       @default(NEW)
+  referralDate        DateTime             @default(now())
   appointmentDate     DateTime?
   // Insurance
   insuranceProvider   String?
@@ -713,18 +714,18 @@ model Referral {
   authStatus          String?
   // Pipeline
   pipelineId          String?
-  pipeline            Pipeline?          @relation(fields: [pipelineId], references: [id])
-  stageId             String?            // current stage (stages feature; mirrors status until migrated)
-  imagingType         String?            // CT | MRI | MRI Arthrogram — only set for MRI pipeline referrals
+  pipeline            Pipeline?            @relation(fields: [pipelineId], references: [id])
+  stageId             String? // current stage (stages feature; mirrors status until migrated)
+  imagingType         String? // CT | MRI | MRI Arthrogram — only set for MRI pipeline referrals
   // Notes & meta
   notes               String?
-  customProperties    Json               @default("{}") // custom property values
+  customProperties    Json                 @default("{}") // custom property values
   createdById         String?
-  createdBy           User?              @relation("ReferralCreatedBy", fields: [createdById], references: [id])
+  createdBy           User?                @relation("ReferralCreatedBy", fields: [createdById], references: [id])
   assignedToId        String?
-  assignedTo          User?              @relation("ReferralAssignedTo", fields: [assignedToId], references: [id])
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  assignedTo          User?                @relation("ReferralAssignedTo", fields: [assignedToId], references: [id])
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
   documents           Document[]
   outreachMessages    OutreachMessage[]
   tags                ReferralTag[]
@@ -748,14 +749,14 @@ model CallAttempt {
 }
 
 model ProviderNote {
-  id         String          @id @default(cuid())
-  content    String
-  providerId String
-  provider   ReferringDoctor @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  id          String          @id @default(cuid())
+  content     String
+  providerId  String
+  provider    ReferringDoctor @relation(fields: [providerId], references: [id], onDelete: Cascade)
   createdById String
-  createdBy  User            @relation(fields: [createdById], references: [id])
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  createdBy   User            @relation(fields: [createdById], references: [id])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 }
 
 model Document {
@@ -795,7 +796,7 @@ model OutreachMessage {
   channel    OutreachChannel
   trigger    OutreachTrigger
   status     OutreachStatus
-  recipient  String          // phone number or email — no PHI
+  recipient  String // phone number or email — no PHI
   message    String
   error      String?
   sentById   String?
@@ -815,7 +816,7 @@ model Tag {
   id         String        @id @default(cuid())
   name       String
   scope      TagScope      @default(REFERRAL)
-  color      String        // hex color e.g. "#3b82f6"
+  color      String // hex color e.g. "#3b82f6"
   createdAt  DateTime      @default(now())
   referrals  ReferralTag[]
   activities ActivityTag[]
@@ -833,22 +834,22 @@ model ReferralTag {
 }
 
 model EmailBroadcast {
-  id             String                   @id @default(cuid())
+  id             String                    @id @default(cuid())
   subject        String
   body           String
-  fromSender     String                   @default("referrals")
-  attachments    Json                     @default("[]")
-  status         BroadcastStatus          @default(DRAFT)
+  fromSender     String                    @default("referrals")
+  attachments    Json                      @default("[]")
+  status         BroadcastStatus           @default(DRAFT)
   scheduledAt    DateTime?
   sentAt         DateTime?
-  recipientCount Int                      @default(0)
-  sentCount      Int                      @default(0)
-  failedCount    Int                      @default(0)
-  filters        Json?                    // stored filter criteria
+  recipientCount Int                       @default(0)
+  sentCount      Int                       @default(0)
+  failedCount    Int                       @default(0)
+  filters        Json? // stored filter criteria
   createdById    String?
-  createdBy      User?                    @relation(fields: [createdById], references: [id])
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  createdBy      User?                     @relation(fields: [createdById], references: [id])
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
   recipients     EmailBroadcastRecipient[]
 
   @@index([status])
@@ -872,31 +873,31 @@ model EmailBroadcastRecipient {
 }
 
 model Task {
-  id            String        @id @default(cuid())
-  title         String
-  description   String?
-  dueDate       DateTime?
-  priority      TaskPriority  @default(NORMAL)
-  status        TaskStatus    @default(NOT_STARTED)
-  type          TaskType      @default(TODO)
-  repeat        TaskRepeat    @default(NONE)
+  id                    String         @id @default(cuid())
+  title                 String
+  description           String?
+  dueDate               DateTime?
+  priority              TaskPriority   @default(NORMAL)
+  status                TaskStatus     @default(NOT_STARTED)
+  type                  TaskType       @default(TODO)
+  repeat                TaskRepeat     @default(NONE)
   // Minutes before dueDate to fire a reminder (0 = at due time); null = no reminder.
   reminderMinutesBefore Int?
-  reminderSentAt DateTime?
-  queueId       String?
-  queue         TaskQueue?    @relation(fields: [queueId], references: [id], onDelete: SetNull)
-  createdById   String
-  createdBy     User          @relation("TaskCreatedBy", fields: [createdById], references: [id])
-  assignedToId  String?
-  assignedTo    User?         @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
-  referralId    String?
-  referral      Referral?     @relation(fields: [referralId], references: [id], onDelete: SetNull)
-  customProperties Json       @default("{}") // custom property values
-  updatedById   String?
-  updatedBy     User?         @relation("TaskUpdatedBy", fields: [updatedById], references: [id])
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  notifications Notification[]
+  reminderSentAt        DateTime?
+  queueId               String?
+  queue                 TaskQueue?     @relation(fields: [queueId], references: [id], onDelete: SetNull)
+  createdById           String
+  createdBy             User           @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  assignedToId          String?
+  assignedTo            User?          @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  referralId            String?
+  referral              Referral?      @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  customProperties      Json           @default("{}") // custom property values
+  updatedById           String?
+  updatedBy             User?          @relation("TaskUpdatedBy", fields: [updatedById], references: [id])
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  notifications         Notification[]
 
   @@index([assignedToId])
   @@index([createdById])
@@ -913,16 +914,16 @@ model TaskQueue {
 }
 
 model Notification {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      String
   message   String
   link      String?
-  read      Boolean   @default(false)
+  read      Boolean  @default(false)
   taskId    String?
-  task      Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  createdAt DateTime  @default(now())
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
 
   @@index([userId, read])
   @@index([userId])
@@ -937,8 +938,8 @@ model Automation {
   triggerConfig Json              @default("{}")
   actionType    AutomationAction
   actionConfig  Json              @default("{}")
-  flow          Json?             // if/else branch: { match, rules[], then[], else[] }; null = single action
-  graph         Json?             // visual flow graph: { rootId, nodes }; takes precedence when set
+  flow          Json? // if/else branch: { match, rules[], then[], else[] }; null = single action
+  graph         Json? // visual flow graph: { rootId, nodes }; takes precedence when set
   createdById   String
   createdBy     User              @relation(fields: [createdById], references: [id])
   createdAt     DateTime          @default(now())
@@ -956,9 +957,9 @@ model AutomationRun {
   triggeredAt  DateTime   @default(now())
   contextType  String
   contextId    String
-  result       String     // "success" | "skipped" | "error"
+  result       String // "success" | "skipped" | "error"
   detail       String?
-  meta         Json?      // { recordLabel, recordType, steps: [{ label, status, error? }] }
+  meta         Json? // { recordLabel, recordType, steps: [{ label, status, error? }] }
 
   @@index([automationId])
   @@index([contextType, contextId])
@@ -969,14 +970,14 @@ model WorkflowResume {
   id           String     @id @default(cuid())
   automationId String
   automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
-  resumeNodeId String     // node to continue from when resumed
-  resumeAt     DateTime   // when to continue
-  referralId   String?    // referral that referral-actions operate on (if any)
-  recordType   String?    // generic record the workflow acts on (e.g. "CO:visits")
+  resumeNodeId String // node to continue from when resumed
+  resumeAt     DateTime // when to continue
+  referralId   String? // referral that referral-actions operate on (if any)
+  recordType   String? // generic record the workflow acts on (e.g. "CO:visits")
   recordId     String?
   recordLabel  String?
-  vars         Json       // template vars captured at enrollment
-  record       Json       // record snapshot for branch evaluation
+  vars         Json // template vars captured at enrollment
+  record       Json // record snapshot for branch evaluation
   createdAt    DateTime   @default(now())
 
   @@index([resumeAt])
@@ -984,29 +985,29 @@ model WorkflowResume {
 }
 
 model Activity {
-  id          String             @id @default(cuid())
-  practiceId  String?
-  practice    ReferringPractice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
-  locationId  String?
-  location    PracticeLocation?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  nextStep    String?
-  date        DateTime           @default(now())
-  frontDesk   String?
-  flyer       String?
-  notes       String?
-  rating      Int?               // clinic value: 1 Low / 2 Mid / 3 High
-  meetingRating Int?             // meeting rating: 1 (lowest) … 5 (highest)
-  customProperties Json          @default("{}") // custom property values
-  ownerId     String?
-  owner       User?              @relation("ActivityOwner", fields: [ownerId], references: [id])
-  createdById String
-  createdBy   User               @relation(fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   User?              @relation("ActivityUpdatedBy", fields: [updatedById], references: [id])
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @default(now()) @updatedAt
-  providers   ActivityProvider[]
-  tags        ActivityTag[]
+  id               String             @id @default(cuid())
+  practiceId       String?
+  practice         ReferringPractice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+  locationId       String?
+  location         PracticeLocation?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  nextStep         String?
+  date             DateTime           @default(now())
+  frontDesk        String?
+  flyer            String?
+  notes            String?
+  rating           Int? // clinic value: 1 Low / 2 Mid / 3 High
+  meetingRating    Int? // meeting rating: 1 (lowest) … 5 (highest)
+  customProperties Json               @default("{}") // custom property values
+  ownerId          String?
+  owner            User?              @relation("ActivityOwner", fields: [ownerId], references: [id])
+  createdById      String
+  createdBy        User               @relation(fields: [createdById], references: [id])
+  updatedById      String?
+  updatedBy        User?              @relation("ActivityUpdatedBy", fields: [updatedById], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @default(now()) @updatedAt
+  providers        ActivityProvider[]
+  tags             ActivityTag[]
 
   @@index([practiceId])
   @@index([locationId])
@@ -1046,7 +1047,7 @@ model SurgeryView {
   name          String
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  config        Json     // { query, columns, viewMode }
+  config        Json // { query, columns, viewMode }
   visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[] @default([])
@@ -1060,7 +1061,7 @@ model TaskView {
   name          String
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  config        Json     // { filter, columns, frozen, viewMode }
+  config        Json // { filter, columns, frozen, viewMode }
   visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[] @default([])
@@ -1074,8 +1075,8 @@ model ReferralView {
   name          String
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pipelineId    String?  // the pipeline this view belongs to (null = the "All" scope)
-  config        Json     // { query, columns }
+  pipelineId    String? // the pipeline this view belongs to (null = the "All" scope)
+  config        Json // { query, columns }
   visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[] @default([])
@@ -1116,7 +1117,7 @@ model UserViewOrder {
   id         String   @id @default(cuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  viewType   String   // "SURGERY" | "ACTIVITY" | "PROVIDER" | "CUSTOM_OBJECT"
+  viewType   String // "SURGERY" | "ACTIVITY" | "PROVIDER" | "CUSTOM_OBJECT"
   scopeKey   String   @default("") // custom-object key for CUSTOM_OBJECT, "" otherwise
   orderedIds String[] @default([])
   updatedAt  DateTime @updatedAt
@@ -1125,29 +1126,29 @@ model UserViewOrder {
 }
 
 model DirectEmail {
-  id       String   @id @default(cuid())
-  to       String[]
-  cc       String[]
-  bcc      String[]
-  subject  String
-  body     String
-  sentAt   DateTime @default(now())
-  success  Boolean  @default(true)
-  error    String?
+  id                String   @id @default(cuid())
+  to                String[]
+  cc                String[]
+  bcc               String[]
+  subject           String
+  body              String
+  sentAt            DateTime @default(now())
+  success           Boolean  @default(true)
+  error             String?
   // Direction + threading. Outbound is app-sent; inbound is a reply pulled from
   // the mailbox. fromEmail is the sender (app mailbox for outbound, the external
   // replier for inbound). conversationId groups a thread; internetMessageId dedupes.
   direction         String   @default("OUTBOUND") // OUTBOUND | INBOUND
   fromEmail         String?
-  mailbox           String?  // the app mailbox this was sent from / received in
+  mailbox           String? // the app mailbox this was sent from / received in
   conversationId    String?
   internetMessageId String?  @unique
-  graphMessageId    String?  // Graph message id (to reply in-thread)
-  sentById String?
-  sentBy   User?    @relation(fields: [sentById], references: [id])
+  graphMessageId    String? // Graph message id (to reply in-thread)
+  sentById          String?
+  sentBy            User?    @relation(fields: [sentById], references: [id])
   // Files sent with the email that are viewable from the record's timeline:
   // array of { name, url } where url serves the saved RecordAttachment.
-  attachments Json  @default("[]")
+  attachments       Json     @default("[]")
 
   @@index([sentAt])
   @@index([conversationId])
@@ -1185,7 +1186,7 @@ enum SmsDirection {
 
 model SmsThread {
   id            String       @id @default(cuid())
-  phone         String       // E.164 format e.g. +15551234567
+  phone         String // E.164 format e.g. +15551234567
   contactName   String?
   referralId    String?
   referral      Referral?    @relation(fields: [referralId], references: [id], onDelete: SetNull)
@@ -1199,16 +1200,16 @@ model SmsThread {
 }
 
 model SmsMessage {
-  id         String        @id @default(cuid())
-  threadId   String
-  thread     SmsThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  body       String
-  direction  SmsDirection
-  status     String?       // sent | delivered | failed | received
-  twilioSid  String?       @unique
-  sentById   String?
-  sentBy     User?         @relation(fields: [sentById], references: [id], onDelete: SetNull)
-  createdAt  DateTime      @default(now())
+  id        String       @id @default(cuid())
+  threadId  String
+  thread    SmsThread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  body      String
+  direction SmsDirection
+  status    String? // sent | delivered | failed | received
+  twilioSid String?      @unique
+  sentById  String?
+  sentBy    User?        @relation(fields: [sentById], references: [id], onDelete: SetNull)
+  createdAt DateTime     @default(now())
 
   @@index([threadId, createdAt])
 }
@@ -1235,8 +1236,8 @@ model CompletedAppointment {
 
 model OrgNameRule {
   id             String   @id @default(cuid())
-  contains       String   // case-insensitive substring to match
-  normalizedName String   // canonical practice name to resolve to
+  contains       String // case-insensitive substring to match
+  normalizedName String // canonical practice name to resolve to
   order          Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1261,7 +1262,7 @@ model ApiToken {
   id          String    @id @default(cuid())
   name        String
   tokenHash   String    @unique
-  prefix      String    // non-secret display prefix, e.g. "gosm_1a2b3c"
+  prefix      String // non-secret display prefix, e.g. "gosm_1a2b3c"
   scopes      Json      @default("[]")
   lastUsedAt  DateTime?
   expiresAt   DateTime?
@@ -1279,9 +1280,9 @@ model Integration {
   id            String   @id @default(cuid())
   provider      String   @unique // "intakeq"
   enabled       Boolean  @default(false)
-  apiKeyEnc     String?  // AES-256-GCM ciphertext of the API key
-  apiKeyHint    String?  // last few chars, for masked display
-  webhookSecret String?  // token that must match the inbound webhook's ?token=
+  apiKeyEnc     String? // AES-256-GCM ciphertext of the API key
+  apiKeyHint    String? // last few chars, for masked display
+  webhookSecret String? // token that must match the inbound webhook's ?token=
   config        Json     @default("{}") // provider-specific settings
   updatedById   String?
   createdAt     DateTime @default(now())
@@ -1293,8 +1294,8 @@ model Integration {
 // Pruned to ~30 days on read.
 model IntegrationEvent {
   id         String   @id @default(cuid())
-  provider   String   // "intakeq"
-  kind       String   // "api" | "webhook"
+  provider   String // "intakeq"
+  kind       String // "api" | "webhook"
   endpoint   String?
   method     String?
   status     Int?
@@ -1314,14 +1315,14 @@ model IntakeReferralResponse {
   id                String   @id @default(cuid())
   intakeId          String   @unique
   clientId          String?
-  clientName        String?  // patient name from IntakeQ (PHI) — for the submissions view
-  dateOfBirth       String?  // patient DOB "yyyy-MM-dd" from IntakeQ (PHI)
+  clientName        String? // patient name from IntakeQ (PHI) — for the submissions view
+  dateOfBirth       String? // patient DOB "yyyy-MM-dd" from IntakeQ (PHI)
   questionnaireId   String?
   questionnaireName String?
-  language          String?  // "EN" | "ES" | null
+  language          String? // "EN" | "ES" | null
   submittedAt       DateTime
-  rawAnswer         String?  // the raw "how were you referred?" answer
-  category          String   // mapped category, or "Unmapped" / "Unanswered"
+  rawAnswer         String? // the raw "how were you referred?" answer
+  category          String // mapped category, or "Unmapped" / "Unanswered"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -1344,9 +1345,9 @@ model MergeRedirect {
 model OrgRulesRunLog {
   id          String   @id @default(cuid())
   ranAt       DateTime @default(now())
-  trigger     String   // "manual" | "auto"
+  trigger     String // "manual" | "auto"
   mergedCount Int      @default(0)
-  merges      Json     // [{ from, to }]
+  merges      Json // [{ from, to }]
 
   @@index([ranAt])
 }
@@ -1367,18 +1368,18 @@ model IvrOption {
   id        String    @id @default(cuid())
   configId  String
   config    IvrConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
-  digit     String    // "1"–"9", "0"
+  digit     String // "1"–"9", "0"
   label     String
   action    IvrAction
-  message   String?   // for PLAY_MESSAGE
-  forwardTo String?   // for FORWARD_CALL
+  message   String? // for PLAY_MESSAGE
+  forwardTo String? // for FORWARD_CALL
   order     Int       @default(0)
 }
 
 model SmsAutoResponse {
   id          String   @id @default(cuid())
   isActive    Boolean  @default(true)
-  trigger     String   // keyword e.g. "YES", "1", "CANCEL"
+  trigger     String // keyword e.g. "YES", "1", "CANCEL"
   matchType   String   @default("exact") // exact | contains | starts_with
   response    String
   description String?
@@ -1414,7 +1415,7 @@ model Sequence {
   isActive      Boolean              @default(true)
   trigger       String               @default("ON_STATUS_CHANGE") // ON_STATUS_CHANGE | ON_CREATE | MANUAL
   triggerStatus ReferralStatus?
-  filters       Json                 @default("{}")               // { referringPracticeId?, insuranceProvider? }
+  filters       Json                 @default("{}") // { referringPracticeId?, insuranceProvider? }
   steps         SequenceStep[]
   enrollments   SequenceEnrollment[]
   createdAt     DateTime             @default(now())
@@ -1422,30 +1423,30 @@ model Sequence {
 }
 
 model SequenceStep {
-  id         String            @id @default(cuid())
-  sequenceId String
-  sequence   Sequence          @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  order      Int
-  delayDays  Int               @default(0)
+  id          String            @id @default(cuid())
+  sequenceId  String
+  sequence    Sequence          @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  order       Int
+  delayDays   Int               @default(0)
   channel     StepChannel
   subject     String?
   body        String
   fromSender  String            @default("referrals")
   attachments Json              @default("[]")
   runs        SequenceStepRun[]
-  createdAt  DateTime          @default(now())
+  createdAt   DateTime          @default(now())
 
   @@index([sequenceId, order])
 }
 
 model SequenceEnrollment {
-  id         String           @id @default(cuid())
+  id         String            @id @default(cuid())
   sequenceId String
-  sequence   Sequence         @relation(fields: [sequenceId], references: [id])
+  sequence   Sequence          @relation(fields: [sequenceId], references: [id])
   referralId String
-  referral   Referral         @relation(fields: [referralId], references: [id], onDelete: Cascade)
-  enrolledAt DateTime         @default(now())
-  status     EnrollmentStatus @default(ACTIVE)
+  referral   Referral          @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  enrolledAt DateTime          @default(now())
+  status     EnrollmentStatus  @default(ACTIVE)
   stepRuns   SequenceStepRun[]
 
   @@unique([sequenceId, referralId])
@@ -1527,17 +1528,17 @@ model LocationRoleRequirement {
 }
 
 model StaffMember {
-  id                String                   @id @default(cuid())
-  name              String
-  primaryRole       StaffRole
-  roles             StaffRole[]              @default([])
-  isLastResort      Boolean                  @default(false)
-  isActive          Boolean                  @default(true)
-  availability      StaffAvailability[]
-  entries           ScheduleEntry[]
+  id                  String                    @id @default(cuid())
+  name                String
+  primaryRole         StaffRole
+  roles               StaffRole[]               @default([])
+  isLastResort        Boolean                   @default(false)
+  isActive            Boolean                   @default(true)
+  availability        StaffAvailability[]
+  entries             ScheduleEntry[]
   locationAssignments StaffLocationAssignment[]
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 }
 
 model StaffLocationAssignment {
@@ -1591,7 +1592,7 @@ model OutreachTemplate {
   id        String          @id @default(cuid())
   trigger   OutreachTrigger
   channel   OutreachChannel
-  subject   String?         // email subject line (email only)
+  subject   String? // email subject line (email only)
   body      String
   isActive  Boolean         @default(true)
   updatedAt DateTime        @updatedAt
@@ -1605,9 +1606,9 @@ model MessageTemplate {
   id             String          @id @default(cuid())
   name           String
   channel        OutreachChannel
-  subject        String?         // email subject (email only)
-  body           String          // rendered HTML (rich text, or generated from blocks)
-  blocks         Json?           // email block builder: ordered blocks; null = rich-text mode
+  subject        String? // email subject (email only)
+  body           String // rendered HTML (rich text, or generated from blocks)
+  blocks         Json? // email block builder: ordered blocks; null = rich-text mode
   isActive       Boolean         @default(true)
   createdById    String?
   updatedById    String?
@@ -1628,38 +1629,38 @@ model SavedReport {
   teamId        String?
   sharedUserIds String[]          @default([])
   tags          String[]          @default([])
-  createdById String
-  createdBy   User              @relation("SavedReportCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
-  dashboards  DashboardReport[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdById   String
+  createdBy     User              @relation("SavedReportCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  dashboards    DashboardReport[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 }
 
 model Dashboard {
   id            String            @id @default(cuid())
   name          String
-  layout        Json?             // react-grid-layout: { [savedReportId]: {x,y,w,h} }
-  dateRange     Json?             // dashboard-level quick date filter: { preset, from?, to? }
+  layout        Json? // react-grid-layout: { [savedReportId]: {x,y,w,h} }
+  dateRange     Json? // dashboard-level quick date filter: { preset, from?, to? }
   visibility    String            @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
   teamId        String?
   sharedUserIds String[]          @default([])
   isPinned      Boolean           @default(false)
   tags          String[]          @default([])
-  createdById String
-  createdBy   User              @relation("DashboardCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
-  reports     DashboardReport[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdById   String
+  createdBy     User              @relation("DashboardCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  reports       DashboardReport[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 }
 
 model DashboardReport {
   dashboardId   String
   savedReportId String
-  order         Int          @default(0)
-  filters       Json?        // per-card FilterState merged into the report at render
-  addedAt       DateTime     @default(now())
-  dashboard     Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-  savedReport   SavedReport  @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
+  order         Int         @default(0)
+  filters       Json? // per-card FilterState merged into the report at render
+  addedAt       DateTime    @default(now())
+  dashboard     Dashboard   @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  savedReport   SavedReport @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
 
   @@id([dashboardId, savedReportId])
 }
@@ -1676,51 +1677,51 @@ enum SurgeryStatus {
 }
 
 model SurgeryCase {
-  id                String         @id @default(cuid())
-  mrn               String?
-  expires           DateTime?
-  creationDate      DateTime?
-  status            SurgeryStatus  @default(NEW)
-  patientName       String
-  orderingProvider  String?
-  diagnosis         String?
-  medicalClearance   String?
-  secondaryClearance String?
-  dentalClearance    String?
-  ctRequired        String?
-  glp1              String?
-  dme               String?
-  physicalTherapy       String?    // Internal/GOSM | External | NA | Undecided
-  physicalTherapyDetail String?    // free text shown when physicalTherapy = External
-  referral          String?
-  facility          String?
-  procedure         String?
-  surgeryDate       DateTime?
-  language          String?        @default("EN")
-  email             String?
-  notes             String?
-  customProperties  Json           @default("{}") // custom property values
-  ownerId           String?
-  owner             User?          @relation("SurgeryCaseOwner", fields: [ownerId], references: [id])
-  createdById       String?
-  createdBy         User?          @relation("SurgeryCaseCreatedBy", fields: [createdById], references: [id])
-  updatedById       String?
-  updatedBy         User?          @relation("SurgeryCaseUpdatedBy", fields: [updatedById], references: [id])
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  callAttempts      SurgeryCallAttempt[]
-  documents         SurgeryDocument[]
+  id                    String               @id @default(cuid())
+  mrn                   String?
+  expires               DateTime?
+  creationDate          DateTime?
+  status                SurgeryStatus        @default(NEW)
+  patientName           String
+  orderingProvider      String?
+  diagnosis             String?
+  medicalClearance      String?
+  secondaryClearance    String?
+  dentalClearance       String?
+  ctRequired            String?
+  glp1                  String?
+  dme                   String?
+  physicalTherapy       String? // Internal/GOSM | External | NA | Undecided
+  physicalTherapyDetail String? // free text shown when physicalTherapy = External
+  referral              String?
+  facility              String?
+  procedure             String?
+  surgeryDate           DateTime?
+  language              String?              @default("EN")
+  email                 String?
+  notes                 String?
+  customProperties      Json                 @default("{}") // custom property values
+  ownerId               String?
+  owner                 User?                @relation("SurgeryCaseOwner", fields: [ownerId], references: [id])
+  createdById           String?
+  createdBy             User?                @relation("SurgeryCaseCreatedBy", fields: [createdById], references: [id])
+  updatedById           String?
+  updatedBy             User?                @relation("SurgeryCaseUpdatedBy", fields: [updatedById], references: [id])
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  callAttempts          SurgeryCallAttempt[]
+  documents             SurgeryDocument[]
 }
 
 model SurgeryCallAttempt {
-  id          String       @id @default(cuid())
-  caseId      String
-  case        SurgeryCase  @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  calledById  String?
-  calledBy    User?        @relation("SurgeryCallAttemptCalledBy", fields: [calledById], references: [id])
-  outcome     CallOutcome  @default(NO_ANSWER)
-  notes       String?
-  createdAt   DateTime     @default(now())
+  id         String      @id @default(cuid())
+  caseId     String
+  case       SurgeryCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  calledById String?
+  calledBy   User?       @relation("SurgeryCallAttemptCalledBy", fields: [calledById], references: [id])
+  outcome    CallOutcome @default(NO_ANSWER)
+  notes      String?
+  createdAt  DateTime    @default(now())
 
   @@index([caseId])
 }
@@ -1782,14 +1783,13 @@ model MarketingConfig {
   notifyEmail String @default("")
 }
 
-
 // A block-based PDF letter/document template (letterhead + tokenized body).
 // `blocks` is an ordered array of typed blocks (see lib/document-blocks.ts);
 // tokens inside text blocks resolve per record at generation time.
 model DocumentTemplate {
   id          String   @id @default(cuid())
   name        String
-  objectType  String   // registry key: REFERRAL | PROVIDER | PRACTICE | LOCATION | SURGERY | CO:<key>
+  objectType  String // registry key: REFERRAL | PROVIDER | PRACTICE | LOCATION | SURGERY | CO:<key>
   blocks      Json     @default("[]")
   pageSize    String   @default("LETTER")
   isActive    Boolean  @default(true)
@@ -1806,7 +1806,7 @@ model DocumentTemplate {
 model MediaAsset {
   id          String   @id @default(cuid())
   name        String
-  blobUrl     String   // private Blob url (fetched server-side with the token)
+  blobUrl     String // private Blob url (fetched server-side with the token)
   contentType String
   size        Int      @default(0)
   createdById String?
@@ -1861,10 +1861,10 @@ model EmailSignature {
 // database. A marketing site is the most-scanned surface an org puts online, so
 // the boundary is the point: a flaw in a public page can't reach PHI.
 model SurgeonSite {
-  id     String            @id @default(cuid())
-  slug   String            @unique // url segment and internal key, e.g. "nolan-horner"
-  domain String?           @unique // the custom domain this site answers on
-  status SurgeonSiteStatus @default(DRAFT)
+  id          String            @id @default(cuid())
+  slug        String            @unique // url segment and internal key, e.g. "nolan-horner"
+  domain      String?           @unique // the custom domain this site answers on
+  status      SurgeonSiteStatus @default(DRAFT)
   // Where REDIRECTED sends visitors — usually the main practice site, so old
   // links and search results don't dead-end when someone leaves.
   redirectUrl String?
@@ -1903,4 +1903,65 @@ enum SurgeonSiteStatus {
   PUBLISHED // live
   REDIRECTED // 301 to redirectUrl
   RETIRED // 410 Gone — tells search engines to drop it, unlike a 404
+}
+
+// ─── Segments ────────────────────────────────────────────────────────────────
+// A named, shareable list of records of one object. ACTIVE segments store a
+// filter and are re-evaluated on read; STATIC segments freeze their membership
+// into SegmentMember rows at build time.
+//
+// The visibility/teamId/sharedUserIds triple is the same sharing model every
+// saved-view table uses (see CustomObjectView) — deliberately identical, so the
+// access rules and the UI control are shared rather than reimplemented.
+model Segment {
+  id           String  @id @default(cuid())
+  name         String
+  description  String?
+  objectType   String // registry key: "REFERRAL" | "CO:appointments" | …
+  kind         String  @default("ACTIVE") // ACTIVE | STATIC
+  source       String  @default("FILTER") // FILTER | IMPORT | MANUAL
+  filter       Json? // FilterState; null for IMPORT/MANUAL
+  sourceConfig Json? // { importRunIds: string[] }
+  userId       String
+  user         User    @relation("SegmentCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  visibility    String   @default("PRIVATE") // PRIVATE | EVERYONE | TEAM | CUSTOM
+  teamId        String?
+  sharedUserIds String[] @default([])
+
+  // Cached size for the list page. ACTIVE segments recompute lazily (the detail
+  // page always recomputes live); `sizeExact` is false when a scan was capped,
+  // so the UI can render "≥ N" instead of a number it can't stand behind.
+  size        Int?
+  sizeAt      DateTime?
+  sizeExact   Boolean   @default(true)
+  lastBuiltAt DateTime? // STATIC only: when membership was last materialised
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  members SegmentMember[]
+
+  @@index([objectType])
+  @@index([userId])
+}
+
+// STATIC membership, one row per record.
+//
+// Not a String[] on Segment: the biggest realistic static segment here is
+// CO:appointments at ~14.4k, where an array would mean a ~500KB column dragged
+// into every list query, the whole membership loaded to render 50 rows, and a
+// read-modify-write race between two people doing bulk adds. Rows give an
+// indexed count, real pagination and atomic createMany(skipDuplicates).
+//
+// recordId has no FK because it points at whichever table objectType names —
+// the same convention as ObjectAssociation.
+model SegmentMember {
+  segmentId String
+  segment   Segment  @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  recordId  String
+  addedAt   DateTime @default(now())
+
+  @@id([segmentId, recordId])
+  @@index([segmentId])
 }

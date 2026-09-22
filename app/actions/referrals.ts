@@ -22,6 +22,7 @@ import {
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 import { enrollInMatchingSequences } from "@/app/actions/sequences"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { clinicDateOnlyValue } from "@/lib/tz"
 
 const ReferralSchema = z.object({
   patientFirstName: z.string().min(1, "First name is required"),
@@ -51,10 +52,12 @@ const ReferralSchema = z.object({
   customProperties: z.record(z.any()).optional(),
 })
 
+// patientDob / referralDate / appointmentDate are CALENDAR days, so they're
+// stored at noon UTC rather than midnight — midnight falls on the previous day
+// anywhere west of UTC, which is why a DOB picked as the 11th came back as the
+// 10th in emails. Matches how custom date properties are already stored.
 function parseDate(val: string | undefined): Date | null {
-  if (!val) return null
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? null : d
+  return clinicDateOnlyValue(val)
 }
 
 // Verifies authentication — any authenticated staff member can edit any referral

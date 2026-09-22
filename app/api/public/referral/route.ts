@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/graph-mailer"
 import { resolveOrCreatePractice } from "@/app/actions/org-rules"
 import { resolveOrCreateProvider } from "@/lib/provider-resolve"
 import { runTrigger_EmbedReferralReceived } from "@/lib/automation-engine"
+import { clinicDateOnlyValue } from "@/lib/tz"
 
 const schema = z.object({
   // Provider (all required)
@@ -68,7 +69,10 @@ export async function POST(req: NextRequest) {
     data: {
       patientFirstName,
       patientLastName,
-      patientDob: new Date(patientDob),
+      // Noon UTC, not midnight: the form posts a calendar day ("1989-05-04") and
+      // midnight lands on the previous evening in Chicago, so the DOB would read
+      // back a day early on the record and in messages. See clinicDateOnlyValue.
+      patientDob: clinicDateOnlyValue(patientDob),
       patientPhone,
       referringDoctorName: providerName,
       referringDoctorId: referringDoctorId,

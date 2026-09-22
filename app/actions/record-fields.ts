@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache"
 import { cpMeta, type CPEntity } from "@/lib/custom-property-entities"
 import { checkUniqueCustomValue } from "@/app/actions/custom-properties"
 import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
+import { clinicDateOnlyValue } from "@/lib/tz"
+import { RECORD_FIELDS } from "@/lib/record-field-catalog"
 
 function delegateFor(type: CPEntity): any {
   return ({
@@ -63,9 +65,17 @@ export async function updateRecordField(entityType: string, recordId: string, fi
       bag[propId] = value
       await model.update({ where: { id: recordId }, data: { customProperties: bag, ...(entityType === "REFERRAL" ? {} : { updatedById: uid }) } })
     } else {
+      // A native DATE column holds a calendar day, so it's stored at noon UTC —
+      // midnight would fall on the previous day anywhere west of UTC and the
+      // record would read back a day early. DATETIME columns are real instants
+      // and pass through untouched.
+      const def = (RECORD_FIELDS[entityType] ?? []).find((f) => f.key === field)
+      const toWrite = value === "" ? null
+        : def?.type === "date" ? clinicDateOnlyValue(value as any)
+        : value
       await model.update({
         where: { id: recordId },
-        data: { [field]: value === "" ? null : value, ...(entityType === "REFERRAL" ? {} : { updatedById: uid }) },
+        data: { [field]: toWrite, ...(entityType === "REFERRAL" ? {} : { updatedById: uid }) },
       })
     }
 
