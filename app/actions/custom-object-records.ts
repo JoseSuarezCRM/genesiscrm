@@ -9,6 +9,9 @@ import { filterStateToWhere } from "@/lib/filter-to-prisma"
 import { decodeFilterParam, customPropertyFilterFields, type FilterField } from "@/lib/filters"
 import { attachAssociatedRecords } from "@/lib/association-columns"
 import { summarize } from "@/lib/column-summary"
+import { fieldsFor } from "@/lib/object-fields-server"
+import { toFilterFields } from "@/lib/object-fields"
+import { buildObjectWhere } from "@/lib/object-query"
 
 // Records are gated by the object's own permission key: "CO:<objectKey>".
 function objKey(key: string) { return `CO:${key}` }
@@ -16,17 +19,6 @@ function objKey(key: string) { return `CO:${key}` }
 // A "use server" file can only export async functions — the list threshold /
 // page size live in a plain module (lib/custom-object-config) instead.
 const CO_PAGE_SIZE = 50
-
-// Filter fields for server-side translation — native columns carry a `column`,
-// custom properties carry `column` + `jsonBag: "values"` (via the shared helper).
-function serverFilterFields(properties: any[]): FilterField[] {
-  return [
-    { key: "__recordNumber", label: "Record ID", type: "number", column: "recordNumber" } as any,
-    { key: "__owner", label: "Owner", type: "select", column: "ownerId" } as any,
-    { key: "__created", label: "Created", type: "date", column: "createdAt" } as any,
-    ...customPropertyFilterFields(properties.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })), "values"),
-  ]
-}
 
 export interface CustomRecordRow {
   id: string
@@ -94,13 +86,20 @@ export async function countCustomObjectRecords(objectKey: string): Promise<numbe
 // The `where` behind a server-mode list: pipeline scope + advanced filter + search.
 // Every reader of that set — the page, the count, the export, the footer totals —
 // builds it here, so a total can never be computed over a different set than the rows.
-function listWhere(
+async function listWhere(
+  objectKey: string,
   objectDefId: string,
   properties: any[],
   primary: any,
   opts: { search?: string; filter?: string; pipeline?: string },
-): any {
-  const filterWhere = filterStateToWhere(decodeFilterParam(opts.filter), serverFilterFields(properties))
+): Promise<any> {
+  // Through buildObjectWhere rather than filterStateToWhere directly: it runs the
+  // raw-SQL pre-pass for custom properties first. Without it, a text filter here
+  // is case-SENSITIVE and a number/date filter compiles to nothing at all — the
+  // list would quietly disagree with the same filter evaluated in the browser.
+  const defs = await fieldsFor(objectKey)
+  const built = await buildObjectWhere(objectKey, decodeFilterParam(opts.filter), toFilterFields(defs))
+  const filterWhere = built.where
   const search = (opts.search ?? "").trim()
   const searchWhere = search
     ? { OR: properties.filter((p) => ["TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL"].includes(p.type) || p.id === primary?.id)
@@ -143,7 +142,7 @@ export async function summarizeCustomObjectRecords(
   if (!def) return { values: {}, scanned: 0, capped: false }
   const properties: any[] = (def.properties as any[]) ?? []
   const primary = properties.find((p) => p.primary) ?? properties[0]
-  const where = listWhere(def.id, properties, primary, opts)
+  const where = await listWhere(objectKey, def.id, properties, primary, opts)
 
   const collected: Record<string, unknown[]> = Object.fromEntries(keys.map((k) => [k, []]))
   let scanned = 0
@@ -186,7 +185,7 @@ export async function queryCustomObjectRecords(objectKey: string, opts: { page?:
   const dir: "asc" | "desc" = opts.dir === "asc" ? "asc" : "desc"
   const skip = (page - 1) * CO_PAGE_SIZE
 
-  const where = listWhere(def.id, properties, primary, opts)
+  const where = await listWhere(objectKey, def.id, properties, primary, opts)
 
   const total = await (prisma as any).customObjectRecord.count({ where })
 
@@ -233,7 +232,7 @@ export async function exportCustomObjectRecords(objectKey: string, opts: { sort?
   const primary = properties.find((p) => p.primary) ?? properties[0]
   const dir: "asc" | "desc" = opts.dir === "asc" ? "asc" : "desc"
 
-  const filterWhere = filterStateToWhere(decodeFilterParam(opts.filter), serverFilterFields(properties))
+  const filterWhere = (await buildObjectWhere(objectKey, decodeFilterParam(opts.filter), toFilterFields(await fieldsFor(objectKey)))).where
   const search = (opts.search ?? "").trim()
   const searchWhere = search
     ? { OR: properties.filter((p) => ["TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL"].includes(p.type) || p.id === primary?.id)

@@ -144,7 +144,13 @@ export async function fieldsFor(objectType: string): Promise<ObjectFieldDef[]> {
     // with proper option lists.
     if ((f as any).joinPath) continue
     defs.push(field({
-      key: f.key,
+      // Custom-object properties are keyed `cp_<id>` here, not by the bare id
+      // reportFieldsFor uses. That prefix is what every list has always written
+      // and what saved CustomObjectView filters contain, so dropping it would
+      // silently blank those views. Reports keep the bare id — they store their
+      // own field refs and are unaffected. `column` stays the raw id either way,
+      // since that's the JSON path.
+      key: isCustomObject(objectType) && f.jsonBag ? `cp_${f.key}` : f.key,
       label: f.label,
       // A custom object's "Record ID" is declared text by the report layer but is
       // backed by the integer `recordNumber`, so text operators reach Postgres as

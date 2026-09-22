@@ -12,6 +12,7 @@ import { getCreateForm } from "@/app/actions/create-form"
 import { pipelinesForObject } from "@/lib/stages/core"
 import { getPipelineColorStyle } from "@/app/actions/pipelines"
 import { associationColumnDefs, attachAssociatedRecords } from "@/lib/association-columns"
+import { fieldsFor } from "@/lib/object-fields-server"
 
 interface Props {
   params: { key: string }
@@ -32,13 +33,16 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
   const totalRecords = await countCustomObjectRecords(params.key)
   const serverMode = totalRecords > CO_SERVER_THRESHOLD
 
-  const [users, savedViews, shareOptions, createFormConfig, pipelines, pipelineColorStyle] = await Promise.all([
+  const [users, savedViews, shareOptions, createFormConfig, pipelines, pipelineColorStyle, filterDefs] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
     getCustomObjectViews(params.key),
     getViewShareOptions(),
     getCreateForm(`CO:${params.key}`),
     pipelinesForObject(`CO:${params.key}`),
     getPipelineColorStyle(`CO:${params.key}`),
+    // One schema for the filter UI and the server-side translation. Serializable,
+    // so the client rebuilds exactly these fields rather than a parallel copy.
+    fieldsFor(`CO:${params.key}`),
   ])
 
   const pageData = serverMode
@@ -81,6 +85,7 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
           stages: p.stages.map((s) => ({ id: s.id, name: s.name, color: s.color })),
         }))}
         pipelineColorStyle={pipelineColorStyle}
+        filterDefs={filterDefs}
       />
     </div>
   )
