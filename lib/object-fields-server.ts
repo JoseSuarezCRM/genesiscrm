@@ -14,6 +14,7 @@ import type { FieldType } from "@/lib/filters"
 import { field, type ObjectFieldDef } from "@/lib/object-fields"
 import { reportFieldsFor } from "@/lib/reporting/objects"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { isCustomObject } from "@/lib/automation-records"
 
 /** Registry key → Prisma model, for DMMF lookups. */
@@ -73,12 +74,34 @@ interface Augment {
   joins?: { key: string; label: string; relationPath: string; column: string; fk: string }[]
   counts?: { key: string; label: string; relation: string }[]
   m2m?: { key: string; label: string; relation: string; relKey: string; options?: () => Promise<{ value: string; label: string }[]> }[]
+  /**
+   * Real columns that RECORD_FIELDS doesn't list, so reportFieldsFor never sees
+   * them. Declared here rather than added to RECORD_FIELDS because that catalog
+   * also drives the editable property cards and the create modal — surgery's
+   * `status` is stage-managed and shouldn't become a free-text card field.
+   */
+  extras?: { key: string; label: string; type: FieldType; column: string; options?: { value: string; label: string }[] }[]
+  /**
+   * Foreign keys offered as a pick-from-a-list select. reportFieldsFor exposes
+   * the joined NAME (good for grouping a report); a filter wants to choose the
+   * practice or provider itself and match on id. Options load lazily so the
+   * lists are only queried when the schema is actually built.
+   */
+  fkSelects?: { key: string; label: string; column: string; options: () => Promise<{ value: string; label: string }[]> }[]
 }
 
 const AUGMENT: Record<string, Augment> = {
   REFERRAL: {
     users: [{ key: "assignedToId", label: "Referral Owner", column: "assignedToId" }],
     joins: [{ key: "practice.name", label: "Referring Practice", relationPath: "referringPractice", column: "name", fk: "referringPracticeId" }],
+    fkSelects: [
+      { key: "referringPracticeId", label: "Referring Practice", column: "referringPracticeId",
+        options: async () => (await prisma.referringPractice.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((x) => ({ value: x.id, label: x.name })) },
+      { key: "referringDoctorId", label: "Referring Provider", column: "referringDoctorId",
+        options: async () => (await prisma.referringDoctor.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((x) => ({ value: x.id, label: x.name })) },
+      { key: "referringLocationId", label: "Referring Location", column: "referringLocationId",
+        options: async () => (await prisma.practiceLocation.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((x) => ({ value: x.id, label: x.name })) },
+    ],
     m2m: [{
       key: "tags", label: "Tags", relation: "tags", relKey: "tagId",
       options: async () => (await prisma.tag.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((t) => ({ value: t.id, label: t.name })),
@@ -110,7 +133,14 @@ const AUGMENT: Record<string, Augment> = {
     ],
   },
   TASK: { users: [{ key: "assignedToId", label: "Assigned To", column: "assignedToId" }] },
-  SURGERY: { users: [{ key: "ownerId", label: "Surgery Owner", column: "ownerId" }] },
+  SURGERY: {
+    users: [{ key: "ownerId", label: "Surgery Owner", column: "ownerId" }],
+    extras: [
+      { key: "status", label: "Status", type: "select", column: "status",
+        options: Object.entries(SURGERY_STATUS_LABELS).map(([value, label]) => ({ value, label: String(label) })) },
+      { key: "expires", label: "Expires", type: "date", column: "expires" },
+    ],
+  },
 }
 
 /**
@@ -195,6 +225,21 @@ export async function fieldsFor(objectType: string): Promise<ObjectFieldDef[]> {
   for (const c of aug.counts ?? []) {
     if (seen.has(c.key)) continue
     defs.push(field({ key: c.key, label: c.label, type: "number", relationCount: { relation: c.relation } }))
+  }
+  for (const e of aug.extras ?? []) {
+    if (seen.has(e.key)) continue
+    defs.push(field({
+      key: e.key, label: e.label, type: e.type, options: e.options, column: e.column,
+      nullable: nullable.has(e.column),
+      dateOnly: e.type === "date" ? false : undefined,
+    }))
+  }
+  for (const fk of aug.fkSelects ?? []) {
+    if (seen.has(fk.key)) continue
+    defs.push(field({
+      key: fk.key, label: fk.label, type: "select", column: fk.column,
+      options: await fk.options(), nullable: nullable.has(fk.column),
+    }))
   }
   for (const m of aug.m2m ?? []) {
     if (seen.has(m.key)) continue
