@@ -212,7 +212,15 @@ async function checkObject(objectType: string) {
     }
 
     return { checked, mismatches, skipped: Array.from(skipped), rows: rows.length, fields: defs.length }
-  }, { isolationLevel: "RepeatableRead", timeout: 600_000, maxWait: 30_000 })
+  }, {
+    isolationLevel: "RepeatableRead",
+    // Generous on purpose: the whole comparison for one object runs inside this
+    // transaction so every query sees one snapshot, and the largest object
+    // (14.4k records × ~800 states) has taken over 12 minutes. Expiring here
+    // aborts the run without telling you anything about parity.
+    timeout: Number(process.env.TX_TIMEOUT_MS ?? 2_400_000),
+    maxWait: 30_000,
+  })
 }
 
 function describe(state: FilterState): string {
@@ -229,7 +237,14 @@ async function main() {
 
   let totalMismatch = 0, totalChecked = 0
   for (const t of targets) {
-    const r: any = await checkObject(t)
+    let r: any
+    try {
+      r = await checkObject(t)
+    } catch (e: any) {
+      console.log(`[ERR ] ${t.padEnd(22)} ${String(e?.message ?? e).split(String.fromCharCode(10))[0].slice(0, 120)}`)
+      totalMismatch++
+      continue
+    }
     totalChecked += r.checked
     totalMismatch += r.mismatches.length
     const status = r.mismatches.length === 0 ? "OK  " : "FAIL"

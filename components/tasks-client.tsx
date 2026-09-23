@@ -3,7 +3,7 @@
 import StyledSelect from "@/components/ui/styled-select"
 import DatePicker from "@/components/ui/date-picker"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
-import { useState, useTransition, useEffect, useRef } from "react"
+import { useState, useTransition, useEffect, useRef, useMemo } from "react"
 import { TaskStatus, TaskPriority, TaskType, TaskRepeat } from "@prisma/client"
 import { createTask, updateTask, updateTaskStatus, deleteTask, createTaskQueue, bulkDeleteTasks, bulkUpdateTasks } from "@/app/actions/tasks"
 import { searchAssociableRecords } from "@/app/actions/associations"
@@ -41,6 +41,7 @@ import FilterBuilder from "@/components/ui/filter-builder"
 import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTeam } from "@/components/view-access-selector"
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
+import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -433,7 +434,9 @@ const TASK_COL_W: Record<string, number> = { title: 260, status: 130, type: 100,
 const PRIORITY_ORDER: Record<string, number> = { URGENT: 0, HIGH: 1, NORMAL: 2, LOW: 3 }
 const STAGE_ORDER: Record<string, number> = { NOT_STARTED: 0, IN_PROGRESS: 1, WAITING: 2, DEFERRED: 3, COMPLETED: 4 }
 
-export default function TasksClient({ tasks: initialTasks, users, queues, objectTypes, currentUserId, highlight, initialFilter, canManage = true, canDelete = false, customProps = [], savedViews = [], shareUsers = [], shareTeams = [], associations = [] }: {
+export default function TasksClient({ filterDefs, tasks: initialTasks, users, queues, objectTypes, currentUserId, highlight, initialFilter, canManage = true, canDelete = false, customProps = [], savedViews = [], shareUsers = [], shareTeams = [], associations = [] }: {
+  /** Filter schema from lib/object-fields-server. */
+  filterDefs: ObjectFieldDef[]
   tasks: Task[]
   users: User[]
   queues: Queue[]
@@ -495,15 +498,12 @@ export default function TasksClient({ tasks: initialTasks, users, queues, object
   const cbFrozen = frozenCount > 0
 
   // ── Filters (advanced + quick pills) ──
-  const filterFields: FilterField[] = [
-    { key: "title", label: "Title", type: "text", getValue: (t: any) => t.title },
-    { key: "status", label: "Stage", type: "select", options: TASK_STAGES.map((s) => ({ value: s.value, label: s.label })), getValue: (t: any) => t.status },
-    { key: "priority", label: "Priority", type: "select", options: Object.entries(PRIORITY_LABELS).map(([v, l]) => ({ value: v, label: l })), getValue: (t: any) => t.priority },
-    { key: "type", label: "Type", type: "select", options: TASK_TYPES.map((x) => ({ value: x.value, label: x.label })), getValue: (t: any) => t.type },
-    { key: "assignedTo", label: "Assigned To", type: "select", options: assignableUsers.map((u) => ({ value: u.id, label: u.label })), getValue: (t: any) => t.assignedTo?.id ?? "" },
-    { key: "dueDate", label: "Due Date", type: "date", getValue: (t: any) => t.dueDate },
-    ...customPropertyFilterFields(customProps.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })), "customProperties"),
-  ]
+  // From the server's schema (lib/object-fields-server). Tasks previously offered
+  // six hand-listed criteria; RECORD_FIELDS had no TASK entry at all, so Title,
+  // Stage, Priority, Type, Repeat, Due Date, Queue and Created By were filterable
+  // nowhere — and invisible to the report builder for the same reason.
+  const filterFields = useMemo(() => toFilterFields(filterDefs), [filterDefs])
+
   const [filter, setFilter] = useState<FilterState>(emptyFilter())
   const filtersActive = activeConditionCount(filter, filterFields) > 0
 

@@ -42,6 +42,7 @@ export const ACCESS_OBJECTS: { key: string; label: string }[] = [
   { key: "CUSTOM_PROPERTIES", label: "Custom Properties" },
   { key: "VIEWS",             label: "Views & Card Sections" },
   { key: "REPORTS",           label: "Reports" },
+  { key: "SEGMENTS",          label: "Segments" },
 ]
 
 // Binary capabilities (on/off — they aren't a view/edit/delete spectrum).
