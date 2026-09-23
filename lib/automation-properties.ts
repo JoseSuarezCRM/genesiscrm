@@ -6,6 +6,7 @@ import {
   FACILITY_OPTIONS, CLEARANCE_OPTIONS, DENTAL_CLEARANCE_OPTIONS,
   CT_REQUIRED_OPTIONS, GLP1_OPTIONS, DME_OPTIONS, REFERRAL_PRESETS,
 } from "./surgery-procedures"
+import { IMAGING_TYPES } from "./record-field-catalog"
 
 export type PropType = "text" | "number" | "date" | "boolean" | "select" | "tag"
 
@@ -95,11 +96,9 @@ export const REFERRAL_PROPERTY_DEFS: PropertyDef[] = [
   { id: "referringNpi",       label: "Referring NPI",       type: "text",   path: "referringNpi" },
 ]
 
-export const IMAGING_OPTIONS = [
-  { value: "CT", label: "CT" },
-  { value: "MRI", label: "MRI" },
-  { value: "MRI Arthrogram", label: "MRI Arthrogram" },
-]
+// Derived, not restated — the field catalog owns the list, so an option added
+// there shows up in workflow conditions without a second edit.
+export const IMAGING_OPTIONS = IMAGING_TYPES.map((v) => ({ value: v, label: v }))
 
 export const SURGERY_STATUS_OPTIONS = [
   { value: "NEW", label: "New" },
