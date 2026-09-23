@@ -716,7 +716,7 @@ model Referral {
   pipelineId          String?
   pipeline            Pipeline?            @relation(fields: [pipelineId], references: [id])
   stageId             String? // current stage (stages feature; mirrors status until migrated)
-  imagingType         String? // CT | MRI | MRI Arthrogram — only set for MRI pipeline referrals
+  imagingType         String? // options in IMAGING_TYPES (lib/record-field-catalog) — only set for MRI pipeline referrals
   // Notes & meta
   notes               String?
   customProperties    Json                 @default("{}") // custom property values

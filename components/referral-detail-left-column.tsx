@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { ReferralStatus } from "@prisma/client"
 import { STATUS_LABELS, formatDate, formatPhone } from "@/lib/utils"
 import { updateReferralStatus, updateReferralField, updateReferralPipeline } from "@/app/actions/referrals"
-import StyledSelect from "@/components/ui/styled-select"
 import ReferralAssignee from "@/components/referral-assignee"
 import TagSelector from "@/components/tag-selector"
 import LeftCardEditorModal from "@/components/left-card-editor-modal"
@@ -18,6 +17,7 @@ import { useCardReorder } from "@/components/use-card-reorder"
 import CustomPropertyField from "@/components/custom-property-field"
 import { isPropertyVisible, RECORD_FIELDS } from "@/lib/record-field-catalog"
 import { PipelineChip } from "@/components/pipeline-chip"
+import StyledSelect from "@/components/ui/styled-select"
 
 interface CardLayout {
   cardName: string
@@ -103,13 +103,16 @@ function EditableRow({
   value,
   type = "text",
   format,
+  options,
 }: {
   referralId: string
   field: string
   label: string
   value: any
-  type?: "text" | "date"
+  type?: "text" | "date" | "select"
   format?: (v: any) => string | null
+  /** For `select`: the allowed values, from the field catalog. */
+  options?: string[]
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
@@ -153,6 +156,23 @@ function EditableRow({
           {label}
         </span>
         <div className="flex items-center gap-1">
+          {type === "select" ? (
+            // The shared select, per the rule that a field reuses the common
+            // inputs rather than a raw control. `autoOpen` means one click on
+            // the value opens the list, matching inline editing elsewhere.
+            <StyledSelect
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              autoOpen
+              disabled={isPending}
+              className="w-full"
+            >
+              <option value="">—</option>
+              {(options ?? []).map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </StyledSelect>
+          ) : (
           <input
             autoFocus
             type={type}
@@ -169,6 +189,7 @@ function EditableRow({
             disabled={isPending}
             className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 disabled:opacity-50"
           />
+          )}
           <button
             onClick={save}
             disabled={isPending}
@@ -380,8 +401,6 @@ export default function ReferralDetailLeftColumn({
         return <EditableRow key={fieldId} referralId={referral.id} field="insuranceGroup" label="Group Number" value={referral.insuranceGroup} />
       case "authStatus":
         return <EditableRow key={fieldId} referralId={referral.id} field="authStatus" label="Auth Status" value={referral.authStatus} />
-      case "imagingType":
-        return <EditableRow key={fieldId} referralId={referral.id} field="imagingType" label="Imaging Type" value={referral.imagingType} />
       case "pipeline":
         return <PipelineRow key={fieldId} referralId={referral.id} value={referral.pipelineId ?? null} name={referral.pipeline?.name} pipelines={pipelines} canEdit={isAdmin} colorStyle={pipelineColorStyle} />
       case "referralDate":
@@ -399,9 +418,12 @@ export default function ReferralDetailLeftColumn({
         if (nf) {
           const v = (referral as any)[nf.key]
           const isDate = nf.type === "date" || nf.type === "datetime"
+          const isSelect = nf.type === "select" && !!nf.options?.length
           if (!nf.readOnly) {
             return <EditableRow key={fieldId} referralId={referral.id} field={nf.key} label={nf.label} value={v}
-              type={isDate ? "date" : undefined} format={nf.type === "phone" ? formatPhone : isDate ? formatDate : undefined} />
+              type={isSelect ? "select" : isDate ? "date" : undefined}
+              options={isSelect ? nf.options : undefined}
+              format={nf.type === "phone" ? formatPhone : isDate ? formatDate : undefined} />
           }
           return <PropertyRow key={fieldId} label={nf.label} value={v == null ? undefined : String(v)} />
         }

@@ -53,6 +53,18 @@ export function isPropertyVisible(
   return rule.equals.includes(String(v ?? ""))
 }
 
+// The referral imaging types, in one place. Previously these were written out
+// separately in the create form, in IMAGING_OPTIONS for automations, and in a
+// schema comment — so adding an option meant remembering all three, and the
+// lists had to be kept in step by hand.
+export const IMAGING_TYPES: string[] = [
+  "CT",
+  "MRI",
+  "MRI Arthrogram",
+  "MRI W WO Contrast",
+  "MRI MARS Protocol",
+]
+
 export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
   REFERRAL: [
     // Patient
@@ -80,7 +92,7 @@ export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
     // lib/record-cards for the referral. Status/date/owner are read-only here
     // (managed by the referral's own status + assignment controls).
     { key: "pipelineId", label: "Pipeline", type: "select" },
-    { key: "imagingType", label: "Imaging Type", type: "text" },
+    { key: "imagingType", label: "Imaging Type", type: "select", options: IMAGING_TYPES },
     { key: "status", label: "Status", type: "text", readOnly: true },
     { key: "referralDate", label: "Referral Date", type: "date", readOnly: true },
     { key: "assignedTo", label: "Assigned To", type: "text", readOnly: true },

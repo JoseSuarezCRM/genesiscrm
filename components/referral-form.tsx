@@ -34,6 +34,7 @@ import { builtinCreateCatalog } from "@/lib/create-catalog"
 import { isPropertyVisible, type RecordFieldDef } from "@/lib/record-field-catalog"
 import { type CreateFormField } from "@/app/actions/create-form"
 import CreateFormEditor from "@/components/create-form-editor"
+import { IMAGING_TYPES } from "@/lib/record-field-catalog"
 
 // ─── Types passed from server ─────────────────────────────────────────────────
 
@@ -851,9 +852,9 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 >
                   <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CT">CT</SelectItem>
-                    <SelectItem value="MRI">MRI</SelectItem>
-                    <SelectItem value="MRI Arthrogram">MRI Arthrogram</SelectItem>
+                    {IMAGING_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>
