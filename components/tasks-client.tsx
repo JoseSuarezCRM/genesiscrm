@@ -42,6 +42,7 @@ import { ViewAccessSelector, type ViewAccessValue, type ShareUser, type ShareTea
 import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
+import AddToSegmentButton from "@/components/add-to-segment-button"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -755,6 +756,7 @@ export default function TasksClient({ filterDefs, tasks: initialTasks, users, qu
 
       {selected.size > 0 && (
         <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <AddToSegmentButton objectType={"TASK"} recordIds={Array.from(selected)} onDone={() => setSelected(new Set())} />
           <button className={bulkBtn} onClick={() => bulkStatus("COMPLETED")}>Mark complete</button>
           <button className={bulkBtn} onClick={() => bulkStatus("NOT_STARTED")}>Mark not started</button>
           {canDelete && <button className={bulkDanger} onClick={bulkDelete}>Delete</button>}

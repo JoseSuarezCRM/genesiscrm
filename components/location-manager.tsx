@@ -33,6 +33,7 @@ import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, ma
 import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { cn } from "@/lib/utils"
 import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
+import AddToSegmentButton from "@/components/add-to-segment-button"
 
 export interface LocationRow {
   id: string
@@ -291,6 +292,7 @@ export default function LocationManager({ filterDefs, locations, practices, cust
 
       {/* Bulk bar */}
       <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <AddToSegmentButton objectType={"LOCATION"} recordIds={Array.from(selected)} onDone={() => setSelected(new Set())} />
         {canDelete && (
           <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}>
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete

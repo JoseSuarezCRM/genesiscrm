@@ -25,6 +25,7 @@ import { moveReferralsToPipeline, bulkUpdateStatus } from "@/app/actions/referra
 import { bulkAddTag, bulkRemoveTag } from "@/app/actions/tags"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Tag as TagIcon } from "lucide-react"
+import AddToSegmentButton from "@/components/add-to-segment-button"
 
 interface Pipeline {
   id: string
@@ -400,6 +401,7 @@ export default function ReferralTable({ referrals, pipelines, pipelineColorStyle
     <>
       {/* Bulk action bar */}
       <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <AddToSegmentButton objectType={"REFERRAL"} recordIds={Array.from(selected)} onDone={() => setSelected(new Set())} />
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen((v) => !v)}

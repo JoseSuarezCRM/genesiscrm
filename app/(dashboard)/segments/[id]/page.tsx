@@ -5,7 +5,7 @@ import { requireView } from "@/lib/auth-guard"
 import { userCanLevel } from "@/lib/permissions"
 import { labelFor } from "@/lib/object-registry"
 import { fieldsFor } from "@/lib/object-fields-server"
-import { getSegment, segmentMembers } from "@/app/actions/segments"
+import { getSegment, segmentMembers, importSegmentCounts } from "@/app/actions/segments"
 import { segmentSummary } from "@/lib/segments"
 import SegmentDetail from "@/components/segment-detail"
 
@@ -29,6 +29,8 @@ export default async function SegmentDetailPage({ params, searchParams }: PagePr
     segmentMembers(params.id, page, 50),
   ])
   const summary = await segmentSummary(segment as any, defs).catch(() => "")
+  // Only meaningful for an import-sourced segment; null otherwise.
+  const importCounts = await importSegmentCounts(params.id).catch(() => null)
 
   return (
     <div className="p-6 space-y-5">
@@ -41,6 +43,7 @@ export default async function SegmentDetailPage({ params, searchParams }: PagePr
         objectLabel={objectLabel}
         summary={summary}
         members={JSON.parse(JSON.stringify(members))}
+        importCounts={importCounts}
         canEdit={userCanLevel(user, "SEGMENTS", "EDIT")}
       />
     </div>

@@ -302,3 +302,64 @@ export async function listImportRunsForSegments() {
     return { ...r, objectType: `CO:${r.objectKey}`, changeRows: n }
   }))
 }
+
+/**
+ * Static segments of one object that the caller can add records to.
+ *
+ * ACTIVE segments are deliberately excluded: their membership comes from their
+ * filter, so a hand-added record would vanish on the next read. `addToSegment`
+ * rejects them too — this only keeps them out of the picker.
+ */
+export async function listStaticSegmentsFor(objectType: string) {
+  const session = await auth()
+  if (!session?.user) return []
+  const user = session.user as any
+  if (!userCanLevel(user, recordPermKey(objectType), "VIEW")) return []
+  const rows: SegmentRow[] = await (prisma as any).segment.findMany({
+    where: { objectType, kind: "STATIC", ...(await visibleWhere(user.id)) },
+    orderBy: { updatedAt: "desc" },
+    take: 50,
+  })
+  return rows.map((s) => ({ id: s.id, name: s.name, size: s.size }))
+}
+
+/** Create a static segment straight from a selection on a list. */
+export async function createStaticSegmentFromRecords(objectType: string, name: string, recordIds: string[]) {
+  const r = await createSegment({ name, objectType, kind: "STATIC", source: "MANUAL", filter: null })
+  if ("error" in r && r.error) return r
+  const id = (r as any).id as string
+  if (recordIds.length) await addToSegment(id, recordIds)
+  return { success: true, id }
+}
+
+/**
+ * For an import-sourced segment: what the runs reported vs what actually
+ * resolves today.
+ *
+ * Worth showing both. `ImportRun.created` is written best-effort — the change
+ * rows are persisted with `.catch(() => {})` — and records can be deleted after
+ * the fact, so the two legitimately disagree. A single number would hide that;
+ * two make the gap visible.
+ */
+export async function importSegmentCounts(id: string) {
+  const seg = await getSegment(id)
+  if (!seg || seg.source !== "IMPORT") return null
+  const runIds: string[] = (seg.sourceConfig as any)?.importRunIds ?? []
+  if (!runIds.length) return null
+  const runs = await (prisma as any).importRun.findMany({
+    where: { id: { in: runIds } },
+    select: { id: true, status: true, created: true, updated: true },
+  })
+  const active = runs.filter((r: any) => r.status === "active")
+  const reported = active.reduce((n: number, r: any) => n + (r.created ?? 0) + (r.updated ?? 0), 0)
+  const changeRows = active.length
+    ? await (prisma as any).importRunChange.count({ where: { runId: { in: active.map((r: any) => r.id) } } })
+    : 0
+  const live = await segmentRecordIds(seg as any)
+  return {
+    reported,
+    changeRows,
+    live: live.total,
+    undoneRuns: runs.length - active.length,
+  }
+}

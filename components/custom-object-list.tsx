@@ -22,6 +22,7 @@ import { formatNumber } from "@/lib/number-format"
 import { aggsFor, summarize, summaryLabel, type SummaryAgg } from "@/lib/column-summary"
 import PipelineStageCell, { type PipelineOption } from "@/components/pipeline-stage-cell"
 import type { ObjectColumnCatalog, ObjectProperty } from "@/lib/object-columns"
+import AddToSegmentButton from "@/components/add-to-segment-button"
 
 // The TABLE body of a custom object's list. The chrome around it (views, search,
 // filters, columns chooser, export, add) lives in ObjectViewShell, which owns the
@@ -212,6 +213,7 @@ export default function CustomObjectList({
   return (
     <div className="space-y-4">
       <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <AddToSegmentButton objectType={`CO:${objectKey}`} recordIds={Array.from(selected)} onDone={() => setSelected(new Set())} />
         {canDelete && (
           <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}>
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete

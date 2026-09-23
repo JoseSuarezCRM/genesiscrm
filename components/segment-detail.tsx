@@ -35,9 +35,10 @@ interface Props {
   summary: string
   members: Members
   canEdit: boolean
+  importCounts: { reported: number; changeRows: number; live: number; undoneRuns: number } | null
 }
 
-export default function SegmentDetail({ segment, objectLabel, summary, members, canEdit }: Props) {
+export default function SegmentDetail({ segment, objectLabel, summary, members, canEdit, importCounts }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [busy, setBusy] = useState(false)
@@ -137,6 +138,20 @@ export default function SegmentDetail({ segment, objectLabel, summary, members, 
           </div>
         ))}
       </div>
+
+      {/* What the import reported vs what resolves now. These legitimately
+          differ — ImportRun.created is written best-effort, and records can be
+          deleted after the fact — so both are shown rather than one number that
+          hides the gap. */}
+      {importCounts && importCounts.live !== importCounts.reported && (
+        <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-xs text-zinc-600">
+          {importCounts.live.toLocaleString()} record{importCounts.live !== 1 ? "s" : ""} now ·
+          {" "}the import{importCounts.undoneRuns ? "s" : ""} reported {importCounts.reported.toLocaleString()} created or updated
+          {importCounts.undoneRuns > 0 && ` · ${importCounts.undoneRuns} run${importCounts.undoneRuns !== 1 ? "s" : ""} undone and excluded`}
+          {importCounts.changeRows !== importCounts.reported &&
+            ` · ${importCounts.changeRows.toLocaleString()} change rows recorded`}
+        </p>
+      )}
 
       {/* Conditions the database couldn't apply are named, not swallowed — a
           size that quietly excluded a criterion would be worse than no size. */}
