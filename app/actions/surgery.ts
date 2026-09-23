@@ -8,6 +8,7 @@ import { CallOutcome } from "@prisma/client"
 import { runTrigger_SurgeryStatusChanged, runTrigger_SurgeryCallAttemptsReached, runTrigger_RecordCreated, runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 import { type SurgeryFilters, SURGERY_PAGE_SIZE, buildSurgeryWhere, surgeryOrderBy } from "@/lib/surgery-query"
 import { surgeryServerFilterFields } from "@/lib/surgery-server-fields"
+import { resolveFor } from "@/lib/object-query"
 
 export async function getSurgeryCases(filters: SurgeryFilters = {}) {
   const session = await auth()
@@ -15,7 +16,11 @@ export async function getSurgeryCases(filters: SurgeryFilters = {}) {
 
   const { page = 1, sort, dir = "desc" } = filters
   const skip = (page - 1) * SURGERY_PAGE_SIZE
-  const where = buildSurgeryWhere(filters, await surgeryServerFilterFields())
+  // Resolve custom-property conditions in raw SQL first: Prisma's JSON filters
+  // are case-sensitive and have no number/date operators, so without this a
+  // filter on a surgery custom property silently matched the wrong set.
+  const sFields = await surgeryServerFilterFields()
+  const where = buildSurgeryWhere(filters, sFields, await resolveFor("SURGERY", filters.filter ?? null, sFields))
   const orderBy = surgeryOrderBy(sort, dir)
 
   const [cases, total, allMatchingIds] = await Promise.all([

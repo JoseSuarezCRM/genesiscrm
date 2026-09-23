@@ -5,6 +5,7 @@
 import type { FilterState, FilterField } from "./filters"
 import { filterStateToWhere } from "./filter-to-prisma"
 import { SURGERY_FILTER_FIELDS } from "./surgery-filter-fields"
+import type { JsonResolution } from "./json-predicate"
 
 export interface SurgeryFilters {
   search?: string
@@ -26,7 +27,12 @@ export const SURGERY_PAGE_SIZE = 20
 // `fields` defaults to the fixed columns; callers that know the tenant's Surgery
 // custom properties pass surgeryFilterFields({ customProps }) so those criteria
 // (and Record Owner) translate too.
-export function buildSurgeryWhere(filters: SurgeryFilters, fields: FilterField[] = SURGERY_FILTER_FIELDS): Record<string, unknown> {
+export function buildSurgeryWhere(
+  filters: SurgeryFilters,
+  fields: FilterField[] = SURGERY_FILTER_FIELDS,
+  /** Custom-property conditions pre-resolved to ids — see lib/json-predicate. */
+  resolved?: JsonResolution,
+): Record<string, unknown> {
   const { search, statuses = [], statusMode = "any", from, to, filter } = filters
   const clauses: Record<string, unknown>[] = []
 
@@ -50,7 +56,7 @@ export function buildSurgeryWhere(filters: SurgeryFilters, fields: FilterField[]
     })
   }
 
-  const advanced = filterStateToWhere(filter, fields)
+  const advanced = filterStateToWhere(filter, fields, resolved)
   if (Object.keys(advanced).length > 0) clauses.push(advanced)
 
   if (clauses.length === 0) return {}
