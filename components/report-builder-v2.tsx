@@ -15,6 +15,7 @@ import type { ReportConfig, ReportField, ReportResult, Aggregation, DateFrequenc
 import { EMPTY_REPORT } from "@/lib/reporting/types"
 import { DATE_PRESET_GROUPS } from "@/lib/reporting/date-presets"
 import { ReportView, DataTable, type ReportStyle } from "@/components/report-view"
+import { listSegments } from "@/app/actions/segments"
 
 const VIZ_OPTIONS: { value: VizType; label: string }[] = [
   { value: "table", label: "Table" }, { value: "kpi", label: "KPI" },
@@ -107,6 +108,23 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
 
   const set = (patch: Partial<ReportConfig>) => setConfig((c) => ({ ...c, ...patch }))
   // Filters translate on primary fields + joined single-FK fields (relationPath).
+  // Segments available for the primary object. Reloaded when the object changes;
+  // a stale segmentId is cleared so a report can't silently point at a segment
+  // belonging to a different object.
+  const [segmentOptions, setSegmentOptions] = useState<{ id: string; name: string; size: number | null }[]>([])
+  useEffect(() => {
+    let cancelled = false
+    listSegments(config.primary)
+      .then((rows: any[]) => {
+        if (cancelled) return
+        setSegmentOptions(rows.map((r) => ({ id: r.id, name: r.name, size: r.size })))
+        if (config.segmentId && !rows.some((r) => r.id === config.segmentId)) set({ segmentId: null })
+      })
+      .catch(() => { if (!cancelled) setSegmentOptions([]) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.primary])
+
   const filterFields: FilterField[] = useMemo(
     () => fields.map((f) => ({ key: f.key, label: f.label, type: f.type, column: f.column, jsonBag: f.jsonBag, options: f.options, relationPath: f.joinPath, getValue: () => null })),
     [fields],
@@ -524,6 +542,31 @@ export default function ReportBuilderV2({ objects, initial, shareUsers = [], sha
                 )}
               </div>
               <FilterEditor fields={filterFields} value={config.filters ?? emptyFilter()} onChange={(v) => set({ filters: v })} />
+
+              {/* Narrow to a segment. Only segments of THIS object are offered —
+                  one over another object would match nothing and read as "no data". */}
+              {segmentOptions.length > 0 && (
+                <div className="border-t border-zinc-100 pt-3">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Segment</label>
+                  <select
+                    value={config.segmentId ?? ""}
+                    onChange={(e) => set({ segmentId: e.target.value || null })}
+                    className="w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-sm outline-none focus:border-zinc-400"
+                  >
+                    <option value="">All records</option>
+                    {segmentOptions.map((sg) => (
+                      <option key={sg.id} value={sg.id}>
+                        {sg.name}{sg.size !== null ? ` (${sg.size.toLocaleString()})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {config.segmentId && (
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      Active segments are re-checked when the report runs, so this follows the segment.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

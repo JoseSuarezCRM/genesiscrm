@@ -1801,7 +1801,7 @@ export async function countMatchingRecords(objectType: string, triggerType: stri
   return n
 }
 
-const ENROLL_CAP = 2000
+export const ENROLL_CAP = 2000
 
 // Run the full workflow once on every existing record that currently matches.
 export async function enrollExistingRecords(automationId: string): Promise<{ matched: number; ran: number; capped: boolean }> {

@@ -11,6 +11,7 @@ import type {
 } from "./types"
 import { resolvePreset } from "./date-presets"
 import { computeStageDurations } from "@/lib/stages/durations"
+import { segmentRecordIds } from "@/lib/segments"
 
 const ROW_CAP = 10000
 
@@ -144,6 +145,22 @@ async function loadReportRows(config: ReportConfig, window?: { start: Date; end:
   // via relationPath). m2m/relation traversal beyond that isn't supported.
   const advanced = filterStateToWhere(config.filters ?? null, toFilterFields(allFields))
   const clauses: Record<string, unknown>[] = [advanced]
+
+  // A segment restricts the report to its records. This MUST be part of the
+  // `where` rather than a filter over the loaded rows: `take: ROW_CAP` is applied
+  // at fetch time, so post-filtering would cap first and narrow second, silently
+  // under-reporting whenever the primary object has more than ROW_CAP rows.
+  if (config.segmentId) {
+    const seg = await (prisma as any).segment.findUnique({ where: { id: config.segmentId } }).catch(() => null)
+    // A segment over a different object would be meaningless here — the ids
+    // wouldn't match anything, which reads as "no data" rather than an error.
+    if (seg && seg.objectType === primary) {
+      const { ids } = await segmentRecordIds(seg)
+      clauses.push({ id: { in: ids } })
+    } else {
+      clauses.push({ id: { in: [] } })
+    }
+  }
   // Date-range window on the chosen (primary) date field.
   const dr = config.dateRange
   if (dr?.field) {

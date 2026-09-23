@@ -15,6 +15,9 @@ import {
   manualEnroll,
   searchEnrollRecords,
   previewCriteriaMatches,
+  previewSegmentMatches,
+  listSegmentsForAutomation,
+  enrollFromSegment,
 } from "@/app/actions/automations"
 import { Zap, Plus, Minus, Trash2, Play, ChevronLeft, ChevronDown, Info, X, GitBranch, Flag, ScrollText, Maximize2, Clock, CalendarClock, Copy, Move, Clipboard, MoreHorizontal, CornerUpLeft, UserPlus, Loader2, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -2811,7 +2814,10 @@ function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }
   criteriaData: CriteriaData
   onClose: () => void
 }) {
-  const [mode, setMode] = useState<"individual" | "filter">("individual")
+  const [mode, setMode] = useState<"individual" | "filter" | "segment">("individual")
+  const [segments, setSegments] = useState<{ id: string; name: string; size: number | null; kind: string }[] | null>(null)
+  const [segmentId, setSegmentId] = useState("")
+  const [segmentError, setSegmentError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<{ id: string; label: string }[]>([])
   const [searching, setSearching] = useState(false)
@@ -2837,6 +2843,29 @@ function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }
     return () => { cancel = true; clearTimeout(t) }
   }, [automationId, query, mode])
 
+  // Loaded when the tab is first opened — the modal is used mostly for the other
+  // two modes, so there's no reason to query on mount.
+  useEffect(() => {
+    if (mode !== "segment" || segments !== null) return
+    listSegmentsForAutomation(automationId)
+      .then((r) => setSegments(r))
+      .catch(() => setSegments([]))
+  }, [mode, automationId, segments])
+
+  const previewSegment = async (id: string) => {
+    setSegmentId(id)
+    setSegmentError(null)
+    setPreview(null)
+    if (!id) return
+    setPreviewing(true)
+    try {
+      const r = await previewSegmentMatches(automationId, id)
+      if (r.error) { setSegmentError(r.error); setPreview(null) }
+      else setPreview(r)
+    } catch { setSegmentError("Couldn't read that segment.") }
+    finally { setPreviewing(false) }
+  }
+
   const selectedIds = Object.keys(selected)
   const toggle = (id: string, label: string) =>
     setSelected(prev => { const n = { ...prev }; if (n[id]) delete n[id]; else n[id] = label; return n })
@@ -2846,6 +2875,19 @@ function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }
     try { setPreview(await previewCriteriaMatches(automationId, groups)) }
     catch { setPreview({ records: [], count: 0, capped: false }) }
     finally { setPreviewing(false) }
+  }
+
+  // The whole segment, resolved server-side — `preview.records` is only a sample.
+  const doEnrollSegment = async () => {
+    if (!segmentId) return
+    setEnrolling(true)
+    try {
+      const r = await enrollFromSegment(automationId, segmentId)
+      if (r.error) setDone(r.error)
+      else setDone(`Enrolled ${r.ran} record${r.ran === 1 ? "" : "s"} into this workflow.${r.capped ? " (Capped at the first 2,000.)" : ""}`)
+    } catch {
+      setDone("Enrollment failed. Please try again.")
+    } finally { setEnrolling(false) }
   }
 
   const doEnroll = async (ids: string[]) => {
@@ -2886,6 +2928,10 @@ function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }
                 <button onClick={() => setMode("filter")}
                   className={cn("px-3 py-1.5 rounded-lg border", mode === "filter" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 text-zinc-600 hover:border-zinc-300")}>
                   Custom filter
+                </button>
+                <button onClick={() => setMode("segment")}
+                  className={cn("px-3 py-1.5 rounded-lg border", mode === "segment" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 text-zinc-600 hover:border-zinc-300")}>
+                  From a segment
                 </button>
               </div>
             </div>
@@ -2933,6 +2979,47 @@ function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }
                   )}
                 </div>
               )}
+
+              {mode === "segment" && (
+                <div className="space-y-3">
+                  <label className="block text-xs font-medium text-zinc-700">Segment</label>
+                  {segments === null ? (
+                    <div className="flex justify-center py-6 text-zinc-300"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                  ) : segments.length === 0 ? (
+                    <p className="text-sm text-zinc-500">
+                      No segments for {objectLabel.toLowerCase()} yet. Build one under Segments, then enroll it here.
+                    </p>
+                  ) : (
+                    <select value={segmentId} onChange={(e) => previewSegment(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 text-sm outline-none focus:border-zinc-400">
+                      <option value="">Choose a segment…</option>
+                      {segments.map((sg) => (
+                        <option key={sg.id} value={sg.id}>
+                          {sg.name} — {sg.kind === "ACTIVE" ? "active" : "static"}{sg.size !== null ? `, ${sg.size.toLocaleString()}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {segmentError && <p className="text-xs text-red-600">{segmentError}</p>}
+                  {previewing && <div className="flex justify-center py-4 text-zinc-300"><Loader2 className="h-4 w-4 animate-spin" /></div>}
+                  {preview && !segmentError && (
+                    <div className="text-sm text-zinc-600">
+                      <p className="font-medium text-zinc-800">
+                        {preview.count.toLocaleString()} record{preview.count === 1 ? "" : "s"} in this segment
+                        {preview.capped ? " — the first 2,000 will be enrolled" : ""}.
+                      </p>
+                      {preview.records.length > 0 && (
+                        <div className="mt-1.5 border border-zinc-100 rounded-lg divide-y divide-zinc-100 max-h-40 overflow-y-auto">
+                          {preview.records.map(r => <div key={r.id} className="px-3 py-1.5 text-sm truncate">{r.label}</div>)}
+                        </div>
+                      )}
+                      {preview.count > preview.records.length && (
+                        <p className="mt-1 text-xs text-zinc-400">Showing the first {preview.records.length}.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 px-5 py-4 border-t">
@@ -2941,6 +3028,11 @@ function ManualEnrollDialog({ automationId, objectLabel, criteriaData, onClose }
                 <button onClick={() => doEnroll(selectedIds)} disabled={enrolling || selectedIds.length === 0}
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">
                   {enrolling && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Enroll {selectedIds.length || ""}
+                </button>
+              ) : mode === "segment" ? (
+                <button onClick={doEnrollSegment} disabled={enrolling || !segmentId || !preview || preview.count === 0 || !!segmentError}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">
+                  {enrolling && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Enroll {preview?.count ? `all ${Math.min(preview.count, 2000).toLocaleString()}` : ""}
                 </button>
               ) : (
                 <button onClick={() => doEnroll((preview?.records ?? []).map(r => r.id))} disabled={enrolling || !preview || preview.count === 0}

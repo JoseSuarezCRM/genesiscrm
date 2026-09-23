@@ -5,8 +5,12 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { AutomationTrigger, AutomationAction } from "@prisma/client"
-import { runScheduledTriggers, countMatchingRecords, enrollExistingRecords, manualEnrollRecords, searchObjectRecords, matchRecordsByGroups } from "@/lib/automation-engine"
+import { runScheduledTriggers, countMatchingRecords, enrollExistingRecords, manualEnrollRecords, searchObjectRecords, matchRecordsByGroups, ENROLL_CAP } from "@/lib/automation-engine"
 import { workflowObjectFor } from "@/lib/workflow-objects"
+import { recordLabel } from "@/lib/automation-records"
+import { labelFor } from "@/lib/object-registry"
+import { segmentRecordIds } from "@/lib/segments"
+import { listSegments, getSegment } from "@/app/actions/segments"
 
 export async function createAutomation(data: {
   name: string
@@ -90,6 +94,61 @@ export async function previewCriteriaMatches(automationId: string, groups: any[]
   await requireAccess("AUTOMATIONS", "EDIT")
   const objectType = await automationObjectType(automationId)
   return matchRecordsByGroups(objectType, (groups ?? []) as any)
+}
+
+// Segments of the workflow's object, for the "from a segment" enrolment mode.
+export async function listSegmentsForAutomation(automationId: string): Promise<{ id: string; name: string; size: number | null; kind: string }[]> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  const objectType = await automationObjectType(automationId)
+  const rows = await listSegments(objectType)
+  return (rows as any[]).map((s) => ({ id: s.id, name: s.name, size: s.size, kind: s.kind }))
+}
+
+/**
+ * Preview which of a segment's records this workflow would enrol.
+ *
+ * Returns the SAME shape as previewCriteriaMatches so the picker renders it
+ * without a second code path. The engine is untouched — it has its own condition
+ * model (lib/automation-conditions), and a segment resolves to record ids before
+ * it ever reaches enrolment.
+ */
+export async function previewSegmentMatches(automationId: string, segmentId: string): Promise<{ records: { id: string; label: string }[]; count: number; capped: boolean; error?: string }> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  const objectType = await automationObjectType(automationId)
+  const seg = await getSegment(segmentId)
+  if (!seg) return { records: [], count: 0, capped: false, error: "Segment not found." }
+  // A segment of another object would enrol records the workflow can't act on.
+  if (seg.objectType !== objectType) {
+    return { records: [], count: 0, capped: false, error: `That segment holds ${await labelFor(seg.objectType)}, but this workflow runs on ${await labelFor(objectType)}.` }
+  }
+  const { ids, total } = await segmentRecordIds(seg as any)
+  // ENROLL_CAP applies on enrolment, so the preview says up front how many will
+  // actually run rather than letting the number surprise you afterwards.
+  const capped = total > ENROLL_CAP
+  const take = ids.slice(0, 25)
+  const records = await Promise.all(take.map(async (id) => ({ id, label: await recordLabel(objectType, id).catch(() => id) })))
+  return { records, count: total, capped }
+}
+
+/**
+ * Enrol every record in a segment.
+ *
+ * Resolves the ids on the server rather than returning them to the client and
+ * posting them back: a segment can hold tens of thousands of records, and the
+ * preview deliberately returns only a sample — enrolling what the preview
+ * happened to show would have quietly enrolled 25 of them.
+ */
+export async function enrollFromSegment(automationId: string, segmentId: string): Promise<{ ran: number; capped: boolean; error?: string }> {
+  await requireAccess("AUTOMATIONS", "EDIT")
+  const objectType = await automationObjectType(automationId)
+  const seg = await getSegment(segmentId)
+  if (!seg) return { ran: 0, capped: false, error: "Segment not found." }
+  if (seg.objectType !== objectType) {
+    return { ran: 0, capped: false, error: "That segment holds a different object than this workflow runs on." }
+  }
+  const { ids } = await segmentRecordIds(seg as any)
+  if (!ids.length) return { ran: 0, capped: false }
+  return manualEnrollRecords(automationId, ids)
 }
 
 export async function updateAutomation(id: string, data: {
