@@ -108,6 +108,27 @@ export const RECORD_FIELDS: Record<string, RecordFieldDef[]> = {
     { key: "fax", label: "Fax", type: "phone" },
     { key: "address", label: "Address", type: "text" },
   ],
+  // Tasks and Activities had NO entry here, so reportFieldsFor returned almost
+  // nothing for them: neither object could be filtered on its own columns, and
+  // the report builder could only see their ids and audit fields.
+  TASK: [
+    { key: "title", label: "Title", type: "text" },
+    { key: "description", label: "Description", type: "long_text" },
+    { key: "status", label: "Stage", type: "select", options: ["NOT_STARTED", "IN_PROGRESS", "WAITING", "DEFERRED", "COMPLETED"] },
+    { key: "priority", label: "Priority", type: "select", options: ["LOW", "NORMAL", "HIGH", "URGENT"] },
+    { key: "type", label: "Type", type: "select", options: ["TODO", "CALL", "EMAIL"] },
+    { key: "repeat", label: "Repeat", type: "select", options: ["NONE", "DAILY", "WEEKLY", "MONTHLY"] },
+    { key: "dueDate", label: "Due Date", type: "datetime" },
+  ],
+  ACTIVITY: [
+    { key: "date", label: "Date", type: "datetime" },
+    { key: "nextStep", label: "Next Step", type: "text" },
+    { key: "frontDesk", label: "Front Desk", type: "text" },
+    { key: "flyer", label: "Flyer", type: "text" },
+    { key: "notes", label: "Notes", type: "long_text" },
+    { key: "rating", label: "Clinic Value", type: "select", options: ["1", "2", "3"], optionLabels: { "1": "Low", "2": "Mid", "3": "High" }, coerce: "number" },
+    { key: "meetingRating", label: "Meeting Rating", type: "select", options: ["1", "2", "3", "4", "5"], coerce: "number" },
+  ],
   SURGERY: [
     { key: "patientName", label: "Patient Name", type: "text" },
     { key: "mrn", label: "MRN", type: "text" },

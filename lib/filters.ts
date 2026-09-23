@@ -74,6 +74,14 @@ export interface FilterField {
    * builders didn't say, and those keep their existing behaviour untouched.
    */
   dateOnly?: boolean
+  /**
+   * A `select` whose option values are numbers because the column is an Int
+   * (activity's Clinic Value and Meeting Rating). Prisma rejects string operands
+   * there — "Expected Int, provided (String)" — so the operands are coerced
+   * before they reach the query. RecordFieldDef already carries this as
+   * `coerce: "number"`; this is the same fact reaching the filter layer.
+   */
+  coerceNumber?: boolean
 }
 
 export interface Operator {

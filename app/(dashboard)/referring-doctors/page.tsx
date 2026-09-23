@@ -7,6 +7,7 @@ import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-shar
 import { getCreateForm } from "@/app/actions/create-form"
 import { listCustomProperties } from "@/app/actions/custom-properties"
 import { userCan, userCanLevel } from "@/lib/permissions"
+import { fieldsFor } from "@/lib/object-fields-server"
 
 export default async function ReferringDoctorsPage() {
   const session = await requireView("PROVIDERS")
@@ -15,7 +16,7 @@ export default async function ReferringDoctorsPage() {
   const canManage = userCanLevel(session?.user as any, "PROVIDERS", "EDIT")
   const currentUserId = (session?.user as any)?.id ?? ""
 
-  const [practices, savedViews, shareOptions] = await Promise.all([
+  const [practices, savedViews, shareOptions, providerFilterDefs] = await Promise.all([
     prisma.referringPractice.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -47,6 +48,7 @@ export default async function ReferringDoctorsPage() {
     }),
     getProviderViews(),
     getViewShareOptions(),
+      fieldsFor("PROVIDER"),
   ])
 
   const customPropertyDefs = await listCustomProperties("PROVIDER")
@@ -80,6 +82,7 @@ export default async function ReferringDoctorsPage() {
       </div>
 
       <PracticeManager
+        providerFilterDefs={providerFilterDefs}
         practices={enriched as any}
         isAdmin={canManage}
         currentUserId={currentUserId}

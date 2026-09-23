@@ -266,6 +266,10 @@ export async function getLocations() {
     referralCount: l._count.referrals,
     providerCount: l._count.doctors,
     activityCount: l._count.activities,
+    // The flattened counts above feed the table columns; the raw `_count` is what
+    // the shared filter schema reads (readPath ["_count", "doctors"]). Both come
+    // from the same query, so they can't disagree.
+    _count: l._count,
   }))
 }
 

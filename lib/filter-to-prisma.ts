@@ -216,7 +216,11 @@ function scalarConditionToWhere(cond: Condition, field: FilterField, resolved?: 
       return null
     }
     case "select": {
-      const arr = Array.isArray(v) ? v : v ? [v] : []
+      const raw = Array.isArray(v) ? v : v ? [v] : []
+      if (raw.length === 0) return null
+      // An Int-backed select needs real numbers; Prisma rejects the strings the
+      // FilterBuilder produces.
+      const arr = field.coerceNumber ? raw.map((x) => Number(x)).filter((n) => !Number.isNaN(n)) : raw
       if (arr.length === 0) return null
       switch (op) {
         case "is_any_of": return guarded(col, field, { [col]: { in: arr } })

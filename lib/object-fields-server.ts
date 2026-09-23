@@ -93,7 +93,7 @@ interface Augment {
 const AUGMENT: Record<string, Augment> = {
   REFERRAL: {
     users: [{ key: "assignedToId", label: "Referral Owner", column: "assignedToId" }],
-    joins: [{ key: "practice.name", label: "Referring Practice", relationPath: "referringPractice", column: "name", fk: "referringPracticeId" }],
+    joins: [{ key: "practice.name", label: "Referring Practice Name", relationPath: "referringPractice", column: "name", fk: "referringPracticeId" }],
     fkSelects: [
       { key: "referringPracticeId", label: "Referring Practice", column: "referringPracticeId",
         options: async () => (await prisma.referringPractice.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((x) => ({ value: x.id, label: x.name })) },
@@ -109,7 +109,8 @@ const AUGMENT: Record<string, Augment> = {
   },
   PROVIDER: {
     users: [{ key: "ownerId", label: "Provider Owner", column: "ownerId" }],
-    joins: [{ key: "practice.name", label: "Practice", relationPath: "practice", column: "name", fk: "practiceId" }],
+    joins: [{ key: "practice.name", label: "Practice Name", relationPath: "practice", column: "name", fk: "practiceId" }],
+    fkSelects: [{ key: "practiceId", label: "Practice", column: "practiceId", options: async () => (await prisma.referringPractice.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((x) => ({ value: x.id, label: x.name })) }],
     counts: [
       { key: "referralCount", label: "Referrals (count)", relation: "referrals" },
       { key: "locationCount", label: "Locations (count)", relation: "locations" },
@@ -118,7 +119,8 @@ const AUGMENT: Record<string, Augment> = {
   PRACTICE: { users: [{ key: "ownerId", label: "Practice Owner", column: "ownerId" }] },
   LOCATION: {
     users: [{ key: "ownerId", label: "Location Owner", column: "ownerId" }],
-    joins: [{ key: "practice.name", label: "Practice", relationPath: "practice", column: "name", fk: "practiceId" }],
+    joins: [{ key: "practice.name", label: "Practice Name", relationPath: "practice", column: "name", fk: "practiceId" }],
+    fkSelects: [{ key: "practiceId", label: "Practice", column: "practiceId", options: async () => (await prisma.referringPractice.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((x) => ({ value: x.id, label: x.name })) }],
     counts: [
       { key: "providerCount", label: "Providers (count)", relation: "doctors" },
       { key: "referralCount", label: "Referrals (count)", relation: "referrals" },
@@ -128,11 +130,15 @@ const AUGMENT: Record<string, Augment> = {
   ACTIVITY: {
     users: [{ key: "ownerId", label: "Activity Owner", column: "ownerId" }],
     joins: [
-      { key: "practice.name", label: "Practice", relationPath: "practice", column: "name", fk: "practiceId" },
+      { key: "practice.name", label: "Practice Name", relationPath: "practice", column: "name", fk: "practiceId" },
       { key: "location.name", label: "Location", relationPath: "location", column: "name", fk: "locationId" },
     ],
   },
-  TASK: { users: [{ key: "assignedToId", label: "Assigned To", column: "assignedToId" }] },
+  TASK: {
+    users: [{ key: "assignedToId", label: "Assigned To", column: "assignedToId" }, { key: "createdById", label: "Created By", column: "createdById" }],
+    fkSelects: [{ key: "queueId", label: "Queue", column: "queueId",
+      options: async () => (await (prisma as any).taskQueue.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((x: any) => ({ value: x.id, label: x.name })) }],
+  },
   SURGERY: {
     users: [{ key: "ownerId", label: "Surgery Owner", column: "ownerId" }],
     extras: [
@@ -160,9 +166,12 @@ export async function fieldsFor(objectType: string): Promise<ObjectFieldDef[]> {
   // calendar value stored at UTC midnight, a DATETIME is an instant whose day is
   // a clinic question. Recover it from the catalog the report layer read.
   const granularity: Record<string, boolean> = {}
+  const numericSelect = new Set<string>()
   for (const f of RECORD_FIELDS[objectType] ?? []) {
     if (f.type === "date") granularity[f.key] = true
     else if (f.type === "datetime") granularity[f.key] = false
+    // A select stored in an Int column — the catalog already records this.
+    if (f.coerce === "number") numericSelect.add(f.key)
   }
 
   for (const f of base) {
@@ -195,6 +204,7 @@ export async function fieldsFor(objectType: string): Promise<ObjectFieldDef[]> {
       // Custom properties are strings in a JSON bag and are compared as calendar
       // days by their own path, so granularity only applies to real columns.
       // `createdAt`/`updatedAt` aren't in the catalog and are always instants.
+      coerceNumber: numericSelect.has(f.key) || undefined,
       dateOnly: f.type !== "date" || f.jsonBag ? undefined
         : (granularity[f.key] ?? (/^(createdAt|updatedAt|creationDate)$/.test(f.column) ? false : undefined)),
     }))

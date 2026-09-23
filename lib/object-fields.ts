@@ -45,6 +45,8 @@ export interface ObjectFieldDef {
   nullable?: boolean
   /** Date fields: calendar value (UTC-midnight storage) vs real instant. See FilterField.dateOnly. */
   dateOnly?: boolean
+  /** Int-backed select — operands coerce to numbers. See FilterField.coerceNumber. */
+  coerceNumber?: boolean
   /** Where to read the value from a loaded row. Derived, never hand-written. */
   readPath: string[]
   /** Optional grouping label for the field picker ("Appointment properties"). */
@@ -122,6 +124,7 @@ export function toFilterFields(defs: ObjectFieldDef[]): FilterField[] {
     relationCount: d.relationCount,
     nullable: d.nullable,
     dateOnly: d.dateOnly,
+    coerceNumber: d.coerceNumber,
     getValue: (row: any) => readValueAt(row, d.readPath),
   }))
 }
