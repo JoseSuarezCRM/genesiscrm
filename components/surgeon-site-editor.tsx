@@ -9,6 +9,7 @@ import {
   updateSurgeonSite, publishSurgeonSite, setSurgeonSiteStatus,
 } from "@/app/actions/surgeon-sites"
 import { missingCredentials, type SurgeonSiteContent, type SurgeonClinic } from "@/lib/surgeon-site"
+import { SurgeonImageField } from "@/components/surgeon-site-image-field"
 import { cn } from "@/lib/utils"
 
 type Status = "DRAFT" | "PUBLISHED" | "REDIRECTED" | "RETIRED"
@@ -173,6 +174,39 @@ export function SurgeonSiteEditor(props: {
             <Textarea value={content.description} onChange={(v) => set("description", v)} rows={2} />
           </Field>
         </Grid>
+      </Section>
+
+      <Section id="images" open={open} setOpen={setOpen} title="Photographs" hint="This surgeon's own likeness. Never anyone else's.">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <SurgeonImageField
+            label="Headshot"
+            hint="The main portrait — homepage, Spanish homepage and medical-legal page."
+            value={content.headshot}
+            onChange={(v) => set("headshot", v)}
+          />
+          <SurgeonImageField
+            label="Second portrait"
+            hint="The About page hero. A different crop or pose from the main headshot."
+            value={content.headshotSecondary}
+            onChange={(v) => set("headshotSecondary", v)}
+          />
+          <SurgeonImageField
+            label="At work"
+            hint="In the operating room or clinic. Used on the homepage and About page."
+            value={content.portraitAtWork}
+            onChange={(v) => set("portraitAtWork", v)}
+          />
+          <SurgeonImageField
+            label="Search-result image"
+            hint="What Google shows beside the practice. A large square image works best."
+            value={content.schemaImagePath}
+            onChange={(v) => set("schemaImagePath", v)}
+          />
+        </div>
+        <p className="mt-3 text-[11px] leading-snug text-zinc-500">
+          Leaving one blank is safe — the page simply has no photograph there. It will never
+          fall back to another surgeon&apos;s.
+        </p>
       </Section>
 
       <Section id="web" open={open} setOpen={setOpen} title="Address & domain" hint="Where the site lives.">

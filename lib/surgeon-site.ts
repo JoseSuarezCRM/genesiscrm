@@ -123,6 +123,20 @@ export interface SurgeonSiteContent {
   description: string
   headshot: string
   schemaImagePath: string
+  /**
+   * A second portrait (the About hero) and the surgeon at work.
+   *
+   * Required on the site app's `Surgeon` type, so they belong here too — this
+   * module exists to mirror that type, and a field missing here is a field the
+   * site can never be given. They were added after five routes were found
+   * importing one surgeon's photographs directly, which put his face on every
+   * other surgeon's domain.
+   *
+   * Blank is safe: the site renders nothing rather than falling back to someone
+   * else's likeness. That is why publishing is not blocked on them.
+   */
+  headshotSecondary: string
+  portraitAtWork: string
 
   // ── Practice and contact ──────────────────────────────────────────────────
   group: string
@@ -182,6 +196,8 @@ export function emptyContent(): SurgeonSiteContent {
     description: "",
     headshot: "",
     schemaImagePath: "",
+    headshotSecondary: "",
+    portraitAtWork: "",
     group: "Genesis Orthopedics & Sports Medicine",
     groupUrl: "https://genesisortho.com/",
     region: "",
