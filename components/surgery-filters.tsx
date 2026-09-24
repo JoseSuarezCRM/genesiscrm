@@ -6,7 +6,7 @@ import { Search, ChevronDown, X, Check, Calendar } from "lucide-react"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { type FilterState, emptyFilter, activeConditionCount } from "@/lib/filters"
 import { decodeFilterParam } from "@/lib/filters"
-import { surgeryFilterFields } from "@/lib/surgery-filter-fields"
+import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 import type { CustomPropDef } from "@/lib/filters"
 
 const STATUS_OPTIONS = [
@@ -19,6 +19,8 @@ const STATUS_OPTIONS = [
 ]
 
 interface SurgeryFiltersProps {
+  /** Filter schema from lib/object-fields-server — shared with the server query. */
+  filterDefs: ObjectFieldDef[]
   currentSearch?: string
   currentStatuses: string[]
   currentStatusMode: "any" | "none"
@@ -239,12 +241,16 @@ export default function SurgeryFilters({
   currentFrom,
   currentTo,
   users = [],
+  filterDefs,
   customPropertyDefs = [],
 }: SurgeryFiltersProps) {
   // Record Owner + every Surgery custom property show up as filter criteria.
   const fields = useMemo(
-    () => surgeryFilterFields({ users, customProps: customPropertyDefs }),
-    [users, customPropertyDefs],
+    // From the server's schema, so the panel offers exactly what the list and
+    // the CSV export understand — including `status` and `expires`, which are
+    // real columns the old hand-built list carried but RECORD_FIELDS never did.
+    () => toFilterFields(filterDefs),
+    [filterDefs],
   )
   const router = useRouter()
   const pathname = usePathname()

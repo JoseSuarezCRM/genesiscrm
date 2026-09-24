@@ -9,6 +9,7 @@ import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
 import { userCan } from "@/lib/permissions"
 import { AuditAction } from "@prisma/client"
+import { resolveFor } from "@/lib/object-query"
 
 const LANGUAGE_LABELS: Record<string, string> = Object.fromEntries(LANGUAGE_OPTIONS.map((o) => [o.value, o.label]))
 
@@ -29,7 +30,9 @@ export async function GET(req: NextRequest) {
   const dir = searchParams.get("dir") === "asc" ? "asc" : "desc"
   const filter = decodeFilterParam(searchParams.get("filter"))
 
-  const where = buildSurgeryWhere({ search, statuses, statusMode, from, to, filter }, await surgeryServerFilterFields())
+  const sFields = await surgeryServerFilterFields()
+  // Same resolution the list uses, so an export can't return a different set.
+  const where = buildSurgeryWhere({ search, statuses, statusMode, from, to, filter }, sFields, await resolveFor("SURGERY", filter, sFields))
 
   const cases = await (prisma as any).surgeryCase.findMany({
     where,

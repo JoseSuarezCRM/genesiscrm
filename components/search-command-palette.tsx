@@ -17,6 +17,7 @@ const allItems: SearchItem[] = [
   // Referrals
   { id: "dashboard", title: "Dashboard", category: "Referrals", href: "/" },
   { id: "referrals", title: "Referrals", category: "Referrals", href: "/referrals" },
+  { id: "segments", title: "Segments", category: "Referrals", href: "/segments" },
   { id: "practices", title: "Practices", category: "Referrals", href: "/practices" },
   { id: "providers", title: "Providers", category: "Referrals", href: "/referring-doctors" },
   { id: "activities", title: "Activities", category: "Referrals", href: "/activities" },

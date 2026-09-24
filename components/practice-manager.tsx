@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation"
 import CreateRecordModal from "@/components/create-record-modal"
 import { builtinCreateCatalog, splitCreateValues } from "@/lib/create-catalog"
 import { type CreateFormField } from "@/app/actions/create-form"
-import { useState, useTransition, useRef, useEffect, type ReactNode } from "react"
+import { useState, useTransition, useRef, useEffect, type ReactNode, useMemo } from "react"
 import { OptionValue } from "@/components/option-value"
 import { ReferringPractice, PracticeLocation, ReferringDoctor, DoctorLocation } from "@prisma/client"
 import {
@@ -39,6 +39,7 @@ import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { PhoneInput } from "@/components/ui/phone-input"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,8 @@ interface SavedProviderView {
 }
 
 interface Props {
+  /** Provider filter schema from lib/object-fields-server. */
+  providerFilterDefs: ObjectFieldDef[]
   practices: PracticeWithRelations[]
   isAdmin: boolean
   currentUserId: string
@@ -353,7 +356,7 @@ function SearchablePicker({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function PracticeManager({ practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], practiceCustomPropertyDefs = [], assignableUsers = [], createFormConfig = null, view = "practices" }: Props & { view?: "practices" | "providers" }) {
+export default function PracticeManager({ providerFilterDefs, practices, isAdmin, savedViews: initialSavedViews, shareUsers, shareTeams, providerCustomPropertyDefs = [], practiceCustomPropertyDefs = [], assignableUsers = [], createFormConfig = null, view = "practices" }: Props & { view?: "practices" | "providers" }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -522,8 +525,6 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
   })()
 
   // Distinct values for the select-type filter fields.
-  const providerPractices = Array.from(new Set(allProviders.map((d) => d.practiceName).filter(Boolean))).sort()
-  const providerSpecialties = Array.from(new Set(allProviders.map((d) => (d as any).specialty as string).filter(Boolean))).sort()
   // Record Owner reads off the user list the view-sharing selector already has.
   // Owner picker map (self-inclusive); falls back to shareUsers for the label.
   const ownerUserMap = Object.fromEntries(assignableUsers.map((u) => [u.id, u.label]))
@@ -532,25 +533,13 @@ export default function PracticeManager({ practices, isAdmin, savedViews: initia
     const u = shareUsers.find((x) => x.id === d.ownerId)
     return u ? (u.name ?? u.email) : ""
   }
-  const providerOwners = Array.from(new Set(allProviders.map(ownerLabel).filter(Boolean))).sort()
 
   // Filter schema — one entry per column/property, type-aware. New (custom)
   // properties should be appended here so they become filter criteria automatically.
-  const providerFilterFields: FilterField[] = [
-    { key: "name", label: "Name", type: "text", getValue: (d) => d.name },
-    { key: "title", label: "Title", type: "text", getValue: (d) => (d as any).title },
-    { key: "practice", label: "Practice", type: "select", options: providerPractices.map((p) => ({ label: p, value: p })), getValue: (d) => d.practiceName },
-    { key: "specialty", label: "Specialty", type: "select", options: providerSpecialties.map((s) => ({ label: s, value: s })), getValue: (d) => (d as any).specialty },
-    { key: "npi", label: "NPI", type: "text", getValue: (d) => d.npi },
-    { key: "phone", label: "Phone", type: "text", getValue: (d) => (d as any).phone },
-    { key: "officePhone", label: "Office Phone", type: "text", getValue: (d) => (d as any).officePhone },
-    { key: "email", label: "Email", type: "text", getValue: (d) => (d as any).email },
-    { key: "referrals", label: "Referrals", type: "number", getValue: (d) => d._count.referrals },
-    { key: "locations", label: "Locations (count)", type: "number", getValue: (d) => d.locations?.length ?? 0 },
-    { key: "owner", label: "Provider Owner", type: "select", options: providerOwners.map((o) => ({ label: o, value: o })), getValue: ownerLabel },
-    { key: "created", label: "Created", type: "date", getValue: (d) => (d as any).createdAt },
-    ...customPropertyFilterFields(providerCustomPropertyDefs),
-  ]
+  // From the server's schema (lib/object-fields-server), so Providers offers the
+  // same criteria as every other object — Contact Type, Provider Owner by person,
+  // Created, Practice as a picker, and every custom property.
+  const providerFilterFields = useMemo(() => toFilterFields(providerFilterDefs), [providerFilterDefs])
 
   // Column chooser: the fixed columns plus specialty, created, and every custom
   // property — so the list can surface any property, native or custom.

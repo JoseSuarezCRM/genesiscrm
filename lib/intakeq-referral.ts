@@ -31,10 +31,17 @@ export const UNANSWERED = "Unanswered"
 // can override this list in Settings; this is the fallback.
 export const DEFAULT_INTAKE_FORMS = ["full intake", "fd/admin"] as const
 
-// The form the weekly referral-source report counts. Deliberately narrower than
-// what's ingested: other forms feed appointment attribution, but including them in
-// the report would change the weekly totals and break week-over-week comparison.
-export const REPORT_FORM = "Full Intake"
+// The report's default selection: every form that was ingested.
+//
+// It applies no name filter at all, which is the point — anything in
+// IntakeReferralResponse is by definition a form we chose to ingest, so "all
+// ingested" and "everything stored" are the same set. There is no form name
+// written down anywhere in the report path, so renaming the IntakeQ form can
+// never silently zero the report while ingestion keeps working.
+//
+// This replaced a hardcoded `REPORT_FORM = "Full Intake"`, which is why 118
+// FD/admin submissions were stored but invisible for a fortnight.
+export const ALL_FORMS = "all"
 
 // Is this form one we ingest? Fragments are normalised the same way as the name, so
 // "FD/admin" matches "FD/Admin", "FD - Admin" and so on.
@@ -48,6 +55,28 @@ export function isTargetQuestionnaire(
     const frag = norm(f)
     return !!frag && n.includes(frag)
   })
+}
+
+/**
+ * Does this stored form name belong to the report's current selection?
+ *
+ * Uses `isTargetQuestionnaire` — the same matcher ingestion gates on — so the
+ * report can never disagree with the Forms-to-ingest list about what counts. A
+ * raw SQL `contains` would be a *second* matcher: the configured fragments are
+ * normalised-loose, so `fd/admin` becomes `fd admin` and plain substring
+ * matching would miss a form legitimately written as "FD - Admin".
+ *
+ * Filtering happens in JS rather than SQL. There is no index on
+ * `questionnaireName`, so a SQL predicate would be evaluated row by row anyway
+ * after the `submittedAt` index scan — and don't add one: two distinct values
+ * across ~2,000 rows is selectivity Postgres would ignore.
+ */
+export function matchesReportForm(
+  name: string | null | undefined,
+  selection: string,
+): boolean {
+  if (!selection || selection === ALL_FORMS) return true
+  return isTargetQuestionnaire(name, [selection])
 }
 
 function norm(s: string): string {

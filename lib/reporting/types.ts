@@ -63,6 +63,12 @@ export interface ReportConfig {
   dimensions: Dimension[]      // x-axis / group / pivot rows
   breakdown?: Dimension | null // compare / stack / pivot columns
   filters?: FilterState | null
+  /**
+   * Restrict the report to a segment's records. Stored by id and resolved at
+   * query time, so the report follows an ACTIVE segment as its membership
+   * changes rather than freezing a copy of the filter.
+   */
+  segmentId?: string | null
   sort?: { by: "value" | "label"; dir: "asc" | "desc" } | null
   limit?: number | null
   tableMode?: "summarized" | "unsummarized" // table viz: grouped rows vs raw records

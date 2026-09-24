@@ -28,16 +28,37 @@ export async function resolveApiObject(slug: string): Promise<ApiObject | null> 
 
 export interface ApiScopeDef { key: string; label: string; group: string; description: string }
 
+/**
+ * Scopes that aren't tied to a CRM object.
+ *
+ * The surgeon-sites one is read-only by design: it feeds the public marketing
+ * sites, which run outside this network and must never be able to write here.
+ * It reaches only published website copy — no patient data of any kind — which
+ * is what makes it safe to hand to a public-facing app.
+ */
+const STANDALONE_SCOPES: ApiScopeDef[] = [
+  {
+    key: "surgeon_sites:read",
+    label: "Read published surgeon websites",
+    group: "Surgeon Websites",
+    description:
+      "Read published website content for the surgeons' public sites. No patient data. Read-only.",
+  },
+]
+
 // Two scopes per object (read / write) — regenerated from the live object list.
 export async function getApiScopes(): Promise<ApiScopeDef[]> {
   const objs = await getApiObjects()
-  return objs.flatMap((o) => {
-    const lower = o.label.toLowerCase()
-    return [
-      { key: `${o.slug}:read`, label: `Read ${lower}`, group: o.label, description: `List and fetch ${lower}` },
-      { key: `${o.slug}:write`, label: `Create & update ${lower}`, group: o.label, description: `Create and update ${lower}` },
-    ]
-  })
+  return [
+    ...objs.flatMap((o) => {
+      const lower = o.label.toLowerCase()
+      return [
+        { key: `${o.slug}:read`, label: `Read ${lower}`, group: o.label, description: `List and fetch ${lower}` },
+        { key: `${o.slug}:write`, label: `Create & update ${lower}`, group: o.label, description: `Create and update ${lower}` },
+      ]
+    }),
+    ...STANDALONE_SCOPES,
+  ]
 }
 
 export async function getApiScopeKeys(): Promise<string[]> {

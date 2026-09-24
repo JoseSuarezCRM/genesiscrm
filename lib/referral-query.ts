@@ -4,6 +4,7 @@
 import type { FilterState, FilterField } from "./filters"
 import { filterStateToWhere } from "./filter-to-prisma"
 import { REFERRAL_FILTER_FIELDS } from "./referral-filter-fields"
+import type { JsonResolution } from "./json-predicate"
 
 export interface ReferralFilters {
   search?: string
@@ -30,6 +31,13 @@ export interface ReferralFilters {
 export function buildReferralWhere(
   filters: ReferralFilters,
   fields: FilterField[] = REFERRAL_FILTER_FIELDS,
+  /**
+   * Custom-property conditions already resolved to ids (lib/json-predicate, via
+   * resolveFor). Without it those criteria are case-SENSITIVE, and number/date
+   * ones translate to nothing — the list would disagree with the same filter
+   * evaluated anywhere else.
+   */
+  resolved?: JsonResolution,
 ): Record<string, unknown> {
   const {
     search, statuses = [], statusMode = "any", practiceIds = [], practiceMode = "any",
@@ -71,7 +79,7 @@ export function buildReferralWhere(
       : { tags: { some: { tagId: { in: tagIds } } } })
   }
 
-  const advanced = filterStateToWhere(filter, fields)
+  const advanced = filterStateToWhere(filter, fields, resolved)
   if (Object.keys(advanced).length > 0) clauses.push(advanced)
 
   if (clauses.length === 0) return {}

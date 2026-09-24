@@ -6,10 +6,10 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { isIntakeqConfigured, listQuestionnaires } from "@/lib/intakeq"
 import { backfillRange } from "@/lib/intakeq-ingest"
-import { REFERRAL_CATEGORIES, UNMAPPED, REPORT_FORM, DEFAULT_INTAKE_FORMS, isTargetQuestionnaire } from "@/lib/intakeq-referral"
+import { REFERRAL_CATEGORIES, UNMAPPED, ALL_FORMS, DEFAULT_INTAKE_FORMS, isTargetQuestionnaire, matchesReportForm } from "@/lib/intakeq-referral"
 import { periodOf, recentPeriods, periodLabel, periodStartDate, defaultPeriodCount, chicagoYmd, type Granularity, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { encryptSecret, maskTail, randomToken, hasEncryptionKey } from "@/lib/crypto"
-import { getIntegration } from "@/lib/integration-store"
+import { getIntegration, getIntakeForms } from "@/lib/integration-store"
 import { sendReferralReport, sendScheduledIntakeReport, type IntakeEmailReportConfig } from "@/lib/intakeq-report"
 import { attributeReferralSources, type SourceMapping, type AttributionResult } from "@/lib/appointment-source"
 
@@ -23,11 +23,24 @@ export interface ReferralSourceReport {
   unmappedAnswers: { answer: string; count: number }[]
   lastSubmittedAt: string | null
   totalStored: number
+  /** Which form the grid is filtered to — ALL_FORMS, or a configured fragment. */
+  form: string
+  formOptions: ReportFormOption[]
+}
+
+/** One entry in the report's form selector. `count` is what it contributes. */
+export interface ReportFormOption {
+  value: string
+  label: string
+  count: number
 }
 
 // The categories × periods grid, English + Spanish already summed per category.
 // `granularity` picks the column bucket: day / week / month / quarter / year.
-export async function getReferralSourceReport(granularity: Granularity = "week"): Promise<ReferralSourceReport> {
+export async function getReferralSourceReport(
+  granularity: Granularity = "week",
+  form: string = ALL_FORMS,
+): Promise<ReferralSourceReport> {
   await requireAccess("REPORTS", "VIEW")
 
   const periods = recentPeriods(granularity, defaultPeriodCount(granularity))
@@ -35,16 +48,15 @@ export async function getReferralSourceReport(granularity: Granularity = "week")
   since.setUTCDate(since.getUTCDate() - 1) // tz buffer
 
   const [rows, latest, totalStored] = await Promise.all([
+    // No form predicate in SQL — the selection is applied below with the same
+    // matcher ingestion uses, so the report and the Forms-to-ingest list can
+    // never disagree about what counts. See matchesReportForm().
     (prisma as any).intakeReferralResponse.findMany({
-      // Full Intake only. Other ingested forms (FD/admin) feed appointment
-      // attribution, but counting them here would change the weekly totals and
-      // break comparison against previous weeks.
       where: {
         submittedAt: { gte: since },
         category: { not: "Unanswered" },
-        questionnaireName: { contains: REPORT_FORM, mode: "insensitive" },
       },
-      select: { submittedAt: true, category: true },
+      select: { submittedAt: true, category: true, questionnaireName: true },
     }),
     (prisma as any).intakeReferralResponse.findFirst({ orderBy: { submittedAt: "desc" }, select: { submittedAt: true } }),
     (prisma as any).intakeReferralResponse.count(),
@@ -55,7 +67,8 @@ export async function getReferralSourceReport(granularity: Granularity = "week")
   for (const cat of [...REFERRAL_CATEGORIES, UNMAPPED]) grid[cat] = periods.map(() => 0)
 
   let hasUnmapped = false
-  for (const r of rows as { submittedAt: Date; category: string }[]) {
+  for (const r of rows as { submittedAt: Date; category: string; questionnaireName: string | null }[]) {
+    if (!matchesReportForm(r.questionnaireName, form)) continue
     const pi = index[periodOf(r.submittedAt, granularity)]
     if (pi === undefined) continue
     if (!grid[r.category]) grid[r.category] = periods.map(() => 0)
@@ -64,12 +77,20 @@ export async function getReferralSourceReport(granularity: Granularity = "week")
   }
 
   // Distinct raw answers that didn't match a category (across all time), so we can
-  // see what needs mapping.
+  // see what needs mapping. Grouped by form as well as answer so this respects the
+  // selection — it never did before, which meant it listed FD/admin answers
+  // underneath a grid that excluded them.
   const unmappedGroups = await (prisma as any).intakeReferralResponse.groupBy({
-    by: ["rawAnswer"], where: { category: "Unmapped" }, _count: { _all: true },
+    by: ["rawAnswer", "questionnaireName"], where: { category: "Unmapped" }, _count: { _all: true },
   }).catch(() => [])
-  const unmappedAnswers = (unmappedGroups as any[])
-    .map((g) => ({ answer: g.rawAnswer ?? "(blank)", count: g._count?._all ?? 0 }))
+  const unmappedByAnswer = new Map<string, number>()
+  for (const g of unmappedGroups as any[]) {
+    if (!matchesReportForm(g.questionnaireName, form)) continue
+    const key = g.rawAnswer ?? "(blank)"
+    unmappedByAnswer.set(key, (unmappedByAnswer.get(key) ?? 0) + (g._count?._all ?? 0))
+  }
+  const unmappedAnswers = Array.from(unmappedByAnswer.entries())
+    .map(([answer, count]) => ({ answer, count }))
     .sort((a, b) => b.count - a.count)
 
   return {
@@ -82,7 +103,61 @@ export async function getReferralSourceReport(granularity: Granularity = "week")
     unmappedAnswers,
     lastSubmittedAt: latest?.submittedAt ? new Date(latest.submittedAt).toISOString() : null,
     totalStored,
+    form,
+    formOptions: await listReportForms(),
   }
+}
+
+/**
+ * The options for the report's form selector.
+ *
+ * Built from the form names actually stored, then bucketed under the configured
+ * fragment that matches each one. Two reasons it isn't just one or the other:
+ * the raw stored name ("GOSM 2026 Full Intake") is what a human recognises, but
+ * selecting by it would split the series the year the form is renamed — and the
+ * configured fragment ("full intake") is stable but means nothing on screen.
+ *
+ * A stored name matching no configured fragment still gets its own option. That
+ * is history from a form since renamed or removed from the list, and without an
+ * option for it there would be no way to look at it.
+ */
+async function listReportForms(): Promise<ReportFormOption[]> {
+  const [groups, configured] = await Promise.all([
+    (prisma as any).intakeReferralResponse
+      .groupBy({ by: ["questionnaireName"], where: { category: { not: "Unanswered" } }, _count: { _all: true } })
+      .catch(() => []),
+    getIntakeForms(),
+  ])
+
+  const stored = (groups as any[]).map((g) => ({
+    name: (g.questionnaireName ?? "") as string,
+    count: (g._count?._all ?? 0) as number,
+  }))
+
+  const options: ReportFormOption[] = []
+  const claimed = new Set<string>()
+
+  for (const fragment of configured) {
+    const matches = stored.filter((row) => isTargetQuestionnaire(row.name, [fragment]))
+    if (!matches.length) continue
+    for (const m of matches) claimed.add(m.name)
+    options.push({
+      value: fragment,
+      // One stored name reads best verbatim; several means the form was renamed,
+      // and the fragment is what actually holds them together.
+      label: matches.length === 1 ? matches[0].name : `${fragment} (${matches.length} form names)`,
+      count: matches.reduce((sum, m) => sum + m.count, 0),
+    })
+  }
+
+  for (const row of stored) {
+    if (claimed.has(row.name) || !row.name) continue
+    options.push({ value: row.name, label: row.name, count: row.count })
+  }
+
+  options.sort((a, b) => b.count - a.count)
+  const total = stored.reduce((sum, row) => sum + row.count, 0)
+  return [{ value: ALL_FORMS, label: "All forms", count: total }, ...options]
 }
 
 // Pull + categorize existing submissions for a date range (bounded; run again if
@@ -191,7 +266,7 @@ export async function getIntegrationsList(): Promise<IntegrationListItem[]> {
     {
       provider: "intakeq",
       name: "IntakeQ",
-      description: "New-patient referral sources — weekly report from the Full Intake form.",
+      description: "New-patient referral sources — weekly report from the ingested intake forms.",
       href: "/settings/integrations/intakeq",
       status: configured ? "connected" : "not_connected",
       enabled: !!row?.enabled,
@@ -231,7 +306,6 @@ export interface IntegrationSettings {
   // Which IntakeQ forms get ingested (loose name fragments).
   intakeForms: string[]
   // The form the weekly report counts — everything else is attribution-only.
-  reportForm: string
 }
 
 export async function getIntegrationSettings(): Promise<IntegrationSettings> {
@@ -251,7 +325,6 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
     window: cfg.window ?? "prior_week",
     lastRunAt: cfg.lastRunAt ?? null,
     intakeForms: Array.isArray(cfg.intakeForms) && cfg.intakeForms.length ? cfg.intakeForms : [...DEFAULT_INTAKE_FORMS],
-    reportForm: REPORT_FORM,
     emailReport: {
       enabled: cfg.emailReport?.enabled ?? false,
       recipients: cfg.emailReport?.recipients ?? [],
@@ -317,7 +390,8 @@ export async function runSourceAttribution(): Promise<AttributionResult> {
 /**
  * Which IntakeQ forms get ingested. Matched loosely against the form name, so a
  * fragment ("full intake") survives the yearly rename. Everything ingested feeds
- * appointment attribution; the weekly report still counts Full Intake only.
+ * appointment attribution, and every one of them is counted in the referral-source
+ * report (which can be filtered to a single form on screen).
  */
 export async function saveIntakeForms(forms: string[]): Promise<{ ok?: boolean; error?: string }> {
   await requireAccess("REPORTS", "EDIT")

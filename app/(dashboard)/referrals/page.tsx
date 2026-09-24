@@ -19,6 +19,9 @@ import { getReferralViews } from "@/app/actions/referral-views"
 import { buildReferralWhere } from "@/lib/referral-query"
 import { referralFilterFields } from "@/lib/referral-filter-fields"
 import { decodeFilterParam } from "@/lib/filters"
+import { fieldsFor } from "@/lib/object-fields-server"
+import { toFilterFields } from "@/lib/object-fields"
+import { resolveFor } from "@/lib/object-query"
 
 interface PageProps {
   searchParams: {
@@ -83,17 +86,21 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
   const pipelineId = searchParams.pipeline ?? null
   const advancedFilter = decodeFilterParam(searchParams.filter)
 
-  // Custom props are needed up-front so advanced-filter conditions on them translate.
+  // Still loaded: the table's column chooser offers every custom property.
   const referralCustomProps = await prisma.customProperty.findMany({ where: { entityType: "REFERRAL" }, orderBy: { createdAt: "asc" } })
-  const filterFields = referralFilterFields({
-    customProps: referralCustomProps.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })),
-  })
+  // One schema for the filter UI and the server translation (lib/object-fields-server),
+  // so the list and the Filter panel can't describe the object differently.
+  const filterDefs = await fieldsFor("REFERRAL")
+  const filterFields = toFilterFields(filterDefs)
+  // Custom-property conditions resolve in raw SQL first — Prisma's JSON filters
+  // are case-sensitive and have no number/date operators.
+  const resolved = await resolveFor("REFERRAL", advancedFilter, filterFields)
 
   const where = buildReferralWhere({
     search, statuses, statusMode, practiceIds, practiceMode, doctorIds, doctorMode,
     tagIds, tagMode, from: searchParams.from, to: searchParams.to,
     incompleteOnly, pipelineId, filter: advancedFilter,
-  }, filterFields) as any
+  }, filterFields, resolved) as any
 
   const [referrals, total, allMatchingIds, practices, allTags, incompleteCount, allDoctors, pipelines] = await Promise.all([
     prisma.referral.findMany({
@@ -137,6 +144,7 @@ async function getReferrals(searchParams: PageProps["searchParams"]) {
     allDoctors,
     pipelines,
     referralCustomProps,
+    filterDefs,
     page,
     incompleteCount,
     incompleteOnly,
@@ -171,6 +179,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
     allDoctors,
     pipelines,
     referralCustomProps,
+    filterDefs,
     page,
     incompleteCount,
     incompleteOnly,
@@ -268,6 +277,7 @@ export default async function ReferralsPage({ searchParams }: PageProps) {
       <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm">
         <Suspense fallback={null}>
           <ReferralFilters
+            filterDefs={filterDefs}
             practices={(practices as any[]).map((p) => ({ id: p.id, label: p.name }))}
             doctors={(allDoctors as any[]).map((d) => ({
               id: d.id,

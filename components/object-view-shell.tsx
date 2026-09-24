@@ -30,7 +30,8 @@ import { createCustomObjectRecord, exportCustomObjectRecords, summarizeCustomObj
 import { getObjectBoardData, type ObjectBoardData } from "@/app/actions/object-board"
 import { readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { activeConditionCount, decodeFilterParam, emptyFilter, matchesFilter, type FilterState } from "@/lib/filters"
-import { buildFilterFields, buildObjectColumns, type ObjectProperty } from "@/lib/object-columns"
+import { buildObjectColumns, type ObjectProperty } from "@/lib/object-columns"
+import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 import { autoBoardConfig, normalizeViewConfig, viewFingerprint, type ObjectViewConfig, type ObjectViewType } from "@/lib/object-views"
 import { displayValue, fmtDate } from "@/components/object-display"
 import { dateSortValue, numberSortValue } from "@/lib/date-values"
@@ -74,6 +75,8 @@ interface Props {
   /** Pipelines with their stages — the list's Pipeline/Stage cells edit both together. */
   pipelines: PipelineOption[]
   pipelineColorStyle: string
+  /** Filter schema from lib/object-fields-server — shared with the server translation. */
+  filterDefs: ObjectFieldDef[]
 }
 
 const TYPE_ICON: Record<ObjectViewType, typeof Table2> = { table: Table2, board: LayoutGrid, calendar: CalendarDays }
@@ -83,7 +86,7 @@ export default function ObjectViewShell(props: Props) {
     objectKey, singular, plural, ownerLabel, properties, records, totalRecords, users,
     canEdit, canDelete, savedViews, shareUsers, shareTeams, serverMode,
     serverTotal, serverPage, serverPageSize, createFormConfig, isAdmin, associations,
-    pipelines, pipelineColorStyle,
+    pipelines, pipelineColorStyle, filterDefs,
   } = props
 
   const router = useRouter()
@@ -98,11 +101,12 @@ export default function ObjectViewShell(props: Props) {
   // memo would cascade into boardCards and wipe the board's optimistic stage move.
   const propSig = properties.map((p) => p.id).join(",")
   const userSig = users.map((u) => u.id).join(",")
-  const filterFields = useMemo(
-    () => buildFilterFields(properties, ownerLabel, users),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [propSig, userSig, ownerLabel],
-  )
+  // Rebuilt from the schema the server sent, so the filter UI and the server-side
+  // translation can't describe the object differently. The only reason this isn't
+  // just handed down ready-made is that FilterField carries a getValue closure,
+  // which can't cross the server boundary — toFilterFields re-attaches it from
+  // the serialized readPath.
+  const filterFields = useMemo(() => toFilterFields(filterDefs), [filterDefs])
   const defaultColumns = useMemo(() => catalog.baseCols.map((c) => c.key), [catalog])
 
   // ── View state ─────────────────────────────────────────────────────────────

@@ -77,7 +77,9 @@ const NATIVE_TYPE: Record<RecordFieldType, ReportFieldType> = {
 }
 const CP_TYPE: Record<string, ReportFieldType> = {
   TEXT: "text", LONG_TEXT: "text", EMAIL: "text", PHONE: "text", URL: "text",
-  NUMBER: "number", DATE: "date", CHECKBOX: "boolean", DROPDOWN: "select", MULTI_SELECT: "select",
+  // DATE_TIME was missing here too, so a date-and-time property was reportable
+  // only as text — no date grouping, no date filtering.
+  NUMBER: "number", DATE: "date", DATE_TIME: "date", CHECKBOX: "boolean", DROPDOWN: "select", MULTI_SELECT: "select",
 }
 
 // The full, reportable field list for an object (native + universal + custom props).

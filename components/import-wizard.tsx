@@ -1,8 +1,10 @@
 "use client"
 
+import Link from "next/link"
+
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle, ArrowRight, Undo2, History } from "lucide-react"
+import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertTriangle, ArrowRight, Undo2, History, Users2 } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -318,14 +320,24 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
                 <span className="text-slate-500 w-40 shrink-0">{new Date(r.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                 <span className="text-slate-600"><span className="font-semibold">{r.created}</span> created · <span className="font-semibold">{r.updated}</span> updated</span>
                 {r.createdByName && <span className="text-slate-400">by {r.createdByName}</span>}
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
                   {r.status === "undone" ? (
                     <span className="text-xs text-slate-400">Undone</span>
                   ) : (
-                    <button onClick={() => undo(r.id)} disabled={undoingId === r.id}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60">
-                      {undoingId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} Undo
-                    </button>
+                    <>
+                      {/* An undone run is deliberately not offered: its records are
+                          deleted, so the segment would resolve to nothing. */}
+                      <Link
+                        href={`/segments/new?object=${encodeURIComponent(`CO:${objectKey}`)}&importRun=${r.id}`}
+                        className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+                      >
+                        <Users2 className="h-3.5 w-3.5" /> Create segment
+                      </Link>
+                      <button onClick={() => undo(r.id)} disabled={undoingId === r.id}
+                        className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                        {undoingId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} Undo
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

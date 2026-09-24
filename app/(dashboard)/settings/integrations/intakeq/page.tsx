@@ -18,7 +18,7 @@ export default async function IntakeqIntegrationPage() {
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-slate-900">IntakeQ — Referral Sources</h1>
         <p className="text-sm text-slate-500 mt-1">
-          New-patient referral sources from the “Gosm 2026 Full Intake” form, summed across English and Spanish, by week.
+          New-patient referral sources from the ingested intake forms, summed across English and Spanish, by week.
         </p>
       </div>
       <IntakeqIntegrationClient settings={settings} report={report} activity={activity} submissions={submissions} canEdit={canEdit} />

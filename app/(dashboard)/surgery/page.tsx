@@ -16,6 +16,7 @@ import { getCreateForm } from "@/app/actions/create-form"
 import { decodeFilterParam } from "@/lib/filters"
 import { Stethoscope, ChevronLeft, ChevronRight } from "lucide-react"
 import { Suspense } from "react"
+import { fieldsFor } from "@/lib/object-fields-server"
 
 interface PageProps {
   searchParams: {
@@ -66,7 +67,7 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
     prisma.customProperty.findMany({ where: { entityType: "SURGERY" }, orderBy: { createdAt: "asc" } }),
   ])
 
-  const [savedViews, shareOptions, surgeryCreateForm] = await Promise.all([getSurgeryViews(), getViewShareOptions(), getCreateForm("SURGERY")])
+  const [savedViews, shareOptions, surgeryCreateForm, filterDefs] = await Promise.all([getSurgeryViews(), getViewShareOptions(), getCreateForm("SURGERY"), fieldsFor("SURGERY")])
   const surgeryDialogProps = {
     customProps: surgeryCustomProps as any,
     createFormConfig: surgeryCreateForm,
@@ -109,6 +110,7 @@ export default async function SurgeryPage({ searchParams }: PageProps) {
       {/* Filters */}
       <Suspense>
         <SurgeryFilters
+          filterDefs={filterDefs}
           currentSearch={searchParams.search}
           currentStatuses={statuses}
           currentStatusMode={statusMode}

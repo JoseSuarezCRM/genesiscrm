@@ -56,23 +56,6 @@ export function buildObjectColumns(
   return { primary, isPerson, nameParts, otherProps, baseCols, allCols: [...baseCols, ...assocCols], assocByKey }
 }
 
-/** Filter fields for an object — the same list feeds FilterBuilder and the quick-filter chips. */
-export function buildFilterFields(
-  properties: ObjectProperty[],
-  ownerLabel: string,
-  users: { id: string; label: string }[],
-): FilterField[] {
-  return [
-    { key: "__recordNumber", label: "Record ID", type: "number", getValue: (r: any) => r.recordNumber },
-    { key: "__owner", label: ownerLabel, type: "select", options: users.map((u) => ({ value: u.id, label: u.label })), getValue: (r: any) => r.ownerId },
-    { key: "__created", label: "Created", type: "date", getValue: (r: any) => r.createdAt },
-    ...customPropertyFilterFields(
-      properties.map((p) => ({ id: p.id, name: p.name, type: p.type, options: p.options })),
-      "values",
-    ),
-  ]
-}
-
 /** Property ids whose values can carry a number — the candidates for a board metric. */
 export function numericProperties(properties: ObjectProperty[]): ObjectProperty[] {
   return properties.filter((p) => p.type === "NUMBER")

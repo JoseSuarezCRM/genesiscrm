@@ -7,6 +7,7 @@ import { getCreateForm } from "@/app/actions/create-form"
 import { userCanLevel, userCanDelete } from "@/lib/permissions"
 import { associationColumnDefs } from "@/lib/association-columns"
 import LocationManager from "@/components/location-manager"
+import { fieldsFor } from "@/lib/object-fields-server"
 
 export default async function LocationsPage() {
   const session = await requireView("LOCATIONS")
@@ -14,12 +15,13 @@ export default async function LocationsPage() {
   const canEdit = userCanLevel(user, "LOCATIONS", "EDIT") || userCanLevel(user, "PRACTICES", "EDIT")
   const canDelete = userCanDelete(user, "LOCATIONS") || userCanDelete(user, "PRACTICES")
 
-  const [locations, practices, customPropertyDefs, assignableUsers, createFormConfig] = await Promise.all([
+  const [locations, practices, customPropertyDefs, assignableUsers, createFormConfig, filterDefs] = await Promise.all([
     getLocations(),
     prisma.referringPractice.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     listCustomProperties("LOCATION"),
     getAssignableUsers(),
     getCreateForm("LOCATION"),
+    fieldsFor("LOCATION"),
   ])
 
   return (
@@ -41,6 +43,7 @@ export default async function LocationsPage() {
         createFormConfig={createFormConfig}
         isAdmin={user?.role === "ADMIN"}
         associations={await associationColumnDefs("LOCATION")}
+        filterDefs={filterDefs}
       />
     </div>
   )

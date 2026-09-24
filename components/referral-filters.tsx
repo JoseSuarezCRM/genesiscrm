@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Search, AlertCircle } from "lucide-react"
 import FilterBuilder from "@/components/ui/filter-builder"
 import { decodeFilterParam, emptyFilter, activeConditionCount, type FilterState, type CustomPropDef } from "@/lib/filters"
-import { referralFilterFields } from "@/lib/referral-filter-fields"
+import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 
 interface FilterOption {
   id: string
@@ -14,6 +14,8 @@ interface FilterOption {
 }
 
 interface ReferralFiltersProps {
+  /** Filter schema from lib/object-fields-server — shared with the server query. */
+  filterDefs: ObjectFieldDef[]
   practices: FilterOption[]
   doctors: FilterOption[]
   tags: FilterOption[]
@@ -43,6 +45,7 @@ export default function ReferralFilters({
   practices,
   doctors,
   tags,
+  filterDefs,
   incompleteCount,
   currentSearch,
   currentStatuses,
@@ -68,14 +71,12 @@ export default function ReferralFilters({
   // Every filterable field — native columns, relational selects (status, practice,
   // provider, location, pipeline, owner), Tags, and every custom property — is an
   // advanced FilterBuilder criterion. The old inline dropdowns are gone.
-  const fields = useMemo(
-    () => referralFilterFields({
-      users, practices, doctors, locations, pipelines,
-      tags: tags.map((t) => ({ id: t.id, label: t.label })),
-      customProps: customPropertyDefs,
-    }),
-    [users, practices, doctors, locations, pipelines, tags, customPropertyDefs],
-  )
+  // Rebuilt from the schema the server sent (lib/object-fields-server), so the
+  // Filter panel offers exactly the criteria the server-side translation
+  // understands — every native column, every FK select, Tags, and every custom
+  // property. Previously this list was assembled here and the server assembled
+  // its own, and the two could disagree about what was filterable.
+  const fields = useMemo(() => toFilterFields(filterDefs), [filterDefs])
 
   // Legacy quick-filter params (status/practice/doctor/tag/date) can arrive from
   // report drill-ins, bookmarks, or older saved views. Fold them into the advanced

@@ -10,12 +10,13 @@ import { associationColumnDefs, attachAssociatedRecords } from "@/lib/associatio
 import { listCustomProperties } from "@/app/actions/custom-properties"
 import { getTaskViews } from "@/app/actions/task-views"
 import { getViewShareOptions } from "@/app/actions/view-share-options"
+import { fieldsFor } from "@/lib/object-fields-server"
 
 export default async function TasksPage({ searchParams }: { searchParams: { filter?: string; highlight?: string } }) {
   const session = await requireView("TASKS")
   const userId = session!.user.id
 
-  const [tasks, users, queues, objectTypes, taskCustomProps, savedViews, shareOptions] = await Promise.all([
+  const [tasks, users, queues, objectTypes, taskCustomProps, savedViews, shareOptions, filterDefs] = await Promise.all([
     prisma.task.findMany({
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
       include: {
@@ -30,6 +31,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { filt
     listCustomProperties("TASK"),
     getTaskViews(),
     getViewShareOptions(),
+    fieldsFor("TASK"),
   ])
 
   const assocMap = await loadTaskAssociations(tasks.map((t) => t.id))
@@ -48,6 +50,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { filt
         <p className="text-sm text-slate-500">{openCount} open</p>
       </div>
       <TasksClient
+        filterDefs={filterDefs}
         tasks={tasksWithAssoc as any}
         users={users}
         queues={queues}

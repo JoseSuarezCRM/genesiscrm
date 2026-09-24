@@ -7,6 +7,7 @@ import { getViewShareOptions, getAssignableUsers } from "@/app/actions/view-shar
 import { listCustomProperties } from "@/app/actions/custom-properties"
 import { getCreateForm } from "@/app/actions/create-form"
 import { userCan, userCanLevel } from "@/lib/permissions"
+import { fieldsFor } from "@/lib/object-fields-server"
 
 export default async function PracticesPage({ searchParams }: { searchParams?: { sort?: string } }) {
   const session = await requireView("PRACTICES")
@@ -20,7 +21,7 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
       ? ({ referrals: { _count: "desc" } } as const)
       : ({ name: "asc" } as const)
 
-  const [practices, savedViews, shareOptions, practiceCustomPropertyDefs, assignableUsers, createFormConfig] = await Promise.all([
+  const [practices, savedViews, shareOptions, practiceCustomPropertyDefs, assignableUsers, createFormConfig, providerFilterDefs] = await Promise.all([
     prisma.referringPractice.findMany({
       orderBy,
       include: {
@@ -56,6 +57,7 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
     listCustomProperties("PRACTICE"),
     getAssignableUsers(),
     getCreateForm("PRACTICE"),
+    fieldsFor("PROVIDER"),
   ])
 
   // A provider belongs to its own practice (the FK) — we do NOT pull in providers
@@ -78,6 +80,7 @@ export default async function PracticesPage({ searchParams }: { searchParams?: {
       </div>
 
       <PracticeManager
+        providerFilterDefs={providerFilterDefs}
         practices={enriched as any}
         isAdmin={canManage}
         currentUserId={currentUserId}

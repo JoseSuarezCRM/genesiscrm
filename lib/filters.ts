@@ -8,6 +8,7 @@
 // "groups with AND/OR logic" the product needs without a full query language.
 
 import { resolvePreset } from "./reporting/date-presets"
+import { dayStart } from "./tz"
 
 export type FieldType = "text" | "number" | "select" | "boolean" | "date"
 
@@ -33,6 +34,54 @@ export interface FilterField {
   // Set for a joined single-FK field: the Prisma relation to nest the condition
   // under (e.g. "referringPractice"). See lib/filter-to-prisma conditionToWhere.
   relationPath?: string
+  /**
+   * A count of related rows. Carried so the SQL translator can recognise it and
+   * lib/object-query can refine it in memory — Prisma's `where` offers only
+   * some/none/every, so "more than 5 referrals" has no SQL form.
+   */
+  relationCount?: { relation: string }
+  /**
+   * For a `relationPath` field: can the related row be absent? Distinct from
+   * `nullable`, which describes the joined COLUMN — a location's practice name
+   * is a required column on an optional relation, and the two need opposite
+   * treatment. An activity with no practice reads as blank in memory, so
+   * "practice doesn't contain X" is true for it, while a Prisma relation filter
+   * drops it.
+   */
+  relationNullable?: boolean
+  /**
+   * Is the underlying column nullable? Populated from Prisma's DMMF by
+   * lib/object-fields-server, never by hand.
+   *
+   * Postgres `NOT (x ILIKE …)` yields `unknown` for a NULL x and drops the row,
+   * while the in-memory evaluator reads null as "" and keeps it — measured on
+   * Referral.patientEmail as 8,566 rows silently disappearing. filter-to-prisma
+   * compensates, but only where it's allowed to: Prisma REJECTS `{ col: null }`
+   * on a non-nullable column, so the compensation has to know which is which.
+   */
+  nullable?: boolean
+  /**
+   * For a date field: is the column a CALENDAR value or a real instant?
+   *
+   * A DATE column (date of birth, referral date) stores its value at UTC
+   * midnight and means the same day everywhere. A DATETIME column (created at,
+   * surgery date) is an instant, and which day it belongs to is a clinic
+   * question — a referral created at 8pm Chicago is that day's, not tomorrow's.
+   * Anchoring both to the host timezone made "created between Aug 30 and Aug 30"
+   * mean a UTC day on Vercel while the record card showed a Chicago one.
+   *
+   * TRI-STATE, like `nullable`: `undefined` means the older per-list field
+   * builders didn't say, and those keep their existing behaviour untouched.
+   */
+  dateOnly?: boolean
+  /**
+   * A `select` whose option values are numbers because the column is an Int
+   * (activity's Clinic Value and Meeting Rating). Prisma rejects string operands
+   * there — "Expected Int, provided (String)" — so the operands are coerced
+   * before they reach the query. RecordFieldDef already carries this as
+   * `coerce: "number"`; this is the same fact reaching the filter layer.
+   */
+  coerceNumber?: boolean
 }
 
 export interface Operator {
@@ -102,6 +151,15 @@ export interface FilterGroup {
   id: string
   combinator: Combinator
   conditions: Condition[]
+  /**
+   * Exclude: negate the whole group ("NOT (a AND b)").
+   *
+   * Optional so every FilterState already stored in CustomObjectView / TaskView /
+   * ReferralView / SurgeryView / SavedReport stays valid and reads as false.
+   * An unhandled `not` does not throw — it silently returns the UN-negated set,
+   * i.e. it over-includes — so every evaluator of a group must honour it.
+   */
+  not?: boolean
 }
 
 export interface FilterState {
@@ -161,6 +219,100 @@ export function activeConditionCount(state: FilterState, fields: FilterField[]):
   )
 }
 
+// ── Calendar days ────────────────────────────────────────────────────────────
+// A DATE custom property stores a calendar day as a STRING — "2026-08-24" from a
+// date picker, "08/24/2026" from a spreadsheet import (appointments' Visit Date
+// holds 11,267 of the latter and 1,292 of the former). Reading one with
+// `new Date()` turns it into an instant and then re-reads the day in the host's
+// timezone: `new Date("2026-08-24T00:00:00.000Z").getDate()` is 23 in Chicago and
+// 24 on a UTC host, so the same filter answered differently in dev and on Vercel.
+//
+// So string dates are compared as calendar days, with no timezone in the path.
+// Real Date values (native DateTime columns) keep their instant semantics.
+function dayFromParts(y: number, m: number, d: number): number {
+  return Date.UTC(y, m - 1, d)
+}
+function dayOf(v: unknown): number {
+  // Host-local parts on purpose: the only Dates reaching here are relative-preset
+  // window bounds from resolvePreset, which are themselves built in host time,
+  // and json-predicate formats those same bounds the same way. Reading them in a
+  // different zone than they were built in is what makes the two sides disagree.
+  if (v instanceof Date) return dayFromParts(v.getFullYear(), v.getMonth() + 1, v.getDate())
+  const s = String(v ?? "")
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  if (iso) return dayFromParts(+iso[1], +iso[2], +iso[3])
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s)
+  if (us) return dayFromParts(+us[3], +us[1], +us[2])
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? NaN : dayFromParts(d.getFullYear(), d.getMonth() + 1, d.getDate())
+}
+
+function evalCalendarDate(raw: unknown, cond: Condition): boolean {
+  const a = dayOf(raw)
+  if (Number.isNaN(a)) return false
+  if (cond.operator === "between" || cond.operator === "not_between") {
+    const arr = Array.isArray(cond.value) ? cond.value : []
+    const from = arr[0] ? dayOf(arr[0]) : NaN
+    const to = arr[1] ? dayOf(arr[1]) : NaN
+    if (Number.isNaN(from) || Number.isNaN(to)) return true
+    const inside = a >= from && a <= to
+    return cond.operator === "between" ? inside : !inside
+  }
+  if (cond.operator === "relative") {
+    const win = resolvePreset(String(cond.value || ""))
+    if (!win) return true
+    return a >= dayOf(win.start) && a <= dayOf(win.end)
+  }
+  const b = cond.value ? dayOf(cond.value) : NaN
+  if (Number.isNaN(b)) return true
+  switch (cond.operator) {
+    case "on": return a === b
+    case "after": return a > b
+    case "on_or_after": return a >= b
+    case "before": return a < b
+    case "on_or_before": return a <= b
+  }
+  return true
+}
+
+
+/**
+ * Date comparison against explicit day boundaries.
+ *
+ * Deliberately compares the value's instant against the same boundary instants
+ * that filter-to-prisma puts in the `where`, rather than comparing calendar
+ * numbers — that way the two evaluators agree by construction instead of by
+ * two implementations happening to round the same way.
+ */
+function evalBoundedDate(a: number, cond: Condition, dateOnly: boolean): boolean {
+  const S = (v: unknown, off = 0) => {
+    const d = dayStart(String(v ?? ""), dateOnly, off)
+    return d ? d.getTime() : NaN
+  }
+  if (cond.operator === "between" || cond.operator === "not_between") {
+    const arr = Array.isArray(cond.value) ? cond.value : []
+    const from = S(arr[0]), to = S(arr[1], 1)
+    if (Number.isNaN(from) || Number.isNaN(to)) return true
+    const inside = a >= from && a < to
+    return cond.operator === "between" ? inside : !inside
+  }
+  if (cond.operator === "relative") {
+    const win = resolvePreset(String(cond.value || ""))
+    if (!win) return true
+    return a >= win.start.getTime() && a <= win.end.getTime()
+  }
+  const start = S(cond.value), next = S(cond.value, 1)
+  if (Number.isNaN(start)) return true
+  switch (cond.operator) {
+    case "on": return a >= start && a < next
+    case "after": return a >= next
+    case "on_or_after": return a >= start
+    case "before": return a < start
+    case "on_or_before": return a < next
+  }
+  return true
+}
+
 function evalCondition(row: any, cond: Condition, fields: FilterField[]): boolean {
   const field = fields.find((f) => f.key === cond.field)
   if (!field) return true
@@ -184,7 +336,11 @@ function evalCondition(row: any, cond: Condition, fields: FilterField[]): boolea
       return true
     }
     case "number": {
-      const a = Number(raw)
+      // Not `Number(raw)`: Number(null) is 0, which made an empty numeric column
+      // compare equal to zero and satisfy "is less than 5". Blank means absent,
+      // and absent matches no numeric comparison — which is also what SQL does,
+      // so the two evaluators agree without the where needing to compensate.
+      const a = isBlank(raw) ? NaN : Number(raw)
       const b = Number(cond.value)
       if (Number.isNaN(b)) return true
       if (Number.isNaN(a)) return false
@@ -218,8 +374,11 @@ function evalCondition(row: any, cond: Condition, fields: FilterField[]): boolea
       return true
     }
     case "date": {
+      // A string value is a stored calendar day; a Date is a real instant.
+      if (typeof raw === "string" && raw) return evalCalendarDate(raw, cond)
       const a = raw ? new Date(raw as any).getTime() : NaN
       if (Number.isNaN(a)) return false
+      if (field.dateOnly !== undefined) return evalBoundedDate(a, cond, field.dateOnly)
       if (cond.operator === "between" || cond.operator === "not_between") {
         const arr = Array.isArray(cond.value) ? cond.value : []
         const from = arr[0] ? new Date(arr[0]).getTime() : NaN
@@ -253,10 +412,14 @@ function evalCondition(row: any, cond: Condition, fields: FilterField[]): boolea
 
 function evalGroup(row: any, group: FilterGroup, fields: FilterField[]): boolean {
   const active = group.conditions.filter((c) => isConditionActive(c, fields))
+  // An empty group matches everything. Negating that would return false and blank
+  // the list the moment someone ticks Exclude on a group they haven't filled in
+  // yet, so `not` only applies once there's something to exclude.
   if (active.length === 0) return true
-  return group.combinator === "OR"
+  const hit = group.combinator === "OR"
     ? active.some((c) => evalCondition(row, c, fields))
     : active.every((c) => evalCondition(row, c, fields))
+  return group.not ? !hit : hit
 }
 
 export function matchesFilter(row: any, state: FilterState, fields: FilterField[]): boolean {
@@ -276,7 +439,9 @@ export interface CustomPropDef { id: string; name: string; type: string; options
 
 const CP_TYPE_TO_FIELD: Record<string, FieldType> = {
   TEXT: "text", LONG_TEXT: "text", EMAIL: "text", PHONE: "text", URL: "text",
-  NUMBER: "number", DATE: "date", CHECKBOX: "boolean",
+  // DATE_TIME was missing and fell through to "text", so a date-and-time
+  // property offered "contains" / "starts with" instead of date operators.
+  NUMBER: "number", DATE: "date", DATE_TIME: "date", CHECKBOX: "boolean",
   DROPDOWN: "select", MULTI_SELECT: "select",
 }
 

@@ -25,6 +25,7 @@ import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
 import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
 import ExportDialog from "@/components/ui/export-dialog"
 import { cn } from "@/lib/utils"
+import AddToSegmentButton from "@/components/add-to-segment-button"
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: "bg-zinc-100 text-zinc-700",
@@ -372,6 +373,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
 
       {/* Bulk action bar */}
       <BulkActionBar count={selected.size} onClear={clearSelection}>
+        <AddToSegmentButton objectType={"SURGERY"} recordIds={Array.from(selected)} onDone={() => clearSelection()} />
         <div className="relative" ref={menuRef}>
           <button onClick={() => setMenuOpen(!menuOpen)} disabled={isPending} className={bulkBtn}>
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}

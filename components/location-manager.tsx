@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect, useRef } from "react"
+import { useState, useTransition, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -32,6 +32,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { cn } from "@/lib/utils"
+import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
+import AddToSegmentButton from "@/components/add-to-segment-button"
 
 export interface LocationRow {
   id: string
@@ -54,6 +56,8 @@ export interface LocationRow {
 interface PracticeOption { id: string; name: string }
 
 interface Props {
+  /** Filter schema from lib/object-fields-server — the same list every object uses. */
+  filterDefs: ObjectFieldDef[]
   locations: LocationRow[]
   practices: PracticeOption[]
   customPropertyDefs?: CustomPropDef[]
@@ -86,7 +90,7 @@ function fmtDate(d: string | Date | null | undefined) {
 
 type SortKey = string // native keys + association column keys (e.g. "practice.name")
 
-export default function LocationManager({ locations, practices, customPropertyDefs = [], canEdit, canDelete, users = [], createFormConfig = null, isAdmin = false, associations = [] }: Props) {
+export default function LocationManager({ filterDefs, locations, practices, customPropertyDefs = [], canEdit, canDelete, users = [], createFormConfig = null, isAdmin = false, associations = [] }: Props) {
   const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Association columns (Practice → field): available in the chooser, opt-in per table.
   const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
@@ -126,20 +130,10 @@ export default function LocationManager({ locations, practices, customPropertyDe
   useEffect(() => { try { localStorage.setItem("locationFrozen", String(frozenCount)) } catch {} }, [frozenCount])
 
   // ── Filtering ──────────────────────────────────────────────────────────────
-  const practiceNames = Array.from(new Set(locations.map((l) => l.practiceName).filter(Boolean))).sort()
-  const ownerNames = Array.from(new Set(locations.map((l) => l.ownerName).filter(Boolean) as string[])).sort()
-  const filterFields: FilterField[] = [
-    { key: "name", label: "Name", type: "text", getValue: (l) => l.name },
-    { key: "practice", label: "Practice", type: "select", options: practiceNames.map((p) => ({ label: p, value: p })), getValue: (l) => l.practiceName },
-    { key: "address", label: "Address", type: "text", getValue: (l) => l.address },
-    { key: "phone", label: "Phone", type: "text", getValue: (l) => l.phone },
-    { key: "fax", label: "Fax", type: "text", getValue: (l) => l.fax },
-    { key: "providers", label: "Providers", type: "number", getValue: (l) => l.providerCount },
-    { key: "referrals", label: "Referrals", type: "number", getValue: (l) => l.referralCount },
-    { key: "activities", label: "Activities", type: "number", getValue: (l) => l.activityCount },
-    { key: "owner", label: "Location Owner", type: "select", options: ownerNames.map((o) => ({ label: o, value: o })), getValue: (l) => l.ownerName ?? "" },
-    ...customPropertyFilterFields(customPropertyDefs),
-  ]
+  // From the server's schema (lib/object-fields-server), so Locations offers the
+  // same criteria as every other object — including Location Owner by person,
+  // Created, and Practice as a picker rather than a name string.
+  const filterFields = useMemo(() => toFilterFields(filterDefs), [filterDefs])
 
   const filtered = locations.filter((l) => {
     const q = search.toLowerCase().trim()
@@ -298,6 +292,7 @@ export default function LocationManager({ locations, practices, customPropertyDe
 
       {/* Bulk bar */}
       <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <AddToSegmentButton objectType={"LOCATION"} recordIds={Array.from(selected)} onDone={() => setSelected(new Set())} />
         {canDelete && (
           <button onClick={bulkDelete} disabled={isPending} className={bulkDanger}>
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete

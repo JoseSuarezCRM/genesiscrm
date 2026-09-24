@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/graph-mailer"
-import { REFERRAL_CATEGORIES, REPORT_FORM } from "@/lib/intakeq-referral"
+import { REFERRAL_CATEGORIES, ALL_FORMS, matchesReportForm } from "@/lib/intakeq-referral"
 import { chicagoYmd, resolveIntakeWindow, type IntakeWindow } from "@/lib/intakeq-weeks"
 import { getIntegration } from "@/lib/integration-store"
 
@@ -13,20 +13,31 @@ function dayLabelShort(ymd: string): string {
 }
 
 // Build the referral-source HTML table (categories × days) for a YMD range.
-async function buildFromDays(startDate: string, endDate: string, days: string[], startMs: number, endMs: number) {
+// NOTE: this is deliberately a separate aggregation from getReferralSourceReport —
+// fixed per-day columns, no Unmapped row, its own range buffer. The two share
+// `matchesReportForm` so they cannot drift on *which forms count*, which is the
+// part that matters; unifying the rest would silently change the emailed series.
+async function buildFromDays(
+  startDate: string,
+  endDate: string,
+  days: string[],
+  startMs: number,
+  endMs: number,
+  form: string = ALL_FORMS,
+  formLabel = "all ingested forms",
+) {
   const rows = await (prisma as any).intakeReferralResponse.findMany({
-    // Full Intake only — matches the on-screen report; see getReferralSourceReport.
     where: {
       submittedAt: { gte: new Date(startMs - 86400000), lte: new Date(endMs + 2 * 86400000) },
       category: { not: "Unanswered" },
-      questionnaireName: { contains: REPORT_FORM, mode: "insensitive" },
     },
-    select: { submittedAt: true, category: true },
+    select: { submittedAt: true, category: true, questionnaireName: true },
   })
   const idx = Object.fromEntries(days.map((d, i) => [d, i]))
   const grid: Record<string, number[]> = {}
   for (const cat of REFERRAL_CATEGORIES) grid[cat] = days.map(() => 0)
-  for (const r of rows as { submittedAt: Date; category: string }[]) {
+  for (const r of rows as { submittedAt: Date; category: string; questionnaireName: string | null }[]) {
+    if (!matchesReportForm(r.questionnaireName, form)) continue
     const di = idx[chicagoYmd(r.submittedAt)]
     if (di === undefined) continue
     if (!grid[r.category]) grid[r.category] = days.map(() => 0)
@@ -51,7 +62,7 @@ async function buildFromDays(startDate: string, endDate: string, days: string[],
   const html = `
     <div style="font-family:Arial,Helvetica,sans-serif;max-width:900px;margin:0 auto;color:#1e293b;">
       <h2 style="color:#0f172a;">Referral Sources</h2>
-      <p style="color:#64748b;font-size:13px;">${startDate} → ${endDate} · daily counts (English + Spanish), from the Gosm 2026 Full Intake form.</p>
+      <p style="color:#64748b;font-size:13px;">${startDate} → ${endDate} · daily counts (English + Spanish), from ${formLabel}.</p>
       <div style="overflow-x:auto;"><table style="border-collapse:collapse;width:100%;">${header}${body}${footer}</table></div>
       <p style="color:#94a3b8;font-size:11px;margin-top:16px;">Sent from Genesis CRM · Integrations → IntakeQ</p>
     </div>`
@@ -59,7 +70,13 @@ async function buildFromDays(startDate: string, endDate: string, days: string[],
 }
 
 // Build the report for a range and email it.
-export async function sendReferralReport(startDate: string, endDate: string, recipients: string[]): Promise<{ ok?: boolean; sent?: number; total?: number; error?: string }> {
+export async function sendReferralReport(
+  startDate: string,
+  endDate: string,
+  recipients: string[],
+  form: string = ALL_FORMS,
+  formLabel = "all ingested forms",
+): Promise<{ ok?: boolean; sent?: number; total?: number; error?: string }> {
   const to = (recipients ?? []).map((r) => r.trim()).filter(Boolean)
   if (!to.length) return { error: "Add at least one recipient email." }
   const [sy, sm, sd] = startDate.split("-").map(Number)
@@ -69,13 +86,29 @@ export async function sendReferralReport(startDate: string, endDate: string, rec
   if ((endMs - startMs) / 86400000 > 92) return { error: "Range is too large — pick 3 months or less." }
   const days: string[] = []
   for (let t = startMs; t <= endMs; t += 86400000) days.push(new Date(t).toISOString().slice(0, 10))
-  const { subject, html, total } = await buildFromDays(startDate, endDate, days, startMs, endMs)
+  const { subject, html, total } = await buildFromDays(startDate, endDate, days, startMs, endMs, form, formLabel)
   const res = await sendEmail(to, subject, html)
   if (!res.success) return { error: res.error ?? "Failed to send the email." }
   return { ok: true, sent: to.length, total }
 }
 
-export interface IntakeEmailReportConfig { enabled: boolean; recipients: string[]; frequency: "daily" | "weekly"; dayOfWeek: number; hour: number; window: IntakeWindow; lastSentAt: string | null }
+export interface IntakeEmailReportConfig {
+  enabled: boolean
+  recipients: string[]
+  frequency: "daily" | "weekly"
+  dayOfWeek: number
+  hour: number
+  window: IntakeWindow
+  lastSentAt: string | null
+  /**
+   * Which form the scheduled email counts. Defaults to every ingested form, but
+   * can be pinned to one so a long-running emailed series stays comparable —
+   * recipients are outside the app and would otherwise see the totals jump with
+   * no explanation.
+   */
+  form?: string
+  formLabel?: string
+}
 
 function patchReportConfig(cfg: any, emailReport: Partial<IntakeEmailReportConfig>) {
   return (prisma as any).integration.update({
@@ -93,7 +126,11 @@ export async function sendScheduledIntakeReport(opts: { manual?: boolean } = {})
   const recipients = (r?.recipients ?? []).filter(Boolean)
   if (!recipients.length) return { error: "No report recipients configured." }
   const { start, end } = resolveIntakeWindow((r?.window ?? "last_7_days") as IntakeWindow)
-  const res = await sendReferralReport(start, end, recipients)
+  const res = await sendReferralReport(
+    start, end, recipients,
+    r?.form ?? ALL_FORMS,
+    r?.formLabel ?? "all ingested forms",
+  )
   if (res.error) return res
   if (!opts.manual) await patchReportConfig(cfg, { lastSentAt: new Date().toISOString() }).catch(() => {})
   return res

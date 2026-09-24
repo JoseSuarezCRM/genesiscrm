@@ -61,9 +61,19 @@ export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "—"
   const d = new Date(date)
   if (isNaN(d.getTime())) return "—"
-  // Date-only values (DOB, referral/appointment dates) are stored as UTC midnight.
-  // Format those in UTC so the calendar day doesn't shift in local timezones;
-  // real timestamps (with a time component) still format in local time.
+  // Two storage conventions meet here, and both come out as the right day.
+  //
+  //  • Calendar days are stored at NOON UTC (see clinicDateOnlyValue in lib/tz):
+  //    noon is the same date in every timezone, so they render correctly below
+  //    without needing a special case at all.
+  //  • Some values are still at MIDNIGHT UTC — custom date properties that keep
+  //    their own ISO strings. Midnight is the previous evening in Chicago, so
+  //    those must be read back in UTC or they lose a day.
+  //
+  // Everything else is a real instant and renders in clinic time. Chicago is
+  // stated rather than left to the host: this runs in the browser AND in server
+  // components, and the server is UTC on Vercel, so an evening timestamp
+  // rendered server-side showed the following day.
   const isDateOnly =
     d.getUTCHours() === 0 &&
     d.getUTCMinutes() === 0 &&
@@ -73,7 +83,7 @@ export function formatDate(date: Date | string | null | undefined): string {
     month: "short",
     day: "numeric",
     year: "numeric",
-    ...(isDateOnly ? { timeZone: "UTC" } : {}),
+    timeZone: isDateOnly ? "UTC" : "America/Chicago",
   })
 }
 
