@@ -16,15 +16,37 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const result = await get(asset.blobUrl, { access: "private" }).catch(() => null)
   if (!result || !result.stream) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
+  const contentType = asset.contentType || result.blob?.contentType || "image/png"
+
+  // `sandbox` is what neuters script in an uploaded SVG opened by direct
+  // navigation, and it must stay for anything the browser would treat as a
+  // document. It is deliberately NOT applied to PDFs: a sandboxed response
+  // becomes an opaque origin, which is reported to stop Chrome's built-in PDF
+  // viewer from displaying the file. The PDFs served here are patient rehab
+  // protocols linked from the public surgeon sites, so "the browser refuses to
+  // show it" is a patient not getting their post-operative instructions.
+  //
+  // Dropping the token for PDFs costs little: `default-src 'none'` still blocks
+  // subresource loads, `nosniff` plus an accurate Content-Type prevents the type
+  // confusion that the header is really guarding against, and the PDF viewer
+  // already denies PDF-embedded JavaScript any network or DOM access.
+  const isDocument = /svg|xml|html/i.test(contentType)
+  const csp = isDocument
+    ? "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    : "default-src 'none'; style-src 'unsafe-inline'"
+
   return new NextResponse(result.stream as any, {
     headers: {
-      "Content-Type": asset.contentType || result.blob?.contentType || "image/png",
+      "Content-Type": contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
-      // Defense-in-depth: don't let the browser sniff a different type, and neuter
-      // any script in an uploaded SVG on direct navigation (sandbox = no scripts).
+      // Defense-in-depth: don't let the browser sniff a different type.
       // <img> embedding is unaffected (images never execute SVG scripts).
       "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      "Content-Security-Policy": csp,
+      // Show the file rather than downloading it, and give it a real filename
+      // when the reader does save it — "cmuf9xswt000057a1b3lc13vh" is not a
+      // useful name for a rehabilitation protocol.
+      "Content-Disposition": `inline; filename="${asset.name.replace(/["\\\r\n]/g, "")}"`,
     },
   })
 }
