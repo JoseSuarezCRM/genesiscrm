@@ -18,6 +18,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { requestSurgeonSiteDeploy } from "@/lib/surgeon-site-deploy"
 import {
   emptyContent,
   missingCredentials,
@@ -168,8 +169,20 @@ export async function publishSurgeonSite(id: string) {
       updatedById: (session.user as any).id ?? null,
     },
   })
+
+  // Ask the site to rebuild. The site bundles its content rather than fetching
+  // it per request — which is what keeps it up when this CRM is not — so nothing
+  // published here is live until a build runs.
+  //
+  // After the publish, and never fatal: the edit is already saved, and losing it
+  // because a webhook timed out would be the worse outcome. The result is
+  // recorded on the row so "it says published but the site is old" is a question
+  // someone can answer by looking.
+  const deploy = await requestSurgeonSiteDeploy(id, `published ${content.name || row.slug}`)
+
   revalidatePath("/settings/surgeon-sites")
   revalidatePath(`/settings/surgeon-sites/${id}`)
+  return deploy
 }
 
 /**
@@ -198,8 +211,16 @@ export async function setSurgeonSiteStatus(
     where: { id },
     data: { status, updatedById: (session.user as any).id ?? null },
   })
+
+  // Status changes need a deploy too. Taking a site to DRAFT, redirecting it or
+  // retiring it are exactly the changes that must not sit unpublished — a
+  // departed surgeon's site staying live is the case this whole status field
+  // exists for.
+  const deploy = await requestSurgeonSiteDeploy(id, `status set to ${status}`)
+
   revalidatePath("/settings/surgeon-sites")
   revalidatePath(`/settings/surgeon-sites/${id}`)
+  return deploy
 }
 
 export async function deleteSurgeonSite(id: string) {

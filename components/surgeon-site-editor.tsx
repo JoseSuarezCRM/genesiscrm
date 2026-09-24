@@ -21,6 +21,17 @@ export function SurgeonSiteEditor(props: {
   status: Status
   redirectUrl: string | null
   publishedAt: string | null
+  /**
+   * Whether the last publish actually reached the live site.
+   *
+   * The site bundles its content at build time, so publishing here only takes
+   * effect once a deploy runs. That is what keeps the site up when this CRM is
+   * down, and the price is that a broken deploy hook would let content quietly
+   * stop arriving. Showing it is how that stops being silent.
+   */
+  lastDeployAt: string | null
+  lastDeployOk: boolean | null
+  lastDeployError: string | null
   content: SurgeonSiteContent
   missing: string[]
 }) {
@@ -95,6 +106,9 @@ export function SurgeonSiteEditor(props: {
             {props.publishedAt
               ? `Last published ${new Date(props.publishedAt).toLocaleString()}`
               : "Never published — nothing is live yet"}
+            {props.lastDeployAt && props.lastDeployOk && (
+              <> · site rebuilt {new Date(props.lastDeployAt).toLocaleString()}</>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -124,6 +138,28 @@ export function SurgeonSiteEditor(props: {
           <span>{err}</span>
         </div>
       )}
+      {/*
+        The deploy, shown only when it failed. A successful one needs no notice —
+        publishing worked and the site is rebuilding — but a failure means the
+        published content is sitting in this database and not on the internet,
+        which otherwise looks exactly like success.
+      */}
+      {props.lastDeployOk === false && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-medium">Published here, but the live site was not rebuilt.</p>
+            <p className="mt-0.5 text-amber-700">
+              {props.lastDeployError ?? "The deploy could not be requested."}
+            </p>
+            <p className="mt-1 text-amber-700">
+              The site keeps serving what it last built, so nothing is broken — but these changes
+              will not appear until it is redeployed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {saved && !err && (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
           <CircleCheck className="h-4 w-4" /> Draft saved. Nothing is live until you publish.

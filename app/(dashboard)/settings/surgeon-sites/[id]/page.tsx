@@ -27,6 +27,9 @@ export default async function SurgeonSiteDetailPage({ params }: { params: { id: 
         status={site.status}
         redirectUrl={site.redirectUrl}
         publishedAt={site.publishedAt ? new Date(site.publishedAt).toISOString() : null}
+        lastDeployAt={site.lastDeployAt ? new Date(site.lastDeployAt).toISOString() : null}
+        lastDeployOk={site.lastDeployOk ?? null}
+        lastDeployError={site.lastDeployError ?? null}
         content={site.content}
         missing={site.missing}
       />

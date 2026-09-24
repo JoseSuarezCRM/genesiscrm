@@ -1890,6 +1890,14 @@ model SurgeonSite {
   publishedContent Json?
   publishedAt      DateTime?
 
+  // The site app bundles its content at build time, so publishing here only
+  // reaches the live site once a build runs. These record whether the deploy
+  // hook fired, because a silently broken hook is the one failure mode of that
+  // design: content would quietly stop arriving and nobody would notice.
+  lastDeployAt    DateTime?
+  lastDeployOk    Boolean?
+  lastDeployError String?
+
   createdById String?
   updatedById String?
   createdAt   DateTime @default(now())
