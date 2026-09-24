@@ -30,6 +30,10 @@ export default async function SurgeonSiteDetailPage({ params }: { params: { id: 
         lastDeployAt={site.lastDeployAt ? new Date(site.lastDeployAt).toISOString() : null}
         lastDeployOk={site.lastDeployOk ?? null}
         lastDeployError={site.lastDeployError ?? null}
+        // Read here rather than in the client component: this is deployment
+        // configuration, not content, and a NEXT_PUBLIC_ variable would bake it
+        // into the browser bundle for no reason.
+        previewUrl={(process.env.SURGEON_SITE_PREVIEW_URL ?? "").trim().replace(/\/+$/, "") || null}
         content={site.content}
         missing={site.missing}
       />

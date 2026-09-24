@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Loader2, Save, Globe, CircleAlert, CircleCheck, Plus, Trash2, ChevronDown, ChevronRight,
+  ExternalLink,
 } from "lucide-react"
 import {
   updateSurgeonSite, publishSurgeonSite, setSurgeonSiteStatus,
@@ -32,6 +33,15 @@ export function SurgeonSiteEditor(props: {
   lastDeployAt: string | null
   lastDeployOk: boolean | null
   lastDeployError: string | null
+  /**
+   * The shared address the sites are served on, e.g. a *.vercel.app origin.
+   *
+   * One deployment serves every surgeon and tells them apart by the domain
+   * requested, so that address alone cannot say which surgeon to render —
+   * `?preview=<domain>` does. Null when SURGEON_SITE_PREVIEW_URL is unset, and
+   * the button is simply absent.
+   */
+  previewUrl: string | null
   content: SurgeonSiteContent
   missing: string[]
 }) {
@@ -112,6 +122,24 @@ export function SurgeonSiteEditor(props: {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/*
+            Opens this surgeon's site on the shared preview address, which serves
+            every surgeon and so needs telling which one. Only shown once the
+            site is published, because the preview renders published content —
+            there is nothing to look at before that.
+          */}
+          {props.previewUrl && props.status === "PUBLISHED" && domain && (
+            <a
+              href={`${props.previewUrl}/?preview=${encodeURIComponent(domain)}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Open this surgeon's site on the shared preview address"
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Preview site
+            </a>
+          )}
           <button
             onClick={() => save()}
             disabled={pending}
