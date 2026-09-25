@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Loader2, Save, Globe, CircleAlert, CircleCheck, Plus, Trash2, ChevronDown, ChevronRight,
-  ExternalLink,
+  ExternalLink, Eye,
 } from "lucide-react"
 import {
   updateSurgeonSite, publishSurgeonSite, setSurgeonSiteStatus,
@@ -42,6 +42,14 @@ export function SurgeonSiteEditor(props: {
    * the button is simply absent.
    */
   previewUrl: string | null
+  /**
+   * Shared secret that unlocks draft rendering on the preview host.
+   *
+   * The preview address is public and a draft is unpublished work, so the link
+   * carries a key. Reaches the browser only inside this button href, which an
+   * admin already had to be signed in to see.
+   */
+  previewSecret: string | null
   content: SurgeonSiteContent
   missing: string[]
 }) {
@@ -123,17 +131,40 @@ export function SurgeonSiteEditor(props: {
         </div>
         <div className="flex items-center gap-2">
           {/*
-            Opens this surgeon's site on the shared preview address, which serves
-            every surgeon and so needs telling which one. Only shown once the
-            site is published, because the preview renders published content —
-            there is nothing to look at before that.
+            The draft, as it would look published. Saves first, because the
+            preview renders what is stored rather than what is on screen —
+            without that, clicking it after an edit shows the previous save and
+            looks like the preview is broken.
+
+            Offered whatever the status, including DRAFT: seeing a site before it
+            has ever gone live is the main thing this is for.
           */}
+          {props.previewUrl && props.previewSecret && domain && (
+            <button
+              type="button"
+              onClick={() =>
+                save(() =>
+                  window.open(
+                    `${props.previewUrl}/?preview=${encodeURIComponent(domain)}&draft=1&key=${encodeURIComponent(props.previewSecret!)}`,
+                    "_blank",
+                    "noreferrer",
+                  ),
+                )
+              }
+              disabled={pending}
+              title="Save, then open this draft as it would look published"
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
+            >
+              <Eye className="h-4 w-4" />
+              Preview draft
+            </button>
+          )}
           {props.previewUrl && props.status === "PUBLISHED" && domain && (
             <a
               href={`${props.previewUrl}/?preview=${encodeURIComponent(domain)}`}
               target="_blank"
               rel="noreferrer"
-              title="Open this surgeon's site on the shared preview address"
+              title="Open the published site on the shared preview address"
               className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
             >
               <ExternalLink className="h-4 w-4" />

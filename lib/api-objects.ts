@@ -44,6 +44,16 @@ const STANDALONE_SCOPES: ApiScopeDef[] = [
     description:
       "Read published website content for the surgeons' public sites. No patient data. Read-only.",
   },
+  {
+    key: "surgeon_sites:read_draft",
+    label: "Read unpublished surgeon website drafts",
+    group: "Surgeon Websites",
+    description:
+      "Read drafts as well as published content, so staff can see a site before it goes live. " +
+      "Separate from the scope above because a draft is work in progress — wording nobody has " +
+      "approved, a photograph that may be replaced — and the public sites must not be able to " +
+      "read it. Still no patient data.",
+  },
 ]
 
 // Two scopes per object (read / write) — regenerated from the live object list.

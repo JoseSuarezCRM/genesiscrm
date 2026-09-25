@@ -20,6 +20,7 @@ import { authenticateApiRequest, apiError } from "@/lib/api-tokens"
 export const dynamic = "force-dynamic"
 
 const SCOPE = "surgeon_sites:read"
+const DRAFT_SCOPE = "surgeon_sites:read_draft"
 
 /** Compare hosts the way a browser would: case-insensitively, without www. */
 function normalizeDomain(input: string): string {
@@ -33,15 +34,24 @@ function normalizeDomain(input: string): string {
 }
 
 export async function GET(req: Request) {
-  const auth = await authenticateApiRequest(req, SCOPE)
-  if ("error" in auth) return auth.error
-
   const url = new URL(req.url)
   const domain = url.searchParams.get("domain")
 
+  // `?draft=1` asks for the draft instead of the published snapshot, so staff
+  // can see a site before it goes live. It is authenticated against a DIFFERENT
+  // scope, not merely flagged: a draft is work in progress — wording nobody has
+  // signed off, a photograph that may still be replaced — and a token handed to
+  // a public site must not be able to reach it. A token without the draft scope
+  // gets 403 here rather than silently falling back to published content, which
+  // would look like the draft simply having no changes.
+  const wantsDraft = url.searchParams.get("draft") === "1"
+  const auth = await authenticateApiRequest(req, wantsDraft ? DRAFT_SCOPE : SCOPE)
+  if ("error" in auth) return auth.error
+
   try {
-    // Only ever the published snapshot. A site being edited right now keeps
-    // serving what it served yesterday, which is what makes editing safe.
+    // Normally only the published snapshot: a site being edited right now keeps
+    // serving what it served yesterday, which is what makes editing safe. The
+    // draft is included only for a caller that asked and proved the scope.
     const select = {
       slug: true,
       domain: true,
@@ -49,20 +59,37 @@ export async function GET(req: Request) {
       redirectUrl: true,
       publishedContent: true,
       publishedAt: true,
+      ...(wantsDraft ? { content: true, updatedAt: true } : {}),
     }
+
+    // A draft preview has to reach a DRAFT site too — that is the whole point,
+    // seeing one before it goes live. Published reads keep the narrow list, so
+    // a draft site is still invisible to the public sites.
+    const statuses = wantsDraft
+      ? ["DRAFT", "PUBLISHED", "REDIRECTED", "RETIRED"]
+      : ["PUBLISHED", "REDIRECTED", "RETIRED"]
 
     if (domain) {
       const wanted = normalizeDomain(domain)
       // Matched in memory rather than by query so that "www." and casing are
       // handled the same way the site app handles its Host header.
       const rows = await (prisma as any).surgeonSite.findMany({
-        where: { status: { in: ["PUBLISHED", "REDIRECTED", "RETIRED"] } },
+        where: { status: { in: statuses } },
         select,
       })
       const site = rows.find((r: any) => r.domain && normalizeDomain(r.domain) === wanted)
 
       if (!site) {
-        return apiError(404, `No published site is served on "${domain}".`, "not_found")
+        return apiError(404, `No ${wantsDraft ? "" : "published "}site is served on "${domain}".`, "not_found")
+      }
+      // For a draft read, hand the draft back in the field the caller renders
+      // from, so nothing downstream has to know which it asked for — and drop
+      // the raw draft afterwards so it cannot be mistaken for published content.
+      if (wantsDraft) {
+        const { content, ...rest } = site
+        return NextResponse.json({
+          site: { ...rest, publishedContent: content, isDraft: true },
+        })
       }
       // A redirected or retired site still answers, because the site app needs
       // to know *how* to respond — 301 to the practice, or 410 so Google drops
@@ -71,10 +98,19 @@ export async function GET(req: Request) {
     }
 
     const sites = await (prisma as any).surgeonSite.findMany({
-      where: { status: { in: ["PUBLISHED", "REDIRECTED", "RETIRED"] } },
+      where: { status: { in: statuses } },
       orderBy: { slug: "asc" },
       select,
     })
+    if (wantsDraft) {
+      return NextResponse.json({
+        sites: sites.map(({ content, ...rest }: any) => ({
+          ...rest,
+          publishedContent: content,
+          isDraft: true,
+        })),
+      })
+    }
     return NextResponse.json({ sites })
   } catch (e: any) {
     console.error("surgeon-sites read failed:", e)
