@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { Fragment, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { KeyRound, Plus, Copy, Check, Loader2, Trash2, ShieldCheck, X, TriangleAlert } from "lucide-react"
-import { createApiToken, revokeApiToken, deleteApiToken, type ApiTokenRow } from "@/app/actions/api-tokens"
+import { KeyRound, Plus, Copy, Check, Loader2, Trash2, ShieldCheck, X, TriangleAlert, Pencil } from "lucide-react"
+import { createApiToken, revokeApiToken, deleteApiToken, updateApiTokenScopes, type ApiTokenRow } from "@/app/actions/api-tokens"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import type { ApiScopeDef } from "@/lib/api-objects"
 import { cn } from "@/lib/utils"
@@ -31,6 +31,33 @@ export default function ApiKeysManager({ initial, scopes: scopeDefs }: { initial
       if (res.error) { setErr(res.error); return }
       setNewToken(res.token ?? null)
       setCreating(false); setName(""); setScopes([])
+      router.refresh()
+    })
+  }
+
+  // Editing an existing key's scopes, keyed by id. The secret never changes, so
+  // whatever already holds the key keeps working — that is the whole point of
+  // editing rather than minting a replacement.
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editScopes, setEditScopes] = useState<string[]>([])
+  const [editErr, setEditErr] = useState<string | null>(null)
+
+  function startEdit(t: ApiTokenRow) {
+    setEditErr(null)
+    setEditing(t.id)
+    setEditScopes(t.scopes)
+  }
+
+  function toggleEditScope(s: string) {
+    setEditScopes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]))
+  }
+
+  function saveScopes(id: string) {
+    setEditErr(null)
+    startTransition(async () => {
+      const res = await updateApiTokenScopes(id, editScopes)
+      if (res.error) { setEditErr(res.error); return }
+      setEditing(null)
       router.refresh()
     })
   }
@@ -125,20 +152,69 @@ export default function ApiKeysManager({ initial, scopes: scopeDefs }: { initial
             {initial.length === 0 ? (
               <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">No API keys yet.</td></tr>
             ) : initial.map((t) => (
-              <tr key={t.id} className={cn("hover:bg-slate-50/70", t.revoked && "opacity-50")}>
-                <td className="px-4 py-3 font-medium text-slate-800">{t.name}{t.revoked && <span className="ml-2 text-[10px] uppercase text-red-600 font-semibold">revoked</span>}</td>
-                <td className="px-4 py-3"><code className="text-xs text-slate-500">{t.prefix}••••</code></td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {t.scopes.map((s) => <span key={s} className="text-[10px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 font-mono">{s}</span>)}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : "Never"}</td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
-                  {!t.revoked && <button onClick={() => revoke(t.id)} className="text-sm text-amber-600 hover:underline mr-3">Revoke</button>}
-                  <button onClick={() => remove(t.id)} className="inline-flex items-center text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-                </td>
-              </tr>
+              <Fragment key={t.id}>
+                <tr className={cn("hover:bg-slate-50/70", t.revoked && "opacity-50")}>
+                  <td className="px-4 py-3 font-medium text-slate-800">{t.name}{t.revoked && <span className="ml-2 text-[10px] uppercase text-red-600 font-semibold">revoked</span>}</td>
+                  <td className="px-4 py-3"><code className="text-xs text-slate-500">{t.prefix}••••</code></td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {t.scopes.map((s) => <span key={s} className="text-[10px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 font-mono">{s}</span>)}
+                      {!t.revoked && (
+                        <button
+                          onClick={() => (editing === t.id ? setEditing(null) : startEdit(t))}
+                          className="ml-1 inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline"
+                        >
+                          <Pencil className="h-3 w-3" /> {editing === t.id ? "Cancel" : "Edit"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : "Never"}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {!t.revoked && <button onClick={() => revoke(t.id)} className="text-sm text-amber-600 hover:underline mr-3">Revoke</button>}
+                    <button onClick={() => remove(t.id)} className="inline-flex items-center text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  </td>
+                </tr>
+                {editing === t.id && (
+                  <tr className="bg-slate-50/60">
+                    <td colSpan={5} className="px-4 py-4">
+                      <p className="text-xs text-slate-500 mb-3">
+                        Changing scopes does <strong>not</strong> change the key itself, so nothing
+                        holding it needs updating.
+                      </p>
+                      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        {Object.entries(scopeGroups).map(([group, list]) => (
+                          <div key={group}>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{group}</p>
+                            <div className="grid gap-1.5 sm:grid-cols-2">
+                              {list.map((s) => (
+                                <label key={s.key} className={cn("flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer", editScopes.includes(s.key) ? "border-blue-400 bg-blue-50/50" : "border-slate-200 bg-white hover:bg-slate-50")}>
+                                  <input type="checkbox" checked={editScopes.includes(s.key)} onChange={() => toggleEditScope(s.key)} className="mt-0.5 rounded border-slate-300" />
+                                  <span>
+                                    <span className="block text-xs font-medium text-slate-700">{s.label}</span>
+                                    {s.description && <span className="block text-[11px] text-slate-500">{s.description}</span>}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {editErr && <p className="mt-3 text-sm text-red-600">{editErr}</p>}
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          onClick={() => saveScopes(t.id)}
+                          disabled={pending || editScopes.length === 0}
+                          className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
+                        >
+                          {pending && <Loader2 className="h-4 w-4 animate-spin" />} Save scopes
+                        </button>
+                        <button onClick={() => setEditing(null)} className="h-9 px-3 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>

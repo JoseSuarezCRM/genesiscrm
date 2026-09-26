@@ -53,6 +53,45 @@ export async function createApiToken(name: string, scopes: string[]): Promise<{ 
   return { token, prefix }
 }
 
+/**
+ * Change what an existing key is allowed to reach.
+ *
+ * Without this, widening a key meant minting a replacement and updating every
+ * service that holds it — and the failure mode is quiet: the old key still
+ * works, so whatever is still sending it keeps getting refused for the new
+ * scope while looking, from the outside, like the scope was never granted.
+ *
+ * The secret is untouched. Nothing that already holds the key needs to change,
+ * which is the point.
+ */
+export async function updateApiTokenScopes(
+  id: string,
+  scopes: string[],
+): Promise<{ ok?: boolean; error?: string }> {
+  await requirePermission("MANAGE_USERS")
+
+  // Filtered against the live catalog, exactly as creation is: a scope string
+  // that no longer exists must not survive an edit just because it was saved
+  // before the object it named was deleted.
+  const valid = await getApiScopeKeys()
+  const chosen = (scopes ?? []).filter((s) => valid.includes(s))
+  if (chosen.length === 0) return { error: "Pick at least one scope." }
+
+  try {
+    const row = await (prisma as any).apiToken.findUnique({ where: { id } })
+    if (!row) return { error: "That key no longer exists." }
+    // A revoked key stays revoked. Re-granting scopes on one would quietly
+    // bring it back, and a key is revoked precisely when it should not work.
+    if (row.revokedAt) return { error: "That key is revoked. Create a new one instead." }
+
+    await (prisma as any).apiToken.update({ where: { id }, data: { scopes: chosen } })
+    revalidatePath("/settings/integrations/api-keys")
+    return { ok: true }
+  } catch (e: any) {
+    return { error: e?.message ?? "Couldn't update the key." }
+  }
+}
+
 export async function revokeApiToken(id: string): Promise<{ ok?: boolean; error?: string }> {
   await requirePermission("MANAGE_USERS")
   try {
