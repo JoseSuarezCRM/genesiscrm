@@ -4,11 +4,13 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Loader2, Save, Globe, CircleAlert, CircleCheck, Plus, Trash2, ChevronDown, ChevronRight,
-  ExternalLink, Eye,
+  ExternalLink, Eye, RefreshCw,
 } from "lucide-react"
 import {
   updateSurgeonSite, publishSurgeonSite, setSurgeonSiteStatus,
+  surgeonSitePreviewUrl, rotateSurgeonSitePreviewToken,
 } from "@/app/actions/surgeon-sites"
+import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { missingCredentials, type SurgeonSiteContent, type SurgeonClinic } from "@/lib/surgeon-site"
 import { SurgeonImageField } from "@/components/surgeon-site-image-field"
 import { cn } from "@/lib/utils"
@@ -42,14 +44,8 @@ export function SurgeonSiteEditor(props: {
    * the button is simply absent.
    */
   previewUrl: string | null
-  /**
-   * Shared secret that unlocks draft rendering on the preview host.
-   *
-   * The preview address is public and a draft is unpublished work, so the link
-   * carries a key. Reaches the browser only inside this button href, which an
-   * admin already had to be signed in to see.
-   */
-  previewSecret: string | null
+  /** Whether a preview link has ever been issued, so Rotate can be offered. */
+  hasPreviewToken: boolean
   content: SurgeonSiteContent
   missing: string[]
 }) {
@@ -100,6 +96,56 @@ export function SurgeonSiteEditor(props: {
     })
   }
 
+  /**
+   * Save, then open this draft on the preview address.
+   *
+   * Saving first matters: the preview renders what is *stored*, not what is on
+   * screen, so without it you would look at your previous save and conclude the
+   * preview was broken.
+   *
+   * The tab is opened synchronously, while the click is still the reason
+   * anything is happening — browsers block a window.open that arrives after an
+   * await. It is filled in once the server hands back the link, which is also
+   * where the site's preview key is minted, so the key never sits in this page.
+   */
+  function previewDraft() {
+    setErr(null)
+    const tab = window.open("", "_blank", "noreferrer")
+    startTransition(async () => {
+      try {
+        await updateSurgeonSite(props.id, { domain, redirectUrl, content })
+        setSaved(true)
+        const res = await surgeonSitePreviewUrl(props.id)
+        if (res.error || !res.url) {
+          tab?.close()
+          setErr(res.error ?? "Could not build the preview link.")
+          return
+        }
+        if (tab) tab.location.href = res.url
+        else window.open(res.url, "_blank", "noreferrer")
+        router.refresh()
+      } catch (e: any) {
+        tab?.close()
+        setErr(e?.message ?? "Could not open the preview")
+      }
+    })
+  }
+
+  async function rotatePreview() {
+    if (
+      !(await confirmDialog(
+        "Issue a new preview link for this site? Any link already shared stops working.",
+      ))
+    )
+      return
+    setErr(null)
+    startTransition(async () => {
+      const res = await rotateSurgeonSitePreviewToken(props.id)
+      if (res.error) setErr(res.error)
+      router.refresh()
+    })
+  }
+
   function changeStatus(status: Status) {
     setErr(null)
     startTransition(async () => {
@@ -139,18 +185,10 @@ export function SurgeonSiteEditor(props: {
             Offered whatever the status, including DRAFT: seeing a site before it
             has ever gone live is the main thing this is for.
           */}
-          {props.previewUrl && props.previewSecret && domain && (
+          {props.previewUrl && domain && (
             <button
               type="button"
-              onClick={() =>
-                save(() =>
-                  window.open(
-                    `${props.previewUrl}/?preview=${encodeURIComponent(domain)}&draft=1&key=${encodeURIComponent(props.previewSecret!)}`,
-                    "_blank",
-                    "noreferrer",
-                  ),
-                )
-              }
+              onClick={previewDraft}
               disabled={pending}
               title="Save, then open this draft as it would look published"
               className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
@@ -335,6 +373,23 @@ export function SurgeonSiteEditor(props: {
           <Field label="Redirect destination" hint="Where visitors go if this site is set to Redirected.">
             <Input value={redirectUrl} onChange={(v) => { setRedirectUrl(v); setSaved(false) }} placeholder="https://genesisortho.com/" />
           </Field>
+          {props.hasPreviewToken && (
+            <Field
+              label="Preview link"
+              hint="Preview draft carries a key unique to this site. Issue a new one if a link has been shared too widely — it affects only this surgeon and needs no redeploy."
+              wide
+            >
+              <button
+                type="button"
+                onClick={rotatePreview}
+                disabled={pending}
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Issue a new preview link
+              </button>
+            </Field>
+          )}
         </Grid>
       </Section>
 

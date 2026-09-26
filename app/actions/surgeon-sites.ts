@@ -15,6 +15,7 @@
  *    draft instead" rather than a separate pipeline.
  */
 
+import { randomBytes } from "node:crypto"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
@@ -221,6 +222,65 @@ export async function setSurgeonSiteStatus(
   revalidatePath("/settings/surgeon-sites")
   revalidatePath(`/settings/surgeon-sites/${id}`)
   return deploy
+}
+
+/**
+ * The link that opens this site's draft on the shared preview address.
+ *
+ * Mints the site's preview key on first use. Lazy rather than at creation so
+ * there is no backfill, and so a site nobody previews never has one.
+ *
+ * Returns the whole URL rather than the key, so the key exists in exactly one
+ * place — this function — and no caller has to know how the link is shaped.
+ */
+export async function surgeonSitePreviewUrl(
+  id: string,
+): Promise<{ url?: string; error?: string }> {
+  await requireAdmin()
+
+  const base = (process.env.SURGEON_SITE_PREVIEW_URL ?? "").trim().replace(/\/+$/, "")
+  if (!base) {
+    return { error: "No preview address is configured. Set SURGEON_SITE_PREVIEW_URL." }
+  }
+
+  const row = await (prisma as any).surgeonSite.findUnique({ where: { id } })
+  if (!row) return { error: "Site not found" }
+  if (!row.domain?.trim()) {
+    return { error: "Give the site a domain first — the preview link is keyed on it." }
+  }
+
+  let token: string = row.previewToken ?? ""
+  if (!token) {
+    // `prv_` rather than the `gosm_` API-key prefix: this travels in a URL and
+    // must never be mistaken for a credential that can read the API.
+    token = `prv_${randomBytes(24).toString("hex")}`
+    await (prisma as any).surgeonSite.update({ where: { id }, data: { previewToken: token } })
+  }
+
+  const params = new URLSearchParams({ preview: row.domain.trim(), draft: "1", key: token })
+  return { url: `${base}/?${params.toString()}` }
+}
+
+/**
+ * Invalidate this site's preview link and issue a new one.
+ *
+ * One surgeon, one click, no deploy — which is the point of the key living on
+ * the row instead of in an environment variable shared by two projects.
+ */
+export async function rotateSurgeonSitePreviewToken(
+  id: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  await requireAdmin()
+  try {
+    await (prisma as any).surgeonSite.update({
+      where: { id },
+      data: { previewToken: `prv_${randomBytes(24).toString("hex")}` },
+    })
+    revalidatePath(`/settings/surgeon-sites/${id}`)
+    return { ok: true }
+  } catch (e: any) {
+    return { error: e?.message ?? "Couldn't rotate the preview link." }
+  }
 }
 
 export async function deleteSurgeonSite(id: string) {

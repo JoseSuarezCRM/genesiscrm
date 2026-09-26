@@ -1898,6 +1898,16 @@ model SurgeonSite {
   lastDeployOk    Boolean?
   lastDeployError String?
 
+  // Unlocks draft preview for THIS site, and nothing else.
+  //
+  // A draft is unpublished work on a public preview address, so the link that
+  // opens one carries a key. It lives here rather than in a shared environment
+  // variable because that was the only piece of configuration that had to be
+  // identical on two Vercel projects, and keeping it in step is what kept
+  // breaking. Here it is rotated with a button, affects one surgeon, and needs
+  // no deploy. Generated on first use; a site that is never previewed has none.
+  previewToken String?
+
   createdById String?
   updatedById String?
   createdAt   DateTime @default(now())

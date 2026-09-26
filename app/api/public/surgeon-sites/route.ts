@@ -13,6 +13,7 @@
  * Authorization: Bearer <token with the "surgeon_sites:read" scope>.
  */
 
+import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateApiRequest, apiError } from "@/lib/api-tokens"
@@ -21,6 +22,25 @@ export const dynamic = "force-dynamic"
 
 const SCOPE = "surgeon_sites:read"
 const DRAFT_SCOPE = "surgeon_sites:read_draft"
+
+/**
+ * Does the key on a preview link match the one this site holds?
+ *
+ * Constant-time, so the comparison cannot be used to discover a token a
+ * character at a time. Both are random and 52 characters long, which makes that
+ * attack impractical anyway — but `timingSafeEqual` costs nothing and removes
+ * the need to have made that judgement correctly.
+ *
+ * A site with no token has never been previewed, so no key can be valid for it.
+ */
+function matchesPreviewKey(given: string | null, stored: string | null): boolean {
+  if (!given || !stored) return false
+  const a = Buffer.from(given)
+  const b = Buffer.from(stored)
+  // timingSafeEqual throws on a length mismatch, which is itself a leak of one
+  // bit; comparing lengths first is equivalent and does not throw.
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 /** Compare hosts the way a browser would: case-insensitively, without www. */
 function normalizeDomain(input: string): string {
@@ -48,6 +68,12 @@ export async function GET(req: Request) {
   const auth = await authenticateApiRequest(req, wantsDraft ? DRAFT_SCOPE : SCOPE)
   if ("error" in auth) return auth.error
 
+  // A draft read is always for ONE named site. There is no key that unlocks
+  // every draft at once, and offering a bulk read would have to invent one.
+  if (wantsDraft && !domain) {
+    return apiError(400, "A draft read needs ?domain= — drafts are fetched one site at a time.", "bad_request")
+  }
+
   try {
     // Normally only the published snapshot: a site being edited right now keeps
     // serving what it served yesterday, which is what makes editing safe. The
@@ -59,7 +85,7 @@ export async function GET(req: Request) {
       redirectUrl: true,
       publishedContent: true,
       publishedAt: true,
-      ...(wantsDraft ? { content: true, updatedAt: true } : {}),
+      ...(wantsDraft ? { content: true, updatedAt: true, previewToken: true } : {}),
     }
 
     // A draft preview has to reach a DRAFT site too — that is the whole point,
@@ -82,11 +108,22 @@ export async function GET(req: Request) {
       if (!site) {
         return apiError(404, `No ${wantsDraft ? "" : "published "}site is served on "${domain}".`, "not_found")
       }
-      // For a draft read, hand the draft back in the field the caller renders
-      // from, so nothing downstream has to know which it asked for — and drop
-      // the raw draft afterwards so it cannot be mistaken for published content.
       if (wantsDraft) {
-        const { content, ...rest } = site
+        // The site's own preview key, checked here rather than by the caller.
+        // The CRM owns this content and already knows who may read it; making
+        // the public site hold a copy of a secret to decide for itself was the
+        // arrangement this replaces.
+        //
+        // The scope check above is a separate, independent gate: reading a
+        // draft needs both a token allowed to read drafts AND this site's key.
+        if (!matchesPreviewKey(url.searchParams.get("key"), site.previewToken)) {
+          return apiError(403, "That preview link is not valid for this site.", "forbidden")
+        }
+        // Hand the draft back in the field the caller renders from, so nothing
+        // downstream has to know which it asked for. The raw draft and the key
+        // are dropped: one so it cannot be mistaken for published content, the
+        // other because a response should not echo a secret back.
+        const { content, previewToken: _t, ...rest } = site
         return NextResponse.json({
           site: { ...rest, publishedContent: content, isDraft: true },
         })
@@ -97,20 +134,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ site })
     }
 
+    // Published only — a draft read is rejected above unless it names a domain,
+    // so this path never carries drafts and needs no branch for them.
     const sites = await (prisma as any).surgeonSite.findMany({
       where: { status: { in: statuses } },
       orderBy: { slug: "asc" },
       select,
     })
-    if (wantsDraft) {
-      return NextResponse.json({
-        sites: sites.map(({ content, ...rest }: any) => ({
-          ...rest,
-          publishedContent: content,
-          isDraft: true,
-        })),
-      })
-    }
     return NextResponse.json({ sites })
   } catch (e: any) {
     console.error("surgeon-sites read failed:", e)

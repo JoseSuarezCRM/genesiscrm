@@ -34,7 +34,7 @@ export default async function SurgeonSiteDetailPage({ params }: { params: { id: 
         // configuration, not content, and a NEXT_PUBLIC_ variable would bake it
         // into the browser bundle for no reason.
         previewUrl={(process.env.SURGEON_SITE_PREVIEW_URL ?? "").trim().replace(/\/+$/, "") || null}
-        previewSecret={(process.env.SURGEON_SITE_PREVIEW_SECRET ?? "").trim() || null}
+        hasPreviewToken={!!site.previewToken}
         content={site.content}
         missing={site.missing}
       />
