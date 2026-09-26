@@ -83,6 +83,18 @@ export interface SurgeonPublication {
   url: string
 }
 
+/**
+ * One strand of a surgeon's research, as the research page presents it.
+ *
+ * Never inheritable: these paragraphs name the trials a surgeon led and the
+ * journals that published them. They were hardcoded in the site app's research
+ * route, which credited every surgeon with one man's career.
+ */
+export interface SurgeonResearchTheme {
+  title: string
+  body: string
+}
+
 export interface SurgeonProfile {
   cards: { icon: string; title: string; description: string }[]
   highlights: { title: string; body: string }[]
@@ -171,6 +183,14 @@ export interface SurgeonSiteContent {
   protocolsSourceUrl?: string
   publications: SurgeonPublication[]
   researchStats: { label: string; value: string }[]
+  /**
+   * The research page's narrative, and the journals and meetings it lists.
+   * Each renders nothing when empty — a surgeon who has published but not
+   * written these gets a shorter page, never someone else's career.
+   */
+  researchThemes: SurgeonResearchTheme[]
+  researchVenues: string[]
+  researchMeetings: string[]
   /** The "why patients choose…" paragraph per article, keyed by article slug. */
   articleBios: Record<string, string>
   profile: SurgeonProfile
@@ -214,6 +234,9 @@ export function emptyContent(): SurgeonSiteContent {
     protocolGroups: [],
     publications: [],
     researchStats: [],
+    researchThemes: [],
+    researchVenues: [],
+    researchMeetings: [],
     articleBios: {},
     profile: { cards: [], highlights: [], facts: [], bio: [] },
     pageCopy: {},
