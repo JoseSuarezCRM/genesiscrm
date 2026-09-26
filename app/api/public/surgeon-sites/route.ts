@@ -17,6 +17,7 @@ import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateApiRequest, apiError } from "@/lib/api-tokens"
+import { parsePractice } from "@/lib/practice"
 
 export const dynamic = "force-dynamic"
 
@@ -51,6 +52,21 @@ function normalizeDomain(input: string): string {
     .split("/")[0]
     .split(":")[0]
     .replace(/^www\./, "")
+}
+
+
+/**
+ * The practice every site shares — office roster, insurances, hours,
+ * medical-legal contacts.
+ *
+ * Returned alongside the site rather than from a second endpoint, because no
+ * caller ever wants one without the other and two round trips would mean two
+ * ways for them to disagree. Under the same read scope: it is organisation
+ * information, not per-surgeon and not PHI.
+ */
+async function practicePayload() {
+  const row = await (prisma as any).practice.findUnique({ where: { id: "default" } })
+  return parsePractice(row?.content)
 }
 
 export async function GET(req: Request) {
@@ -126,12 +142,13 @@ export async function GET(req: Request) {
         const { content, previewToken: _t, ...rest } = site
         return NextResponse.json({
           site: { ...rest, publishedContent: content, isDraft: true },
+          practice: await practicePayload(),
         })
       }
       // A redirected or retired site still answers, because the site app needs
       // to know *how* to respond — 301 to the practice, or 410 so Google drops
       // the pages rather than retrying a 404 indefinitely.
-      return NextResponse.json({ site })
+      return NextResponse.json({ site, practice: await practicePayload() })
     }
 
     // Published only — a draft read is rejected above unless it names a domain,
@@ -141,7 +158,7 @@ export async function GET(req: Request) {
       orderBy: { slug: "asc" },
       select,
     })
-    return NextResponse.json({ sites })
+    return NextResponse.json({ sites, practice: await practicePayload() })
   } catch (e: any) {
     console.error("surgeon-sites read failed:", e)
     return apiError(500, "Could not read surgeon sites.", "server_error")

@@ -1860,6 +1860,23 @@ model EmailSignature {
 // reads `publishedContent` over a scoped ApiToken and never touches this
 // database. A marketing site is the most-scanned surface an org puts online, so
 // the boundary is the point: a flaw in a public page can't reach PHI.
+/// The practice every surgeon site shares.
+///
+/// A singleton — one row, id "default". The office roster, insurance lists,
+/// hours and medical-legal contacts are organisation-level, not per surgeon:
+/// they all lived in the site app's code, and the roster carried a per-surgeon
+/// flag, which is how a second surgeon's contact page listed another surgeon's
+/// clinics as their own. Copying them onto six records instead would store the
+/// same fourteen addresses six times.
+///
+/// Shape is typed in lib/practice.ts, which is a contract with the site app.
+model Practice {
+  id          String   @id @default("default")
+  content     Json     @default("{}")
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
 model SurgeonSite {
   id          String            @id @default(cuid())
   slug        String            @unique // url segment and internal key, e.g. "nolan-horner"
