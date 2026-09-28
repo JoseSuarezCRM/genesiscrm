@@ -103,6 +103,24 @@ export interface SurgeonProfile {
   bio: string[]
 }
 
+/**
+ * The icon names `SurgeonProfile.cards` and `.facts` may use.
+ *
+ * The record carries a name rather than a component because it is data — it has
+ * to survive being typed in this CRM and sent over HTTP. The site app maps these
+ * six names to components in `src/lib/profile-icons.ts` and falls back to Award
+ * for anything else, so a typo is silent. Hence a fixed list here: the editor
+ * offers these and nothing else.
+ */
+export const PROFILE_ICONS = [
+  { value: "Award", label: "Award" },
+  { value: "BookOpen", label: "Book" },
+  { value: "Building2", label: "Building" },
+  { value: "GraduationCap", label: "Graduation cap" },
+  { value: "School", label: "School" },
+  { value: "Users", label: "People" },
+] as const
+
 export interface SurgeonSiteContent {
   // ── Identity ──────────────────────────────────────────────────────────────
   /** Full display name with credential: "Nolan Horner, MD". */

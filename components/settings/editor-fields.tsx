@@ -10,6 +10,7 @@
 
 import * as React from "react"
 import { Plus, Trash2 } from "lucide-react"
+import StyledSelect from "@/components/ui/styled-select"
 import { cn } from "@/lib/utils"
 
 export function Grid({ children }: { children: React.ReactNode }) {
@@ -65,6 +66,40 @@ export function Textarea(props: {
       placeholder={props.placeholder}
       className={controlClass}
     />
+  )
+}
+
+/**
+ * A choice from a fixed set.
+ *
+ * Wraps the app's StyledSelect rather than a native `<select>`, per the house
+ * rule that every field uses the shared inputs. Used wherever the site app
+ * resolves a stored string through a lookup table — icon names, review sources —
+ * because those are closed sets and a text box invites a value that silently
+ * resolves to the fallback.
+ */
+export function Select(props: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+  /** Offered as the first entry when the field is legitimately unset. */
+  placeholder?: string
+}) {
+  return (
+    <div className={controlClass + " p-0"}>
+      <StyledSelect
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        className="w-full border-0 bg-transparent px-3 py-2 text-sm"
+      >
+        {props.placeholder !== undefined && <option value="">{props.placeholder}</option>}
+        {props.options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </StyledSelect>
+    </div>
   )
 }
 

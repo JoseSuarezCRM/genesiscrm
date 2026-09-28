@@ -1,22 +1,56 @@
 "use client"
 
+/**
+ * One surgeon's website, as staff edit it.
+ *
+ * Every field the site app can read is reachable from here. That was not true
+ * until recently: seventeen of them — the Spanish clinic copy, the research
+ * narrative, the per-article paragraphs, the whole publication list — existed on
+ * the record and in the site's types, but had no form, so the only way to write
+ * one was a script on the command line. A field with no editor is a field the
+ * practice does not have.
+ *
+ * The shell (rail, panels, preview tab) is shared with the practice editor.
+ * Nothing here is bespoke chrome.
+ */
+
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Loader2, Save, Globe, CircleAlert, CircleCheck, Plus, Trash2, ChevronDown, ChevronRight,
-  ExternalLink, Eye, RefreshCw,
+  Loader2, Save, Globe, CircleAlert, CircleCheck, ExternalLink, RefreshCw,
 } from "lucide-react"
 import {
   updateSurgeonSite, publishSurgeonSite, setSurgeonSiteStatus,
   surgeonSitePreviewUrl, rotateSurgeonSitePreviewToken,
 } from "@/app/actions/surgeon-sites"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
-import { missingCredentials, type SurgeonSiteContent, type SurgeonClinic } from "@/lib/surgeon-site"
+import {
+  missingCredentials, PROFILE_ICONS,
+  type SurgeonSiteContent, type SurgeonClinic,
+} from "@/lib/surgeon-site"
+import {
+  PAGE_COPY_GROUPS, PAGE_LIST_KEYS, ARTICLE_BIO_KEYS,
+  KNOWN_COPY_KEYS, filledCount,
+} from "@/lib/surgeon-site-copy"
 import { SurgeonImageField } from "@/components/surgeon-site-image-field"
 import { EditorShell, type EditorSection } from "@/components/settings/editor-shell"
-import { cn } from "@/lib/utils"
+import { CollectionEditor } from "@/components/settings/collection-editor"
+import {
+  Field, Grid, Input, RowList, Select, StringList, Textarea,
+} from "@/components/settings/editor-fields"
+import {
+  ArticleBioEditor, CopyKeyEditor, CopyListEditor,
+} from "@/components/settings/copy-key-editor"
+import { PublicationsEditor } from "@/components/settings/publications-editor"
+import { ProtocolsEditor } from "@/components/settings/protocols-editor"
 
 type Status = "DRAFT" | "PUBLISHED" | "REDIRECTED" | "RETIRED"
+
+/** The languages the site app actually publishes in. */
+const LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "es", label: "Spanish" },
+]
 
 export function SurgeonSiteEditor(props: {
   id: string
@@ -57,7 +91,6 @@ export function SurgeonSiteEditor(props: {
   const [redirectUrl, setRedirectUrl] = useState(props.redirectUrl ?? "")
   const [err, setErr] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
-  const [open, setOpen] = useState<string>("identity")
 
   // Recomputed as they type, using the same function the server publishes with,
   // so the checklist can never disagree with what publishing actually allows.
@@ -66,6 +99,13 @@ export function SurgeonSiteEditor(props: {
   function set<K extends keyof SurgeonSiteContent>(key: K, value: SurgeonSiteContent[K]) {
     setContent((c) => ({ ...c, [key]: value }))
     setSaved(false)
+  }
+
+  function setProfile<K extends keyof SurgeonSiteContent["profile"]>(
+    key: K,
+    value: SurgeonSiteContent["profile"][K],
+  ) {
+    set("profile", { ...content.profile, [key]: value })
   }
 
   function save(then?: () => void) {
@@ -131,41 +171,6 @@ export function SurgeonSiteEditor(props: {
     })
   }
 
-  /**
-   * Save, then open this draft on the preview address.
-   *
-   * Saving first matters: the preview renders what is *stored*, not what is on
-   * screen, so without it you would look at your previous save and conclude the
-   * preview was broken.
-   *
-   * The tab is opened synchronously, while the click is still the reason
-   * anything is happening — browsers block a window.open that arrives after an
-   * await. It is filled in once the server hands back the link, which is also
-   * where the site's preview key is minted, so the key never sits in this page.
-   */
-  function previewDraft() {
-    setErr(null)
-    const tab = window.open("", "_blank", "noreferrer")
-    startTransition(async () => {
-      try {
-        await updateSurgeonSite(props.id, { domain, redirectUrl, content })
-        setSaved(true)
-        const res = await surgeonSitePreviewUrl(props.id)
-        if (res.error || !res.url) {
-          tab?.close()
-          setErr(res.error ?? "Could not build the preview link.")
-          return
-        }
-        if (tab) tab.location.href = res.url
-        else window.open(res.url, "_blank", "noreferrer")
-        router.refresh()
-      } catch (e: any) {
-        tab?.close()
-        setErr(e?.message ?? "Could not open the preview")
-      }
-    })
-  }
-
   async function rotatePreview() {
     if (
       !(await confirmDialog(
@@ -194,9 +199,6 @@ export function SurgeonSiteEditor(props: {
     })
   }
 
-  // Each section is one panel in the rail. `needsAttention` is driven by the
-  // same missingCredentials() the publish gate uses, so the rail and the
-  // checklist cannot disagree about what is unfinished.
   /**
    * Which section fixes each outstanding item.
    *
@@ -217,6 +219,19 @@ export function SurgeonSiteEditor(props: {
     }),
   )
 
+  // How much of the keyed copy has been written — shown in the rail so the two
+  // biggest sections say at a glance whether anyone has been through them.
+  const copyFilled = PAGE_COPY_GROUPS.reduce(
+    (n, g) => n + filledCount(content.pageCopy, g.keys),
+    0,
+  )
+  const copyTotal = PAGE_COPY_GROUPS.reduce((n, g) => n + g.keys.length, 0)
+  const bioFilled = ARTICLE_BIO_KEYS.filter((k) => (content.articleBios[k.key] ?? "").trim()).length
+
+  const clinicOptions = content.clinics
+    .filter((c) => c.name.trim())
+    .map((c) => ({ value: c.name, label: c.name }))
+
   const sections: EditorSection[] = [
     {
       id: "identity",
@@ -225,7 +240,6 @@ export function SurgeonSiteEditor(props: {
       needsAttention: attention.has("identity"),
       previewPath: "/",
       panel: (
-        <>
         <Grid>
           <Field label="Full name with credential" hint='Appears in titles and the byline, e.g. "Nolan Horner, MD"'>
             <Input value={content.name} onChange={(v) => set("name", v)} />
@@ -243,47 +257,45 @@ export function SurgeonSiteEditor(props: {
             <Textarea value={content.description} onChange={(v) => set("description", v)} rows={2} />
           </Field>
         </Grid>
-        </>
       ),
     },
     {
       id: "images",
       label: "Photographs",
       hint: "This surgeon's own likeness. Never anyone else's.",
-      needsAttention: attention.has("images"),
       previewPath: "/about",
       panel: (
         <>
-        <div className="grid gap-5 sm:grid-cols-2">
-          <SurgeonImageField
-            label="Headshot"
-            hint="The main portrait — homepage, Spanish homepage and medical-legal page."
-            value={content.headshot}
-            onChange={(v) => set("headshot", v)}
-          />
-          <SurgeonImageField
-            label="Second portrait"
-            hint="The About page hero. A different crop or pose from the main headshot."
-            value={content.headshotSecondary}
-            onChange={(v) => set("headshotSecondary", v)}
-          />
-          <SurgeonImageField
-            label="At work"
-            hint="In the operating room or clinic. Used on the homepage and About page."
-            value={content.portraitAtWork}
-            onChange={(v) => set("portraitAtWork", v)}
-          />
-          <SurgeonImageField
-            label="Search-result image"
-            hint="What Google shows beside the practice. A large square image works best."
-            value={content.schemaImagePath}
-            onChange={(v) => set("schemaImagePath", v)}
-          />
-        </div>
-        <p className="mt-3 text-[11px] leading-snug text-zinc-500">
-          Leaving one blank is safe — the page simply has no photograph there. It will never
-          fall back to another surgeon&apos;s.
-        </p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <SurgeonImageField
+              label="Headshot"
+              hint="The main portrait — homepage, Spanish homepage and medical-legal page."
+              value={content.headshot}
+              onChange={(v) => set("headshot", v)}
+            />
+            <SurgeonImageField
+              label="Second portrait"
+              hint="The About page hero. A different crop or pose from the main headshot."
+              value={content.headshotSecondary}
+              onChange={(v) => set("headshotSecondary", v)}
+            />
+            <SurgeonImageField
+              label="At work"
+              hint="In the operating room or clinic. Used on the homepage and About page."
+              value={content.portraitAtWork}
+              onChange={(v) => set("portraitAtWork", v)}
+            />
+            <SurgeonImageField
+              label="Search-result image"
+              hint="What Google shows beside the practice. A large square image works best."
+              value={content.schemaImagePath}
+              onChange={(v) => set("schemaImagePath", v)}
+            />
+          </div>
+          <p className="mt-3 text-pretty text-xs leading-snug text-zinc-500">
+            Leaving one blank is safe — the page simply has no photograph there. It will never
+            fall back to another surgeon&apos;s.
+          </p>
         </>
       ),
     },
@@ -294,7 +306,6 @@ export function SurgeonSiteEditor(props: {
       needsAttention: attention.has("web"),
       previewPath: "/",
       panel: (
-        <>
         <Grid>
           <Field label="Domain" hint="The address patients visit, without https://">
             <Input value={domain} onChange={(v) => { setDomain(v); setSaved(false) }} placeholder="nolanhornermd.com" />
@@ -337,13 +348,12 @@ export function SurgeonSiteEditor(props: {
                 disabled={pending}
                 className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
               >
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className="size-4" />
                 Issue a new preview link
               </button>
             </Field>
           )}
         </Grid>
-        </>
       ),
     },
     {
@@ -353,7 +363,6 @@ export function SurgeonSiteEditor(props: {
       needsAttention: attention.has("contact"),
       previewPath: "/contact",
       panel: (
-        <>
         <Grid>
           <Field label="Phone (as displayed)"><Input value={content.phone} onChange={(v) => set("phone", v)} placeholder="(877) 377-1188" /></Field>
           <Field label="Phone (dialable)" hint="International format, used by search engines."><Input value={content.phoneE164} onChange={(v) => set("phoneE164", v)} placeholder="+1-877-377-1188" /></Field>
@@ -361,11 +370,86 @@ export function SurgeonSiteEditor(props: {
           <Field label="Fax (dialable)"><Input value={content.faxE164} onChange={(v) => set("faxE164", v)} /></Field>
           <Field label="Email"><Input value={content.email} onChange={(v) => set("email", v)} /></Field>
           <Field label="Practice name"><Input value={content.group} onChange={(v) => set("group", v)} /></Field>
+          <Field label="Practice website" hint="Linked wherever the site names the group."><Input value={content.groupUrl} onChange={(v) => set("groupUrl", v)} placeholder="https://genesisortho.com/" /></Field>
           <Field label="Region" hint='As it reads in prose, e.g. "Chicagoland"'><Input value={content.region} onChange={(v) => set("region", v)} /></Field>
           <Field label="Metro" hint='The city named in page titles, e.g. "Chicago". Often different from the region and from any one clinic.'><Input value={content.metro} onChange={(v) => set("metro", v)} /></Field>
           <Field label="LinkedIn"><Input value={content.linkedin} onChange={(v) => set("linkedin", v)} /></Field>
           <Field label="Research profile" hint="ResearchGate or similar. Leave blank if they have none."><Input value={content.researchProfile ?? ""} onChange={(v) => set("researchProfile", v)} /></Field>
         </Grid>
+      ),
+    },
+    {
+      id: "reach",
+      label: "Reach & links",
+      hint: "Languages, service area, and the profiles search engines cross-reference.",
+      previewPath: "/",
+      panel: (
+        <>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Languages
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            Turning Spanish off removes the language switcher and keeps the Spanish pages out of
+            search. Turning it on does not translate anything — the Spanish copy is written by
+            hand under Page copy and on each clinic.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {LANGUAGES.map((l) => {
+              const on = content.languages.includes(l.code)
+              return (
+                <button
+                  key={l.code}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    set(
+                      "languages",
+                      on
+                        ? content.languages.filter((c) => c !== l.code)
+                        : [...content.languages, l.code],
+                    )
+                  }
+                  className={
+                    on
+                      ? "rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white"
+                      : "rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 transition-colors hover:bg-zinc-50"
+                  }
+                >
+                  {l.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Areas served
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            Towns and neighbourhoods, one per box. Used in the listing search engines read, not
+            printed as a list on any page.
+          </p>
+          <StringList
+            values={content.areaServed}
+            onChange={(v) => set("areaServed", v)}
+            placeholder="Oak Brook"
+            addLabel="Add an area"
+            itemLabel="area"
+          />
+
+          <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Other profiles
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            Full links to profiles that are unmistakably this surgeon — Doximity, Healthgrades, a
+            hospital page. Search engines use them to tie this site to the same person.
+          </p>
+          <StringList
+            values={content.sameAs}
+            onChange={(v) => set("sameAs", v)}
+            placeholder="https://www.doximity.com/pub/…"
+            addLabel="Add a profile"
+            itemLabel="profile"
+          />
         </>
       ),
     },
@@ -378,25 +462,32 @@ export function SurgeonSiteEditor(props: {
       previewPath: "/about",
       panel: (
         <>
-        <p className="mb-4 text-sm text-zinc-500">
-          These appear on every article page. They describe this surgeon&apos;s own training and must
-          never be copied from another surgeon&apos;s site.
-        </p>
-        <RowList
-          rows={content.credentials}
-          onChange={(rows) => set("credentials", rows)}
-          blank={{ label: "", detail: "" }}
-          addLabel="Add a credential"
-          render={(row, update) => (
-            <>
-              <Input value={row.label} onChange={(v) => update({ ...row, label: v })} placeholder="Fellowship trained" />
-              <Input value={row.detail} onChange={(v) => update({ ...row, detail: v })} placeholder="Sports medicine & shoulder, Rush University Medical Center" />
-            </>
-          )}
-        />
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            These appear on every article page. They describe this surgeon&apos;s own training and must
+            never be copied from another surgeon&apos;s site.
+          </p>
+          <RowList
+            rows={content.credentials}
+            onChange={(rows) => set("credentials", rows)}
+            blank={{ label: "", detail: "" }}
+            addLabel="Add a credential"
+            itemLabel="credential"
+            render={(row, update) => (
+              <>
+                <Input value={row.label} onChange={(v) => update({ ...row, label: v })} placeholder="Fellowship trained" />
+                <Input value={row.detail} onChange={(v) => update({ ...row, detail: v })} placeholder="Sports medicine & shoulder, Rush University Medical Center" />
+              </>
+            )}
+          />
 
-        <p className="mt-6 mb-3 text-sm font-medium text-zinc-900">Training institutions</p>
-        <StringList values={content.alumniOf} onChange={(v) => set("alumniOf", v)} placeholder="Rush University Medical Center" />
+          <p className="mb-3 mt-8 text-sm font-medium text-zinc-900">Training institutions</p>
+          <StringList
+            values={content.alumniOf}
+            onChange={(v) => set("alumniOf", v)}
+            placeholder="Rush University Medical Center"
+            addLabel="Add an institution"
+            itemLabel="institution"
+          />
         </>
       ),
     },
@@ -409,16 +500,122 @@ export function SurgeonSiteEditor(props: {
       previewPath: "/about",
       panel: (
         <>
-        <p className="mb-3 text-sm text-zinc-500">
-          One paragraph per box. This is the surgeon&apos;s own history — training, research, the teams
-          they have covered.
-        </p>
-        <StringList
-          values={content.profile.bio}
-          onChange={(bio) => set("profile", { ...content.profile, bio })}
-          placeholder="Dr. … is a board-certified orthopedic surgeon…"
-          multiline
-        />
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            One paragraph per box. This is the surgeon&apos;s own history — training, research, the teams
+            they have covered.
+          </p>
+          <StringList
+            values={content.profile.bio}
+            onChange={(bio) => setProfile("bio", bio)}
+            placeholder="Dr. … is a board-certified orthopedic surgeon…"
+            addLabel="Add a paragraph"
+            itemLabel="paragraph"
+            multiline
+          />
+        </>
+      ),
+    },
+    {
+      id: "profile",
+      label: "Profile blocks",
+      hint: "The credential cards, highlights and facts table.",
+      badge: "Per surgeon",
+      previewPath: "/about",
+      panel: (
+        <>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Credential cards
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            The row of five across the homepage, under the hero.
+          </p>
+          <CollectionEditor
+            items={content.profile.cards}
+            onChange={(cards) => setProfile("cards", cards)}
+            blank={() => ({ icon: "Award", title: "", description: "" })}
+            itemLabel="card"
+            reorderable
+            emptyHint="No cards. The homepage skips the credentials row entirely."
+            summary={(c) => ({ title: c.title, detail: c.description })}
+            form={(c, update) => (
+              <>
+                <Grid>
+                  <Field label="Title">
+                    <Input value={c.title} onChange={(v) => update({ ...c, title: v })} placeholder="Fellowship trained" />
+                  </Field>
+                  <Field label="Icon">
+                    <Select
+                      value={c.icon}
+                      onChange={(v) => update({ ...c, icon: v })}
+                      options={[...PROFILE_ICONS]}
+                    />
+                  </Field>
+                </Grid>
+                <Field label="Description">
+                  <Textarea value={c.description} onChange={(v) => update({ ...c, description: v })} rows={2} />
+                </Field>
+              </>
+            )}
+          />
+
+          <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Highlights
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            Short titled blocks on the About page, between the biography and the facts.
+          </p>
+          <CollectionEditor
+            items={content.profile.highlights}
+            onChange={(highlights) => setProfile("highlights", highlights)}
+            blank={() => ({ title: "", body: "" })}
+            itemLabel="highlight"
+            reorderable
+            emptyHint="No highlights. The About page runs straight from the biography to the facts."
+            summary={(h) => ({ title: h.title, detail: h.body })}
+            form={(h, update) => (
+              <>
+                <Field label="Title">
+                  <Input value={h.title} onChange={(v) => update({ ...h, title: v })} />
+                </Field>
+                <Field label="Body">
+                  <Textarea value={h.body} onChange={(v) => update({ ...h, body: v })} rows={3} />
+                </Field>
+              </>
+            )}
+          />
+
+          <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Facts
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            The labelled table on the About page — fellowship, residency, board certification.
+          </p>
+          <CollectionEditor
+            items={content.profile.facts}
+            onChange={(facts) => setProfile("facts", facts)}
+            blank={() => ({ icon: "GraduationCap", label: "", value: "" })}
+            itemLabel="fact"
+            reorderable
+            emptyHint="No facts. The table is left out."
+            summary={(f) => ({ title: f.label, detail: f.value })}
+            form={(f, update) => (
+              <Grid>
+                <Field label="Label">
+                  <Input value={f.label} onChange={(v) => update({ ...f, label: v })} placeholder="Fellowship" />
+                </Field>
+                <Field label="Icon">
+                  <Select
+                    value={f.icon}
+                    onChange={(v) => update({ ...f, icon: v })}
+                    options={[...PROFILE_ICONS]}
+                  />
+                </Field>
+                <Field label="Value" wide>
+                  <Input value={f.value} onChange={(v) => update({ ...f, value: v })} placeholder="Sports medicine & shoulder, Rush University Medical Center" />
+                </Field>
+              </Grid>
+            )}
+          />
         </>
       ),
     },
@@ -427,14 +624,302 @@ export function SurgeonSiteEditor(props: {
       label: "Clinics",
       hint: "Each one generates its own page, nav entry and map listing.",
       needsAttention: attention.has("clinics"),
+      badge: String(content.clinics.length),
       previewPath: "/contact",
       panel: (
         <>
-        <p className="mb-4 text-sm text-zinc-500">
-          Adding a clinic here creates its page, its entry in the menu, its listing for Google and its
-          place in the sitemap. There is nothing else to set up.
-        </p>
-        <ClinicList clinics={content.clinics} onChange={(clinics) => set("clinics", clinics)} />
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            Adding a clinic here creates its page, its entry in the menu, its listing for Google and its
+            place in the sitemap. There is nothing else to set up. Offices the practice runs that this
+            surgeon does <strong className="font-medium">not</strong> attend come from the practice
+            record, not from here.
+          </p>
+          <ClinicList clinics={content.clinics} onChange={(clinics) => set("clinics", clinics)} />
+        </>
+      ),
+    },
+    {
+      id: "reviews",
+      label: "Reviews",
+      hint: "Verbatim patient reviews. Never edited, never moved between surgeons.",
+      badge: String(content.reviews.length),
+      previewPath: "/reviews",
+      panel: (
+        <>
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            Quote each review exactly as it was published. A review is one patient&apos;s statement
+            about one doctor: rewriting it to name someone else is fabricating a testimonial. Empty
+            is a perfectly good answer — the page links out to Google instead.
+          </p>
+          <CollectionEditor
+            items={content.reviews}
+            onChange={(reviews) => set("reviews", reviews)}
+            blank={() => ({ quote: "", source: "Google" as const, rating: 5 as const })}
+            itemLabel="review"
+            reorderable
+            emptyHint="No reviews. The page sends patients to this surgeon's Google listing instead."
+            summary={(r) => ({
+              title: r.quote,
+              detail: [r.source, `${r.rating}★`, r.office, r.date].filter(Boolean).join(" · "),
+            })}
+            form={(r, update) => (
+              <>
+                <Field label="Quote" hint="Word for word, as the patient wrote it.">
+                  <Textarea value={r.quote} onChange={(v) => update({ ...r, quote: v })} rows={4} />
+                </Field>
+                <Grid>
+                  <Field label="Source">
+                    <Select
+                      value={r.source}
+                      onChange={(v) => update({ ...r, source: v as typeof r.source })}
+                      options={[
+                        { value: "Google", label: "Google" },
+                        { value: "Zocdoc", label: "Zocdoc" },
+                      ]}
+                    />
+                  </Field>
+                  <Field label="Rating">
+                    <Select
+                      value={String(r.rating)}
+                      onChange={(v) =>
+                        update({ ...r, rating: (Number.parseInt(v, 10) || 5) as typeof r.rating })
+                      }
+                      options={[5, 4, 3, 2, 1].map((n) => ({
+                        value: String(n),
+                        label: `${n} star${n === 1 ? "" : "s"}`,
+                      }))}
+                    />
+                  </Field>
+                  <Field label="Office" hint="Which clinic it was left for, if it says.">
+                    <Select
+                      value={r.office ?? ""}
+                      onChange={(v) => update({ ...r, office: v })}
+                      options={clinicOptions}
+                      placeholder="Not stated"
+                    />
+                  </Field>
+                  <Field label="Date" hint="As shown on the review.">
+                    <Input value={r.date ?? ""} onChange={(v) => update({ ...r, date: v })} placeholder="March 2025" />
+                  </Field>
+                </Grid>
+              </>
+            )}
+          />
+        </>
+      ),
+    },
+    {
+      id: "research",
+      label: "Research",
+      hint: "The research page's narrative, journals and meetings.",
+      badge: "Per surgeon",
+      previewPath: "/research",
+      panel: (
+        <>
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            All of this was written into the site app until recently, which credited every surgeon
+            with one person&apos;s career. Each part renders nothing when empty, so a surgeon who has
+            published but not written these gets a shorter page — never someone else&apos;s.
+          </p>
+
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Figures
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            The counts across the top of the page — publications, trials, citations.
+          </p>
+          <RowList
+            rows={content.researchStats}
+            onChange={(v) => set("researchStats", v)}
+            blank={{ label: "", value: "" }}
+            addLabel="Add a figure"
+            itemLabel="figure"
+            render={(row, update) => (
+              <>
+                <Input value={row.label} onChange={(v) => update({ ...row, label: v })} placeholder="Peer-reviewed publications" />
+                <Input value={row.value} onChange={(v) => update({ ...row, value: v })} placeholder="100+" />
+              </>
+            )}
+          />
+
+          <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Themes
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            The strands of their work, one titled block each. These name the trials a surgeon led
+            and the journals that published them, so they belong to one person only.
+          </p>
+          <CollectionEditor
+            items={content.researchThemes}
+            onChange={(v) => set("researchThemes", v)}
+            blank={() => ({ title: "", body: "" })}
+            itemLabel="theme"
+            reorderable
+            emptyHint="No themes. The research page shows the publication list without the narrative above it."
+            summary={(t) => ({ title: t.title, detail: t.body })}
+            form={(t, update) => (
+              <>
+                <Field label="Title">
+                  <Input value={t.title} onChange={(v) => update({ ...t, title: v })} />
+                </Field>
+                <Field label="Body">
+                  <Textarea value={t.body} onChange={(v) => update({ ...t, body: v })} rows={6} />
+                </Field>
+              </>
+            )}
+          />
+
+          <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Journals
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            Where their work has appeared, one per box.
+          </p>
+          <StringList
+            values={content.researchVenues}
+            onChange={(v) => set("researchVenues", v)}
+            placeholder="The American Journal of Sports Medicine"
+            addLabel="Add a journal"
+            itemLabel="journal"
+          />
+
+          <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Meetings
+          </p>
+          <p className="mb-3 text-pretty text-sm text-zinc-500">
+            Conferences they have presented at, one per box.
+          </p>
+          <StringList
+            values={content.researchMeetings}
+            onChange={(v) => set("researchMeetings", v)}
+            placeholder="American Academy of Orthopaedic Surgeons Annual Meeting"
+            addLabel="Add a meeting"
+            itemLabel="meeting"
+          />
+        </>
+      ),
+    },
+    {
+      id: "publications",
+      label: "Publications",
+      hint: "The full list. Paste it rather than typing it.",
+      badge: String(content.publications.length),
+      previewPath: "/research/publications",
+      panel: (
+        <PublicationsEditor
+          items={content.publications}
+          onChange={(v) => set("publications", v)}
+        />
+      ),
+    },
+    {
+      id: "protocols",
+      label: "Rehab protocols",
+      hint: "This surgeon's own post-operative instructions.",
+      badge: String(content.protocolGroups.reduce((n, g) => n + g.items.length, 0)),
+      previewPath: "/rehabilitation-protocols",
+      panel: (
+        <>
+          <ProtocolsEditor
+            groups={content.protocolGroups}
+            onChange={(v) => set("protocolGroups", v)}
+          />
+          <div className="mt-8">
+            <Field
+              label="Protocol source page"
+              hint="Where the full set lives on the practice's own site, if it does. Linked at the foot of the page."
+            >
+              <Input
+                value={content.protocolsSourceUrl ?? ""}
+                onChange={(v) => set("protocolsSourceUrl", v)}
+                placeholder="https://genesisortho.com/protocols/"
+              />
+            </Field>
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "medical-legal",
+      label: "Medical-legal",
+      hint: "How the expert-witness pages state their qualifications.",
+      badge: "Per surgeon",
+      previewPath: "/medical-legal",
+      panel: (
+        <>
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            A separate list from the Credentials section: the expert-witness pages address
+            attorneys, and state the same training differently. It never falls back to the other
+            list — leave this empty and the &ldquo;Why work with&hellip;&rdquo; heading appears
+            with nothing under it.
+          </p>
+          <RowList
+            rows={content.medicalLegalCredentials}
+            onChange={(v) => set("medicalLegalCredentials", v)}
+            blank={{ label: "", detail: "" }}
+            addLabel="Add a credential"
+            itemLabel="credential"
+            render={(row, update) => (
+              <>
+                <Input value={row.label} onChange={(v) => update({ ...row, label: v })} placeholder="Board certification" />
+                <Input value={row.detail} onChange={(v) => update({ ...row, detail: v })} placeholder="American Board of Orthopaedic Surgery" />
+              </>
+            )}
+          />
+          <p className="mt-6 text-pretty text-xs text-zinc-400">
+            The enquiry address, scheduling links and turnaround are the same for every surgeon and
+            live on the practice record, under Settings → Practice.
+          </p>
+        </>
+      ),
+    },
+    {
+      id: "copy",
+      label: "Page copy",
+      hint: "The sentences on each page that describe this surgeon.",
+      badge: `${copyFilled}/${copyTotal}`,
+      previewPath: "/",
+      panel: (
+        <>
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            Search descriptions and the opening paragraphs, page by page. All optional: where one
+            is blank, a search description is built from this surgeon&apos;s own name, title and
+            metro, and body copy is simply left out.
+          </p>
+          <CopyKeyEditor
+            groups={PAGE_COPY_GROUPS}
+            values={content.pageCopy}
+            onChange={(v) => set("pageCopy", v)}
+            known={KNOWN_COPY_KEYS}
+          />
+          <div className="mt-8">
+            <CopyListEditor
+              keys={PAGE_LIST_KEYS}
+              values={content.pageLists}
+              onChange={(v) => set("pageLists", v)}
+            />
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "articles",
+      label: "Article intros",
+      hint: 'The "why patients choose…" paragraph that closes each clinical article.',
+      badge: `${bioFilled}/${ARTICLE_BIO_KEYS.length}`,
+      previewPath: "/expertise",
+      panel: (
+        <>
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            The clinical part of each article is shared across every surgeon&apos;s site. This
+            paragraph is not — it is why a patient would choose <em>this</em> surgeon for that
+            problem, and an article with no entry simply ends without the section.
+          </p>
+          <ArticleBioEditor
+            keys={ARTICLE_BIO_KEYS}
+            values={content.articleBios}
+            onChange={(v) => set("articleBios", v)}
+          />
         </>
       ),
     },
@@ -554,226 +1039,210 @@ export function SurgeonSiteEditor(props: {
               <CircleCheck className="size-4" /> Everything needed is filled in.
             </div>
           )}
+          {props.status === "REDIRECTED" && (
+            <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
+              This site currently redirects visitors elsewhere.{" "}
+              <button
+                type="button"
+                onClick={() => changeStatus("PUBLISHED")}
+                disabled={pending}
+                className="font-medium text-zinc-900 underline-offset-4 hover:underline disabled:opacity-40"
+              >
+                Serve the site again
+              </button>
+            </div>
+          )}
         </>
       }
     />
   )
 }
 
-/* ── Layout pieces ─────────────────────────────────────────────────────────── */
+/* ── Clinics ───────────────────────────────────────────────────────────────── */
 
-function Section(props: {
-  id: string
-  open: string
-  setOpen: (id: string) => void
-  title: string
-  hint: string
-  warn?: boolean
-  children: React.ReactNode
-}) {
-  const isOpen = props.open === props.id
-  return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-      <button
-        onClick={() => props.setOpen(isOpen ? "" : props.id)}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-zinc-50"
-      >
-        {isOpen ? <ChevronDown className="h-4 w-4 text-zinc-400" /> : <ChevronRight className="h-4 w-4 text-zinc-400" />}
-        <span className="text-sm font-medium text-zinc-900">{props.title}</span>
-        {props.warn && (
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[0.7rem] font-medium text-amber-700">
-            Per surgeon
-          </span>
-        )}
-        <span className="ml-auto hidden text-xs text-zinc-400 sm:block">{props.hint}</span>
-      </button>
-      {isOpen && <div className="border-t border-zinc-100 p-4">{props.children}</div>}
-    </div>
-  )
-}
-
-function Grid({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-4 sm:grid-cols-2">{children}</div>
-}
-
-function Field(props: { label: string; hint?: string; wide?: boolean; children: React.ReactNode }) {
-  return (
-    <label className={cn("block", props.wide && "sm:col-span-2")}>
-      <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">{props.label}</span>
-      {props.children}
-      {props.hint && <span className="mt-1 block text-xs text-zinc-400">{props.hint}</span>}
-    </label>
-  )
-}
-
-function Input(props: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-  return (
-    <input
-      value={props.value}
-      onChange={(e) => props.onChange(e.target.value)}
-      placeholder={props.placeholder}
-      className="mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none transition-colors focus:border-zinc-400"
-    />
-  )
-}
-
-function Textarea(props: { value: string; onChange: (v: string) => void; rows?: number; placeholder?: string }) {
-  return (
-    <textarea
-      value={props.value}
-      onChange={(e) => props.onChange(e.target.value)}
-      rows={props.rows ?? 3}
-      placeholder={props.placeholder}
-      className="mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none transition-colors focus:border-zinc-400"
-    />
-  )
-}
-
-/* ── Repeatable rows ───────────────────────────────────────────────────────── */
-
-function RowList<T>(props: {
-  rows: T[]
-  onChange: (rows: T[]) => void
-  blank: T
-  addLabel: string
-  render: (row: T, update: (row: T) => void) => React.ReactNode
-}) {
-  return (
-    <div className="space-y-2">
-      {props.rows.map((row, i) => (
-        <div key={i} className="flex items-start gap-2">
-          <div className="grid flex-1 gap-2 sm:grid-cols-2">{props.render(row, (next) => {
-            const rows = [...props.rows]
-            rows[i] = next
-            props.onChange(rows)
-          })}</div>
-          <button
-            onClick={() => props.onChange(props.rows.filter((_, j) => j !== i))}
-            className="mt-2 text-zinc-300 transition-colors hover:text-red-600"
-            title="Remove"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
-      <button
-        onClick={() => props.onChange([...props.rows, props.blank])}
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
-      >
-        <Plus className="h-4 w-4" /> {props.addLabel}
-      </button>
-    </div>
-  )
-}
-
-function StringList(props: {
-  values: string[]
-  onChange: (v: string[]) => void
-  placeholder?: string
-  multiline?: boolean
-}) {
-  return (
-    <div className="space-y-2">
-      {props.values.map((value, i) => (
-        <div key={i} className="flex items-start gap-2">
-          {props.multiline ? (
-            <textarea
-              value={value}
-              rows={4}
-              placeholder={props.placeholder}
-              onChange={(e) => {
-                const v = [...props.values]
-                v[i] = e.target.value
-                props.onChange(v)
-              }}
-              className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400"
-            />
-          ) : (
-            <input
-              value={value}
-              placeholder={props.placeholder}
-              onChange={(e) => {
-                const v = [...props.values]
-                v[i] = e.target.value
-                props.onChange(v)
-              }}
-              className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400"
-            />
-          )}
-          <button
-            onClick={() => props.onChange(props.values.filter((_, j) => j !== i))}
-            className="mt-2 text-zinc-300 transition-colors hover:text-red-600"
-            title="Remove"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
-      <button
-        onClick={() => props.onChange([...props.values, ""])}
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
-      >
-        <Plus className="h-4 w-4" /> Add
-      </button>
-    </div>
-  )
-}
-
-function ClinicList(props: { clinics: SurgeonClinic[]; onChange: (c: SurgeonClinic[]) => void }) {
-  function update(i: number, next: SurgeonClinic) {
-    const clinics = [...props.clinics]
-    clinics[i] = next
-    props.onChange(clinics)
+function blankClinic(): SurgeonClinic {
+  return {
+    slug: "", name: "", city: "", day: "", street: "", cityStateZip: "",
+    mapQuery: "", bookingUrl: "", lead: "", intro: [], seoTitle: "", seoDescription: "",
   }
+}
+
+function slugify(v: string): string {
+  return v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+}
+
+/**
+ * A clinic is twenty fields — fourteen English, six Spanish — which is why it
+ * edits in a dialog rather than as a row. The Spanish half in particular had no
+ * editor at all before, so a clinic created here was permanently absent from the
+ * Spanish site: the pages are generated per clinic from `es`, and a clinic
+ * without it is skipped.
+ */
+function ClinicList(props: { clinics: SurgeonClinic[]; onChange: (c: SurgeonClinic[]) => void }) {
+  return (
+    <CollectionEditor
+      items={props.clinics}
+      onChange={props.onChange}
+      blank={blankClinic}
+      itemLabel="clinic"
+      reorderable
+      emptyHint="No clinics yet. A site needs at least one before it can be published."
+      summary={(c) => ({
+        title: c.name,
+        detail: [c.day, c.cityStateZip, c.es ? "Spanish ✓" : "no Spanish"].filter(Boolean).join(" · "),
+      })}
+      form={(c, update) => (
+        <>
+          <Grid>
+            <Field label="Name">
+              <Input
+                value={c.name}
+                onChange={(v) => update({ ...c, name: v, slug: c.slug || slugify(v) })}
+                placeholder="Oak Brook"
+              />
+            </Field>
+            <Field label="URL key" hint="Appears in the page address.">
+              <Input value={c.slug} onChange={(v) => update({ ...c, slug: v })} placeholder="oak-brook" />
+            </Field>
+            <Field label="Clinic day" hint='Plural, as it reads: "Mondays"'>
+              <Input value={c.day} onChange={(v) => update({ ...c, day: v })} placeholder="Mondays" />
+            </Field>
+            <Field label="City" hint="Used for local search listings.">
+              <Input value={c.city} onChange={(v) => update({ ...c, city: v })} />
+            </Field>
+            <Field label="Street">
+              <Input value={c.street} onChange={(v) => update({ ...c, street: v })} />
+            </Field>
+            <Field label="Suite">
+              <Input value={c.suite ?? ""} onChange={(v) => update({ ...c, suite: v })} />
+            </Field>
+            <Field label="City, state and ZIP">
+              <Input value={c.cityStateZip} onChange={(v) => update({ ...c, cityStateZip: v })} placeholder="Oak Brook, IL 60523" />
+            </Field>
+            <Field label="Map search text" hint="What to search for on Google Maps.">
+              <Input value={c.mapQuery} onChange={(v) => update({ ...c, mapQuery: v })} />
+            </Field>
+            <Field
+              label="Booking link"
+              hint="Where the Book button goes. With none, no button is shown — it never falls back to another surgeon's."
+              wide
+            >
+              <Input value={c.bookingUrl} onChange={(v) => update({ ...c, bookingUrl: v })} />
+            </Field>
+            <Field label="Google review link" hint="Where the page sends patients to leave a review." wide>
+              <Input value={c.googleReviewUrl ?? ""} onChange={(v) => update({ ...c, googleReviewUrl: v })} />
+            </Field>
+            <Field label="Introduction" hint="The opening paragraph on this clinic's page." wide>
+              <Textarea value={c.lead} onChange={(v) => update({ ...c, lead: v })} rows={2} />
+            </Field>
+          </Grid>
+
+          <Field label="Body paragraphs" hint="After the introduction. One paragraph per box.">
+            <StringList
+              values={c.intro}
+              onChange={(intro) => update({ ...c, intro })}
+              addLabel="Add a paragraph"
+              itemLabel="paragraph"
+              multiline
+            />
+          </Field>
+
+          <Grid>
+            <Field label="Page title" hint="Shown in search results." wide>
+              <Input value={c.seoTitle} onChange={(v) => update({ ...c, seoTitle: v })} />
+            </Field>
+            <Field label="Page description" hint="The snippet under the title in search results." wide>
+              <Textarea value={c.seoDescription} onChange={(v) => update({ ...c, seoDescription: v })} rows={2} />
+            </Field>
+          </Grid>
+
+          <ClinicSpanish clinic={c} update={update} />
+        </>
+      )}
+    />
+  )
+}
+
+/**
+ * The Spanish half of a clinic.
+ *
+ * Behind a toggle because it is genuinely optional and the English form is long
+ * enough already. Turning it off removes the whole `es` object rather than
+ * blanking its fields: the site tests for the object's presence to decide
+ * whether this clinic appears on the Spanish site, so six empty strings would
+ * publish a Spanish page with nothing on it.
+ */
+function ClinicSpanish(props: {
+  clinic: SurgeonClinic
+  update: (c: SurgeonClinic) => void
+}) {
+  const { clinic: c, update } = props
+  const es = c.es
+
+  const setEs = (patch: Partial<NonNullable<SurgeonClinic["es"]>>) =>
+    update({
+      ...c,
+      es: { day: "", lead: "", intro: [], areas: "", seoTitle: "", seoDescription: "", ...es, ...patch },
+    })
 
   return (
-    <div className="space-y-4">
-      {props.clinics.map((c, i) => (
-        <div key={i} className="rounded-lg border border-zinc-200 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-medium text-zinc-900">{c.name || `Clinic ${i + 1}`}</p>
-            <button
-              onClick={() => props.onChange(props.clinics.filter((_, j) => j !== i))}
-              className="text-zinc-300 transition-colors hover:text-red-600"
-              title="Remove this clinic"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
+    <div className="mt-2 rounded-xl border border-zinc-200 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-zinc-900">Spanish page</p>
+          <p className="mt-0.5 text-pretty text-xs text-zinc-500">
+            Without this, the clinic has no page on the Spanish site at all. Written by hand —
+            nothing here is translated for you.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (es) {
+              const { es: _drop, ...rest } = c
+              update(rest)
+            } else {
+              setEs({})
+            }
+          }}
+          className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+        >
+          {es ? "Remove" : "Add Spanish"}
+        </button>
+      </div>
+
+      {es && (
+        <div className="mt-4 space-y-4">
           <Grid>
-            <Field label="Name"><Input value={c.name} onChange={(v) => update(i, { ...c, name: v, slug: c.slug || v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") })} placeholder="Oak Brook" /></Field>
-            <Field label="URL key" hint="Appears in the page address."><Input value={c.slug} onChange={(v) => update(i, { ...c, slug: v })} placeholder="oak-brook" /></Field>
-            <Field label="Clinic day" hint='Plural, as it reads: "Mondays"'><Input value={c.day} onChange={(v) => update(i, { ...c, day: v })} placeholder="Mondays" /></Field>
-            <Field label="City" hint="Used for local search listings."><Input value={c.city} onChange={(v) => update(i, { ...c, city: v })} /></Field>
-            <Field label="Street"><Input value={c.street} onChange={(v) => update(i, { ...c, street: v })} /></Field>
-            <Field label="Suite"><Input value={c.suite ?? ""} onChange={(v) => update(i, { ...c, suite: v })} /></Field>
-            <Field label="City, state and ZIP"><Input value={c.cityStateZip} onChange={(v) => update(i, { ...c, cityStateZip: v })} placeholder="Oak Brook, IL 60523" /></Field>
-            <Field label="Map search text" hint="What to search for on Google Maps."><Input value={c.mapQuery} onChange={(v) => update(i, { ...c, mapQuery: v })} /></Field>
-            <Field label="Booking link" wide><Input value={c.bookingUrl} onChange={(v) => update(i, { ...c, bookingUrl: v })} /></Field>
-            <Field label="Introduction" hint="The opening paragraph on this clinic's page." wide>
-              <Textarea value={c.lead} onChange={(v) => update(i, { ...c, lead: v })} rows={2} />
+            <Field label="Día de consulta" hint='In Spanish, plural: "Lunes"'>
+              <Input value={es.day} onChange={(v) => setEs({ day: v })} placeholder="Lunes" />
             </Field>
-            <Field label="Page title" hint="Shown in search results." wide><Input value={c.seoTitle} onChange={(v) => update(i, { ...c, seoTitle: v })} /></Field>
-            <Field label="Page description" hint="The snippet under the title in search results." wide>
-              <Textarea value={c.seoDescription} onChange={(v) => update(i, { ...c, seoDescription: v })} rows={2} />
+            <Field label="Zonas atendidas" hint="One sentence listing the areas served.">
+              <Input value={es.areas} onChange={(v) => setEs({ areas: v })} />
+            </Field>
+            <Field label="Introducción" wide>
+              <Textarea value={es.lead} onChange={(v) => setEs({ lead: v })} rows={2} />
+            </Field>
+          </Grid>
+          <Field label="Párrafos" hint="One paragraph per box.">
+            <StringList
+              values={es.intro}
+              onChange={(intro) => setEs({ intro })}
+              addLabel="Añadir párrafo"
+              itemLabel="párrafo"
+              multiline
+            />
+          </Field>
+          <Grid>
+            <Field label="Título de la página" wide>
+              <Input value={es.seoTitle} onChange={(v) => setEs({ seoTitle: v })} />
+            </Field>
+            <Field label="Descripción de la página" wide>
+              <Textarea value={es.seoDescription} onChange={(v) => setEs({ seoDescription: v })} rows={2} />
             </Field>
           </Grid>
         </div>
-      ))}
-      <button
-        onClick={() =>
-          props.onChange([
-            ...props.clinics,
-            {
-              slug: "", name: "", city: "", day: "", street: "", cityStateZip: "",
-              mapQuery: "", bookingUrl: "", lead: "", intro: [], seoTitle: "", seoDescription: "",
-            },
-          ])
-        }
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
-      >
-        <Plus className="h-4 w-4" /> Add a clinic
-      </button>
+      )}
     </div>
   )
 }
