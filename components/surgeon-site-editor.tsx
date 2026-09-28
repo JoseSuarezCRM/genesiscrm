@@ -13,6 +13,7 @@ import {
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { missingCredentials, type SurgeonSiteContent, type SurgeonClinic } from "@/lib/surgeon-site"
 import { SurgeonImageField } from "@/components/surgeon-site-image-field"
+import { EditorShell, type EditorSection } from "@/components/settings/editor-shell"
 import { cn } from "@/lib/utils"
 
 type Status = "DRAFT" | "PUBLISHED" | "REDIRECTED" | "RETIRED"
@@ -79,6 +80,40 @@ export function SurgeonSiteEditor(props: {
         setErr(e?.message ?? "Could not save")
       }
     })
+  }
+
+  /**
+   * Save and wait for it.
+   *
+   * `save()` runs inside a transition and returns immediately, which is right
+   * for the button and wrong for the Preview tab: the preview renders what is
+   * STORED, so showing it before the save lands shows the previous version and
+   * reads as a broken preview.
+   */
+  async function saveNow() {
+    setErr(null)
+    try {
+      await updateSurgeonSite(props.id, { domain, redirectUrl, content })
+      setSaved(true)
+      router.refresh()
+    } catch (e: any) {
+      setErr(e?.message ?? "Could not save")
+      throw e
+    }
+  }
+
+  /** The draft URL for the Preview tab, minted on demand. */
+  async function previewSrc(path?: string) {
+    const res = await surgeonSitePreviewUrl(props.id)
+    if (res.error || !res.url) {
+      setErr(res.error ?? "Could not build the preview link.")
+      return null
+    }
+    if (!path || path === "/") return res.url
+    // `?preview=` and the key live on the query, so the path goes before it.
+    const u = new URL(res.url)
+    u.pathname = path
+    return u.toString()
   }
 
   function publish() {
@@ -159,137 +194,38 @@ export function SurgeonSiteEditor(props: {
     })
   }
 
-  return (
-    <div className="mt-4 space-y-5 pb-16">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-            {content.name || "New surgeon website"}
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {props.publishedAt
-              ? `Last published ${new Date(props.publishedAt).toLocaleString()}`
-              : "Never published — nothing is live yet"}
-            {props.lastDeployAt && props.lastDeployOk && (
-              <> · site rebuilt {new Date(props.lastDeployAt).toLocaleString()}</>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/*
-            The draft, as it would look published. Saves first, because the
-            preview renders what is stored rather than what is on screen —
-            without that, clicking it after an edit shows the previous save and
-            looks like the preview is broken.
+  // Each section is one panel in the rail. `needsAttention` is driven by the
+  // same missingCredentials() the publish gate uses, so the rail and the
+  // checklist cannot disagree about what is unfinished.
+  /**
+   * Which section fixes each outstanding item.
+   *
+   * Derived from the same missingCredentials() the publish gate uses, so the
+   * rail cannot disagree with the checklist about what is unfinished. A message
+   * with no mapping simply marks nothing rather than guessing.
+   */
+  const attention = new Set(
+    missing.flatMap((m) => {
+      const t = m.toLowerCase()
+      if (t.includes("name") || t.includes("title") || t.includes("description")) return ["identity"]
+      if (t.includes("domain") || t.includes("site url")) return ["web"]
+      if (t.includes("email") || t.includes("phone")) return ["contact"]
+      if (t.includes("credential")) return ["credentials"]
+      if (t.includes("biography")) return ["bio"]
+      if (t.includes("clinic")) return ["clinics"]
+      return []
+    }),
+  )
 
-            Offered whatever the status, including DRAFT: seeing a site before it
-            has ever gone live is the main thing this is for.
-          */}
-          {props.previewUrl && domain && (
-            <button
-              type="button"
-              onClick={previewDraft}
-              disabled={pending}
-              title="Save, then open this draft as it would look published"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
-            >
-              <Eye className="h-4 w-4" />
-              Preview draft
-            </button>
-          )}
-          {props.previewUrl && props.status === "PUBLISHED" && domain && (
-            <a
-              href={`${props.previewUrl}/?preview=${encodeURIComponent(domain)}`}
-              target="_blank"
-              rel="noreferrer"
-              title="Open the published site on the shared preview address"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Preview site
-            </a>
-          )}
-          <button
-            onClick={() => save()}
-            disabled={pending}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save draft
-          </button>
-          <button
-            onClick={publish}
-            disabled={pending || missing.length > 0}
-            title={missing.length > 0 ? "Fill in the remaining details first" : "Make this live"}
-            className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-40"
-          >
-            <Globe className="h-4 w-4" />
-            {props.status === "PUBLISHED" ? "Publish changes" : "Publish"}
-          </button>
-        </div>
-      </div>
-
-      {err && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{err}</span>
-        </div>
-      )}
-      {/*
-        The deploy, shown only when it failed. A successful one needs no notice —
-        publishing worked and the site is rebuilding — but a failure means the
-        published content is sitting in this database and not on the internet,
-        which otherwise looks exactly like success.
-      */}
-      {props.lastDeployOk === false && (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <div>
-            <p className="font-medium">Published here, but the live site was not rebuilt.</p>
-            <p className="mt-0.5 text-amber-700">
-              {props.lastDeployError ?? "The deploy could not be requested."}
-            </p>
-            <p className="mt-1 text-amber-700">
-              The site keeps serving what it last built, so nothing is broken — but these changes
-              will not appear until it is redeployed.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {saved && !err && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          <CircleCheck className="h-4 w-4" /> Draft saved. Nothing is live until you publish.
-        </div>
-      )}
-
-      {/* The publish checklist. Framed as what's left rather than as errors,
-          because on a new site everything is legitimately unfilled. */}
-      {missing.length > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-medium text-amber-900">
-            Before this site can go live, it still needs:
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-amber-800">
-            {missing.map((m) => (
-              <li key={m} className="flex items-start gap-2">
-                <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
-                {m}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-xs text-amber-700">
-            Credentials and biography can&apos;t be carried over from another surgeon — they describe
-            one person&apos;s training, so they have to be written for this one.
-          </p>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          <CircleCheck className="h-4 w-4" /> Everything needed is filled in.
-        </div>
-      )}
-
-      <Section id="identity" open={open} setOpen={setOpen} title="Identity" hint="How the surgeon is named across the site.">
+  const sections: EditorSection[] = [
+    {
+      id: "identity",
+      label: "Identity",
+      hint: "How the surgeon is named across the site.",
+      needsAttention: attention.has("identity"),
+      previewPath: "/",
+      panel: (
+        <>
         <Grid>
           <Field label="Full name with credential" hint='Appears in titles and the byline, e.g. "Nolan Horner, MD"'>
             <Input value={content.name} onChange={(v) => set("name", v)} />
@@ -307,9 +243,17 @@ export function SurgeonSiteEditor(props: {
             <Textarea value={content.description} onChange={(v) => set("description", v)} rows={2} />
           </Field>
         </Grid>
-      </Section>
-
-      <Section id="images" open={open} setOpen={setOpen} title="Photographs" hint="This surgeon's own likeness. Never anyone else's.">
+        </>
+      ),
+    },
+    {
+      id: "images",
+      label: "Photographs",
+      hint: "This surgeon's own likeness. Never anyone else's.",
+      needsAttention: attention.has("images"),
+      previewPath: "/about",
+      panel: (
+        <>
         <div className="grid gap-5 sm:grid-cols-2">
           <SurgeonImageField
             label="Headshot"
@@ -340,9 +284,17 @@ export function SurgeonSiteEditor(props: {
           Leaving one blank is safe — the page simply has no photograph there. It will never
           fall back to another surgeon&apos;s.
         </p>
-      </Section>
-
-      <Section id="web" open={open} setOpen={setOpen} title="Address & domain" hint="Where the site lives.">
+        </>
+      ),
+    },
+    {
+      id: "web",
+      label: "Address & domain",
+      hint: "Where the site lives.",
+      needsAttention: attention.has("web"),
+      previewPath: "/",
+      panel: (
+        <>
         <Grid>
           <Field label="Domain" hint="The address patients visit, without https://">
             <Input value={domain} onChange={(v) => { setDomain(v); setSaved(false) }} placeholder="nolanhornermd.com" />
@@ -391,9 +343,17 @@ export function SurgeonSiteEditor(props: {
             </Field>
           )}
         </Grid>
-      </Section>
-
-      <Section id="contact" open={open} setOpen={setOpen} title="Contact & practice" hint="Phone, email and how the region is described.">
+        </>
+      ),
+    },
+    {
+      id: "contact",
+      label: "Contact & practice",
+      hint: "Phone, email and how the region is described.",
+      needsAttention: attention.has("contact"),
+      previewPath: "/contact",
+      panel: (
+        <>
         <Grid>
           <Field label="Phone (as displayed)"><Input value={content.phone} onChange={(v) => set("phone", v)} placeholder="(877) 377-1188" /></Field>
           <Field label="Phone (dialable)" hint="International format, used by search engines."><Input value={content.phoneE164} onChange={(v) => set("phoneE164", v)} placeholder="+1-877-377-1188" /></Field>
@@ -406,16 +366,18 @@ export function SurgeonSiteEditor(props: {
           <Field label="LinkedIn"><Input value={content.linkedin} onChange={(v) => set("linkedin", v)} /></Field>
           <Field label="Research profile" hint="ResearchGate or similar. Leave blank if they have none."><Input value={content.researchProfile ?? ""} onChange={(v) => set("researchProfile", v)} /></Field>
         </Grid>
-      </Section>
-
-      <Section
-        id="credentials"
-        open={open}
-        setOpen={setOpen}
-        title="Credentials"
-        hint="Board certification, fellowship, residency, team affiliations."
-        warn
-      >
+        </>
+      ),
+    },
+    {
+      id: "credentials",
+      label: "Credentials",
+      hint: "Board certification, fellowship, residency, team affiliations.",
+      needsAttention: attention.has("credentials"),
+      badge: "Per surgeon",
+      previewPath: "/about",
+      panel: (
+        <>
         <p className="mb-4 text-sm text-zinc-500">
           These appear on every article page. They describe this surgeon&apos;s own training and must
           never be copied from another surgeon&apos;s site.
@@ -435,9 +397,18 @@ export function SurgeonSiteEditor(props: {
 
         <p className="mt-6 mb-3 text-sm font-medium text-zinc-900">Training institutions</p>
         <StringList values={content.alumniOf} onChange={(v) => set("alumniOf", v)} placeholder="Rush University Medical Center" />
-      </Section>
-
-      <Section id="bio" open={open} setOpen={setOpen} title="Biography" hint="The About page narrative." warn>
+        </>
+      ),
+    },
+    {
+      id: "bio",
+      label: "Biography",
+      hint: "The About page narrative.",
+      needsAttention: attention.has("bio"),
+      badge: "Per surgeon",
+      previewPath: "/about",
+      panel: (
+        <>
         <p className="mb-3 text-sm text-zinc-500">
           One paragraph per box. This is the surgeon&apos;s own history — training, research, the teams
           they have covered.
@@ -448,16 +419,144 @@ export function SurgeonSiteEditor(props: {
           placeholder="Dr. … is a board-certified orthopedic surgeon…"
           multiline
         />
-      </Section>
-
-      <Section id="clinics" open={open} setOpen={setOpen} title="Clinics" hint="Each one generates its own page, nav entry and map listing.">
+        </>
+      ),
+    },
+    {
+      id: "clinics",
+      label: "Clinics",
+      hint: "Each one generates its own page, nav entry and map listing.",
+      needsAttention: attention.has("clinics"),
+      previewPath: "/contact",
+      panel: (
+        <>
         <p className="mb-4 text-sm text-zinc-500">
           Adding a clinic here creates its page, its entry in the menu, its listing for Google and its
           place in the sitemap. There is nothing else to set up.
         </p>
         <ClinicList clinics={content.clinics} onChange={(clinics) => set("clinics", clinics)} />
-      </Section>
-    </div>
+        </>
+      ),
+    },
+  ]
+
+  return (
+    <EditorShell
+      title={content.name || "New surgeon website"}
+      subtitle={
+        <>
+          {props.publishedAt
+            ? `Last published ${new Date(props.publishedAt).toLocaleString()}`
+            : "Never published — nothing is live yet"}
+          {props.lastDeployAt && props.lastDeployOk && (
+            <> · site rebuilt {new Date(props.lastDeployAt).toLocaleString()}</>
+          )}
+        </>
+      }
+      sections={sections}
+      // The Preview tab shows the SAVED draft, so the shell saves first. Offered
+      // whatever the status, including DRAFT: seeing a site before it has ever
+      // gone live is the main thing this is for.
+      canPreview={!!props.previewUrl && !!domain}
+      resolvePreviewSrc={previewSrc}
+      onBeforePreview={saveNow}
+      actions={
+        <>
+          {props.previewUrl && props.status === "PUBLISHED" && domain && (
+            <a
+              href={`${props.previewUrl}/?preview=${encodeURIComponent(domain)}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Open the published site on the shared preview address"
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+            >
+              <ExternalLink className="size-4" />
+              Published site
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => save()}
+            disabled={pending}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
+          >
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            Save draft
+          </button>
+          <button
+            type="button"
+            onClick={publish}
+            disabled={pending || missing.length > 0}
+            title={missing.length > 0 ? "Fill in the remaining details first" : "Make this live"}
+            className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-40"
+          >
+            <Globe className="size-4" />
+            {props.status === "PUBLISHED" ? "Publish changes" : "Publish"}
+          </button>
+        </>
+      }
+      notices={
+        <>
+          {err && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <CircleAlert className="mt-0.5 size-4 shrink-0" />
+              <span className="text-pretty">{err}</span>
+            </div>
+          )}
+          {/*
+            The deploy, shown only when it failed. A successful one needs no
+            notice — publishing worked and the site is rebuilding — but a failure
+            means the published content is sitting in this database and not on
+            the internet, which otherwise looks exactly like success.
+          */}
+          {props.lastDeployOk === false && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <CircleAlert className="mt-0.5 size-4 shrink-0" />
+              <div className="text-pretty">
+                <p className="font-medium">Published here, but the live site was not rebuilt.</p>
+                <p className="mt-0.5 text-amber-700">
+                  {props.lastDeployError ?? "The deploy could not be requested."}
+                </p>
+                <p className="mt-1 text-amber-700">
+                  The site keeps serving what it last built, so nothing is broken — but these
+                  changes will not appear until it is redeployed.
+                </p>
+              </div>
+            </div>
+          )}
+          {saved && !err && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <CircleCheck className="size-4" /> Draft saved. Nothing is live until you publish.
+            </div>
+          )}
+          {/* The publish checklist. Framed as what's left rather than as errors,
+              because on a new site everything is legitimately unfilled. */}
+          {missing.length > 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-medium text-amber-900">
+                Before this site can go live, it still needs:
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-amber-800">
+                {missing.map((m) => (
+                  <li key={m} className="flex items-start gap-2 text-pretty">
+                    <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-amber-500" />
+                    {m}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-pretty text-xs text-amber-700">
+                Credentials and biography can&apos;t be carried over from another surgeon — they
+                describe one person&apos;s training, so they have to be written for this one.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <CircleCheck className="size-4" /> Everything needed is filled in.
+            </div>
+          )}
+        </>
+      }
+    />
   )
 }
 

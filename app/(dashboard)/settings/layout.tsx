@@ -32,6 +32,7 @@ const settingsSections = [
       { href: "/settings/duplicates", label: "Duplicate Detection" },
       { href: "/settings/marketing", label: "Marketing Materials" },
       { href: "/settings/surgeon-sites", label: "Surgeon Websites" },
+      { href: "/settings/practice", label: "Practice" },
     ],
   },
   {
