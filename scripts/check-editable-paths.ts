@@ -8,8 +8,42 @@
  *   npx tsx scripts/check-editable-paths.ts
  */
 
+import { readFileSync } from "node:fs"
 import { isEditablePath, isImagePath, setAtPath } from "../lib/surgeon-site-address"
 import { emptyContent } from "../lib/surgeon-site"
+
+/**
+ * `--from <file>`: judge the paths the site actually emits.
+ *
+ * The site repo's `scripts/editable-paths.ts` renders every page in edit mode
+ * and writes down every field it tagged. If one of those is not on the
+ * allow-list below, clicking it does nothing — no error, no message, just an
+ * editor that seems broken on that paragraph. This is the check that makes the
+ * two repositories agree, without either importing the other.
+ */
+const fromIdx = process.argv.indexOf("--from")
+if (fromIdx >= 0) {
+  const file = process.argv[fromIdx + 1]
+  if (!file) {
+    console.error("--from needs a file written by the site repo's scripts/editable-paths.ts")
+    process.exit(2)
+  }
+  const entries: [string, string][] = JSON.parse(readFileSync(file, "utf8"))
+  if (entries.length === 0) {
+    // An empty list passes every allow-list trivially, which is exactly the kind
+    // of green result that has turned out to be measuring nothing before.
+    console.error("The file lists no fields. Refusing to call that a pass.")
+    process.exit(2)
+  }
+  const rejected = entries.filter(([raw]) => !isEditablePath(JSON.parse(raw)))
+  console.log(`${entries.length} fields the site offers; ${entries.length - rejected.length} accepted here.`)
+  for (const [raw, page] of rejected) console.error(`  NOT ALLOWED  ${raw}   (on ${page})`)
+  if (rejected.length) {
+    console.error("\nEach of those is clickable on the site and silently ignored here.")
+    console.error("Add it to RULES in lib/surgeon-site-address.ts, or stop tagging it.")
+  }
+  process.exit(rejected.length ? 1 : 0)
+}
 
 let failures = 0
 const ok = (cond: boolean, what: string) => {
