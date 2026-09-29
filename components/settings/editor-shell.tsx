@@ -109,6 +109,25 @@ export function EditorShell(props: {
   const [frameReady, setFrameReady] = React.useState(false)
 
   /**
+   * How much of the page on screen is editable, as the frame measured it.
+   *
+   * Only about a tenth of a clinical article is this surgeon's own text; the
+   * rest is written into the page template. Saying so — per page, as a number —
+   * is the difference between an editor that seems to work on some paragraphs
+   * and not others, and one that tells you why.
+   */
+  const [coverage, setCoverage] = React.useState<{
+    pathname: string
+    editableBlocks: number
+    totalBlocks: number
+    editableWords: number
+    totalWords: number
+  } | null>(null)
+  const [highlight, setHighlight] = React.useState(true)
+  /** Brief notice after a click on text that is not editable here. */
+  const [fixedNotice, setFixedNotice] = React.useState(false)
+
+  /**
    * The origin the preview is served from, derived from the URL we built.
    *
    * Every message is checked against it and every message we send is addressed
@@ -196,6 +215,19 @@ export function EditorShell(props: {
         case "pick-image":
           if (isEditablePath(msg.path)) handlers.current.onPreviewPickImage?.(msg.path)
           return
+        case "coverage": {
+          const c = msg.coverage
+          // Numbers from another origin: take them only if they are numbers.
+          const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null)
+          if (!c || typeof c !== "object" || typeof msg.pathname !== "string") return
+          const eb = n(c.editableBlocks), tb = n(c.totalBlocks), ew = n(c.editableWords), tw = n(c.totalWords)
+          if (eb === null || tb === null || ew === null || tw === null) return
+          setCoverage({ pathname: msg.pathname, editableBlocks: eb, totalBlocks: tb, editableWords: ew, totalWords: tw })
+          return
+        }
+        case "fixed":
+          setFixedNotice(true)
+          return
       }
     }
 
@@ -213,6 +245,21 @@ export function EditorShell(props: {
     if (!previewOrigin) return
     frameRef.current?.contentWindow?.postMessage({ gosm: PROTOCOL, type: "hello" }, previewOrigin)
   }, [previewOrigin])
+
+  React.useEffect(() => {
+    if (!frameReady || !previewOrigin) return
+    frameRef.current?.contentWindow?.postMessage(
+      { gosm: PROTOCOL, type: "highlight", on: highlight },
+      previewOrigin,
+    )
+  }, [frameReady, previewOrigin, highlight])
+
+  // The notice is a moment, not a state: it fades on its own.
+  React.useEffect(() => {
+    if (!fixedNotice) return
+    const t = setTimeout(() => setFixedNotice(false), 4000)
+    return () => clearTimeout(t)
+  }, [fixedNotice])
 
   // Push an edit into the frame so the page updates without a reload. A reload
   // costs a request to this app and loses the reader's place on the page.
@@ -283,13 +330,40 @@ export function EditorShell(props: {
       {tab === "preview" && props.canPreview ? (
         <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white">
           <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-2.5">
-            <p className="truncate text-xs text-zinc-500">
-              The saved draft, as it would look published.
-            </p>
-            <div className="flex items-center gap-2">
+            {coverage && coverage.totalWords > 0 ? (
+              <CoverageSummary coverage={coverage} />
+            ) : (
+              <p className="truncate text-xs text-zinc-500">
+                The saved draft, as it would look published.
+              </p>
+            )}
+            <div className="flex shrink-0 items-center gap-3">
               <button
                 type="button"
-                onClick={() => { setFrameReady(false); setPreviewNonce((n) => n + 1) }}
+                role="switch"
+                aria-checked={highlight}
+                onClick={() => setHighlight((h) => !h)}
+                className="inline-flex items-center gap-2 text-xs text-zinc-600 transition-colors hover:text-zinc-900"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors",
+                    highlight ? "bg-zinc-900" : "bg-zinc-200",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 size-3 rounded-full bg-white transition-transform",
+                      highlight ? "translate-x-3.5" : "translate-x-0.5",
+                    )}
+                  />
+                </span>
+                Show editable
+              </button>
+              <button
+                type="button"
+                onClick={() => { setFrameReady(false); setCoverage(null); setPreviewNonce((n) => n + 1) }}
                 aria-label="Reload the preview"
                 className="text-zinc-400 transition-colors hover:text-zinc-900"
               >
@@ -305,6 +379,16 @@ export function EditorShell(props: {
               </a>
             </div>
           </div>
+          {fixedNotice && (
+            <p
+              role="status"
+              className="border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-pretty text-xs text-zinc-600"
+            >
+              That text isn&apos;t editable here yet — it&apos;s either written into the page itself or
+              put together from other settings, like the clinic list. The tinted parts are the
+              ones you can change from here.
+            </p>
+          )}
           {previewError ? (
             <p className="px-4 py-10 text-center text-sm text-zinc-500">{previewError}</p>
           ) : (
@@ -378,6 +462,43 @@ export function EditorShell(props: {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * "17% of this page is editable" — with the count behind it.
+ *
+ * Words for the percentage, because a heading and a four-hundred-word section
+ * are one block each and a block count would make a page of short headings look
+ * well covered. Blocks for the detail, because that is what a person sees.
+ */
+function CoverageSummary(props: {
+  coverage: { editableBlocks: number; totalBlocks: number; editableWords: number; totalWords: number }
+}) {
+  const c = props.coverage
+  const pct = Math.round((c.editableWords / c.totalWords) * 100)
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <div
+        className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-zinc-100"
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        aria-label="Share of this page's text that is editable"
+      >
+        <div className="h-full rounded-full bg-zinc-900" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="truncate text-xs text-zinc-600">
+        <span className="font-medium tabular-nums text-zinc-900">{pct}%</span> of this page is
+        editable here
+        <span className="text-zinc-400">
+          {" "}
+          · <span className="tabular-nums">{c.editableBlocks}</span> of{" "}
+          <span className="tabular-nums">{c.totalBlocks}</span> blocks
+        </span>
+      </p>
     </div>
   )
 }
