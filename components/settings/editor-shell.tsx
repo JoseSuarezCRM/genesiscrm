@@ -16,7 +16,23 @@
 
 import * as React from "react"
 import { CircleAlert, Eye, PencilLine, RefreshCw } from "lucide-react"
+import { isEditablePath, type ContentPath } from "@/lib/surgeon-site-address"
 import { cn } from "@/lib/utils"
+
+/** Bumped only if the message shape changes incompatibly; both halves check it. */
+const PROTOCOL = 1
+
+/**
+ * A value to push into the preview frame so the page shows it without reloading.
+ *
+ * `nonce` exists because the same field can be set to the same value twice (undo,
+ * or a retype) and the frame still needs to hear about it.
+ */
+export interface PreviewPatch {
+  path: ContentPath
+  value: string
+  nonce: number
+}
 
 export interface EditorSection {
   id: string
@@ -60,6 +76,27 @@ export function EditorShell(props: {
   resolvePreviewSrc?: (path?: string) => Promise<string | null>
   /** Called before showing the preview — the editors save first. */
   onBeforePreview?: () => Promise<void> | void
+  /**
+   * A staff member clicked an editable string in the preview.
+   *
+   * The frame reports *which field*, never a new value — it runs on a public
+   * marketing site and has no business proposing content. What happens next is
+   * entirely this app's decision.
+   */
+  onPreviewFocus?: (path: ContentPath) => void
+  /** The preview asked for an image to be chosen. Same rule: a path, not a URL. */
+  onPreviewPickImage?: (path: ContentPath) => void
+  /** Pushed into the frame so the page shows an edit without reloading. */
+  patch?: PreviewPatch | null
+  /** Where the frame currently is, so a caller can follow along. */
+  onPreviewNavigate?: (pathname: string) => void
+  /**
+   * Open this section from outside — used when a click in the preview names a
+   * field that lives somewhere other than the panel on screen.
+   *
+   * The rail still moves on its own when clicked; this only nudges it.
+   */
+  openSection?: string | null
 }) {
   const [active, setActive] = React.useState(props.sections[0]?.id ?? "")
   const [tab, setTab] = React.useState<"edit" | "preview">("edit")
@@ -68,8 +105,31 @@ export function EditorShell(props: {
   const [previewing, setPreviewing] = React.useState(false)
   const [previewSrc, setPreviewSrc] = React.useState<string | null>(null)
   const [previewError, setPreviewError] = React.useState<string | null>(null)
+  const frameRef = React.useRef<HTMLIFrameElement | null>(null)
+  const [frameReady, setFrameReady] = React.useState(false)
+
+  /**
+   * The origin the preview is served from, derived from the URL we built.
+   *
+   * Every message is checked against it and every message we send is addressed
+   * to it. Never "*": that would hand a physician's unpublished draft to
+   * whatever happened to occupy the frame.
+   */
+  const previewOrigin = React.useMemo(() => {
+    if (!previewSrc) return null
+    try {
+      return new URL(previewSrc).origin
+    } catch {
+      return null
+    }
+  }, [previewSrc])
 
   const section = props.sections.find((s) => s.id === active) ?? props.sections[0]
+
+  const openSection = props.openSection
+  React.useEffect(() => {
+    if (openSection) setActive(openSection)
+  }, [openSection])
 
   const showPreview = async () => {
     setPreviewing(true)
@@ -83,12 +143,97 @@ export function EditorShell(props: {
       } else {
         setPreviewSrc(src)
       }
+      setFrameReady(false)
       setPreviewNonce((n) => n + 1)
       setTab("preview")
     } finally {
       setPreviewing(false)
     }
   }
+
+  /**
+   * Listen to the preview frame.
+   *
+   * Two checks, and both are load-bearing. The origin has to be the one we
+   * framed — otherwise any page could drive this editor. And `event.source` has
+   * to be that frame's own window: origin alone would also accept a popup, or a
+   * second frame, served from the same place.
+   *
+   * Everything past those checks is still treated as hostile input. The path is
+   * validated against the allow-list in `lib/surgeon-site-address.ts`; nothing
+   * here walks an unvetted string into the record.
+   */
+  const handlers = React.useRef({
+    onPreviewFocus: props.onPreviewFocus,
+    onPreviewPickImage: props.onPreviewPickImage,
+    onPreviewNavigate: props.onPreviewNavigate,
+  })
+  handlers.current = {
+    onPreviewFocus: props.onPreviewFocus,
+    onPreviewPickImage: props.onPreviewPickImage,
+    onPreviewNavigate: props.onPreviewNavigate,
+  }
+
+  React.useEffect(() => {
+    if (!previewOrigin) return
+
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== previewOrigin) return
+      if (e.source !== frameRef.current?.contentWindow) return
+      const msg = e.data
+      if (!msg || typeof msg !== "object" || msg.gosm !== PROTOCOL) return
+
+      switch (msg.type) {
+        case "ready":
+          setFrameReady(true)
+          return
+        case "nav":
+          if (typeof msg.pathname === "string") handlers.current.onPreviewNavigate?.(msg.pathname)
+          return
+        case "focus":
+          if (isEditablePath(msg.path)) handlers.current.onPreviewFocus?.(msg.path)
+          return
+        case "pick-image":
+          if (isEditablePath(msg.path)) handlers.current.onPreviewPickImage?.(msg.path)
+          return
+      }
+    }
+
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [previewOrigin])
+
+  /**
+   * Open the conversation once the frame has loaded.
+   *
+   * This side speaks first, which is how the frame learns where to reply —
+   * neither half has the other's origin written into it.
+   */
+  const greetFrame = React.useCallback(() => {
+    if (!previewOrigin) return
+    frameRef.current?.contentWindow?.postMessage({ gosm: PROTOCOL, type: "hello" }, previewOrigin)
+  }, [previewOrigin])
+
+  // Push an edit into the frame so the page updates without a reload. A reload
+  // costs a request to this app and loses the reader's place on the page.
+  React.useEffect(() => {
+    const patch = props.patch
+    if (!patch || !frameReady || !previewOrigin) return
+    frameRef.current?.contentWindow?.postMessage(
+      { gosm: PROTOCOL, type: "patch", path: patch.path, value: patch.value },
+      previewOrigin,
+    )
+  }, [props.patch, frameReady, previewOrigin])
+
+  // Following the rail: ask the frame to navigate rather than changing its src,
+  // because a document load costs a request to this app and a client-side
+  // navigation costs nothing.
+  React.useEffect(() => {
+    if (!frameReady || !previewOrigin || tab !== "preview") return
+    const to = section?.previewPath
+    if (!to) return
+    frameRef.current?.contentWindow?.postMessage({ gosm: PROTOCOL, type: "goto", to }, previewOrigin)
+  }, [frameReady, previewOrigin, tab, section?.previewPath])
 
   // The nonce makes a save reload the frame rather than serving it from cache.
   const frameSrc = previewSrc
@@ -144,7 +289,7 @@ export function EditorShell(props: {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setPreviewNonce((n) => n + 1)}
+                onClick={() => { setFrameReady(false); setPreviewNonce((n) => n + 1) }}
                 aria-label="Reload the preview"
                 className="text-zinc-400 transition-colors hover:text-zinc-900"
               >
@@ -169,7 +314,9 @@ export function EditorShell(props: {
             */
             <iframe
               key={previewNonce}
+              ref={frameRef}
               src={frameSrc}
+              onLoad={greetFrame}
               title="Site preview"
               className="h-[70dvh] w-full border-0 bg-white"
             />

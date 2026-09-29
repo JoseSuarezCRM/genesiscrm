@@ -14,7 +14,7 @@
  * Nothing here is bespoke chrome.
  */
 
-import { useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   Loader2, Save, Globe, CircleAlert, CircleCheck, ExternalLink, RefreshCw,
@@ -33,7 +33,10 @@ import {
   KNOWN_COPY_KEYS, filledCount,
 } from "@/lib/surgeon-site-copy"
 import { SurgeonImageField } from "@/components/surgeon-site-image-field"
-import { EditorShell, type EditorSection } from "@/components/settings/editor-shell"
+import { EditorShell, type EditorSection, type PreviewPatch } from "@/components/settings/editor-shell"
+import {
+  getAtPath, sectionForPath, type ContentPath,
+} from "@/lib/surgeon-site-address"
 import { CollectionEditor } from "@/components/settings/collection-editor"
 import {
   Field, Grid, Input, RowList, Select, StringList, Textarea,
@@ -92,6 +95,39 @@ export function SurgeonSiteEditor(props: {
   const [err, setErr] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
+  /**
+   * The field a staff member clicked in the preview.
+   *
+   * Clicking does not edit anything — it opens the matching field in the rail,
+   * which is where the real input lives. That is deliberate for now: typing
+   * directly into the page means fighting React over the caret, and several of
+   * these strings can contain links that a plain-text round trip would destroy.
+   * This gets most of the feel with none of that.
+   */
+  const [focusPath, setFocusPath] = useState<ContentPath | null>(null)
+  const [openSection, setOpenSection] = useState<string | null>(null)
+  const [patch, setPatch] = useState<PreviewPatch | null>(null)
+  const patchNonce = useRef(0)
+
+  // Push the focused field back into the preview as it is typed, so the page
+  // shows the change without a reload.
+  const focusKey = focusPath ? JSON.stringify(focusPath) : null
+  useEffect(() => {
+    if (!focusPath) return
+    const value = getAtPath(content, focusPath)
+    if (typeof value !== "string") return
+    patchNonce.current += 1
+    setPatch({ path: focusPath, value, nonce: patchNonce.current })
+    // `focusKey` rather than `focusPath`: the array identity changes on every
+    // render, the string does not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, focusKey])
+
+  function openFromPreview(path: ContentPath) {
+    setOpenSection(sectionForPath(path))
+    setFocusPath(path)
+  }
+
   // Recomputed as they type, using the same function the server publishes with,
   // so the checklist can never disagree with what publishing actually allows.
   const missing = missingCredentials(content, domain || null)
@@ -149,10 +185,12 @@ export function SurgeonSiteEditor(props: {
       setErr(res.error ?? "Could not build the preview link.")
       return null
     }
-    if (!path || path === "/") return res.url
-    // `?preview=` and the key live on the query, so the path goes before it.
+    // `&edit=1` turns on the markup that names which field each string came
+    // from. The site refuses it on a live domain and without a valid draft, so
+    // asking for it here cannot widen what the link already grants.
     const u = new URL(res.url)
-    u.pathname = path
+    u.searchParams.set("edit", "1")
+    if (path && path !== "/") u.pathname = path
     return u.toString()
   }
 
@@ -891,6 +929,11 @@ export function SurgeonSiteEditor(props: {
             values={content.pageCopy}
             onChange={(v) => set("pageCopy", v)}
             known={KNOWN_COPY_KEYS}
+            focusKey={
+              focusPath?.[0] === "pageCopy" && typeof focusPath[1] === "string"
+                ? focusPath[1]
+                : null
+            }
           />
           <div className="mt-8">
             <CopyListEditor
@@ -945,6 +988,9 @@ export function SurgeonSiteEditor(props: {
       canPreview={!!props.previewUrl && !!domain}
       resolvePreviewSrc={previewSrc}
       onBeforePreview={saveNow}
+      onPreviewFocus={openFromPreview}
+      openSection={openSection}
+      patch={patch}
       actions={
         <>
           {props.previewUrl && props.status === "PUBLISHED" && domain && (

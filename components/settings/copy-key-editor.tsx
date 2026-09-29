@@ -38,8 +38,21 @@ function CopyBox(props: {
   spec: CopyKey
   value: string
   onChange: (v: string) => void
+  /** Put the caret here — a click in the site preview named this field. */
+  focused?: boolean
 }) {
   const { spec } = props
+  const ref = React.useRef<HTMLTextAreaElement | null>(null)
+
+  React.useEffect(() => {
+    if (!props.focused) return
+    const el = ref.current
+    if (!el) return
+    // Scroll first, then focus: focusing alone jumps the panel abruptly, and a
+    // staff member who clicked something on the page should see it arrive.
+    el.scrollIntoView({ block: "center", behavior: "smooth" })
+    el.focus({ preventScroll: true })
+  }, [props.focused])
   const meta = spec.kind === "meta"
   const len = props.value.trim().length
   const over = meta && len > META_LENGTH_GUIDE
@@ -61,6 +74,7 @@ function CopyBox(props: {
         )}
       </span>
       <textarea
+        ref={ref}
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
         rows={meta ? 2 : 4}
@@ -126,8 +140,20 @@ export function CopyKeyEditor(props: {
   onChange: (values: Record<string, string>) => void
   /** Every key the manifest names, for spotting the ones it does not. */
   known: ReadonlySet<string>
+  /** A key named by a click in the site preview: open its group and focus it. */
+  focusKey?: string | null
 }) {
   const [open, setOpen] = React.useState<string | null>(props.groups[0]?.id ?? null)
+
+  // Fifty boxes live behind ten collapsed headings, so naming a key is not
+  // enough — the group holding it has to be opened before it can be focused.
+  const focusKey = props.focusKey
+  React.useEffect(() => {
+    if (!focusKey) return
+    const group = props.groups.find((g) => g.keys.some((k) => k.key === focusKey))
+    if (group) setOpen(group.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey])
 
   const set = (key: string, v: string) => {
     const next = { ...props.values }
@@ -158,6 +184,7 @@ export function CopyKeyEditor(props: {
               spec={k}
               value={props.values[k.key] ?? ""}
               onChange={(v) => set(k.key, v)}
+              focused={focusKey === k.key}
             />
           ))}
         </Group>
