@@ -25,6 +25,22 @@ const SCOPE = "surgeon_sites:read"
 const DRAFT_SCOPE = "surgeon_sites:read_draft"
 
 /**
+ * Draft reads get their own, much larger, rate-limit bucket.
+ *
+ * The default is five per quarter hour, shared with the login limiter. A
+ * published read is a build step and never comes near it. A draft read is one
+ * staff member looking at their own unpublished work, one request per page
+ * load — so the sixth click of Reload used to lock them out for fifteen minutes
+ * behind a 502, which reads as the tool being broken.
+ *
+ * Raising it is safe here in a way it would not be on the login form: this path
+ * already requires a scoped API key AND the per-site `previewToken`, which is
+ * rotatable from the editor, and it returns no PHI. The separate bucket means
+ * this allowance cannot be spent to exhaust the strict one.
+ */
+const DRAFT_RATE_LIMIT = { bucket: "draft", max: 60 }
+
+/**
  * Does the key on a preview link match the one this site holds?
  *
  * Constant-time, so the comparison cannot be used to discover a token a
@@ -81,7 +97,11 @@ export async function GET(req: Request) {
   // gets 403 here rather than silently falling back to published content, which
   // would look like the draft simply having no changes.
   const wantsDraft = url.searchParams.get("draft") === "1"
-  const auth = await authenticateApiRequest(req, wantsDraft ? DRAFT_SCOPE : SCOPE)
+  const auth = await authenticateApiRequest(
+    req,
+    wantsDraft ? DRAFT_SCOPE : SCOPE,
+    wantsDraft ? DRAFT_RATE_LIMIT : undefined,
+  )
   if ("error" in auth) return auth.error
 
   // A draft read is always for ONE named site. There is no key that unlocks

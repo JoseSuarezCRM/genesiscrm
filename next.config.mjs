@@ -1,5 +1,30 @@
 /** @type {import('next').NextConfig} */
 
+/**
+ * The surgeon-site preview origin, for `frame-src`.
+ *
+ * Settings -> Surgeon Websites renders the draft site in an iframe. That was
+ * broken from the day it shipped: the CSP below sets `default-src 'self'` and
+ * never sets `frame-src` or `child-src`, and CSP falls back
+ * `frame-src -> child-src -> default-src`. So the policy was effectively
+ * `frame-src 'self'` and the browser refused the frame outright.
+ *
+ * Checking that the SITE allowed framing was only half the check — that governs
+ * `frame-ancestors` on the child. This governs what the CRM may embed.
+ *
+ * Only the origin is used: a value carrying a path would make the directive
+ * invalid and silently drop the whole policy line.
+ */
+function previewOrigin() {
+  const raw = process.env.SURGEON_SITE_PREVIEW_URL
+  if (!raw) return ""
+  try {
+    return new URL(raw).origin
+  } catch {
+    return ""
+  }
+}
+
 const securityHeaders = [
   {
     key: "Strict-Transport-Security",
@@ -37,6 +62,10 @@ const securityHeaders = [
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
+      // What this app may EMBED. `frame-ancestors` below is the opposite
+      // direction and stays 'none' — the CRM holds a session for a PHI app and
+      // must never be framable itself.
+      ("frame-src 'self' " + previewOrigin()).trim(),
       "frame-ancestors 'none'",
       "upgrade-insecure-requests",
     ].join("; "),

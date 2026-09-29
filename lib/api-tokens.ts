@@ -21,9 +21,22 @@ export function apiError(status: number, message: string, code?: string) {
 
 export interface AuthedToken { id: string; name: string; scopes: string[] }
 
-// Validate the Bearer token, enforce the required scope + rate limit, and log the
-// call. Returns the token, or an error Response to return directly.
-export async function authenticateApiRequest(req: Request, scope: string): Promise<{ token: AuthedToken } | { error: NextResponse }> {
+/**
+ * Validate the Bearer token, enforce the required scope + rate limit, and log
+ * the call. Returns the token, or an error Response to return directly.
+ *
+ * `limit` lets one endpoint opt out of the default five-per-quarter-hour
+ * ceiling into a bucket of its own. Only for endpoints whose ordinary use is a
+ * person clicking — the default exists to make credential guessing pointless,
+ * and a read that is already gated by a scope and a second per-record secret is
+ * not that. Passing a bucket keeps the two counts separate, so spending the
+ * generous one cannot lock anybody out of the strict one.
+ */
+export async function authenticateApiRequest(
+  req: Request,
+  scope: string,
+  limit?: { bucket: string; max: number },
+): Promise<{ token: AuthedToken } | { error: NextResponse }> {
   const header = req.headers.get("authorization") ?? ""
   const m = header.match(/^Bearer\s+(.+)$/i)
   if (!m) return { error: apiError(401, "Missing bearer token. Send 'Authorization: Bearer <api key>'.", "unauthorized") }
@@ -35,7 +48,8 @@ export async function authenticateApiRequest(req: Request, scope: string): Promi
   const scopes: string[] = (row.scopes as string[]) ?? []
   if (!scopes.includes(scope)) return { error: apiError(403, `This API key is missing the "${scope}" scope.`, "insufficient_scope") }
 
-  if (!checkRateLimit(`apitoken:${row.id}`).allowed) return { error: apiError(429, "Rate limit exceeded. Slow down and retry.", "rate_limited") }
+  const bucket = limit ? `apitoken:${row.id}:${limit.bucket}` : `apitoken:${row.id}`
+  if (!checkRateLimit(bucket, limit?.max).allowed) return { error: apiError(429, "Rate limit exceeded. Slow down and retry.", "rate_limited") }
 
   // Best-effort bookkeeping + activity log (never blocks the request).
   ;(prisma as any).apiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {})
