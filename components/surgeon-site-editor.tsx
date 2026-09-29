@@ -128,6 +128,43 @@ export function SurgeonSiteEditor(props: {
     setFocusPath(path)
   }
 
+  /**
+   * Save the draft shortly after typing stops.
+   *
+   * Editing from the page makes losing work much easier than it used to be: the
+   * preview keeps unsaved changes in its own copy of the draft, so the page
+   * looks right while the database still holds the old text, and a reload of the
+   * frame silently reverts what someone just wrote. Nobody would read that as
+   * "you forgot to press Save".
+   *
+   * Idle rather than per keystroke, because each save rewrites the whole record
+   * — a hundred kilobytes of JSON — and revalidates two paths. Whole-record
+   * because that is how this editor has always worked: it holds the entire
+   * document in state, so there is no partial write to get wrong.
+   *
+   * The explicit button stays. It is faster than the timer, and it is what
+   * people reach for when they want to be certain.
+   */
+  const [dirty, setDirty] = useState(false)
+  const [autosaving, setAutosaving] = useState(false)
+
+  useEffect(() => {
+    if (!dirty || pending) return
+    const timer = setTimeout(async () => {
+      setAutosaving(true)
+      try {
+        await updateSurgeonSite(props.id, { domain, redirectUrl, content })
+        setDirty(false)
+        setSaved(true)
+      } catch (e: any) {
+        setErr(e?.message ?? "Could not save")
+      } finally {
+        setAutosaving(false)
+      }
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [dirty, content, domain, redirectUrl, pending, props.id])
+
   // Recomputed as they type, using the same function the server publishes with,
   // so the checklist can never disagree with what publishing actually allows.
   const missing = missingCredentials(content, domain || null)
@@ -135,6 +172,7 @@ export function SurgeonSiteEditor(props: {
   function set<K extends keyof SurgeonSiteContent>(key: K, value: SurgeonSiteContent[K]) {
     setContent((c) => ({ ...c, [key]: value }))
     setSaved(false)
+    setDirty(true)
   }
 
   function setProfile<K extends keyof SurgeonSiteContent["profile"]>(
@@ -150,6 +188,7 @@ export function SurgeonSiteEditor(props: {
       try {
         await updateSurgeonSite(props.id, { domain, redirectUrl, content })
         setSaved(true)
+        setDirty(false)
         then?.()
         router.refresh()
       } catch (e: any) {
@@ -171,6 +210,7 @@ export function SurgeonSiteEditor(props: {
     try {
       await updateSurgeonSite(props.id, { domain, redirectUrl, content })
       setSaved(true)
+      setDirty(false)
       router.refresh()
     } catch (e: any) {
       setErr(e?.message ?? "Could not save")
@@ -346,7 +386,7 @@ export function SurgeonSiteEditor(props: {
       panel: (
         <Grid>
           <Field label="Domain" hint="The address patients visit, without https://">
-            <Input value={domain} onChange={(v) => { setDomain(v); setSaved(false) }} placeholder="nolanhornermd.com" />
+            <Input value={domain} onChange={(v) => { setDomain(v); setSaved(false); setDirty(true) }} placeholder="nolanhornermd.com" />
           </Field>
           <Field label="Site URL" hint="Full origin used in links Google reads. Usually https:// plus the domain.">
             <Input value={content.baseUrl} onChange={(v) => set("baseUrl", v)} placeholder="https://nolanhornermd.com" />
@@ -372,7 +412,7 @@ export function SurgeonSiteEditor(props: {
             />
           </Field>
           <Field label="Redirect destination" hint="Where visitors go if this site is set to Redirected.">
-            <Input value={redirectUrl} onChange={(v) => { setRedirectUrl(v); setSaved(false) }} placeholder="https://genesisortho.com/" />
+            <Input value={redirectUrl} onChange={(v) => { setRedirectUrl(v); setSaved(false); setDirty(true) }} placeholder="https://genesisortho.com/" />
           </Field>
           {props.hasPreviewToken && (
             <Field
@@ -1005,6 +1045,11 @@ export function SurgeonSiteEditor(props: {
               Published site
             </a>
           )}
+          {/* What the timer is doing, in the one place people look for it.
+              `aria-live` so it is announced rather than only seen. */}
+          <span aria-live="polite" className="text-xs text-zinc-500">
+            {autosaving ? "Saving…" : dirty ? "Unsaved changes" : ""}
+          </span>
           <button
             type="button"
             onClick={() => save()}
@@ -1055,7 +1100,7 @@ export function SurgeonSiteEditor(props: {
               </div>
             </div>
           )}
-          {saved && !err && (
+          {saved && !err && !dirty && !autosaving && (
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
               <CircleCheck className="size-4" /> Draft saved. Nothing is live until you publish.
             </div>
