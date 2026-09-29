@@ -36,12 +36,22 @@ export function CollectionEditor<T>(props: {
   itemLabel: string
   /** The line shown in the list. Keep it short — it is the only thing scanned. */
   summary: (item: T) => { title: string; detail?: string }
-  /** The dialog body. */
-  form: (item: T, update: (item: T) => void) => React.ReactNode
+  /**
+   * The dialog body. `index` is where this entry sits (or will sit, when new),
+   * so inputs can be named by their record path for the preview's click-to-focus.
+   */
+  form: (item: T, update: (item: T) => void, index: number) => React.ReactNode
   /** Shown when there is nothing yet. Always paired with the add button. */
   emptyHint: string
   /** Let entries be reordered — order is meaningful for clinics and protocols. */
   reorderable?: boolean
+  /**
+   * Open this entry, because a click in the site preview named it.
+   *
+   * `nonce` makes a second click on the same entry reopen it after it was
+   * closed; the index alone would not change, so nothing would happen.
+   */
+  focus?: { index: number; nonce: number } | null
 }) {
   // -1 is "closed"; items.length is "adding a new one".
   const [editing, setEditing] = React.useState(-1)
@@ -56,6 +66,15 @@ export function CollectionEditor<T>(props: {
     setEditing(-1)
     setDraft(null)
   }
+
+  const focus = props.focus
+  React.useEffect(() => {
+    if (!focus) return
+    const item = props.items[focus.index]
+    if (item !== undefined) open(focus.index, item)
+    // Keyed on the nonce: the request is the event, not the index.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.nonce])
 
   const commit = () => {
     if (draft === null) return
@@ -174,7 +193,9 @@ export function CollectionEditor<T>(props: {
             </DialogDescription>
           </DialogHeader>
 
-          {draft !== null && <div className="space-y-4">{props.form(draft, setDraft)}</div>}
+          {draft !== null && (
+            <div className="space-y-4">{props.form(draft, setDraft, editing)}</div>
+          )}
 
           <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-100 pt-4">
             <button

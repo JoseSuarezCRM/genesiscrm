@@ -32,6 +32,18 @@ export function Field(props: {
   )
 }
 
+/**
+ * Names an input by the record field it edits, so a click on that field in the
+ * site preview can find it.
+ *
+ * The preview reports a path like ["profile", "bio", 2]; the editor looks for
+ * the input carrying the same path and puts the caret there. One mechanism for
+ * every section, rather than each editor learning to interpret paths.
+ */
+export function fieldAttr(field?: readonly (string | number)[]): Record<string, string> {
+  return field ? { "data-field": JSON.stringify(field) } : {}
+}
+
 const controlClass =
   "mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none transition-colors focus:border-zinc-400"
 
@@ -40,9 +52,12 @@ export function Input(props: {
   onChange: (v: string) => void
   placeholder?: string
   type?: string
+  /** The record field this edits — see `fieldAttr`. */
+  field?: readonly (string | number)[]
 }) {
   return (
     <input
+      {...fieldAttr(props.field)}
       type={props.type ?? "text"}
       value={props.value}
       onChange={(e) => props.onChange(e.target.value)}
@@ -57,9 +72,12 @@ export function Textarea(props: {
   onChange: (v: string) => void
   rows?: number
   placeholder?: string
+  /** The record field this edits — see `fieldAttr`. */
+  field?: readonly (string | number)[]
 }) {
   return (
     <textarea
+      {...fieldAttr(props.field)}
       value={props.value}
       onChange={(e) => props.onChange(e.target.value)}
       rows={props.rows ?? 3}
@@ -112,7 +130,8 @@ export function RowList<T>(props: {
   addLabel: string
   /** What one row is called, for the remove button's label. */
   itemLabel?: string
-  render: (row: T, update: (row: T) => void) => React.ReactNode
+  /** `index` so a caller can name each input by its record path. */
+  render: (row: T, update: (row: T) => void, index: number) => React.ReactNode
 }) {
   const what = props.itemLabel ?? "row"
   return (
@@ -120,11 +139,15 @@ export function RowList<T>(props: {
       {props.rows.map((row, i) => (
         <div key={i} className="flex items-start gap-2">
           <div className="grid flex-1 gap-2 sm:grid-cols-2">
-            {props.render(row, (next) => {
-              const rows = [...props.rows]
-              rows[i] = next
-              props.onChange(rows)
-            })}
+            {props.render(
+              row,
+              (next) => {
+                const rows = [...props.rows]
+                rows[i] = next
+                props.onChange(rows)
+              },
+              i,
+            )}
           </div>
           <button
             type="button"
@@ -155,8 +178,11 @@ export function StringList(props: {
   multiline?: boolean
   addLabel?: string
   itemLabel?: string
+  /** Each row is named `[...fieldBase, index]` — see `fieldAttr`. */
+  fieldBase?: readonly (string | number)[]
 }) {
   const what = props.itemLabel ?? "entry"
+  const rowField = (i: number) => (props.fieldBase ? [...props.fieldBase, i] : undefined)
   const set = (i: number, v: string) => {
     const next = [...props.values]
     next[i] = v
@@ -168,6 +194,7 @@ export function StringList(props: {
         <div key={i} className="flex items-start gap-2">
           {props.multiline ? (
             <textarea
+              {...fieldAttr(rowField(i))}
               value={value}
               rows={4}
               placeholder={props.placeholder}
@@ -176,6 +203,7 @@ export function StringList(props: {
             />
           ) : (
             <input
+              {...fieldAttr(rowField(i))}
               value={value}
               placeholder={props.placeholder}
               onChange={(e) => set(i, e.target.value)}

@@ -261,8 +261,18 @@ export function ArticleBioEditor(props: {
   keys: { key: string; label: string; area: string }[]
   values: Record<string, string>
   onChange: (values: Record<string, string>) => void
+  /** An article named by a click in the site preview: open its area, focus it. */
+  focusKey?: string | null
 }) {
   const [open, setOpen] = React.useState<string | null>(null)
+
+  const focusKey = props.focusKey
+  React.useEffect(() => {
+    if (!focusKey) return
+    const area = props.keys.find((k) => k.key === focusKey)?.area
+    if (area) setOpen(area)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey])
 
   const set = (key: string, v: string) => {
     const next = { ...props.values }
@@ -303,6 +313,7 @@ export function ArticleBioEditor(props: {
               }}
               value={props.values[k.key] ?? ""}
               onChange={(v) => set(k.key, v)}
+              focused={focusKey === k.key}
             />
           ))}
         </Group>

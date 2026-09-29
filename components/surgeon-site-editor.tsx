@@ -123,10 +123,61 @@ export function SurgeonSiteEditor(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, focusKey])
 
+  /**
+   * Bumped on every click in the preview, so clicking the same field twice
+   * refocuses it. The path alone would not change, and nothing would happen.
+   */
+  const [focusNonce, setFocusNonce] = useState(0)
+
   function openFromPreview(path: ContentPath) {
     setOpenSection(sectionForPath(path))
     setFocusPath(path)
+    setFocusNonce((n) => n + 1)
   }
+
+  /**
+   * For a collection at `prefix`, the entry the preview named — so its dialog
+   * opens. Null when the click was about something else.
+   */
+  function focusFor(prefix: ContentPath): { index: number; nonce: number } | null {
+    if (!focusPath || focusPath.length <= prefix.length) return null
+    for (let i = 0; i < prefix.length; i++) if (focusPath[i] !== prefix[i]) return null
+    const index = focusPath[prefix.length]
+    return typeof index === "number" ? { index, nonce: focusNonce } : null
+  }
+
+  /**
+   * Put the caret in the input that edits the clicked field.
+   *
+   * Inputs carry their record path as `data-field` (see `fieldAttr`), so this is
+   * one lookup for every section rather than each editor learning to read paths.
+   * It retries for a few frames because the section has to switch and, for a
+   * collection, a dialog has to open before the input exists.
+   *
+   * Compared as strings rather than through a CSS selector: the path is JSON,
+   * full of quotes and brackets, and escaping it into a selector is a way to be
+   * subtly wrong for exactly the keys that contain dots.
+   */
+  useEffect(() => {
+    if (!focusPath) return
+    const target = JSON.stringify(focusPath)
+    let tries = 0
+    let frame = 0
+    const tick = () => {
+      const el = Array.from(document.querySelectorAll<HTMLElement>("[data-field]")).find(
+        (n) => n.getAttribute("data-field") === target,
+      )
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" })
+        el.focus({ preventScroll: true })
+        return
+      }
+      if (++tries < 30) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNonce])
 
   /**
    * Save the draft shortly after typing stops.
@@ -550,10 +601,10 @@ export function SurgeonSiteEditor(props: {
             blank={{ label: "", detail: "" }}
             addLabel="Add a credential"
             itemLabel="credential"
-            render={(row, update) => (
+            render={(row, update, i) => (
               <>
-                <Input value={row.label} onChange={(v) => update({ ...row, label: v })} placeholder="Fellowship trained" />
-                <Input value={row.detail} onChange={(v) => update({ ...row, detail: v })} placeholder="Sports medicine & shoulder, Rush University Medical Center" />
+                <Input field={["credentials", i, "label"]} value={row.label} onChange={(v) => update({ ...row, label: v })} placeholder="Fellowship trained" />
+                <Input field={["credentials", i, "detail"]} value={row.detail} onChange={(v) => update({ ...row, detail: v })} placeholder="Sports medicine & shoulder, Rush University Medical Center" />
               </>
             )}
           />
@@ -584,6 +635,7 @@ export function SurgeonSiteEditor(props: {
           </p>
           <StringList
             values={content.profile.bio}
+            fieldBase={["profile", "bio"]}
             onChange={(bio) => setProfile("bio", bio)}
             placeholder="Dr. … is a board-certified orthopedic surgeon…"
             addLabel="Add a paragraph"
@@ -609,17 +661,18 @@ export function SurgeonSiteEditor(props: {
           </p>
           <CollectionEditor
             items={content.profile.cards}
+            focus={focusFor(["profile", "cards"])}
             onChange={(cards) => setProfile("cards", cards)}
             blank={() => ({ icon: "Award", title: "", description: "" })}
             itemLabel="card"
             reorderable
             emptyHint="No cards. The homepage skips the credentials row entirely."
             summary={(c) => ({ title: c.title, detail: c.description })}
-            form={(c, update) => (
+            form={(c, update, i) => (
               <>
                 <Grid>
                   <Field label="Title">
-                    <Input value={c.title} onChange={(v) => update({ ...c, title: v })} placeholder="Fellowship trained" />
+                    <Input field={["profile", "cards", i, "title"]} value={c.title} onChange={(v) => update({ ...c, title: v })} placeholder="Fellowship trained" />
                   </Field>
                   <Field label="Icon">
                     <Select
@@ -630,7 +683,7 @@ export function SurgeonSiteEditor(props: {
                   </Field>
                 </Grid>
                 <Field label="Description">
-                  <Textarea value={c.description} onChange={(v) => update({ ...c, description: v })} rows={2} />
+                  <Textarea field={["profile", "cards", i, "description"]} value={c.description} onChange={(v) => update({ ...c, description: v })} rows={2} />
                 </Field>
               </>
             )}
@@ -644,19 +697,20 @@ export function SurgeonSiteEditor(props: {
           </p>
           <CollectionEditor
             items={content.profile.highlights}
+            focus={focusFor(["profile", "highlights"])}
             onChange={(highlights) => setProfile("highlights", highlights)}
             blank={() => ({ title: "", body: "" })}
             itemLabel="highlight"
             reorderable
             emptyHint="No highlights. The About page runs straight from the biography to the facts."
             summary={(h) => ({ title: h.title, detail: h.body })}
-            form={(h, update) => (
+            form={(h, update, i) => (
               <>
                 <Field label="Title">
-                  <Input value={h.title} onChange={(v) => update({ ...h, title: v })} />
+                  <Input field={["profile", "highlights", i, "title"]} value={h.title} onChange={(v) => update({ ...h, title: v })} />
                 </Field>
                 <Field label="Body">
-                  <Textarea value={h.body} onChange={(v) => update({ ...h, body: v })} rows={3} />
+                  <Textarea field={["profile", "highlights", i, "body"]} value={h.body} onChange={(v) => update({ ...h, body: v })} rows={3} />
                 </Field>
               </>
             )}
@@ -670,16 +724,17 @@ export function SurgeonSiteEditor(props: {
           </p>
           <CollectionEditor
             items={content.profile.facts}
+            focus={focusFor(["profile", "facts"])}
             onChange={(facts) => setProfile("facts", facts)}
             blank={() => ({ icon: "GraduationCap", label: "", value: "" })}
             itemLabel="fact"
             reorderable
             emptyHint="No facts. The table is left out."
             summary={(f) => ({ title: f.label, detail: f.value })}
-            form={(f, update) => (
+            form={(f, update, i) => (
               <Grid>
                 <Field label="Label">
-                  <Input value={f.label} onChange={(v) => update({ ...f, label: v })} placeholder="Fellowship" />
+                  <Input field={["profile", "facts", i, "label"]} value={f.label} onChange={(v) => update({ ...f, label: v })} placeholder="Fellowship" />
                 </Field>
                 <Field label="Icon">
                   <Select
@@ -689,7 +744,7 @@ export function SurgeonSiteEditor(props: {
                   />
                 </Field>
                 <Field label="Value" wide>
-                  <Input value={f.value} onChange={(v) => update({ ...f, value: v })} placeholder="Sports medicine & shoulder, Rush University Medical Center" />
+                  <Input field={["profile", "facts", i, "value"]} value={f.value} onChange={(v) => update({ ...f, value: v })} placeholder="Sports medicine & shoulder, Rush University Medical Center" />
                 </Field>
               </Grid>
             )}
@@ -712,7 +767,11 @@ export function SurgeonSiteEditor(props: {
             surgeon does <strong className="font-medium">not</strong> attend come from the practice
             record, not from here.
           </p>
-          <ClinicList clinics={content.clinics} onChange={(clinics) => set("clinics", clinics)} />
+          <ClinicList
+            clinics={content.clinics}
+            onChange={(clinics) => set("clinics", clinics)}
+            focus={focusFor(["clinics"])}
+          />
         </>
       ),
     },
@@ -732,6 +791,7 @@ export function SurgeonSiteEditor(props: {
           <CollectionEditor
             items={content.reviews}
             onChange={(reviews) => set("reviews", reviews)}
+            focus={focusFor(["reviews"])}
             blank={() => ({ quote: "", source: "Google" as const, rating: 5 as const })}
             itemLabel="review"
             reorderable
@@ -740,10 +800,10 @@ export function SurgeonSiteEditor(props: {
               title: r.quote,
               detail: [r.source, `${r.rating}★`, r.office, r.date].filter(Boolean).join(" · "),
             })}
-            form={(r, update) => (
+            form={(r, update, i) => (
               <>
                 <Field label="Quote" hint="Word for word, as the patient wrote it.">
-                  <Textarea value={r.quote} onChange={(v) => update({ ...r, quote: v })} rows={4} />
+                  <Textarea field={["reviews", i, "quote"]} value={r.quote} onChange={(v) => update({ ...r, quote: v })} rows={4} />
                 </Field>
                 <Grid>
                   <Field label="Source">
@@ -830,18 +890,19 @@ export function SurgeonSiteEditor(props: {
           <CollectionEditor
             items={content.researchThemes}
             onChange={(v) => set("researchThemes", v)}
+            focus={focusFor(["researchThemes"])}
             blank={() => ({ title: "", body: "" })}
             itemLabel="theme"
             reorderable
             emptyHint="No themes. The research page shows the publication list without the narrative above it."
             summary={(t) => ({ title: t.title, detail: t.body })}
-            form={(t, update) => (
+            form={(t, update, i) => (
               <>
                 <Field label="Title">
-                  <Input value={t.title} onChange={(v) => update({ ...t, title: v })} />
+                  <Input field={["researchThemes", i, "title"]} value={t.title} onChange={(v) => update({ ...t, title: v })} />
                 </Field>
                 <Field label="Body">
-                  <Textarea value={t.body} onChange={(v) => update({ ...t, body: v })} rows={6} />
+                  <Textarea field={["researchThemes", i, "body"]} value={t.body} onChange={(v) => update({ ...t, body: v })} rows={6} />
                 </Field>
               </>
             )}
@@ -1002,6 +1063,11 @@ export function SurgeonSiteEditor(props: {
             keys={ARTICLE_BIO_KEYS}
             values={content.articleBios}
             onChange={(v) => set("articleBios", v)}
+            focusKey={
+              focusPath?.[0] === "articleBios" && typeof focusPath[1] === "string"
+                ? focusPath[1]
+                : null
+            }
           />
         </>
       ),
@@ -1169,11 +1235,16 @@ function slugify(v: string): string {
  * Spanish site: the pages are generated per clinic from `es`, and a clinic
  * without it is skipped.
  */
-function ClinicList(props: { clinics: SurgeonClinic[]; onChange: (c: SurgeonClinic[]) => void }) {
+function ClinicList(props: {
+  clinics: SurgeonClinic[]
+  onChange: (c: SurgeonClinic[]) => void
+  focus?: { index: number; nonce: number } | null
+}) {
   return (
     <CollectionEditor
       items={props.clinics}
       onChange={props.onChange}
+      focus={props.focus ?? null}
       blank={blankClinic}
       itemLabel="clinic"
       reorderable
@@ -1182,7 +1253,7 @@ function ClinicList(props: { clinics: SurgeonClinic[]; onChange: (c: SurgeonClin
         title: c.name,
         detail: [c.day, c.cityStateZip, c.es ? "Spanish ✓" : "no Spanish"].filter(Boolean).join(" · "),
       })}
-      form={(c, update) => (
+      form={(c, update, i) => (
         <>
           <Grid>
             <Field label="Name">
@@ -1224,13 +1295,14 @@ function ClinicList(props: { clinics: SurgeonClinic[]; onChange: (c: SurgeonClin
               <Input value={c.googleReviewUrl ?? ""} onChange={(v) => update({ ...c, googleReviewUrl: v })} />
             </Field>
             <Field label="Introduction" hint="The opening paragraph on this clinic's page." wide>
-              <Textarea value={c.lead} onChange={(v) => update({ ...c, lead: v })} rows={2} />
+              <Textarea field={["clinics", i, "lead"]} value={c.lead} onChange={(v) => update({ ...c, lead: v })} rows={2} />
             </Field>
           </Grid>
 
           <Field label="Body paragraphs" hint="After the introduction. One paragraph per box.">
             <StringList
               values={c.intro}
+              fieldBase={["clinics", i, "intro"]}
               onChange={(intro) => update({ ...c, intro })}
               addLabel="Add a paragraph"
               itemLabel="paragraph"
