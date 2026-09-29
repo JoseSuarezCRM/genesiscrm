@@ -25,7 +25,9 @@
  * write a foreign URL into the record, and the next build would download it.
  */
 
-import { KNOWN_ARTICLE_KEYS, KNOWN_COPY_KEYS, KNOWN_LIST_KEYS } from "@/lib/surgeon-site-copy"
+import {
+  KNOWN_ARTICLE_KEYS, KNOWN_COPY_KEYS, KNOWN_IMAGE_KEYS, KNOWN_LIST_KEYS,
+} from "@/lib/surgeon-site-copy"
 
 export type ContentSegment = string | number
 export type ContentPath = ContentSegment[]
@@ -43,6 +45,7 @@ const IDX: Matcher = { index: true }
 const COPY_KEY: Matcher = { from: KNOWN_COPY_KEYS }
 const ARTICLE_KEY: Matcher = { from: KNOWN_ARTICLE_KEYS }
 const LIST_KEY: Matcher = { from: KNOWN_LIST_KEYS }
+const IMAGE_KEY: Matcher = { from: KNOWN_IMAGE_KEYS }
 
 const lit = (s: string): Matcher => ({ lit: s })
 const one = (...s: string[]): Matcher => ({ oneOf: s })
@@ -73,6 +76,9 @@ const RULES: Matcher[][] = [
   [lit("pageCopy"), COPY_KEY],
   [lit("articleBios"), ARTICLE_KEY],
   [lit("pageLists"), LIST_KEY, IDX],
+  // Shared photographs: addressable by name only. A per-page replacement key is
+  // built here from a validated page path, never taken from the frame.
+  [lit("pageImages"), IMAGE_KEY],
 
   [lit("profile"), lit("bio"), IDX],
   [lit("profile"), lit("cards"), IDX, one("title", "description", "icon")],
@@ -130,7 +136,20 @@ export function isEditablePath(path: unknown): path is ContentPath {
 
 /** Whether this field's value is chosen here rather than sent by the frame. */
 export function isImagePath(path: ContentPath): boolean {
+  if (path[0] === "pageImages") return true
   return path.length === 1 && typeof path[0] === "string" && IMAGE_FIELDS.has(path[0])
+}
+
+/**
+ * A page path reported by the frame, if it is a plausible one.
+ *
+ * It becomes a key on the record ("replace this page's hero only"), so it is
+ * held to the shape of a real route: absolute, lowercase segments, no dots, no
+ * query. Anything else is refused rather than stored.
+ */
+export function safePagePath(page: unknown): string | null {
+  if (typeof page !== "string" || page.length > 200) return null
+  return /^\/(?:[a-z0-9-]+(?:\/[a-z0-9-]+)*)?$/.test(page) ? page : null
 }
 
 /**

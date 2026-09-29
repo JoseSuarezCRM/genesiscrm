@@ -30,8 +30,12 @@ import {
 } from "@/lib/surgeon-site"
 import {
   PAGE_COPY_GROUPS, PAGE_LIST_KEYS, ARTICLE_BIO_KEYS,
-  KNOWN_COPY_KEYS, filledCount,
+  KNOWN_COPY_KEYS, SHARED_IMAGE_KEYS, filledCount,
 } from "@/lib/surgeon-site-copy"
+import { MediaPicker } from "@/components/media-picker"
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
 import { SurgeonImageField } from "@/components/surgeon-site-image-field"
 import { EditorShell, type EditorSection, type PreviewPatch } from "@/components/settings/editor-shell"
 import {
@@ -360,6 +364,52 @@ export function SurgeonSiteEditor(props: {
   const clinicOptions = content.clinics
     .filter((c) => c.name.trim())
     .map((c) => ({ value: c.name, label: c.name }))
+
+  /**
+   * Replacing a photograph from the preview.
+   *
+   * The frame names the slot; this app decides everything else. A hero first
+   * asks whether to replace it on this page or everywhere the image is used —
+   * the difference between one article and twenty-two — and then the media
+   * library opens. The frame never proposes an image, only a place for one.
+   */
+  const [pick, setPick] = useState<{ path: ContentPath; page: string | null; hero: boolean } | null>(null)
+  const [pickScope, setPickScope] = useState<"ask" | "page" | "everywhere" | null>(null)
+  const [imageUpdate, setImageUpdate] = useState<{ path: ContentPath; url: string; nonce: number } | null>(null)
+  const imageNonce = useRef(0)
+
+  function startPick(path: ContentPath, page: string | null, hero: boolean) {
+    setPick({ path, page, hero })
+    setPickScope(hero && page && path[0] === "pageImages" ? "ask" : "everywhere")
+  }
+
+  function applyImage(url: string) {
+    if (!pick) return
+    const [head, key] = pick.path
+    let target: ContentPath
+    if (head === "pageImages" && typeof key === "string") {
+      const slot = pickScope === "page" && pick.page ? pick.page : key
+      set("pageImages", { ...content.pageImages, [slot]: url })
+      target = ["pageImages", slot]
+    } else if (typeof head === "string") {
+      set(head as keyof SurgeonSiteContent, url as never)
+      target = [head]
+    } else return
+    imageNonce.current += 1
+    // Absolute, because the frame is on another origin and a path to this app's
+    // media route means nothing there.
+    setImageUpdate({ path: target, url: new URL(url, window.location.origin).href, nonce: imageNonce.current })
+    setPick(null)
+    setPickScope(null)
+  }
+
+  function removePageImage(slot: string) {
+    const next = { ...content.pageImages }
+    delete next[slot]
+    set("pageImages", next)
+  }
+
+  const pageOverrides = Object.keys(content.pageImages ?? {}).filter((k) => k.startsWith("/")).sort()
 
   const sections: EditorSection[] = [
     {
@@ -1047,6 +1097,84 @@ export function SurgeonSiteEditor(props: {
       ),
     },
     {
+      id: "imagery",
+      label: "Page imagery",
+      hint: "Replace the shared stock photographs with this surgeon's own.",
+      badge: String(Object.keys(content.pageImages ?? {}).length || ""),
+      previewPath: "/expertise/shoulder",
+      panel: (
+        <>
+          <p className="mb-4 text-pretty text-sm text-zinc-500">
+            Every surgeon&apos;s site starts with the same editorial photographs. Replace one here and
+            it changes on every page of <em>this</em> site that uses it — never on anyone else&apos;s.
+            Leave a slot empty to keep the shared photograph. You can also click a photograph in the
+            preview, and choose there whether to replace it on that page only.
+          </p>
+          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200">
+            {SHARED_IMAGE_KEYS.map((img) => {
+              const own = content.pageImages?.[img.key]
+              return (
+                <li key={img.key} className="flex items-center gap-3 bg-white px-3 py-2.5">
+                  <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 text-[0.6rem] text-zinc-400">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- media route, 48px thumbnail */}
+                    {own ? <img src={own} alt="" className="size-full object-cover" /> : "Shared"}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-zinc-900">{img.label}</span>
+                    <span className="block text-xs text-zinc-500">
+                      {own ? "This surgeon's own" : "Shared photograph"} · used on{" "}
+                      <span className="tabular-nums">{img.pages}</span> page{img.pages === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => startPick(["pageImages", img.key], null, false)}
+                    className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                  >
+                    {own ? "Replace" : "Use my own"}
+                  </button>
+                  {own && (
+                    <button
+                      type="button"
+                      onClick={() => removePageImage(img.key)}
+                      className="text-xs text-zinc-500 transition-colors hover:text-red-600"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          {pageOverrides.length > 0 && (
+            <>
+              <p className="mb-2 mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">
+                Single-page replacements
+              </p>
+              <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200">
+                {pageOverrides.map((slot) => (
+                  <li key={slot} className="flex items-center gap-3 bg-white px-3 py-2.5">
+                    <span className="size-10 shrink-0 overflow-hidden rounded-lg border border-zinc-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- media route thumbnail */}
+                      <img src={content.pageImages[slot]} alt="" className="size-full object-cover" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-700">{slot}</span>
+                    <button
+                      type="button"
+                      onClick={() => removePageImage(slot)}
+                      className="text-xs text-zinc-500 transition-colors hover:text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      ),
+    },
+    {
       id: "articles",
       label: "Article intros",
       hint: 'The "why patients choose…" paragraph that closes each clinical article.',
@@ -1075,6 +1203,7 @@ export function SurgeonSiteEditor(props: {
   ]
 
   return (
+    <>
     <EditorShell
       title={content.name || "New surgeon website"}
       subtitle={
@@ -1097,6 +1226,8 @@ export function SurgeonSiteEditor(props: {
       onPreviewFocus={openFromPreview}
       openSection={openSection}
       patch={patch}
+      onPreviewPickImage={startPick}
+      imageUpdate={imageUpdate}
       actions={
         <>
           {props.previewUrl && props.status === "PUBLISHED" && domain && (
@@ -1212,6 +1343,46 @@ export function SurgeonSiteEditor(props: {
         </>
       }
     />
+    <Dialog open={pickScope === "ask"} onOpenChange={(o) => { if (!o) { setPick(null); setPickScope(null) } }}>
+      <DialogContent className="max-w-md rounded-xl">
+        <DialogHeader>
+          <DialogTitle>Replace this photograph</DialogTitle>
+          <DialogDescription className="text-pretty">
+            It is a shared photograph. Replace it on this page alone, or on every page of this
+            surgeon&apos;s site that uses it. Other surgeons&apos; sites are never affected.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <button
+            type="button"
+            onClick={() => setPickScope("page")}
+            className="rounded-xl border border-zinc-200 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
+          >
+            <span className="block text-sm font-medium text-zinc-900">This page only</span>
+            <span className="block truncate font-mono text-xs text-zinc-500">{pick?.page}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPickScope("everywhere")}
+            className="rounded-xl border border-zinc-200 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
+          >
+            <span className="block text-sm font-medium text-zinc-900">Everywhere it appears</span>
+            <span className="block text-xs text-zinc-500">
+              {(() => {
+                const n = SHARED_IMAGE_KEYS.find((k) => k.key === pick?.path[1])?.pages
+                return n ? `${n} page${n === 1 ? "" : "s"} on this site` : "Every page on this site"
+              })()}
+            </span>
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    <MediaPicker
+      open={!!pick && (pickScope === "page" || pickScope === "everywhere")}
+      onClose={() => { setPick(null); setPickScope(null) }}
+      onSelect={applyImage}
+    />
+    </>
   )
 }
 

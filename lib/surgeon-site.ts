@@ -215,6 +215,15 @@ export interface SurgeonSiteContent {
   /** Per-page copy that describes the surgeon, keyed by page. */
   pageCopy: Record<string, string>
   pageLists: Record<string, string[]>
+  /**
+   * This surgeon's replacements for the shared editorial photographs.
+   *
+   * Keyed by the shared image's name ("expertise-shoulder") to replace it on
+   * every page that uses it, or by a page path ("/expertise/shoulder/…") to
+   * replace that page's hero only. Values are media-library paths. Empty means
+   * the shared images, which is what every site showed before this existed.
+   */
+  pageImages: Record<string, string>
 }
 
 /** A new site starts empty rather than pre-filled with anyone's details. */
@@ -259,6 +268,7 @@ export function emptyContent(): SurgeonSiteContent {
     profile: { cards: [], highlights: [], facts: [], bio: [] },
     pageCopy: {},
     pageLists: {},
+    pageImages: {},
   }
 }
 

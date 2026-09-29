@@ -16,7 +16,9 @@
 
 import * as React from "react"
 import { CircleAlert, Eye, PencilLine, RefreshCw } from "lucide-react"
-import { isEditablePath, type ContentPath } from "@/lib/surgeon-site-address"
+import {
+  isEditablePath, isImagePath, safePagePath, type ContentPath,
+} from "@/lib/surgeon-site-address"
 import { cn } from "@/lib/utils"
 
 /** Bumped only if the message shape changes incompatibly; both halves check it. */
@@ -84,8 +86,14 @@ export function EditorShell(props: {
    * entirely this app's decision.
    */
   onPreviewFocus?: (path: ContentPath) => void
-  /** The preview asked for an image to be chosen. Same rule: a path, not a URL. */
-  onPreviewPickImage?: (path: ContentPath) => void
+  /**
+   * The preview asked for an image to be chosen. Same rule: a path, not a URL.
+   * `page` is validated here before it is passed on, because a per-page
+   * replacement uses it as a key on the record.
+   */
+  onPreviewPickImage?: (path: ContentPath, page: string | null, hero: boolean) => void
+  /** A chosen image to show in the frame straight away. `url` must be absolute. */
+  imageUpdate?: { path: ContentPath; url: string; nonce: number } | null
   /** Pushed into the frame so the page shows an edit without reloading. */
   patch?: PreviewPatch | null
   /** Where the frame currently is, so a caller can follow along. */
@@ -213,7 +221,9 @@ export function EditorShell(props: {
           if (isEditablePath(msg.path)) handlers.current.onPreviewFocus?.(msg.path)
           return
         case "pick-image":
-          if (isEditablePath(msg.path)) handlers.current.onPreviewPickImage?.(msg.path)
+          if (isEditablePath(msg.path) && isImagePath(msg.path)) {
+            handlers.current.onPreviewPickImage?.(msg.path, safePagePath(msg.page), msg.hero === true)
+          }
           return
         case "coverage": {
           const c = msg.coverage
@@ -260,6 +270,16 @@ export function EditorShell(props: {
     const t = setTimeout(() => setFixedNotice(false), 4000)
     return () => clearTimeout(t)
   }, [fixedNotice])
+
+  // A replacement image, shown in the frame without a reload.
+  React.useEffect(() => {
+    const u = props.imageUpdate
+    if (!u || !frameReady || !previewOrigin) return
+    frameRef.current?.contentWindow?.postMessage(
+      { gosm: PROTOCOL, type: "image", path: u.path, value: u.url },
+      previewOrigin,
+    )
+  }, [props.imageUpdate, frameReady, previewOrigin])
 
   // Push an edit into the frame so the page updates without a reload. A reload
   // costs a request to this app and loses the reader's place on the page.

@@ -346,6 +346,32 @@ export const ARTICLE_BIO_KEYS: { key: string; label: string; area: string }[] = 
 
 export const KNOWN_ARTICLE_KEYS: ReadonlySet<string> = new Set(ARTICLE_BIO_KEYS.map((k) => k.key))
 
+/**
+ * The shared editorial photographs a surgeon can replace.
+ *
+ * Mirrors `SHARED_IMAGES` in the site app's `src/lib/editable/images.ts`; the
+ * key is the image's file name there. `pages` is how many route files use it,
+ * so "replace everywhere" can say what everywhere means. Regenerate with:
+ *
+ *   grep -rhoE 'from "@/assets/[a-z0-9-]+\.(jpg|webp|png)' src/routes src/components  *     | sort | uniq -c
+ */
+export const SHARED_IMAGE_KEYS: { key: string; label: string; pages: number }[] = [
+  { key: "expertise-shoulder", label: "Shoulder", pages: 22 },
+  { key: "expertise-knee", label: "Knee", pages: 12 },
+  { key: "expertise-sports", label: "Sports medicine", pages: 8 },
+  { key: "ime-hero", label: "Medical-legal", pages: 8 },
+  { key: "expertise-hip", label: "Hip", pages: 6 },
+  { key: "expertise-trauma", label: "Trauma", pages: 4 },
+  { key: "insurance-hero", label: "Insurance & work injuries", pages: 4 },
+  { key: "chicago", label: "Chicago skyline", pages: 3 },
+  { key: "resources-hero", label: "Patient resources", pages: 3 },
+  { key: "prp-hero", label: "PRP injections", pages: 2 },
+  { key: "reviews-hero", label: "Reviews", pages: 2 },
+  { key: "research-hero", label: "Research", pages: 1 },
+]
+
+export const KNOWN_IMAGE_KEYS: ReadonlySet<string> = new Set(SHARED_IMAGE_KEYS.map((k) => k.key))
+
 /** Keys present in stored copy that this manifest does not name. */
 export function unknownKeys(
   stored: Record<string, unknown>,

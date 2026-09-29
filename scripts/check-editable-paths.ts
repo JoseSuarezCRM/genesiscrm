@@ -9,7 +9,7 @@
  */
 
 import { readFileSync } from "node:fs"
-import { isEditablePath, isImagePath, setAtPath } from "../lib/surgeon-site-address"
+import { isEditablePath, isImagePath, safePagePath, setAtPath } from "../lib/surgeon-site-address"
 import { emptyContent } from "../lib/surgeon-site"
 
 /**
@@ -84,6 +84,14 @@ console.log("\nImages are addressable but not settable by the frame")
 ok(isEditablePath(["headshot"]), "allows the headshot path")
 ok(isImagePath(["headshot"]), "marks the headshot as image-valued")
 ok(!isImagePath(["pageCopy", "home.intro"]), "does not mark copy as image-valued")
+
+console.log("\nShared photographs")
+ok(isEditablePath(["pageImages", "expertise-shoulder"]), "allows a known shared-image slot")
+ok(isImagePath(["pageImages", "expertise-shoulder"]), "marks it as image-valued")
+ok(!isEditablePath(["pageImages", "not-an-image"]), "refuses an unknown slot")
+ok(!isEditablePath(["pageImages", "/about"]), "refuses a per-page slot named by the frame")
+ok(safePagePath("/expertise/shoulder/rotator-cuff-repair") !== null, "accepts a real route as a page key")
+ok(safePagePath("/a/../b") === null && safePagePath("/x?y=1") === null, "refuses traversal and queries")
 
 console.log("\nsetAtPath never creates, only changes")
 const c = emptyContent()
