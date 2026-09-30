@@ -32,14 +32,15 @@ const inputCls = "h-9 px-3 text-sm border border-slate-200 rounded-lg bg-white f
 
 function newPropId() { return `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` }
 
-export default function CustomObjectSettings({ objects }: { objects: CustomObjectDefLite[] }) {
+export default function CustomObjectSettings({ objects, initialKey }: { objects: CustomObjectDefLite[]; initialKey?: string }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [singular, setSingular] = useState("")
   const [plural, setPlural] = useState("")
   const [err, setErr] = useState("")
   const [showCreate, setShowCreate] = useState(false)
-  const [selectedId, setSelectedId] = useState<string>(objects[0]?.id ?? "")
+  // ?key=<object> opens that object — e.g. "Add a field" from Settings → On-call AI.
+  const [selectedId, setSelectedId] = useState<string>(objects.find((o) => o.key === initialKey)?.id ?? objects[0]?.id ?? "")
 
   const selected = objects.find((o) => o.id === selectedId) ?? null
 

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { listCustomObjects } from "@/app/actions/custom-objects"
 import CustomObjectSettings from "@/components/custom-object-settings"
 
-export default async function ObjectsSettingsPage() {
+export default async function ObjectsSettingsPage({ searchParams }: { searchParams?: { key?: string } }) {
   const session = await auth()
   if ((session?.user as any)?.role !== "ADMIN") redirect("/")
 
@@ -19,7 +19,7 @@ export default async function ObjectsSettingsPage() {
         </p>
       </div>
 
-      <CustomObjectSettings objects={objects} />
+      <CustomObjectSettings objects={objects} initialKey={searchParams?.key} />
     </div>
   )
 }
