@@ -43,6 +43,10 @@ const allItems: SearchItem[] = [
   { id: "surgery", title: "Surgery Cases", category: "Surgery", href: "/surgery" },
   { id: "surgery-reports", title: "Surgery Reports", category: "Surgery", href: "/surgery/reports" },
 
+  // On-call
+  { id: "on-call-new", title: "New referral call", category: "On-call", href: "/on-call", requiredPermission: "NAV_ONCALL" },
+  { id: "on-call-log", title: "Referral call log", category: "On-call", href: "/objects/referral-calls", requiredPermission: "NAV_ONCALL" },
+
   // Admin/Settings
   { id: "settings", title: "Settings", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },
   { id: "user-mgmt", title: "User Management", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },

@@ -45,7 +45,9 @@ export default function ToastHost() {
 
   if (toasts.length === 0) return null
   return (
-    <div className="fixed bottom-4 left-4 z-[1000] flex flex-col gap-2">
+    // --toast-offset: set by pages with a sticky bottom bar (the on-call intake) so
+    // toasts stay above it.
+    <div className="fixed left-4 z-[1000] flex flex-col gap-2" style={{ bottom: "calc(1rem + var(--toast-offset, 0px))" }}>
       {toasts.map((t) => (
         <div key={t.id}
           className="flex items-center gap-2.5 bg-white border border-slate-200 shadow-lg rounded-xl pl-3 pr-2 py-2.5 text-sm animate-toast-in">

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { enforcePropertyLocks, hasLockedProperties } from "@/lib/custom-object-locks"
 
 export type CustomPropType =
   | "TEXT" | "LONG_TEXT" | "NUMBER" | "EMAIL" | "PHONE" | "DATE" | "DATE_TIME" | "CHECKBOX" | "DROPDOWN" | "MULTI_SELECT" | "URL" | "USER"
@@ -25,6 +26,14 @@ export interface CustomObjectProperty {
   conditional?: { controllingPropertyId: string; rules: Record<string, string[]> } | null
   visibilityRule?: { controllingKey: string; equals: string[] } | null
   numberFormat?: string   // NUMBER only: "currency" or undefined (plain)
+  /**
+   * Set on properties that code writes to — the on-call intake's fields, for
+   * instance. A locked property can be relabeled, recoloured and given new
+   * options, but not deleted, retyped, or stripped of an option value that
+   * existing records and filters depend on. Enforced on the server by
+   * `enforcePropertyLocks` in lib/custom-object-locks.ts.
+   */
+  locked?: boolean
 }
 
 export interface CustomObjectCard {
@@ -129,6 +138,12 @@ export async function updateCustomObject(id: string, data: { singular?: string; 
 // Replace the object's property schema (the editor manages the array client-side).
 export async function saveCustomObjectProperties(id: string, properties: CustomObjectProperty[]) {
   await requireAdmin()
+  // Properties that code depends on are checked against what is STORED, not
+  // what the client sent — see lib/custom-object-locks.ts.
+  const current = await (prisma as any).customObjectDef.findUnique({ where: { id }, select: { properties: true } })
+  const locked = enforcePropertyLocks((current?.properties ?? []) as CustomObjectProperty[], properties)
+  if ("error" in locked) return { error: locked.error }
+  properties = locked.properties
   // Always keep exactly one primary property.
   const hasPrimary = properties.some((p) => p.primary)
   const clean = properties.map((p, i) => ({ ...p, primary: hasPrimary ? !!p.primary : i === 0 }))
@@ -139,6 +154,12 @@ export async function saveCustomObjectProperties(id: string, properties: CustomO
 
 export async function deleteCustomObject(id: string) {
   await requireAdmin()
+  // Deleting an object deletes every record in it. For one that code depends on
+  // — the on-call call log — that would be an entire history of patient calls.
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { id }, select: { properties: true } })
+  if (hasLockedProperties(def?.properties)) {
+    return { error: "This object is used by a built-in feature and can't be deleted." }
+  }
   await (prisma as any).customObjectDef.delete({ where: { id } })
   revalidatePath("/settings/objects")
   return { success: true }

@@ -47,6 +47,9 @@ enum AuditAction {
   USER_DELETE
   PASSWORD_RESET
   OUTREACH_SENT
+  RECORD_CREATE // a custom-object record created (keys only in metadata, never values)
+  RECORD_UPDATE
+  AI_EXTRACTION // one AI reading of call notes/screenshot: model, outcome, tokens — never content
 }
 
 enum OutreachChannel {
@@ -1870,6 +1873,23 @@ model EmailSignature {
 /// same fourteen addresses six times.
 ///
 /// Shape is typed in lib/practice.ts, which is a contract with the site app.
+// Saved AI rules for reading pasted notes into a custom object's fields: "what
+// to pull and where". One row per object key — today the on-call referral
+// calls; the fax extraction could use the same mechanism later.
+//
+// Per-field instructions live here rather than on the object's property JSON so
+// the rules survive a property being relabeled, and so an object without JSON
+// properties could use them too. None of it is PHI: it is admin-written
+// guidance, and it is sent to the model in the prompt, never in the schema.
+model ExtractionProfile {
+  objectKey    String   @id
+  instructions String   @default("")
+  // { [propertyId]: { instruction?: string, extract?: boolean, inSurgeonText?: boolean, inEpicNote?: boolean } }
+  fields       Json     @default("{}")
+  updatedById  String?
+  updatedAt    DateTime @updatedAt
+}
+
 model Practice {
   id          String   @id @default("default")
   content     Json     @default("{}")

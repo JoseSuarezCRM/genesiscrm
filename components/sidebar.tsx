@@ -20,11 +20,14 @@ import {
   Workflow,
   LayoutDashboard,
   BarChart3,
+  PhoneIncoming,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { userCanLevel } from "@/lib/permissions"
+import { userCanLevel, type AccessLevel } from "@/lib/permissions"
 
-type NavItem = { href: string; label: string; object?: string }
+// `level` is the access the item needs on `object` (View unless stated) — "New call"
+// is useless to someone who can only read the call log.
+type NavItem = { href: string; label: string; object?: string; level?: AccessLevel }
 
 const referralItems: NavItem[] = [
   { href: "/",                  label: "Dashboard" },
@@ -87,12 +90,18 @@ const adminItems: NavItem[] = [
   { href: "/settings/users", label: "Settings" },
 ]
 
+const onCallItems: NavItem[] = [
+  { href: "/on-call",                label: "New call", object: "CO:referral-calls", level: "EDIT" },
+  { href: "/objects/referral-calls", label: "Call log", object: "CO:referral-calls" },
+]
+
 const sections = [
   { key: "NAV_REFERRALS",    title: "Referrals",    icon: Users,         items: referralItems },
   { key: "NAV_APPOINTMENTS", title: "Appointments", icon: ClipboardList, items: appointmentItems },
   { key: "NAV_SCHEDULING",   title: "Scheduling",   icon: CalendarRange, items: schedulingItems },
   { key: "NAV_SCHEDULING",   title: "Scheduling v2", icon: LayoutDashboard, items: schedulingV2Items },
   { key: "NAV_SURGERY",      title: "Surgery",      icon: Stethoscope,   items: surgeryItems },
+  { key: "NAV_ONCALL",       title: "On-call",      icon: PhoneIncoming, items: onCallItems },
   { key: "NAV_COMMUNICATIONS", title: "Communications", icon: MessageCircle, items: communicationsItems },
   { key: "NAV_REPORTING",    title: "Reporting",    icon: BarChart3,     items: reportingItems },
   { key: "NAV_AUTOMATIONS",  title: "Automations",  icon: Workflow,      items: automationItems },
@@ -123,12 +132,15 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
   // If no NAV_* perms set (no team assigned), show all non-admin sections
   const can = (key: string) => isSuperAdmin || (hasNavPerms ? userPermissions.includes(key) : key !== "NAV_ADMIN")
   // An item tied to an object is hidden when the user has no View access to it.
-  const canViewItem = (item: { object?: string }) =>
-    isSuperAdmin || !item.object || userCanLevel({ role: userRole, permissions: userPermissions }, item.object, "VIEW")
+  const canViewItem = (item: { object?: string; level?: AccessLevel }) =>
+    isSuperAdmin || !item.object || userCanLevel({ role: userRole, permissions: userPermissions }, item.object, item.level ?? "VIEW")
 
   // Custom objects form their own section, gated per-object by CO:<key> view access.
-  const objectsSection = customObjects.length > 0
-    ? [{ key: "OBJECTS", title: "Objects", icon: Box, items: customObjects.map((o) => ({ href: `/objects/${o.key}`, label: o.plural, object: `CO:${o.key}` })) }]
+  // The call log already has a home under On-call; list it here only for someone
+  // who can't see that section.
+  const listedObjects = customObjects.filter((o) => o.key !== "referral-calls" || !can("NAV_ONCALL"))
+  const objectsSection = listedObjects.length > 0
+    ? [{ key: "OBJECTS", title: "Objects", icon: Box, items: listedObjects.map((o) => ({ href: `/objects/${o.key}`, label: o.plural, object: `CO:${o.key}` })) }]
     : []
 
   const visibleSections = [...sections.filter((s) => can(s.key)), ...objectsSection]

@@ -62,6 +62,7 @@ export const NAV_PERMISSIONS: PermissionDef[] = [
   { key: "NAV_APPOINTMENTS", label: "Appointments", description: "Completed appointments and referring providers" },
   { key: "NAV_SCHEDULING",   label: "Scheduling",   description: "Weekly schedule and staff roster" },
   { key: "NAV_SURGERY",      label: "Surgery",      description: "Surgery cases tracker with file import, call log, and documents" },
+  { key: "NAV_ONCALL",       label: "On-call",      description: "Referral call intake (paste or screenshot → AI fills the form) and the call log" },
   { key: "NAV_COMMUNICATIONS", label: "Communications", description: "Reusable SMS and Email templates" },
   { key: "NAV_AUTOMATIONS",  label: "Automations",  description: "Workflows and appointment reconciliation" },
   { key: "NAV_ADMIN",        label: "Settings",     description: "User management, objects, data model, templates, and settings" },

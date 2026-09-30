@@ -139,15 +139,25 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
   const [props, setProps] = useState<CustomObjectProperty[]>(object.properties)
   const [cards, setCards] = useState<CustomObjectCard[]>(object.cards)
   const [saved, setSaved] = useState(false)
+  // Server-side refusals — mostly a locked property the admin tried to change.
+  const [err, setErr] = useState<string | null>(null)
   const [editingProp, setEditingProp] = useState<CustomObjectProperty | "new" | null>(null)
+  // Built-in features depend on this object's locked properties; deleting the
+  // object would delete their records too.
+  const objectLocked = props.some((p) => p.locked)
   const [propQuery, setPropQuery] = useState("")
   const [propPage, setPropPage] = useState(0)
   const PROP_PAGE = 10
 
   function removeProp(id: string) {
+    if (props.find((x) => x.id === id)?.locked) return
     const next = props.filter((x) => x.id !== id)
     setProps(next)
-    startTransition(async () => { await saveCustomObjectProperties(object.id, next); router.refresh() })
+    startTransition(async () => {
+      const res = await saveCustomObjectProperties(object.id, next)
+      setErr(res && "error" in res ? res.error ?? null : null)
+      router.refresh()
+    })
   }
   // Persist a created/edited property from the full editor into the def.
   async function saveProp(draft: PropertyDraft, existing: CustomObjectProperty | null) {
@@ -161,10 +171,18 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
       internalName: draft.internalName, description: draft.description,
       unique: draft.unique, defaultValue: draft.defaultValue, conditional: draft.conditional,
       visibilityRule: draft.visibilityRule, numberFormat: draft.numberFormat,
+      // Carried through: the editor doesn't know about it, and dropping it here
+      // would read to the server as an attempt to unlock.
+      ...(existing?.locked ? { locked: true } : {}),
     }
     const next = existing ? props.map((p) => (p.id === existing.id ? prop : p)) : [...props, prop]
     setProps(next)
-    return await saveCustomObjectProperties(object.id, next).then(() => { router.refresh(); return {} }).catch((e: any) => ({ error: e?.message ?? "Failed to save." }))
+    return await saveCustomObjectProperties(object.id, next)
+      .then((res) => {
+        router.refresh()
+        return res && "error" in res && res.error ? { error: res.error } : {}
+      })
+      .catch((e: any) => ({ error: e?.message ?? "Failed to save." }))
   }
   // Card layout
   function addCard() { setCards((prev) => [...prev, { id: newPropId(), title: "New card", column: "MIDDLE", propertyIds: [] }]) }
@@ -182,7 +200,9 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
       if (singular !== object.singular || plural !== object.plural) {
         await updateCustomObject(object.id, { singular, plural })
       }
-      await saveCustomObjectProperties(object.id, props.filter((p) => p.name.trim() || p.primary))
+      const res = await saveCustomObjectProperties(object.id, props.filter((p) => p.name.trim() || p.primary || p.locked))
+      if (res && "error" in res && res.error) { setErr(res.error); return }
+      setErr(null)
       await saveCustomObjectCards(object.id, cards)
       setSaved(true); setTimeout(() => setSaved(false), 2000)
       router.refresh()
@@ -231,8 +251,16 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
               </div>
               <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-600 shrink-0">{PROP_TYPES.find((t) => t.value === p.type)?.label ?? p.type}</span>
               {p.primary && <span className="text-[10px] font-medium text-slate-400 uppercase shrink-0">Primary</span>}
+              {p.locked && (
+                <span
+                  title="Used by a built-in feature: you can rename it, but not delete it or change its type."
+                  className="text-[10px] font-medium text-zinc-500 uppercase shrink-0"
+                >
+                  Locked
+                </span>
+              )}
               <button onClick={() => setEditingProp(p)} className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-slate-400 hover:text-zinc-900 hover:bg-slate-100 rounded-lg"><Pencil className="h-3.5 w-3.5" /></button>
-              {!p.primary && <button onClick={() => removeProp(p.id)} className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>}
+              {!p.primary && !p.locked && <button onClick={() => removeProp(p.id)} className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="h-3.5 w-3.5" /></button>}
             </div>
           ))}
         </div>
@@ -307,11 +335,14 @@ function ObjectEditor({ object }: { object: CustomObjectDefLite }) {
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
         </button>
         {saved && <span className="text-xs text-green-600">Saved</span>}
-        <button
-          onClick={async () => { if (await confirmDialog(`Delete "${object.plural}" and all its records? This cannot be undone.`)) startTransition(async () => { await deleteCustomObject(object.id); router.refresh() }) }}
-          className="ml-auto inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
-          <Trash2 className="h-3.5 w-3.5" /> Delete object
-        </button>
+        {err && <span role="alert" className="text-xs text-red-600">{err}</span>}
+        {!objectLocked && (
+          <button
+            onClick={async () => { if (await confirmDialog(`Delete "${object.plural}" and all its records? This cannot be undone.`)) startTransition(async () => { const res = await deleteCustomObject(object.id); if (res && "error" in res && res.error) setErr(res.error); router.refresh() }) }}
+            className="ml-auto inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
+            <Trash2 className="h-3.5 w-3.5" /> Delete object
+          </button>
+        )}
       </div>
     </div>
   )
