@@ -82,7 +82,8 @@ export default function ViewSettingsPanel({
   saving: boolean
   onSave: () => void
   onReset: () => void
-  onExport: () => void
+  /** Omitted when the viewer may not export. */
+  onExport?: () => void
   onOpenFilters: () => void
   onOpenSort: () => void
   onOpenColumns: () => void
@@ -338,7 +339,7 @@ export default function ViewSettingsPanel({
             <Section title="Sharing">
               <Row label="Copy link to view" onClick={copyLink} icon={Link2} />
               <Row label="Manage sharing" onClick={() => setSub("sharing")} icon={Users} />
-              <Row label="Export" onClick={onExport} icon={Download} shortcut="Ctrl+Shift+X" />
+              {onExport && <Row label="Export" onClick={onExport} icon={Download} shortcut="Ctrl+Shift+X" />}
             </Section>
 
             <Section title="Actions">

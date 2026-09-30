@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { requireView } from "@/lib/auth-guard"
-import { userCanLevel, userCanDelete } from "@/lib/permissions"
+import { userCan, userCanLevel, userCanDelete } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { getCustomObject } from "@/app/actions/custom-objects"
 import { listCustomObjectRecords, countCustomObjectRecords, queryCustomObjectRecords } from "@/app/actions/custom-object-records"
@@ -13,6 +13,8 @@ import { pipelinesForObject } from "@/lib/stages/core"
 import { getPipelineColorStyle } from "@/app/actions/pipelines"
 import { associationColumnDefs, attachAssociatedRecords } from "@/lib/association-columns"
 import { fieldsFor } from "@/lib/object-fields-server"
+import { RC_OBJECT_KEY } from "@/lib/referral-calls/constants"
+import CallLogStats from "@/components/referral-calls/call-log-stats"
 
 interface Props {
   params: { key: string }
@@ -86,6 +88,11 @@ export default async function CustomObjectListPage({ params, searchParams }: Pro
         }))}
         pipelineColorStyle={pipelineColorStyle}
         filterDefs={filterDefs}
+        canExport={userCan(user, "EXPORT_DATA")}
+        // The call log adds calls in the on-call intake, which derives the title,
+        // texts and charting fields the generic create form would leave empty.
+        createHref={def.key === RC_OBJECT_KEY ? "/on-call" : undefined}
+        headerSlot={def.key === RC_OBJECT_KEY ? <CallLogStats objectDefId={def.id} /> : undefined}
       />
     </div>
   )

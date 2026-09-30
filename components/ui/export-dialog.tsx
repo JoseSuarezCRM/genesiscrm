@@ -4,6 +4,7 @@ import { useState } from "react"
 import { X, Download, Loader2 } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
 import { toCsv, downloadCsv } from "@/lib/export-csv"
+import { showErrorToast } from "@/components/toast"
 
 interface Props {
   open: boolean
@@ -58,6 +59,8 @@ export default function ExportDialog({ open, onClose, subject, defaultName, getD
         downloadCsv(filename, toCsv(headers, rows))
       }
       handleClose()
+    } catch (e) {
+      showErrorToast(e instanceof Error && e.message ? e.message : "The export couldn't be created.")
     } finally {
       setBusy(false)
     }

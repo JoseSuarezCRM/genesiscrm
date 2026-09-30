@@ -14,8 +14,14 @@ const BUILTIN: { slug: string; entity: string; label: string }[] = [
 
 export interface ApiObject { slug: string; entity: string; label: string; custom: boolean }
 
+// Custom objects that never get API endpoints or scopes. The on-call call log
+// holds clinical details from ER calls; nothing outside the CRM needs them, and
+// an API key is not a person whose access can be audited call by call.
+const NOT_ON_API = new Set(["referral-calls"])
+
 export async function getApiObjects(): Promise<ApiObject[]> {
-  const customs = await (prisma as any).customObjectDef.findMany({ orderBy: { order: "asc" } }).catch(() => [])
+  const customs = ((await (prisma as any).customObjectDef.findMany({ orderBy: { order: "asc" } }).catch(() => [])) as any[])
+    .filter((c) => !NOT_ON_API.has(c.key))
   return [
     ...BUILTIN.map((b) => ({ ...b, custom: false })),
     ...customs.map((c: any) => ({ slug: c.key, entity: `CO:${c.key}`, label: c.plural || c.singular || c.key, custom: true })),

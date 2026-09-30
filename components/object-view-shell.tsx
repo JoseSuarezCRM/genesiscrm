@@ -26,7 +26,7 @@ import {
   renameCustomObjectView, setCustomObjectViewAccess,
 } from "@/app/actions/custom-object-views"
 import { reorderViews } from "@/app/actions/view-order"
-import { createCustomObjectRecord, exportCustomObjectRecords, summarizeCustomObjectRecords, type ColumnSummaries } from "@/app/actions/custom-object-records"
+import { createCustomObjectRecord, exportCustomObjectRecords, recordCustomObjectExport, summarizeCustomObjectRecords, type ColumnSummaries } from "@/app/actions/custom-object-records"
 import { getObjectBoardData, type ObjectBoardData } from "@/app/actions/object-board"
 import { readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { activeConditionCount, decodeFilterParam, emptyFilter, matchesFilter, type FilterState } from "@/lib/filters"
@@ -77,6 +77,12 @@ interface Props {
   pipelineColorStyle: string
   /** Filter schema from lib/object-fields-server — shared with the server translation. */
   filterDefs: ObjectFieldDef[]
+  /** Export needs the EXPORT_DATA capability, as it does for Referrals and Surgery. */
+  canExport?: boolean
+  /** Where "Add" goes instead of the create modal — the call log adds calls in the intake. */
+  createHref?: string
+  /** Rendered under the header, e.g. the call log's stats strip. */
+  headerSlot?: React.ReactNode
 }
 
 const TYPE_ICON: Record<ObjectViewType, typeof Table2> = { table: Table2, board: LayoutGrid, calendar: CalendarDays }
@@ -86,7 +92,7 @@ export default function ObjectViewShell(props: Props) {
     objectKey, singular, plural, ownerLabel, properties, records, totalRecords, users,
     canEdit, canDelete, savedViews, shareUsers, shareTeams, serverMode,
     serverTotal, serverPage, serverPageSize, createFormConfig, isAdmin, associations,
-    pipelines, pipelineColorStyle, filterDefs,
+    pipelines, pipelineColorStyle, filterDefs, canExport = true, createHref, headerSlot,
   } = props
 
   const router = useRouter()
@@ -448,13 +454,19 @@ export default function ObjectViewShell(props: Props) {
         sort: cfg.sort.key, dir: cfg.sort.dir, search,
         filter: filtersActive ? JSON.stringify(cfg.filter) : undefined,
       }) as RecordRow[])
-    : () => buildExportRows(sorted)
+    : async () => {
+        // Rows already on screen; the export is still recorded (and refused without EXPORT_DATA).
+        const data = buildExportRows(sorted)
+        const res = await recordCustomObjectExport(objectKey, data.rows.length)
+        if (res && "error" in res) throw new Error(res.error)
+        return data
+      }
 
   // ── Keyboard shortcuts (Ctrl+S save, Ctrl+Shift+X export, / focus search) ──
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const typing = (e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "x") { e.preventDefault(); setExportOpen(true); return }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "x") { e.preventDefault(); if (canExport) setExportOpen(true); return }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "s") { e.preventDefault(); saveChanges(); return }
       if (e.key === "/" && !typing) { e.preventDefault(); document.getElementById("object-search")?.focus() }
     }
@@ -477,13 +489,19 @@ export default function ObjectViewShell(props: Props) {
             {(filtersActive || search) && ` · ${count} matching`}
           </p>
         </div>
-        {canEdit && (
+        {canEdit && (createHref ? (
+          <a href={createHref}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700">
+            <Plus className="h-3.5 w-3.5" /> Add {singular.toLowerCase()}
+          </a>
+        ) : (
           <button onClick={() => setAddOpen(true)}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700">
             <Plus className="h-3.5 w-3.5" /> Add {singular.toLowerCase()}
           </button>
-        )}
+        ))}
       </div>
+      {headerSlot}
 
       {/* ── View tabs ── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 pb-2">
@@ -586,10 +604,12 @@ export default function ObjectViewShell(props: Props) {
               <LayoutGrid className="h-3.5 w-3.5" /> Cards <ChevronDown className="h-3 w-3 opacity-50" />
             </button>
           )}
-          <button onClick={() => setExportOpen(true)} disabled={sorted.length === 0} title="Export this view (Ctrl+Shift+X)"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50">
-            <Download className="h-3.5 w-3.5" /> Export
-          </button>
+          {canExport && (
+            <button onClick={() => setExportOpen(true)} disabled={sorted.length === 0} title="Export this view (Ctrl+Shift+X)"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium text-zinc-600 hover:border-zinc-400 disabled:opacity-50">
+              <Download className="h-3.5 w-3.5" /> Export
+            </button>
+          )}
           {dirty && (
             <button onClick={saveChanges} disabled={savingView || !appliedViewId}
               title={appliedViewId ? `Save changes to "${appliedView?.name}" (Ctrl+S)` : "Save this as a view to keep the changes"}
@@ -675,7 +695,7 @@ export default function ObjectViewShell(props: Props) {
           access={access} onAccessChange={commitAccess}
           shareUsers={shareUsers} shareTeams={shareTeams} canShare={!!appliedViewId && appliedView?.isOwner !== false}
           dirty={dirty} saving={savingView}
-          onSave={saveChanges} onReset={resetView} onExport={() => setExportOpen(true)}
+          onSave={saveChanges} onReset={resetView} onExport={canExport ? () => setExportOpen(true) : undefined}
           onOpenFilters={() => setFiltersOpen(true)} onOpenSort={() => setSortOpen(true)}
           onOpenColumns={() => setColModalOpen(true)} />
       </div>
@@ -710,7 +730,7 @@ export default function ObjectViewShell(props: Props) {
       })()}
 
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject={plural} defaultName={objectKey}
-        getData={exportData} count={serverMode ? serverTotal : undefined} />
+        getData={exportData} count={serverMode ? serverTotal : sorted.length} />
 
       <ColumnChooserModal
         open={colModalOpen}

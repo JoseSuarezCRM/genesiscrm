@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess, requireDelete } from "@/lib/auth-guard"
+import { userCan, userCanLevel } from "@/lib/permissions"
+import { createAuditLog } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
 import { runTrigger_RecordCreated, runTrigger_RecordPropertyChanged, runTrigger_RecordOwnerChanged } from "@/lib/automation-engine"
 import { filterStateToWhere } from "@/lib/filter-to-prisma"
@@ -225,7 +227,10 @@ export async function queryCustomObjectRecords(objectKey: string, opts: { page?:
 // All matching rows (no pagination) for a server-side CSV export — same filter,
 // search, and sort as the on-screen list.
 export async function exportCustomObjectRecords(objectKey: string, opts: { sort?: string; dir?: "asc" | "desc"; search?: string; filter?: string }): Promise<CustomRecordRow[]> {
-  await requireAccess(objKey(objectKey), "VIEW")
+  const session = await requireAccess(objKey(objectKey), "VIEW")
+  // Exporting takes records out of the CRM: the EXPORT_DATA capability, as for
+  // Referrals and Surgery, and an audit entry.
+  if (!userCan(session.user as any, "EXPORT_DATA")) throw new Error("You don't have permission to export")
   const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
   if (!def) return []
   const properties: any[] = (def.properties as any[]) ?? []
@@ -264,12 +269,37 @@ export async function exportCustomObjectRecords(objectKey: string, opts: { sort?
   }))
   // Attach linked records so association columns export for large (server-mode) objects too.
   await attachAssociatedRecords(`CO:${objectKey}`, mapped as any[])
+  await createAuditLog({
+    userId: (session.user as any).id,
+    action: "EXPORT_CSV",
+    resourceType: objKey(objectKey),
+    metadata: { objectKey, rows: mapped.length, mode: "server" },
+  })
   return mapped
+}
+
+/**
+ * The same check and audit entry for a small object, whose rows the list
+ * already holds and exports in the browser.
+ */
+export async function recordCustomObjectExport(objectKey: string, rows: number): Promise<{ success: true } | { error: string }> {
+  const session = await auth()
+  if (!session?.user || !userCanLevel(session.user as any, objKey(objectKey), "VIEW") || !userCan(session.user as any, "EXPORT_DATA")) {
+    return { error: "You don't have permission to export." }
+  }
+  await createAuditLog({
+    userId: (session.user as any).id,
+    action: "EXPORT_CSV",
+    resourceType: objKey(objectKey),
+    metadata: { objectKey, rows: Math.max(0, Math.floor(Number(rows) || 0)), mode: "client" },
+  })
+  return { success: true }
 }
 
 export async function getCustomObjectRecord(objectKey: string, id: string): Promise<CustomRecordRow | null> {
   await requireAccess(objKey(objectKey), "VIEW")
-  const r = await (prisma as any).customObjectRecord.findUnique({ where: { id } })
+  // Scoped to this object: View access to one object must not open another's records by id.
+  const r = await (prisma as any).customObjectRecord.findFirst({ where: { id, objectDef: { key: objectKey } } })
   if (!r) return null
   const names = await resolveNames([r.ownerId, r.createdById, r.updatedById, r.lastViewedById])
   return {
@@ -323,9 +353,10 @@ export async function updateCustomObjectRecord(objectKey: string, id: string, da
   const session = await requireAccess(objKey(objectKey), "EDIT")
   const uid = (session!.user as any).id
 
-  const before = await (prisma as any).customObjectRecord.findUnique({
-    where: { id }, select: { values: true, ownerId: true },
+  const before = await (prisma as any).customObjectRecord.findFirst({
+    where: { id, objectDef: { key: objectKey } }, select: { values: true, ownerId: true },
   })
+  if (!before) return { error: "Record not found." }
 
   const patch: Record<string, unknown> = { updatedById: uid }
   if (data.values !== undefined) patch.values = data.values
@@ -355,24 +386,24 @@ export async function updateCustomObjectRecord(objectKey: string, id: string, da
 
 export async function deleteCustomObjectRecord(objectKey: string, id: string) {
   await requireDelete(objKey(objectKey))
-  await (prisma as any).customObjectRecord.delete({ where: { id } })
+  await (prisma as any).customObjectRecord.deleteMany({ where: { id, objectDef: { key: objectKey } } })
   revalidatePath(`/objects/${objectKey}`)
   return { success: true }
 }
 
 export async function bulkDeleteCustomObjectRecords(objectKey: string, ids: string[]) {
   await requireDelete(objKey(objectKey))
-  await (prisma as any).customObjectRecord.deleteMany({ where: { id: { in: ids } } })
+  const res = await (prisma as any).customObjectRecord.deleteMany({ where: { id: { in: ids }, objectDef: { key: objectKey } } })
   revalidatePath(`/objects/${objectKey}`)
-  return { success: true, deleted: ids.length }
+  return { success: true, deleted: res.count }
 }
 
 export async function recordCustomObjectView(objectKey: string, id: string) {
   const session = await auth()
   const uid = (session?.user as any)?.id
-  if (!uid) return
-  await (prisma as any).customObjectRecord.update({
-    where: { id },
+  if (!uid || !userCanLevel(session!.user as any, objKey(objectKey), "VIEW")) return
+  await (prisma as any).customObjectRecord.updateMany({
+    where: { id, objectDef: { key: objectKey } },
     data: { lastViewedById: uid, lastViewedAt: new Date() },
   }).catch(() => {})
 }
@@ -385,8 +416,8 @@ export async function mergeCustomObjectRecord(objectKey: string, sourceId: strin
 
   const type = `CO:${objectKey}`
   const [source, target] = await Promise.all([
-    (prisma as any).customObjectRecord.findUnique({ where: { id: sourceId } }),
-    (prisma as any).customObjectRecord.findUnique({ where: { id: targetId } }),
+    (prisma as any).customObjectRecord.findFirst({ where: { id: sourceId, objectDef: { key: objectKey } } }),
+    (prisma as any).customObjectRecord.findFirst({ where: { id: targetId, objectDef: { key: objectKey } } }),
   ])
   if (!source || !target) return { error: "Record not found." }
 

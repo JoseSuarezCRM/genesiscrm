@@ -13,10 +13,12 @@ import { RECORD_FIELDS, defaultCardFor, SURGERY_CLINICAL_FIELDS, type RecordFiel
 import { pipelinesForObject } from "@/lib/stages/core"
 import { computeStageDurations } from "@/lib/stages/durations"
 import { stageDurationFieldsFor, durationValue } from "@/lib/stages/duration-fields"
+import { RC_PERM_KEY } from "@/lib/referral-calls/constants"
+import { RC_SERVER_SET_PROPS } from "@/lib/referral-calls/inline-edit"
 
 const CP_TYPE: Record<string, RecordFieldType> = {
   TEXT: "text", LONG_TEXT: "long_text", NUMBER: "number", EMAIL: "email",
-  PHONE: "phone", DATE: "date", DATE_TIME: "datetime", CHECKBOX: "select", DROPDOWN: "select",
+  PHONE: "phone", DATE: "date", DATE_TIME: "datetime", CHECKBOX: "checkbox", DROPDOWN: "select",
   MULTI_SELECT: "select", URL: "text",
 }
 
@@ -74,7 +76,9 @@ async function loadCustomObjectCards(objectType: string, record: Record<string, 
   ] : []
 
   const catalog: RecordFieldDef[] = [
-    ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", multi: p.type === "MULTI_SELECT", options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined, optionColors: (p as any).optionColors ?? undefined, optionStyle: (p as any).optionStyle ?? undefined, visibilityRule: (p as any).visibilityRule ?? undefined, numberFormat: (p as any).numberFormat ?? undefined })),
+    ...props.map((p) => ({ key: p.id, label: p.name, type: CP_TYPE[p.type] ?? "text", multi: p.type === "MULTI_SELECT",
+      // The call log fills some values itself (title, charted by/at); they show, but don't edit.
+      ...(objectType === RC_PERM_KEY && RC_SERVER_SET_PROPS.has(p.id) ? { readOnly: true } : {}), options: p.options ?? [], optionLabels: (p as any).optionLabels ?? undefined, optionColors: (p as any).optionColors ?? undefined, optionStyle: (p as any).optionStyle ?? undefined, visibilityRule: (p as any).visibilityRule ?? undefined, numberFormat: (p as any).numberFormat ?? undefined })),
     ...stageFields,
     ...durationDefs.map((d) => ({ key: d.key, label: d.label, type: "number" as const, readOnly: true, unit: "days" })),
     ...metaCatalog(ownerLabel || `${def?.singular ?? "Record"} Owner`, true),

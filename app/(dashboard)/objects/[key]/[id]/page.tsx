@@ -17,6 +17,8 @@ import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordStageControl from "@/components/record-stage-control"
 import { pipelinesForObject } from "@/lib/stages/core"
+import { RC_OBJECT_KEY } from "@/lib/referral-calls/constants"
+import ReferralCallDetailActions from "@/components/referral-calls/detail-actions"
 
 interface Props { params: { key: string; id: string } }
 
@@ -43,7 +45,7 @@ export default async function CustomRecordDetailPage({ params }: Props) {
     listRecordActivities(objectType, params.id),
     loadPropertyCards(objectType, record as any, def.ownerLabel),
     pipelinesForObject(objectType),
-    (prisma as any).customObjectRecord.findUnique({ where: { id: params.id }, select: { pipelineId: true, stageId: true } }),
+    (prisma as any).customObjectRecord.findFirst({ where: { id: params.id, objectDefId: def.id }, select: { pipelineId: true, stageId: true } }),
     (prisma as any).stageTransition.findFirst({ where: { recordType: objectType, recordId: params.id }, orderBy: { enteredAt: "desc" }, select: { enteredAt: true } }),
   ])
 
@@ -56,10 +58,20 @@ export default async function CustomRecordDetailPage({ params }: Props) {
       backLabel={`Back to ${def.plural}`}
       title={String(title)}
       actions={
-        <RecordActionsMenu entityType={objectType} recordId={record.id} title={String(title)}
-          catalog={propertyCards.catalog} values={propertyCards.values}
-          userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
-          canEdit={canEdit} canDelete={canDelete} />
+        <div className="flex flex-wrap items-center gap-2">
+          {def.key === RC_OBJECT_KEY && (
+            <ReferralCallDetailActions
+              recordId={record.id}
+              surgeonText={typeof record.values?.surgeon_text === "string" ? record.values.surgeon_text : ""}
+              epicNote={typeof record.values?.epic_note === "string" ? record.values.epic_note : ""}
+              canEdit={canEdit}
+            />
+          )}
+          <RecordActionsMenu entityType={objectType} recordId={record.id} title={String(title)}
+            catalog={propertyCards.catalog} values={propertyCards.values}
+            userMap={Object.fromEntries(userOptions.map((u) => [u.id, u.label]))}
+            canEdit={canEdit} canDelete={canDelete} />
+        </div>
       }
       subtitle={
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

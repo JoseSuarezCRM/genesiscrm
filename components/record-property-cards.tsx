@@ -54,6 +54,8 @@ interface Props {
 }
 
 function display(f: RecordFieldDef, v: any, userMap: Record<string, string>): ReactNode {
+  // Unticked is a value, not a blank.
+  if (f.type === "checkbox") return v === true ? "Yes" : "No"
   if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return "—"
   if (f.type === "user") return userMap[v] ?? String(v)
   if (f.type === "datetime") return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })
@@ -325,6 +327,22 @@ export function FieldRow({ f, value, values, recordId, entityType, canEdit, user
     })
   }
   const commitOther = () => commit(sel === (f.otherOption ?? "Other") ? otherText : sel)
+
+  // A checkbox toggles in one click — no edit mode to open and close.
+  if (f.type === "checkbox") {
+    return (
+      <div className="py-2 space-y-1">
+        {Label}
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-900">
+          <input type="checkbox" checked={value === true} disabled={isPending}
+            onChange={(e) => { doneRef.current = false; commit(e.target.checked) }}
+            className="h-4 w-4 rounded border-slate-300 accent-zinc-900" />
+          {value === true ? "Yes" : "No"}
+          {isPending && <Loader2 className="h-3 w-3 animate-spin text-slate-400" />}
+        </label>
+      </div>
+    )
+  }
 
   if (!editing) {
     return (

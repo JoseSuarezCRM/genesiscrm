@@ -9,6 +9,9 @@ import { checkUniqueCustomValue } from "@/app/actions/custom-properties"
 import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 import { clinicDateOnlyValue } from "@/lib/tz"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { RC_PERM_KEY } from "@/lib/referral-calls/constants"
+import { RC_SERVER_SET_PROPS, deriveReferralCallEdit } from "@/lib/referral-calls/inline-edit"
+import { changedKeys } from "@/lib/referral-calls/snapshot"
 
 function delegateFor(type: CPEntity): any {
   return ({
@@ -38,11 +41,32 @@ export async function updateRecordField(entityType: string, recordId: string, fi
     await requireAccess(entityType, "EDIT")
     const session = await auth()
     const uid = (session?.user as any)?.id ?? null
-    const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { values: true } })
-    const values: Record<string, any> = (rec?.values as any) ?? {}
-    values[field] = value === "" ? null : value
+    // Scoped to the object named in entityType: Edit access to one custom object
+    // must not reach another object's records by id.
+    const rec = await (prisma as any).customObjectRecord.findFirst({
+      where: { id: recordId, objectDef: { key: entityType.slice(3) } },
+      select: { values: true, ownerId: true, objectDef: { select: { properties: true } } },
+    })
+    if (!rec) return { error: "Record not found." }
+    const stored: Record<string, any> = (rec.values as any) ?? {}
+    const prop = ((rec.objectDef?.properties as any[]) ?? []).find((p) => p.id === field)
+    // A DATE property holds a calendar day: stored at noon UTC like every other
+    // date-only value (the date picker commits midnight).
+    const written = value === "" ? null
+      : prop?.type === "DATE" ? (clinicDateOnlyValue(value as any)?.toISOString() ?? null)
+      : value
+    let values: Record<string, any> = { ...stored, [field]: written }
+    let changes: Record<string, unknown> = { [field]: value }
+
+    // The call log computes some values from others; see lib/referral-calls/inline-edit.ts.
+    if (entityType === RC_PERM_KEY) {
+      if (RC_SERVER_SET_PROPS.has(field)) return { error: "This value is filled in automatically." }
+      values = await deriveReferralCallEdit({ stored, next: values, editedField: field, ownerId: rec.ownerId ?? null, actor: (session?.user as any) ?? {} })
+      changes = Object.fromEntries(changedKeys(stored, values).map((k) => [k, values[k]]))
+    }
+
     await (prisma as any).customObjectRecord.update({ where: { id: recordId }, data: { values, updatedById: uid } })
-    await runTrigger_RecordPropertyChanged(entityType, recordId, { [field]: value }, uid ?? undefined).catch(() => {})
+    await runTrigger_RecordPropertyChanged(entityType, recordId, changes, uid ?? undefined).catch(() => {})
     revalidatePath(`/objects/${entityType.slice(3)}/${recordId}`)
     return { success: true }
   }
@@ -95,7 +119,8 @@ export async function updateRecordField(entityType: string, recordId: string, fi
 export async function getRecordValues(entityType: string, id: string): Promise<Record<string, any>> {
   if (entityType.startsWith("CO:")) {
     await requireAccess(entityType, "VIEW")
-    const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id } })
+    // Scoped to the named object, as in updateRecordField.
+    const rec = await (prisma as any).customObjectRecord.findFirst({ where: { id, objectDef: { key: entityType.slice(3) } } })
     return (rec?.values as any) ?? {}
   }
   const meta = cpMeta(entityType as CPEntity)

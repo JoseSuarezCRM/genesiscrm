@@ -10,6 +10,7 @@ import { prisma } from "../lib/prisma"
 import { ensureReferralCallObject, getReferralCallDef } from "../lib/referral-calls/provision"
 import { RC_PROPERTIES } from "../lib/referral-calls/schema"
 import { RC_OBJECT_KEY, RC_PERM_KEY } from "../lib/referral-calls/constants"
+import { deriveReferralCallEdit, RC_SERVER_SET_PROPS } from "../lib/referral-calls/inline-edit"
 
 class Rollback extends Error {}
 
@@ -88,6 +89,19 @@ async function main() {
   } catch (e) {
     if (!(e instanceof Rollback)) throw e
   }
+
+  console.log("\nOne field at a time (call log table, detail page)")
+  const actor = { name: "Maria Alvarez", email: "ma@example.test" }
+  const stored = { reason: "L hip fx", referred_from: "Northshore ER", charted: false, status: "sent_to_surgeon" }
+  const ticked = await deriveReferralCallEdit({ stored, next: { ...stored, charted: true }, editedField: "charted", ownerId: null, actor })
+  eq([ticked.charted_by, typeof ticked.charted_at], ["MA", "string"], "ticking Charted records who and when")
+  eq(ticked.call_title, "Northshore ER – L hip fx", "the title follows the fields")
+  const handText = await deriveReferralCallEdit({ stored: ticked, next: { ...ticked, surgeon_text: "typed by hand", reason: "R hip fx" }, editedField: "surgeon_text", ownerId: null, actor })
+  eq([handText.surgeon_text, handText.surgeon_text_edited], ["typed by hand", true], "a text edited on the detail page stays as typed")
+  const later = await deriveReferralCallEdit({ stored: handText, next: { ...handText, reason: "R wrist fx" }, editedField: "reason", ownerId: null, actor })
+  eq(later.surgeon_text, "typed by hand", "…and isn't rebuilt by later field edits")
+  eq(typeof later.epic_note === "string" && (later.epic_note as string).includes("R wrist fx"), true, "the Epic note still rebuilds")
+  eq(RC_SERVER_SET_PROPS.has("charted_by") && RC_SERVER_SET_PROPS.has("call_title"), true, "server-set fields refuse direct edits")
 
   const leftover = await getReferralCallDef()
   eq(!!leftover, !!already, "rolled back — the database is as it was")

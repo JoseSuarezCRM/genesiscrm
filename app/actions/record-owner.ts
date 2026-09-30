@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { runTrigger_RecordOwnerChanged } from "@/lib/automation-engine"
+import { RC_PERM_KEY } from "@/lib/referral-calls/constants"
+import { deriveReferralCallEdit } from "@/lib/referral-calls/inline-edit"
 
 // Any object key: a built-in, or "CO:<key>" for a custom object.
 export type OwnableObject = string
@@ -25,10 +27,20 @@ export async function setRecordOwner(type: OwnableObject, id: string, ownerId: s
   if (type.startsWith("CO:")) {
     await requireAccess(type, "EDIT")
     const s = await auth()
-    await (prisma as any).customObjectRecord.update({
-      where: { id },
-      data: { ownerId: ownerId || null, updatedById: (s?.user as any)?.id ?? null },
+    // Scoped to the named object: Edit access to one custom object must not
+    // reach another object's records by id.
+    const rec = await (prisma as any).customObjectRecord.findFirst({
+      where: { id, objectDef: { key: type.slice(3) } },
+      select: { values: true },
     })
+    if (!rec) return { error: "Record not found." }
+    const data: Record<string, unknown> = { ownerId: ownerId || null, updatedById: (s?.user as any)?.id ?? null }
+    // A referral call's Epic note names the call-taker (the owner): rebuild it.
+    if (type === RC_PERM_KEY) {
+      const stored = (rec.values as Record<string, unknown>) ?? {}
+      data.values = await deriveReferralCallEdit({ stored, next: stored, ownerId: ownerId || null, actor: (s?.user as any) ?? {} })
+    }
+    await (prisma as any).customObjectRecord.update({ where: { id }, data })
     await runTrigger_RecordOwnerChanged(type, id, ownerId || null).catch(() => {})
     revalidatePath(`/objects/${type.slice(3)}/${id}`)
     return { success: true }
