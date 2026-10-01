@@ -21,6 +21,8 @@ export default NextAuth(authConfig).auth
  */
 export const config = {
   matcher: [
-    "/((?!api/auth|api/cron|api/public|api/media|api/resources|api/webhooks|_next/static|_next/image|favicon.ico|refer|resources|accept-invite).*)",
+    // The public pages are matched as whole path segments — `refer(?:/|$)`, not
+    // `refer` — or the exclusion also swallows /referrals and /referring-doctors.
+    "/((?!api/auth|api/cron|api/public|api/media|api/resources|api/webhooks|_next/static|_next/image|favicon.ico|refer(?:/|$)|resources(?:/|$)|accept-invite(?:/|$)).*)",
   ],
 }
