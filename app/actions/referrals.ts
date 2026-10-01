@@ -82,6 +82,16 @@ interface PendingFile {
   contentType: string
 }
 
+/** A fax uploaded by /api/fax/extract and not yet attached to any referral. */
+async function isAttachablePendingUpload(f: PendingFile): Promise<boolean> {
+  let u: URL
+  try { u = new URL(f.url) } catch { return false }
+  if (u.protocol !== "https:" || !u.hostname.endsWith(".blob.vercel-storage.com")) return false
+  if (!u.pathname.startsWith("/referrals/pending/") || u.pathname.includes("..")) return false
+  const taken = await prisma.document.findFirst({ where: { fileUrl: f.url }, select: { id: true } })
+  return !taken
+}
+
 export async function createReferral(data: unknown, pendingFile?: PendingFile | null) {
   await requireAccess("REFERRALS", "EDIT")
   const session = await auth()
@@ -139,8 +149,10 @@ export async function createReferral(data: unknown, pendingFile?: PendingFile | 
     },
   })
 
-  // Attach the scanned fax as a document if one was uploaded during extraction
-  if (pendingFile?.url) {
+  // Attach the scanned fax as a document if one was uploaded during extraction.
+  // The URL comes from the browser, so only a genuine, unattached pending
+  // upload is accepted — not another referral's document, not a URL elsewhere.
+  if (pendingFile?.url && (await isAttachablePendingUpload(pendingFile))) {
     await prisma.document.create({
       data: {
         referralId: referral.id,

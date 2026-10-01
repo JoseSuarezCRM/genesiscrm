@@ -3,6 +3,23 @@ import { put } from "@vercel/blob"
 import Anthropic from "@anthropic-ai/sdk"
 import { auth } from "@/lib/auth"
 import { getAnthropicClient } from "@/lib/anthropic"
+import { userCanLevel } from "@/lib/permissions"
+import { createAuditLog } from "@/lib/audit"
+
+/*
+ * PHI handling: a fax is a patient document, and so is the model's reading of
+ * it. Neither is ever logged — only the kind of failure. The upload happens
+ * only after a successful read (a busy-retry used to leave a copy per attempt),
+ * and uploads never attached to a referral are removed by
+ * /api/cron/pending-uploads.
+ */
+
+/** Log a failure without any of its content. */
+function logFailure(stage: string, err?: unknown) {
+  const status = err instanceof Anthropic.APIError ? err.status : undefined
+  const kind = err instanceof Error ? err.name : typeof err
+  console.error(`[FAX EXTRACT] ${stage} failed`, JSON.stringify({ kind, status: status ?? null }))
+}
 
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"]
 const MAX_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
@@ -68,6 +85,11 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  // Reading a fax is the first step of creating a referral.
+  if (!userCanLevel(session.user as any, "REFERRALS", "EDIT")) {
+    return NextResponse.json({ error: "You don't have permission to create referrals." }, { status: 403 })
+  }
+  const started = Date.now()
 
   let formData: FormData
   try {
@@ -91,26 +113,6 @@ export async function POST(req: NextRequest) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
-
-    // Upload to Vercel Blob immediately so it's ready to attach when the referral is saved.
-    // Non-fatal — if Blob is not configured, extraction still works and the user can attach manually.
-    let pendingFile: PendingFile | null = null
-    try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-      const blob = await put(`referrals/pending/${Date.now()}-${safeName}`, buffer, {
-        access: "private",
-        contentType: file.type,
-      })
-      pendingFile = {
-        url: blob.url,
-        name: file.name,
-        size: file.size,
-        contentType: file.type,
-      }
-    } catch (blobErr) {
-      console.warn("[FAX EXTRACT] Blob upload failed, extraction will continue without file attachment:", blobErr)
-    }
-
     const base64 = buffer.toString("base64")
 
     // Build the file content block based on type
@@ -148,7 +150,14 @@ export async function POST(req: NextRequest) {
       ],
     })
 
-    const rawText = response.content[0].type === "text" ? response.content[0].text : ""
+    // The answer is the text block, wherever it sits in the content.
+    const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text")
+    const rawText = textBlock?.text ?? ""
+    if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
+      logFailure(`read (${response.stop_reason})`)
+      await auditRead(session.user.id, file, response.stop_reason, started)
+      return NextResponse.json({ error: "AI extraction failed. Please fill the form manually." }, { status: 500 })
+    }
 
     // Strip possible markdown code fences Claude may add despite instructions
     const cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/, "")
@@ -157,8 +166,32 @@ export async function POST(req: NextRequest) {
     try {
       extracted = JSON.parse(cleaned)
     } catch {
-      console.error("[FAX EXTRACT] Failed to parse Claude response:", rawText)
+      // Never log the reply itself: it is the patient's details.
+      logFailure("parse")
+      await auditRead(session.user.id, file, "invalid_output", started)
       return NextResponse.json({ error: "AI extraction failed. Please fill the form manually." }, { status: 500 })
+    }
+
+    // Keep the fax to attach when the referral is saved — only now that the read
+    // worked. Non-fatal: without Blob the user can still attach it by hand.
+    let pendingFile: PendingFile | null = null
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+      const blob = await put(`referrals/pending/${Date.now()}-${safeName}`, buffer, {
+        access: "private",
+        contentType: file.type,
+        // Unguessable: createReferral only accepts pending uploads, and the path
+        // would otherwise be a timestamp and the file's name.
+        addRandomSuffix: true,
+      })
+      pendingFile = {
+        url: blob.url,
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      }
+    } catch (blobErr) {
+      logFailure("upload", blobErr)
     }
 
     // Validate date format — if Claude returned an invalid format, discard it
@@ -198,10 +231,11 @@ export async function POST(req: NextRequest) {
       pendingFile,
     }
 
+    await auditRead(session.user.id, file, "ok", started)
     return NextResponse.json(result)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error("[FAX EXTRACT]", message)
+    logFailure("read", err)
+    await auditRead(session.user.id, file, "error", started)
     // 529 overloaded / 429 rate-limited are transient — tell the user to retry,
     // rather than implying the document couldn't be read.
     if (err instanceof Anthropic.APIError && (err.status === 529 || err.status === 429)) {
@@ -212,4 +246,14 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: "AI extraction failed. Please fill the form manually." }, { status: 500 })
   }
+}
+
+/** One audit entry per read: what happened, never what the fax said. */
+async function auditRead(userId: string, file: File, outcome: string, started: number) {
+  await createAuditLog({
+    userId,
+    action: "AI_EXTRACTION",
+    resourceType: "REFERRAL_FAX",
+    metadata: { outcome, contentType: file.type, bytes: file.size, ms: Date.now() - started },
+  })
 }

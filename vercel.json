@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/filesanywhere",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/pending-uploads",
+      "schedule": "30 9 * * *"
     }
   ]
 }
