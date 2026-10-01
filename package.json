@@ -14,7 +14,8 @@
     "check:editable": "tsx scripts/check-editable-paths.ts",
     "check:referral-parser": "tsx scripts/referral-calls-parity.ts",
     "check:referral-calls": "tsx scripts/check-referral-calls.ts",
-    "check:referral-calls-db": "tsx --env-file=.env.local scripts/check-referral-calls-db.ts"
+    "check:referral-calls-db": "tsx --env-file=.env.local scripts/check-referral-calls-db.ts",
+    "check:date-presets": "tsx scripts/check-date-presets.ts --all-tz"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

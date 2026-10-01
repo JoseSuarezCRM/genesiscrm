@@ -154,7 +154,7 @@ function predicateFor(field: FilterField, cond: Condition): { sql: string; param
     if (op === "relative") {
       const win = resolvePreset(String(v ?? ""))
       if (!win) return null
-      return { sql: `${notNull} AND ${col} >= $3::date AND ${col} <= $4::date`, params: [ymd(win.start), ymd(win.end)] }
+      return { sql: `${notNull} AND ${col} >= $3::date AND ${col} <= $4::date`, params: [win.startDay, win.endDay] }
     }
     const day = v ? dayString(v) : null
     if (!day) return null

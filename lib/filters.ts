@@ -8,7 +8,7 @@
 // "groups with AND/OR logic" the product needs without a full query language.
 
 import { resolvePreset } from "./reporting/date-presets"
-import { dayStart } from "./tz"
+import { CLINIC_TZ, dayStart, zonedParts } from "./tz"
 
 export type FieldType = "text" | "number" | "select" | "boolean" | "date"
 
@@ -233,11 +233,13 @@ function dayFromParts(y: number, m: number, d: number): number {
   return Date.UTC(y, m - 1, d)
 }
 function dayOf(v: unknown): number {
-  // Host-local parts on purpose: the only Dates reaching here are relative-preset
-  // window bounds from resolvePreset, which are themselves built in host time,
-  // and json-predicate formats those same bounds the same way. Reading them in a
-  // different zone than they were built in is what makes the two sides disagree.
-  if (v instanceof Date) return dayFromParts(v.getFullYear(), v.getMonth() + 1, v.getDate())
+  // A Date here is an instant: read its CLINIC day, the calendar every date
+  // preset is built on (lib/reporting/date-presets.ts). Relative presets don't
+  // come through here as Dates any more — they hand over their calendar days.
+  if (v instanceof Date) {
+    const p = zonedParts(v, CLINIC_TZ)
+    return dayFromParts(p.year, p.month + 1, p.day)
+  }
   const s = String(v ?? "")
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
   if (iso) return dayFromParts(+iso[1], +iso[2], +iso[3])
@@ -261,7 +263,7 @@ function evalCalendarDate(raw: unknown, cond: Condition): boolean {
   if (cond.operator === "relative") {
     const win = resolvePreset(String(cond.value || ""))
     if (!win) return true
-    return a >= dayOf(win.start) && a <= dayOf(win.end)
+    return a >= dayOf(win.startDay) && a <= dayOf(win.endDay)
   }
   const b = cond.value ? dayOf(cond.value) : NaN
   if (Number.isNaN(b)) return true
