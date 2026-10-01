@@ -3,6 +3,7 @@
 import { requireAccess } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { userCanLevel, type AccessLevel } from "@/lib/permissions"
 import { revalidatePath } from "next/cache"
 import twilio from "twilio"
 
@@ -18,11 +19,21 @@ function normalizePhone(raw: string): string {
   return `+${digits}`
 }
 
+/**
+ * The signed-in user, if they have `level` on SMS. Every action here checks it
+ * up front: the inbox page is gated, but a server action can be called
+ * directly, so the page's check protects nothing on its own.
+ */
+async function smsUser(level: AccessLevel) {
+  const session = await auth()
+  if (!session?.user || !userCanLevel(session.user as any, "SMS", level)) return null
+  return session
+}
+
 // ── Thread management ────────────────────────────────────────────────────────
 
 export async function getThreads() {
-  const session = await auth()
-  if (!session?.user) return []
+  if (!(await smsUser("VIEW"))) return []
 
   return prisma.smsThread.findMany({
     orderBy: { lastMessageAt: "desc" },
@@ -38,8 +49,7 @@ export async function getThreads() {
 }
 
 export async function getMessages(threadId: string) {
-  const session = await auth()
-  if (!session?.user) return []
+  if (!(await smsUser("VIEW"))) return []
 
   return prisma.smsMessage.findMany({
     where: { threadId },
@@ -53,8 +63,7 @@ export async function createThread(
   contactName: string,
   referralId?: string
 ): Promise<{ threadId: string } | { error: string }> {
-  const session = await auth()
-  if (!session?.user) return { error: "Unauthorized" }
+  if (!(await smsUser("EDIT"))) return { error: "You don't have permission to send SMS." }
 
   const normalized = normalizePhone(phone)
 
@@ -93,8 +102,8 @@ export async function sendSms(
   threadId: string,
   body: string
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Unauthorized" }
+  const session = await smsUser("EDIT")
+  if (!session) return { success: false, error: "You don't have permission to send SMS." }
   if (!body.trim()) return { success: false, error: "Message cannot be empty." }
 
   const thread = await prisma.smsThread.findUnique({ where: { id: threadId } })
@@ -127,14 +136,12 @@ export async function sendSms(
     revalidatePath("/messages")
     return { success: true }
   } catch (e: any) {
-  await requireAccess("SMS", "EDIT")
     return { success: false, error: e?.message ?? "Failed to send SMS." }
   }
 }
 
 export async function linkThreadToReferral(threadId: string, referralId: string | null) {
-  const session = await auth()
-  if (!session?.user) return { error: "Unauthorized" }
+  if (!(await smsUser("EDIT"))) return { error: "You don't have permission to change SMS threads." }
 
   await prisma.smsThread.update({
     where: { id: threadId },
@@ -146,8 +153,9 @@ export async function linkThreadToReferral(threadId: string, referralId: string 
 }
 
 export async function searchReferralsForSms(query: string) {
-  const session = await auth()
-  if (!session?.user) return []
+  // Returns patients' names, MRNs and phones: needs Referrals access as well.
+  const session = await smsUser("EDIT")
+  if (!session || !userCanLevel(session.user as any, "REFERRALS", "VIEW")) return []
 
   const q = query.trim()
   if (!q) return []
