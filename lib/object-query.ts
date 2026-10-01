@@ -19,7 +19,7 @@
 import { prisma } from "@/lib/prisma"
 import { matchesFilter, type Condition, type FilterField, type FilterState } from "@/lib/filters"
 import { explainFilterState, filterStateToWhere, type FilterExplanation } from "@/lib/filter-to-prisma"
-import { needsRawResolution, resolveJsonPredicates, type JsonResolution } from "@/lib/json-predicate"
+import { EMPTY_RESOLUTION, needsRawResolution, resolveJsonPredicates, type JsonResolution } from "@/lib/json-predicate"
 import { fieldsFor, modelNameFor } from "@/lib/object-fields-server"
 import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 import { delegateFor, isCustomObject } from "@/lib/automation-records"
@@ -50,9 +50,9 @@ export async function resolveFor(
   fields: FilterField[],
   scope?: ObjectScope,
 ): Promise<JsonResolution> {
-  if (!state) return {}
+  if (!state) return EMPTY_RESOLUTION
   const sc = scope ?? (await scopeFor(objectType))
-  if (!sc.table) return {}
+  if (!sc.table) return EMPTY_RESOLUTION
   const byKey = Object.fromEntries(fields.map((f) => [f.key, f]))
   const items: { cond: Condition; field: FilterField }[] = []
   for (const g of state.groups ?? []) {
@@ -61,7 +61,7 @@ export async function resolveFor(
       if (f && needsRawResolution(f, c.operator)) items.push({ cond: c, field: f })
     }
   }
-  if (!items.length) return {}
+  if (!items.length) return EMPTY_RESOLUTION
   return resolveJsonPredicates({
     table: sc.table,
     scope: sc.objectDefId ? { column: "objectDefId", value: sc.objectDefId } : null,

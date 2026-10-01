@@ -24,6 +24,7 @@
 import { prisma } from "@/lib/prisma"
 import type { Condition, FilterField } from "@/lib/filters"
 import { resolvePreset } from "@/lib/reporting/date-presets"
+import { fromMatches, type IdSet, type Universe } from "@/lib/id-sets"
 
 /** Above this, inlining ids costs more than refining the rows in memory. */
 export const ID_INLINE_CAP = 20_000
@@ -167,8 +168,14 @@ function predicateFor(field: FilterField, cond: Condition): { sql: string; param
   return null
 }
 
-/** conditionId → the ids satisfying it (already the final answer, absence included). */
-export type JsonResolution = Record<string, string[]>
+export interface JsonResolution {
+  /** conditionId → the rows satisfying it (already the final answer, absence included). */
+  byCondition: Record<string, IdSet>
+  /** Every id in scope — what a negated set is relative to. Null when not needed (lib/id-sets.ts). */
+  universe: Universe
+}
+
+export const EMPTY_RESOLUTION: JsonResolution = { byCondition: {}, universe: null }
 
 export async function resolveJsonPredicates(opts: {
   /** Postgres table, i.e. the Prisma model name — these models carry no @@map. */
@@ -177,7 +184,8 @@ export async function resolveJsonPredicates(opts: {
   scope?: { column: string; value: string } | null
   items: { cond: Condition; field: FilterField }[]
 }): Promise<JsonResolution> {
-  const out: JsonResolution = {}
+  if (!opts.items.length) return EMPTY_RESOLUTION
+  const matches: Record<string, string[]> = {}
   for (const { cond, field } of opts.items) {
     const p = predicateFor(field, cond)
     if (!p) continue
@@ -189,7 +197,24 @@ export async function resolveJsonPredicates(opts: {
     const sql = `SELECT id FROM "${opts.table}" WHERE ${scopeSql} AND (${p.sql})`
     const params = [opts.scope?.value ?? "1", field.column, ...p.params]
     const rows: { id: string }[] = await prisma.$queryRawUnsafe(sql, ...params)
-    out[cond.id] = rows.map((r) => r.id)
+    matches[cond.id] = rows.map((r) => r.id)
   }
-  return out
+
+  // Postgres caps a statement at 32,767 bind variables, one per id. When the
+  // matches together exceed half the scope, fetch the scope's ids so a broad
+  // condition can be sent as the short list of rows it does NOT match
+  // (lib/id-sets.ts). Otherwise a count is enough and nothing needs flipping.
+  const scopeWhere = opts.scope ? `"${opts.scope.column}" = $1` : `$1 = $1`
+  const scopeParam = opts.scope?.value ?? "1"
+  const total = Object.values(matches).reduce((n, ids) => n + ids.length, 0)
+  let universe: Universe = null
+  if (total > 0) {
+    const [{ n }] = (await prisma.$queryRawUnsafe(`SELECT count(*)::int AS n FROM "${opts.table}" WHERE ${scopeWhere}`, scopeParam)) as { n: number }[]
+    if (total * 2 > n) {
+      universe = ((await prisma.$queryRawUnsafe(`SELECT id FROM "${opts.table}" WHERE ${scopeWhere}`, scopeParam)) as { id: string }[]).map((r) => r.id)
+    }
+  }
+  const byCondition: Record<string, IdSet> = {}
+  for (const [id, ids] of Object.entries(matches)) byCondition[id] = fromMatches(ids, universe)
+  return { byCondition, universe }
 }

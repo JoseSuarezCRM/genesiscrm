@@ -8,6 +8,7 @@ import { FilterState, FilterField, FilterGroup, Condition, isConditionActive } f
 import { resolvePreset } from "./reporting/date-presets"
 import { dayStart } from "./tz"
 import type { JsonResolution } from "./json-predicate"
+import { andSets, idSetWhere, notSet, orSets, PG_MAX_BIND_VARIABLES, type IdSet } from "./id-sets"
 
 // ── NULL handling ────────────────────────────────────────────────────────────
 // Postgres is three-valued: a comparison against NULL yields `unknown`, and both
@@ -49,8 +50,8 @@ function jsonConditionToWhere(
   // Resolved upstream in raw SQL (lib/json-predicate) because Prisma's JSON
   // filters are case-sensitive and have no numeric/date operators at all. The
   // id set IS the answer for this condition, absence included.
-  const pre = resolved?.[cond.id]
-  if (pre) return { id: { in: pre } }
+  const pre = resolved?.byCondition[cond.id]
+  if (pre) return idSetWhere(pre)
   const bag = field.jsonBag!
   const path = [field.column!]
   const op = cond.operator
@@ -306,18 +307,62 @@ function scalarConditionToWhere(cond: Condition, field: FilterField, resolved?: 
   return null
 }
 
-function groupToWhere(group: FilterGroup, byKey: Record<string, FilterField>, resolved?: JsonResolution): Record<string, unknown> | null {
-  const parts = group.conditions
-    .map((c) => { const f = byKey[c.field]; return f ? conditionToWhere(c, f, resolved) : null })
-    .filter((x): x is Record<string, unknown> => x !== null)
+/**
+ * A group's `where`, or — when every condition in it was resolved to ids — the
+ * group as one id set, so filterStateToWhere can merge it with others.
+ *
+ * Resolved conditions on the object's own rows are combined into ONE set here
+ * rather than sent as one `id IN (…)` each: Postgres caps a statement at 32,767
+ * bind variables (see lib/id-sets.ts). A joined field's ids belong to the
+ * related table, so those stay separate.
+ */
+function groupToWhere(
+  group: FilterGroup,
+  byKey: Record<string, FilterField>,
+  resolved?: JsonResolution,
+): { where: Record<string, unknown> } | { set: IdSet } | null {
+  const universe = resolved?.universe ?? null
+  const combine = group.combinator === "OR" ? orSets : andSets
+  let merged: IdSet | null = null
+  const parts: Record<string, unknown>[] = []
+  for (const c of group.conditions) {
+    const f = byKey[c.field]
+    if (!f) continue
+    const set = !f.relationPath ? resolved?.byCondition[c.id] : undefined
+    if (set) { merged = merged ? combine(merged, set, universe) : set; continue }
+    const w = conditionToWhere(c, f, resolved)
+    if (w !== null) parts.push(w)
+  }
   // An empty group restricts nothing, and `not` must not turn that into "match
   // nothing" — otherwise ticking Exclude on a half-built group blanks the list.
   // Returning null here already means "no restriction", so there's nothing to negate.
-  if (parts.length === 0) return null
+  if (parts.length === 0 && !merged) return null
+  if (parts.length === 0 && merged) return { set: group.not ? notSet(merged) : merged }
+  if (merged) parts.push(idSetWhere(merged))
   const inner = group.combinator === "OR" ? { OR: parts } : { AND: parts }
   // Safe because every condition above is null-guarded, so `inner` is true/false
   // per row and never `unknown` — see the NULL handling note at the top.
-  return group.not ? { NOT: inner } : inner
+  return { where: group.not ? { NOT: inner } : inner }
+}
+
+/** A filter too broad to send even after merging (lib/id-sets.ts). */
+export class FilterTooLargeError extends Error {
+  constructor() {
+    super("This filter matches too many records to run on the server. Add a condition to narrow it.")
+    this.name = "FilterTooLargeError"
+  }
+}
+
+/** Ids a where sends as bind variables. */
+function countIds(w: unknown): number {
+  if (!w || typeof w !== "object") return 0
+  if (Array.isArray(w)) return w.reduce((n: number, x) => n + countIds(x), 0)
+  let n = 0
+  for (const [k, v] of Object.entries(w as Record<string, unknown>)) {
+    if ((k === "in" || k === "notIn") && Array.isArray(v)) n += v.length
+    else n += countIds(v)
+  }
+  return n
 }
 
 // Returns a Prisma `where` fragment (or {} when there are no active conditions).
@@ -328,11 +373,22 @@ export function filterStateToWhere(
 ): Record<string, unknown> {
   if (!state) return {}
   const byKey: Record<string, FilterField> = Object.fromEntries(fields.map((f) => [f.key, f]))
-  const groups = state.groups
-    .map((g) => groupToWhere(g, byKey, resolved))
-    .filter((x): x is Record<string, unknown> => x !== null)
+  const universe = resolved?.universe ?? null
+  const combine = state.combinator === "OR" ? orSets : andSets
+  const groups: Record<string, unknown>[] = []
+  let merged: IdSet | null = null
+  for (const g of state.groups) {
+    const r = groupToWhere(g, byKey, resolved)
+    if (!r) continue
+    if ("set" in r) merged = merged ? combine(merged, r.set, universe) : r.set
+    else groups.push(r.where)
+  }
+  if (merged) groups.push(idSetWhere(merged))
   if (groups.length === 0) return {}
-  return state.combinator === "OR" ? { OR: groups } : { AND: groups }
+  const where = state.combinator === "OR" ? { OR: groups } : { AND: groups }
+  // Leave room for the rest of the statement (scope, search, paging).
+  if (countIds(where) > PG_MAX_BIND_VARIABLES - 500) throw new FilterTooLargeError()
+  return where
 }
 
 // ── Which conditions actually reached the database ───────────────────────────
