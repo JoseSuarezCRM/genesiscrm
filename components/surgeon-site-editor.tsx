@@ -25,9 +25,10 @@ import {
 } from "@/app/actions/surgeon-sites"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import {
-  missingCredentials, PROFILE_ICONS,
+  missingCredentials, OPTIONAL_TREATMENTS, PROFILE_ICONS,
   type SurgeonSiteContent, type SurgeonClinic,
 } from "@/lib/surgeon-site"
+import Switch from "@/components/ui/switch"
 import {
   PAGE_COPY_GROUPS, PAGE_LIST_KEYS, ARTICLE_BIO_KEYS,
   KNOWN_COPY_KEYS, SHARED_IMAGE_KEYS, filledCount,
@@ -1026,6 +1027,45 @@ export function SurgeonSiteEditor(props: {
             </Field>
           </div>
         </>
+      ),
+    },
+    {
+      id: "treatments",
+      label: "Treatments offered",
+      hint: "Treatments only some surgeons provide. Each switches on its own page.",
+      badge: String((content.offers ?? []).length),
+      previewPath: OPTIONAL_TREATMENTS[0]?.path,
+      panel: (
+        <div className="space-y-3">
+          <p className="text-sm text-zinc-500">
+            Switch one on only if this surgeon provides it: the page says they do. Its page, its card
+            on the area page, its sitemap entry and every link to it appear only for surgeons with it
+            switched on. Their own paragraph about it is under Page copy → Article bios.
+          </p>
+          {OPTIONAL_TREATMENTS.map((t) => {
+            const on = (content.offers ?? []).includes(t.key)
+            return (
+              <label key={t.key} className="flex items-start justify-between gap-4 rounded-xl border border-zinc-200 p-4">
+                <span>
+                  <span className="block text-sm font-medium text-zinc-900">{t.label}</span>
+                  <span className="mt-0.5 block text-xs text-zinc-500">{t.hint}</span>
+                </span>
+                <Switch
+                  checked={on}
+                  label={`${t.label} offered`}
+                  onChange={(v) =>
+                    set(
+                      "offers",
+                      v
+                        ? Array.from(new Set([...(content.offers ?? []), t.key]))
+                        : (content.offers ?? []).filter((k) => k !== t.key),
+                    )
+                  }
+                />
+              </label>
+            )
+          })}
+        </div>
       ),
     },
     {

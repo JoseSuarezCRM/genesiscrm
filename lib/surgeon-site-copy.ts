@@ -69,6 +69,18 @@ export const PAGE_COPY_GROUPS: CopyGroup[] = [
       },
       { key: "home.intro2", label: "Second paragraph", kind: "body" },
       {
+        key: "home.areas.title",
+        label: "Areas-of-care heading",
+        hint: 'Shared default "Areas of care". "Focused subspecialty care" is a claim about training — only if it is true of this surgeon.',
+        kind: "body",
+      },
+      {
+        key: "llms.summary",
+        label: "Summary for AI assistants (llms.txt)",
+        hint: "One or two sentences on who this surgeon is. Defaults to the one-line description.",
+        kind: "meta",
+      },
+      {
         key: "home.research",
         label: "Research paragraph",
         hint: "The homepage's summary of their research. Omit for a surgeon who does none.",
@@ -80,7 +92,15 @@ export const PAGE_COPY_GROUPS: CopyGroup[] = [
     id: "about",
     label: "About",
     blurb: "The biography page. Its paragraphs live under Biography; this is the search snippet.",
-    keys: [{ key: "about.description", label: "Search description", kind: "meta" }],
+    keys: [
+      { key: "about.description", label: "Search description", kind: "meta" },
+      {
+        key: "about.hero-alt",
+        label: "Portrait description (alt text)",
+        hint: 'What the About-page portrait shows, for screen readers. Defaults to "Portrait of <name>".',
+        kind: "meta",
+      },
+    ],
   },
   {
     id: "expertise",
@@ -90,10 +110,25 @@ export const PAGE_COPY_GROUPS: CopyGroup[] = [
       { key: "expertise.lead", label: "Overview lead", kind: "meta" },
       { key: "expertise.trauma.description", label: "Trauma — search description", kind: "meta" },
       {
-        key: "expertise.hip.lead",
-        label: "Hip — opening paragraph",
-        kind: "body",
+        key: "expertise.og",
+        label: "Overview — social-share description",
+        hint: 'Shared default names no training. "Subspecialty" only if true of this surgeon.',
+        kind: "meta",
       },
+      ...(
+        [
+          ["shoulder", "Shoulder"],
+          ["knee", "Knee"],
+          ["hip", "Hip"],
+          ["sports-medicine", "Sports medicine"],
+          ["trauma", "Trauma"],
+        ] as const
+      ).map(([slug, name]) => ({
+        key: `expertise.card.${slug}`,
+        label: `${name} card — one-line summary`,
+        hint: "Shown on the area cards across the site. Leave empty for the shared, claim-free line.",
+        kind: "body" as const,
+      })),
       {
         key: "expertise.hip.hamstring-gluteal-tendon-repair.description",
         label: "Hamstring & gluteal tendon repair — search description",
@@ -162,6 +197,12 @@ export const PAGE_COPY_GROUPS: CopyGroup[] = [
         label: "Patellar instability — search description",
         kind: "meta",
       },
+      {
+        key: "misha-knee-system.experience-heading",
+        label: "MISHA — heading over this surgeon's own paragraph",
+        hint: "The paragraph itself is under Article bios → MISHA Knee System. Only shown when MISHA is switched on under Treatments offered.",
+        kind: "body",
+      },
     ],
   },
   {
@@ -176,11 +217,6 @@ export const PAGE_COPY_GROUPS: CopyGroup[] = [
       {
         key: "expertise.sports-medicine.achilles-tendon-rupture.description",
         label: "Achilles tendon rupture — search description",
-        kind: "meta",
-      },
-      {
-        key: "expertise.sports-medicine.distal-biceps-repair.description",
-        label: "Distal biceps repair — search description",
         kind: "meta",
       },
       {
@@ -264,6 +300,34 @@ export const PAGE_COPY_GROUPS: CopyGroup[] = [
       { key: "es.home.copy2", label: "Home — second credential line", kind: "body" },
       { key: "es.home.copy3", label: "Home — third credential line", kind: "body" },
       { key: "es.home.copy4", label: "Home — fourth credential line", kind: "body" },
+      {
+        key: "es.home.credentials",
+        label: "Home — opening credential sentence",
+        hint: "Certification and subspecialty training, in Spanish. Empty leaves the hero paragraph to start at the care it describes.",
+        kind: "body",
+      },
+      {
+        key: "es.title",
+        label: "Title in Spanish (e.g. cirujano ortopédico certificado)",
+        hint: "Used after the name in Spanish prose. Empty leaves the name alone.",
+        kind: "body",
+      },
+      { key: "es.hombro.lead", label: "Shoulder — lead", kind: "body" },
+      { key: "es.medicina-deportiva.description", label: "Sports medicine — search description", kind: "meta" },
+      { key: "es.medicina-deportiva.lead", label: "Sports medicine — lead", kind: "body" },
+      ...(
+        [
+          ["hombro", "Shoulder"],
+          ["rodilla", "Knee"],
+          ["cadera", "Hip"],
+          ["medicina-deportiva", "Sports medicine"],
+          ["traumatismos", "Trauma"],
+        ] as const
+      ).map(([slug, name]) => ({
+        key: `es.expertise.card.${slug}`,
+        label: `Home — ${name} card`,
+        kind: "body" as const,
+      })),
       { key: "es.about.copy1", label: "Biography — search description", kind: "meta" },
       { key: "es.about.copy2", label: "Biography — lead", kind: "meta" },
       { key: "es.about.copy3", label: "Biography — first paragraph", kind: "body" },
@@ -328,6 +392,7 @@ export const ARTICLE_BIO_KEYS: { key: string; label: string; area: string }[] = 
   { key: "acl-reconstruction", label: "ACL reconstruction", area: "Knee" },
   { key: "meniscus-tear", label: "Meniscus tear", area: "Knee" },
   { key: "patellar-instability", label: "Patellar instability", area: "Knee" },
+  { key: "misha-knee-system", label: "MISHA Knee System", area: "Knee" },
   { key: "labral-tear-fai", label: "Hip labral tear & FAI", area: "Hip" },
   {
     key: "hamstring-gluteal-tendon-repair",

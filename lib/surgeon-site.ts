@@ -211,6 +211,13 @@ export interface SurgeonSiteContent {
   researchMeetings: string[]
   /** The "why patients choose…" paragraph per article, keyed by article slug. */
   articleBios: Record<string, string>
+  /**
+   * Treatments this surgeon offers that not every surgeon does — keys from
+   * `OPTIONAL_TREATMENTS`. Each has a page that exists only on the site of a
+   * surgeon listed here (and so do its nav card, sitemap entry and links).
+   * Mirrors the site app's `lib/offers.ts`.
+   */
+  offers: string[]
   profile: SurgeonProfile
   /** Per-page copy that describes the surgeon, keyed by page. */
   pageCopy: Record<string, string>
@@ -265,6 +272,7 @@ export function emptyContent(): SurgeonSiteContent {
     researchVenues: [],
     researchMeetings: [],
     articleBios: {},
+    offers: [],
     profile: { cards: [], highlights: [], facts: [], bio: [] },
     pageCopy: {},
     pageLists: {},
@@ -273,6 +281,20 @@ export function emptyContent(): SurgeonSiteContent {
 }
 
 /** Read stored JSON back as content, filling anything a newer field added. */
+/**
+ * Treatments only some surgeons offer, each with a page of its own on the site.
+ * "Dr. X offers MISHA" is a claim about Dr. X, so it is switched on per surgeon
+ * and never inherited. Must match the site app's `lib/offers.ts`.
+ */
+export const OPTIONAL_TREATMENTS: readonly { key: string; label: string; path: string; hint: string }[] = [
+  {
+    key: "misha-knee-system",
+    label: "MISHA Knee System",
+    path: "/expertise/knee/misha-knee-system",
+    hint: "The implantable shock absorber for medial knee arthritis.",
+  },
+]
+
 export function parseContent(raw: unknown): SurgeonSiteContent {
   return { ...emptyContent(), ...((raw as Partial<SurgeonSiteContent>) ?? {}) }
 }
