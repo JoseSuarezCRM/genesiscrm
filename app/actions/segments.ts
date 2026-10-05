@@ -13,6 +13,7 @@ import { queryObjectIds, countObjectMatches } from "@/lib/object-query"
 import { segmentRecordIds, segmentSummary, type SegmentRow } from "@/lib/segments"
 import { delegateFor, isCustomObject, recordLabel } from "@/lib/automation-records"
 import { labelFor } from "@/lib/object-registry"
+import { importObjectType } from "@/lib/import-types"
 
 // A segment dereferences records of another object, so access to the segment is
 // never enough on its own — the caller must also be allowed to VIEW that object.
@@ -299,7 +300,7 @@ export async function listImportRunsForSegments() {
   // membership is counted from the change rows rather than trusted from it.
   return Promise.all(runs.map(async (r: any) => {
     const n = await (prisma as any).importRunChange.count({ where: { runId: r.id } })
-    return { ...r, objectType: `CO:${r.objectKey}`, changeRows: n }
+    return { ...r, objectType: importObjectType(r.objectKey), changeRows: n }
   }))
 }
 

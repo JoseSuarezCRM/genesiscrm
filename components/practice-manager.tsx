@@ -657,9 +657,10 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
   const providerFiltersActive = activeConditionCount(providerFilter, providerFilterFields) > 0
 
   function buildProviderExport() {
-    const headers = ["Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Office Phone", "Email", "Locations", "Referrals", "Provider Owner"]
+    // Record ID first, so an edited export re-imports as updates (Settings → Import Records).
+    const headers = ["Record ID", "Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Office Phone", "Email", "Locations", "Referrals", "Provider Owner"]
     const rows = filteredProviders.map((d) => [
-      d.name, (d as any).title ?? "", d.practiceName, (d as any).specialty ?? "", d.npi ?? "",
+      d.id, d.name, (d as any).title ?? "", d.practiceName, (d as any).specialty ?? "", d.npi ?? "",
       (d as any).phone ?? "", (d as any).officePhone ?? "", (d as any).email ?? "",
       d.locations?.map((l) => l.location.name).join("; ") ?? "", d._count.referrals, ownerLabel(d),
     ])

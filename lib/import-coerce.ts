@@ -6,6 +6,7 @@
 // a blank on update, and never write empty fields on create.
 
 import { optionItems } from "@/lib/custom-options"
+import { clinicDateOnlyValue } from "@/lib/tz"
 
 export type CoerceResult = { value: unknown } | { skip: true } | { error: string }
 
@@ -43,7 +44,12 @@ export function coerceValue(
       if (FALSE_SET.has(l)) return { value: false }
       return { error: `"${raw}" is not a yes/no value` }
     }
-    case "DATE":
+    // A DATE is a calendar day, stored at noon UTC like every other date-only
+    // value — midnight reads back a day early anywhere west of UTC.
+    case "DATE": {
+      const d = clinicDateOnlyValue(s)
+      return d ? { value: d.toISOString() } : { error: `"${raw}" is not a valid date` }
+    }
     case "DATE_TIME": {
       const d = new Date(s)
       return isNaN(d.getTime()) ? { error: `"${raw}" is not a valid date` } : { value: d.toISOString() }

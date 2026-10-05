@@ -11,10 +11,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { cn } from "@/lib/utils"
 import { normalizeKey } from "@/lib/import-parse"
 import { runImportBatch, startImportRun, listImportRuns, undoImportRun, createImportProperty, type ImportRunDTO } from "@/app/actions/import-records"
-import { RECORD_ID_TARGET, type ImportMode } from "@/lib/import-types"
+import { RECORD_ID_TARGET, PROVIDER_IMPORT_KEY, importObjectType, type ImportMode } from "@/lib/import-types"
 
-export interface ImportProperty { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> }
-export interface ImportObject { key: string; singular: string; plural: string; properties: ImportProperty[] }
+export interface ImportProperty { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string>; aliases?: string[] }
+export interface ImportObject {
+  key: string
+  singular: string
+  plural: string
+  properties: ImportProperty[]
+  canCreateProperty: boolean
+  requiredForCreate?: string[] // property ids a new record can't be created without
+  excludeAssocTypes?: string[] // object types linked through native fields instead
+}
 export interface AssocTarget { key: string; label: string }
 
 // Column-target sentinels. Real property ids and "assoc:<type>" are the others.
@@ -30,7 +38,7 @@ const NEW_PROP_TYPES: { value: string; label: string }[] = [
 ]
 
 type Parsed = { headers: string[]; rows: Record<string, string>[]; total: number }
-type Progress = { created: number; updated: number; skipped: number; errors: { row: number; message: string }[]; done: number }
+type Progress = { created: number; updated: number; skipped: number; practicesCreated: number; errors: { row: number; message: string }[]; done: number }
 
 export default function ImportWizard({ objects, assocTargets }: { objects: ImportObject[]; assocTargets: AssocTarget[] }) {
   const router = useRouter()
@@ -46,6 +54,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
   const [done, setDone] = useState(false)
   const [runs, setRuns] = useState<ImportRunDTO[]>([])
   const [undoingId, setUndoingId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   // Properties created on the fly from the mapper (added to this object's list).
   const [createdProps, setCreatedProps] = useState<ImportProperty[]>([])
   const [newPropCol, setNewPropCol] = useState<string | null>(null)
@@ -66,6 +75,8 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
 
   const baseObject = objects.find((o) => o.key === objectKey)!
   const object = { ...baseObject, properties: [...baseObject.properties, ...createdProps] }
+  const isProviders = objectKey === PROVIDER_IMPORT_KEY
+  const objectAssocTargets = assocTargets.filter((t) => !(object.excludeAssocTypes ?? []).includes(t.key))
 
   // Load the recent imports for the selected object (for the undo history).
   const refreshRuns = (key = objectKey) => { if (key) listImportRuns(key).then(setRuns).catch(() => {}) }
@@ -99,10 +110,11 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
   }
 
   async function undo(id: string) {
-    setUndoingId(id)
+    setUndoingId(id); setNotice(null)
     try {
       const r = await undoImportRun(id)
       if (r.error) setError(r.error)
+      else if (r.kept) setNotice(`Undone. ${r.kept} record${r.kept === 1 ? " was" : "s were"} kept because ${r.kept === 1 ? "it's" : "they're"} now in use (referrals, notes, activities or other providers).`)
       refreshRuns(); router.refresh()
     } finally { setUndoingId(null) }
   }
@@ -114,13 +126,14 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
       const nk = normalizeKey(h)
       if (nk === "recordid" || nk === "id") { m[h] = RECORD_ID_TARGET; continue }
       const prop = obj.properties.find((p) => normalizeKey(p.name) === nk || p.id === h)
+        ?? obj.properties.find((p) => (p.aliases ?? []).some((a) => normalizeKey(a) === nk))
       m[h] = prop ? prop.id : IGNORE
     }
     return m
   }
 
   async function onFile(file: File) {
-    setError(null); setParsing(true); setParsed(null); setDone(false); setProgress(null)
+    setError(null); setNotice(null); setParsing(true); setParsed(null); setDone(false); setProgress(null)
     setFileName(file.name)
     try {
       const fd = new FormData(); fd.append("file", file)
@@ -137,6 +150,12 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
   }
 
   const hasRecordId = useMemo(() => Object.values(map).includes(RECORD_ID_TARGET), [map])
+  // Required-for-create fields with no column mapped (e.g. a provider's Name and Practice).
+  const missingForCreate = useMemo(
+    () => (object.requiredForCreate ?? []).filter((id) => !Object.values(map).includes(id))
+      .map((id) => object.properties.find((p) => p.id === id)?.name ?? id),
+    [map, object.requiredForCreate, object.properties],
+  )
   const mappedFieldCount = useMemo(
     () => Object.values(map).filter((t) => t !== IGNORE && t !== RECORD_ID_TARGET && !t.startsWith(ASSOC_PREFIX)).length,
     [map],
@@ -157,7 +176,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
     if (!parsed) return
     setRunning(true); setError(null); setDone(false)
     const config = buildConfig()
-    const acc: Progress = { created: 0, updated: 0, skipped: 0, errors: [], done: 0 }
+    const acc: Progress = { created: 0, updated: 0, skipped: 0, practicesCreated: 0, errors: [], done: 0 }
     setProgress({ ...acc })
     try {
       // A tracked run so this import can be undone later.
@@ -168,7 +187,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
         const slice = parsed.rows.slice(i, i + BATCH)
         const r = await runImportBatch(objectKey, config, slice, i, runId)
         if (r.error) { setError(r.error); break }
-        acc.created += r.created; acc.updated += r.updated; acc.skipped += r.skipped
+        acc.created += r.created; acc.updated += r.updated; acc.skipped += r.skipped; acc.practicesCreated += r.practicesCreated ?? 0
         acc.errors.push(...r.errors); acc.done += slice.length
         setProgress({ ...acc, errors: acc.errors.slice(0, 200) })
       }
@@ -216,13 +235,18 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
           </div>
         </div>
         {error && <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+        {notice && <p className="mt-3 text-sm text-slate-600 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">{notice}</p>}
       </div>
 
       {/* Step 2 — mapping */}
       {parsed && (
         <div className={card}>
           <p className={stepLabel}>2 · Map columns</p>
-          <p className="mt-1 text-xs text-slate-400">Each column defaults to <span className="font-medium">Don&apos;t import</span>. Map one column to <span className="font-medium">Record ID</span> to update existing records.</p>
+          {isProviders ? (
+            <p className="mt-1 text-xs text-slate-400">Map <span className="font-medium">Name</span> and <span className="font-medium">Practice</span> to create providers — a practice that isn&apos;t in the CRM yet is created, after your Org Name Rules. Existing providers are matched by <span className="font-medium">Record ID</span>, else NPI or name within the practice. Locations only link to the practice&apos;s existing offices.</p>
+          ) : (
+            <p className="mt-1 text-xs text-slate-400">Each column defaults to <span className="font-medium">Don&apos;t import</span>. Map one column to <span className="font-medium">Record ID</span> to update existing records.</p>
+          )}
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -247,9 +271,11 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
                         className="min-w-[220px] h-8 px-2 text-sm border border-slate-200 rounded-md bg-white">
                         <option value={IGNORE}>Don&apos;t import</option>
                         <option value={RECORD_ID_TARGET}>Record ID (match key)</option>
-                        {object.properties.map((p) => <option key={p.id} value={p.id}>Field: {p.name}</option>)}
-                        <option value={CREATE}>＋ Create new property…</option>
-                        {assocTargets.map((t) => <option key={t.key} value={ASSOC_PREFIX + t.key}>Associate → {t.label}</option>)}
+                        {object.properties.map((p) => (
+                          <option key={p.id} value={p.id}>Field: {p.name}{object.requiredForCreate?.includes(p.id) ? " (required for new)" : ""}</option>
+                        ))}
+                        {object.canCreateProperty && <option value={CREATE}>＋ Create new property…</option>}
+                        {objectAssocTargets.map((t) => <option key={t.key} value={ASSOC_PREFIX + t.key}>Associate → {t.label}</option>)}
                       </StyledSelect>
                     </td>
                   </tr>
@@ -268,7 +294,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
         <div className={card}>
           <p className={stepLabel}>3 · Import</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <label className="text-sm text-slate-600">When a Record ID matches
+            <label className="text-sm text-slate-600">{isProviders ? "When a provider already exists" : "When a Record ID matches"}
               <StyledSelect value={mode} onChange={(e) => setMode(e.target.value as ImportMode)} className="mt-1 min-w-[200px] h-9 border border-slate-200 rounded-lg bg-white">
                 <option value="upsert">Create new &amp; update existing</option>
                 <option value="createOnly">Only create new (ignore matches)</option>
@@ -280,7 +306,10 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
               Import {parsed.rows.length} rows
             </Button>
           </div>
-          {!hasRecordId && mode !== "createOnly" && (
+          {missingForCreate.length > 0 && mode !== "updateOnly" && (
+            <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-amber-600"><AlertTriangle className="h-3.5 w-3.5" /> New {object.plural.toLowerCase()} need {missingForCreate.join(" and ")} — map {missingForCreate.length === 1 ? "that column" : "those columns"}, or rows that don&apos;t match an existing record are skipped.</p>
+          )}
+          {!isProviders && !hasRecordId && mode !== "createOnly" && (
             <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-amber-600"><AlertTriangle className="h-3.5 w-3.5" /> No Record ID column mapped — every row will create a new record.</p>
           )}
           {mappedFieldCount === 0 && (
@@ -297,6 +326,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
                   : <span className="text-slate-500">{progress.done} / {parsed.rows.length}…</span>}
                 <span className="text-slate-600"><span className="font-semibold">{progress.created}</span> created</span>
                 <span className="text-slate-600"><span className="font-semibold">{progress.updated}</span> updated</span>
+                {progress.practicesCreated > 0 && <span className="text-slate-600"><span className="font-semibold">{progress.practicesCreated}</span> practice{progress.practicesCreated === 1 ? "" : "s"} created</span>}
                 {progress.skipped > 0 && <span className="text-slate-500">{progress.skipped} skipped</span>}
                 {progress.errors.length > 0 && <span className="text-red-600">{progress.errors.length} issue{progress.errors.length === 1 ? "" : "s"}</span>}
               </div>
@@ -328,7 +358,7 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
                       {/* An undone run is deliberately not offered: its records are
                           deleted, so the segment would resolve to nothing. */}
                       <Link
-                        href={`/segments/new?object=${encodeURIComponent(`CO:${objectKey}`)}&importRun=${r.id}`}
+                        href={`/segments/new?object=${encodeURIComponent(importObjectType(objectKey))}&importRun=${r.id}`}
                         className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
                       >
                         <Users2 className="h-3.5 w-3.5" /> Create segment
