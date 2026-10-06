@@ -2,7 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { requireView } from "@/lib/auth-guard"
-import { userCanLevel } from "@/lib/permissions"
+import { userCan, userCanLevel } from "@/lib/permissions"
 import { labelFor } from "@/lib/object-registry"
 import { fieldsFor } from "@/lib/object-fields-server"
 import { getSegment, segmentMembers, importSegmentCounts } from "@/app/actions/segments"
@@ -45,6 +45,7 @@ export default async function SegmentDetailPage({ params, searchParams }: PagePr
         members={JSON.parse(JSON.stringify(members))}
         importCounts={importCounts}
         canEdit={userCanLevel(user, "SEGMENTS", "EDIT")}
+        canExport={userCan(user, "EXPORT_DATA")}
       />
     </div>
   )

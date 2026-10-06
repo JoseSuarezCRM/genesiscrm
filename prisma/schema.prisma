@@ -1977,6 +1977,7 @@ model Segment {
   source       String  @default("FILTER") // FILTER | IMPORT | MANUAL
   filter       Json? // FilterState; null for IMPORT/MANUAL
   sourceConfig Json? // { importRunIds: string[] }
+  columns      Json? // ordered field keys the record list shows (lib/segment-table); null = the default set
   userId       String
   user         User    @relation("SegmentCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
 

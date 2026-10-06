@@ -17,7 +17,8 @@
     "check:referral-calls-db": "tsx --env-file=.env.local scripts/check-referral-calls-db.ts",
     "check:date-presets": "tsx scripts/check-date-presets.ts --all-tz",
     "check:id-sets": "tsx scripts/check-id-sets.ts",
-    "check:provider-import": "tsx --env-file=.env.local scripts/check-provider-import.ts"
+    "check:provider-import": "tsx --env-file=.env.local scripts/check-provider-import.ts",
+    "check:segment-table": "tsx --env-file=.env.local scripts/check-segment-table.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

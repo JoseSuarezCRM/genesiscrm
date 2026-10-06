@@ -3,10 +3,11 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { RefreshCw, Loader2, AlertTriangle, Trash2 } from "lucide-react"
-import { refreshSegmentSize, rebuildSegment, removeFromSegment, deleteSegment } from "@/app/actions/segments"
+import { RefreshCw, Loader2, AlertTriangle, Trash2, Columns3 } from "lucide-react"
+import { refreshSegmentSize, rebuildSegment, removeFromSegment, deleteSegment, setSegmentColumns, exportSegmentRows } from "@/app/actions/segments"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import ExportDialog from "@/components/ui/export-dialog"
+import ColumnChooserModal from "@/components/ui/column-chooser"
 import { recordHref } from "@/lib/record-href"
 import { cn } from "@/lib/utils"
 
@@ -14,10 +15,18 @@ interface Members {
   total: number
   exact: boolean
   warnings: { label: string; operator: string; reason: string }[]
-  rows: { id: string; label: string }[]
+  rows: { id: string; label: string; cells: string[] }[]
   page: number
   pageSize: number
+  /** The columns shown after the name, saved on the segment (or its default set). */
+  columns: { key: string; label: string }[]
+  /** Everything the column chooser offers for this object. */
+  catalog: { key: string; label: string; group?: string }[]
+  canEditColumns: boolean
 }
+
+// The name column, always first; not a field of the object.
+const NAME_COL = "__name"
 
 interface Props {
   segment: {
@@ -35,15 +44,18 @@ interface Props {
   summary: string
   members: Members
   canEdit: boolean
+  canExport: boolean
   importCounts: { reported: number; changeRows: number; live: number; undoneRuns: number } | null
 }
 
-export default function SegmentDetail({ segment, objectLabel, summary, members, canEdit, importCounts }: Props) {
+export default function SegmentDetail({ segment, objectLabel, summary, members, canEdit, canExport, importCounts }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [busy, setBusy] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [columnsError, setColumnsError] = useState<string | null>(null)
 
   const isStatic = segment.kind === "STATIC"
   const pages = Math.max(1, Math.ceil(members.total / members.pageSize))
@@ -68,6 +80,20 @@ export default function SegmentDetail({ segment, objectLabel, summary, members, 
     setSelected([])
     setBusy(false)
     startTransition(() => router.refresh())
+  }
+
+  async function applyColumns(keys: string[]) {
+    setColumnsError(null)
+    const r = await setSegmentColumns(segment.id, keys.filter((k) => k !== NAME_COL))
+    if ("error" in r) setColumnsError(r.error)
+    else startTransition(() => router.refresh())
+  }
+
+  // Every record, not just this page — the server reads them all with these columns.
+  async function exportData() {
+    const r = await exportSegmentRows(segment.id)
+    if ("error" in r) throw new Error(r.error)
+    return r
   }
 
   async function remove() {
@@ -110,13 +136,15 @@ export default function SegmentDetail({ segment, objectLabel, summary, members, 
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             {isStatic ? "Rebuild" : "Refresh"}
           </button>
-          <button
-            onClick={() => setExportOpen(true)}
-            disabled={!members.rows.length}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40"
-          >
-            Export
-          </button>
+          {canExport && (
+            <button
+              onClick={() => setExportOpen(true)}
+              disabled={!members.rows.length}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40"
+            >
+              Export
+            </button>
+          )}
           {canEdit && (
             <button
               onClick={remove}
@@ -168,18 +196,29 @@ export default function SegmentDetail({ segment, objectLabel, summary, members, 
       )}
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-2.5">
           <span className="text-sm font-medium text-zinc-900">Records</span>
-          {isStatic && canEdit && selected.length > 0 && (
-            <button
-              onClick={removeSelected}
-              disabled={busy}
-              className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-40"
-            >
-              Remove {selected.length} from segment
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isStatic && canEdit && selected.length > 0 && (
+              <button
+                onClick={removeSelected}
+                disabled={busy}
+                className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-40"
+              >
+                Remove {selected.length} from segment
+              </button>
+            )}
+            {members.canEditColumns && (
+              <button
+                onClick={() => setColumnsOpen(true)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium text-zinc-600 hover:border-zinc-400"
+              >
+                <Columns3 className="h-3.5 w-3.5" /> Columns
+              </button>
+            )}
+          </div>
         </div>
+        {columnsError && <p className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{columnsError}</p>}
         {members.rows.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-zinc-500">
             {segment.source === "IMPORT"
@@ -187,23 +226,45 @@ export default function SegmentDetail({ segment, objectLabel, summary, members, 
               : "No records match."}
           </p>
         ) : (
-          <ul className="divide-y divide-zinc-100 text-sm">
-            {members.rows.map((r) => (
-              <li key={r.id} className="flex items-center gap-3 px-4 py-2">
-                {isStatic && canEdit && (
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(r.id)}
-                    onChange={(e) => setSelected((s) => e.target.checked ? [...s, r.id] : s.filter((x) => x !== r.id))}
-                    className="h-3.5 w-3.5 rounded border-zinc-300"
-                  />
-                )}
-                <Link href={recordHref(segment.objectType, r.id) || "#"} className="text-zinc-700 hover:underline">
-                  {r.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  {isStatic && canEdit && <th className="w-10 px-4 py-2" />}
+                  <th className="whitespace-nowrap px-4 py-2">Name</th>
+                  {members.columns.map((c) => (
+                    <th key={c.key} className="whitespace-nowrap px-4 py-2">{c.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {members.rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-zinc-50">
+                    {isStatic && canEdit && (
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(r.id)}
+                          onChange={(e) => setSelected((s) => e.target.checked ? [...s, r.id] : s.filter((x) => x !== r.id))}
+                          className="h-3.5 w-3.5 rounded border-zinc-300"
+                        />
+                      </td>
+                    )}
+                    <td className="max-w-[260px] truncate whitespace-nowrap px-4 py-2">
+                      <Link href={recordHref(segment.objectType, r.id) || "#"} className="font-medium text-zinc-800 hover:underline">
+                        {r.label}
+                      </Link>
+                    </td>
+                    {members.columns.map((c, i) => (
+                      <td key={c.key} title={r.cells[i] || undefined} className="max-w-[240px] truncate whitespace-nowrap px-4 py-2 text-zinc-600">
+                        {r.cells[i] || <span className="text-zinc-300">—</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {pages > 1 && (
           <div className="flex items-center justify-between border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
@@ -231,8 +292,19 @@ export default function SegmentDetail({ segment, objectLabel, summary, members, 
         onClose={() => setExportOpen(false)}
         subject="records"
         defaultName={segment.name.toLowerCase().replace(/\s+/g, "-")}
-        getData={() => ({ headers: ["Record"], rows: members.rows.map((r) => [r.label]) })}
+        getData={exportData}
         count={members.total}
+      />
+
+      <ColumnChooserModal
+        open={columnsOpen}
+        onClose={() => setColumnsOpen(false)}
+        columns={[{ key: NAME_COL, label: "Name" }, ...members.catalog]}
+        selected={members.columns.map((c) => c.key)}
+        required={[NAME_COL]}
+        frozen={0}
+        maxFrozen={0}
+        onApply={(keys) => void applyColumns(keys)}
       />
     </div>
   )

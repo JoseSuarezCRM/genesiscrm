@@ -35,7 +35,7 @@ function toFilterFields(fields: ReportField[]): FilterField[] {
   }))
 }
 
-function readValue(row: any, field: ReportField): unknown {
+export function readValue(row: any, field: ReportField): unknown {
   if (field.stageDuration) {
     const sd = row?.__sd
     if (!sd) return null

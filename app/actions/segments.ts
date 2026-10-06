@@ -1,11 +1,13 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireAccess, requirePermission } from "@/lib/auth-guard"
 import { recordPermKey } from "@/lib/record-perm-key"
-import { userCanLevel } from "@/lib/permissions"
+import { userCan, userCanLevel } from "@/lib/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { FilterState } from "@/lib/filters"
 import { fieldsFor } from "@/lib/object-fields-server"
 import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
@@ -14,6 +16,7 @@ import { segmentRecordIds, segmentSummary, type SegmentRow } from "@/lib/segment
 import { delegateFor, isCustomObject, recordLabel } from "@/lib/automation-records"
 import { labelFor } from "@/lib/object-registry"
 import { importObjectType } from "@/lib/import-types"
+import { MAX_SEGMENT_COLUMNS, loadSegmentRows, resolveSegmentColumns, segmentColumnCatalog } from "@/lib/segment-table"
 
 // A segment dereferences records of another object, so access to the segment is
 // never enough on its own — the caller must also be allowed to VIEW that object.
@@ -275,16 +278,84 @@ export async function previewSegment(objectType: string, filter: FilterState | n
 }
 
 /** A page of a segment's members, for the detail table. */
+/**
+ * One page of a segment's records, with the columns the segment shows (saved on
+ * it, or the default set) and the catalog the column chooser offers.
+ */
 export async function segmentMembers(id: string, page = 1, pageSize = 50) {
   const seg = await getSegment(id)
   if (!seg) return { error: "Segment not found" }
   const defs = await fieldsFor(seg.objectType)
   const r = await segmentRecordIds(seg, defs)
   const slice = r.ids.slice((page - 1) * pageSize, page * pageSize)
-  const rows = await Promise.all(slice.map(async (rid) => ({
-    id: rid, label: await recordLabel(seg.objectType, rid).catch(() => rid),
-  })))
-  return { total: r.total, exact: r.exact, warnings: r.warnings, rows, page, pageSize }
+  const catalog = await segmentColumnCatalog(seg.objectType)
+  const columns = await resolveSegmentColumns(seg.objectType, (seg as any).columns, catalog)
+  const rows = await loadSegmentRows(seg.objectType, slice, columns)
+  return {
+    total: r.total, exact: r.exact, warnings: r.warnings, rows, page, pageSize,
+    columns: columns.map((c) => ({ key: c.key, label: c.label })),
+    catalog: catalog.map((c) => ({ key: c.key, label: c.label, group: c.group })),
+    canEditColumns: await canEditSegment(id),
+  }
+}
+
+/** Whether the signed-in user may change this segment (Segments Edit, and the segment's own sharing). */
+async function canEditSegment(id: string): Promise<boolean> {
+  const session = await auth()
+  const user = session?.user as any
+  if (!user || !userCanLevel(user, "SEGMENTS", "EDIT")) return false
+  return !("error" in (await loadEditable(id, user.id)))
+}
+
+/**
+ * Save the columns a segment's record list shows, for everyone who opens it.
+ * An empty list means just the name; `null` goes back to the default set.
+ */
+export async function setSegmentColumns(id: string, keys: string[] | null): Promise<{ success: true } | { error: string }> {
+  const session = await auth()
+  if (!session?.user) return { error: "Unauthorized" }
+  if (!(await canEditSegment(id))) return { error: "You can't change this segment." }
+  const seg: SegmentRow | null = await (prisma as any).segment.findUnique({ where: { id } })
+  if (!seg) return { error: "Segment not found" }
+  await requireObjectView(seg.objectType)
+
+  const wanted = Array.from(new Set((Array.isArray(keys) ? keys : []).filter((k) => typeof k === "string")))
+  const known = new Set((await segmentColumnCatalog(seg.objectType)).map((c) => c.key))
+  if (wanted.some((k) => !known.has(k))) return { error: "One of those columns doesn't exist on this object." }
+  if (wanted.length > MAX_SEGMENT_COLUMNS) return { error: `Pick up to ${MAX_SEGMENT_COLUMNS} columns.` }
+
+  await (prisma as any).segment.update({ where: { id }, data: { columns: keys === null ? Prisma.DbNull : wanted } })
+  revalidatePath(`/segments/${id}`)
+  return { success: true }
+}
+
+/**
+ * Every record in the segment — not just the page on screen — with its name
+ * and the segment's columns, for the Export dialog. Needs Export Data, like
+ * every other export, and is audited.
+ */
+export async function exportSegmentRows(id: string): Promise<{ headers: string[]; rows: string[][] } | { error: string }> {
+  const session = await auth()
+  const user = session?.user as any
+  if (!user) return { error: "Unauthorized" }
+  if (!userCan(user, "EXPORT_DATA")) return { error: "You don't have permission to export." }
+  const seg = await getSegment(id)
+  if (!seg) return { error: "Segment not found" }
+
+  const catalog = await segmentColumnCatalog(seg.objectType)
+  const columns = await resolveSegmentColumns(seg.objectType, (seg as any).columns, catalog)
+  const { ids } = await segmentRecordIds(seg, await fieldsFor(seg.objectType))
+  const rows: string[][] = []
+  for (let i = 0; i < ids.length; i += 1000) {
+    for (const r of await loadSegmentRows(seg.objectType, ids.slice(i, i + 1000), columns)) rows.push([r.label, ...r.cells])
+  }
+  await createAuditLog({
+    userId: user.id,
+    action: "EXPORT_CSV",
+    resourceType: recordPermKey(seg.objectType),
+    metadata: { segmentId: id, rows: rows.length },
+  })
+  return { headers: ["Name", ...columns.map((c) => c.label)], rows }
 }
 
 /** Import runs that can seed a segment, newest first. Undone runs are excluded. */
