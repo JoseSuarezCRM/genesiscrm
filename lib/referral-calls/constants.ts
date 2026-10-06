@@ -13,13 +13,25 @@ export const RC_PERM_KEY = `CO:${RC_OBJECT_KEY}`
 
 export const RC_STATUSES = [
   { value: "sent_to_surgeon", label: "Text sent to surgeon" },
-  { value: "accepted", label: "Accepted case" },
-  { value: "transferred", label: "Transferred to another specialty/hospital" },
   { value: "outpatient_followup", label: "Outpatient f/u needed" },
+  { value: "transferred", label: "Transferred to another specialty/hospital" },
+  { value: "admitted_consult_note", label: "Patient admitted (other reason), consult note needed in EMR" },
+  { value: "admitted_pending_clearance", label: "Patient admitted for surgery, pending clearance" },
+  { value: "cleared_for_surgery", label: "Patient cleared, surgery planned/done" },
 ] as const
 
 export type RcStatus = (typeof RC_STATUSES)[number]["value"]
 export const RC_DEFAULT_STATUS: RcStatus = "sent_to_surgeon"
+
+/**
+ * Status values no longer offered. Provisioning is otherwise append-only, so
+ * a value has to be named here to be taken off the stored property — and the
+ * records holding it are cleared first (see `ensureReferralCallObject`).
+ */
+export const RC_RETIRED_STATUSES: readonly string[] = ["accepted"]
+
+/** The call log's default columns: patient name (or the call title), then the call's state. */
+export const RC_DEFAULT_COLUMNS: string[] = ["__name", "status", "referred_from", "outcome", "__created"]
 
 /**
  * Outcome picks, in the original tool's canonical order — the order its parser

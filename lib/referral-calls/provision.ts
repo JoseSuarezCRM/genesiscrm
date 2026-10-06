@@ -14,7 +14,7 @@
 
 import { prisma } from "@/lib/prisma"
 import type { CustomObjectProperty } from "@/app/actions/custom-objects"
-import { RC_OBJECT_KEY, RC_PERM_KEY } from "./constants"
+import { RC_DEFAULT_COLUMNS, RC_OBJECT_KEY, RC_PERM_KEY, RC_RETIRED_STATUSES } from "./constants"
 import { RC_PROPERTIES } from "./schema"
 
 export interface ReferralCallDef {
@@ -57,10 +57,17 @@ export async function ensureReferralCallObject(actorUserId: string, db: Db = pri
 
   assertOurs(def.properties)
 
+  // A status the spec retired is still on the property: clear it from the
+  // records holding it before the option goes. Runs once, then never again.
+  const retiring = retiredStatusesIn(def.properties as CustomObjectProperty[])
+  if (retiring.length) await migrateRetiredStatuses(def.id, retiring, db)
+
   // Append anything a later version of the spec added. Optimistic on updatedAt,
   // so a concurrent Settings save is retried against rather than overwritten.
   for (let attempt = 0; attempt < 2; attempt++) {
-    const merged = completeProperties(def.properties as CustomObjectProperty[])
+    const stored = def.properties as CustomObjectProperty[]
+    const retired = retireStatusOptions(stored)
+    const merged = completeProperties(retired ?? stored) ?? retired
     if (!merged) return toDef(def)
     const res = await db.customObjectDef.updateMany({
       where: { id: def.id, updatedAt: def.updatedAt },
@@ -145,6 +152,62 @@ function completeProperties(stored: CustomObjectProperty[]): CustomObjectPropert
   return changed ? out : null
 }
 
+/** Retired status values still present on the stored status property. */
+function retiredStatusesIn(stored: CustomObjectProperty[]): string[] {
+  const status = stored.find((p) => p.id === "status")
+  return (status?.options ?? []).filter((o) => RC_RETIRED_STATUSES.includes(o))
+}
+
+/**
+ * The status property without its retired values, ordered spec-first with any
+ * admin-added options after. Labels and colours already stored are kept — an
+ * admin may have renamed one. Null when nothing is retired, so outside this
+ * one-time step provisioning stays append-only and never reorders an admin's
+ * options.
+ */
+export function retireStatusOptions(stored: CustomObjectProperty[]): CustomObjectProperty[] | null {
+  const at = stored.findIndex((p) => p.id === "status")
+  if (at < 0 || !retiredStatusesIn(stored).length) return null
+  const have = stored[at]
+  const spec = RC_PROPERTIES.find((p) => p.id === "status")!
+  const specOptions = spec.options ?? []
+  const extras = (have.options ?? []).filter((o) => !RC_RETIRED_STATUSES.includes(o) && !specOptions.includes(o))
+  const options = [...specOptions, ...extras]
+  const optionLabels: Record<string, string> = {}
+  for (const o of options) optionLabels[o] = have.optionLabels?.[o] ?? spec.optionLabels?.[o] ?? o
+  const optionColors = have.optionColors
+    ? Object.fromEntries(Object.entries(have.optionColors).filter(([o]) => options.includes(o)))
+    : undefined
+  const out = stored.map((p) => ({ ...p }))
+  out[at] = { ...have, options, optionLabels, ...(optionColors ? { optionColors } : {}) }
+  return out
+}
+
+/**
+ * The record-side half of retiring a status: records holding it lose the
+ * value (left blank, as the on-call staff asked), and the shared views still
+ * on the first seeded column set move to the current default columns. Both
+ * idempotent.
+ */
+async function migrateRetiredStatuses(objectDefId: string, retiring: string[], db: Db) {
+  for (const value of retiring) {
+    const records = await db.customObjectRecord.findMany({
+      where: { objectDefId, values: { path: ["status"], equals: value } },
+      select: { id: true, values: true },
+    })
+    for (const r of records) {
+      const { status: _retired, ...rest } = (r.values ?? {}) as Record<string, unknown>
+      await db.customObjectRecord.update({ where: { id: r.id }, data: { values: rest } })
+    }
+  }
+  const views = await db.customObjectView.findMany({ where: { objectKey: RC_OBJECT_KEY }, select: { id: true, config: true } })
+  for (const v of views) {
+    const config = (v.config ?? {}) as Record<string, unknown>
+    if (JSON.stringify(config.columns) !== JSON.stringify(SEEDED_COLUMNS_V1)) continue
+    await db.customObjectView.update({ where: { id: v.id }, data: { config: { ...config, columns: RC_DEFAULT_COLUMNS } } })
+  }
+}
+
 async function createObject(actorUserId: string, db: Db) {
   const last = await db.customObjectDef.findFirst({ orderBy: { order: "desc" }, select: { order: true } })
 
@@ -206,14 +269,15 @@ const CARDS: { cardName: string; title: string; fields: string[]; section: "LEFT
     fields: ["notes", "source_text"] },
 ]
 
-const COLUMNS = ["__id", "__name", "status", "urgent", "referred_from", "reason", "dob", "__owner", "charted", "__created"]
+/** The columns the shared views were first seeded with; views still on them are moved to RC_DEFAULT_COLUMNS. */
+const SEEDED_COLUMNS_V1 = ["__id", "__name", "status", "urgent", "referred_from", "reason", "dob", "__owner", "charted", "__created"]
 
 const view = (name: string, conditions: { field: string; operator: string; value: string | string[] }[]) => ({
   name,
   config: {
     type: "table",
     sort: { key: "__id", dir: "desc" },
-    columns: COLUMNS,
+    columns: RC_DEFAULT_COLUMNS,
     filter: {
       combinator: "AND",
       groups: [{ id: "g1", combinator: "AND", conditions: conditions.map((c, i) => ({ id: `c${i + 1}`, ...c })) }],

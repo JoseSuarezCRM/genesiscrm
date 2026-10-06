@@ -9,7 +9,7 @@
 import { prisma } from "../lib/prisma"
 import { ensureReferralCallObject, getReferralCallDef } from "../lib/referral-calls/provision"
 import { RC_PROPERTIES } from "../lib/referral-calls/schema"
-import { RC_OBJECT_KEY, RC_PERM_KEY } from "../lib/referral-calls/constants"
+import { RC_DEFAULT_COLUMNS, RC_OBJECT_KEY, RC_PERM_KEY, RC_STATUSES } from "../lib/referral-calls/constants"
 import { deriveReferralCallEdit, RC_SERVER_SET_PROPS } from "../lib/referral-calls/inline-edit"
 
 class Rollback extends Error {}
@@ -74,6 +74,47 @@ async function main() {
         where: { objectDefId: row1.id, values: { path: ["status"], equals: "sent_to_surgeon" } },
       })
       eq(awaiting, 2, "counts only calls awaiting the surgeon")
+
+      console.log("\nRetiring a status")
+      // The state production was in before the status change: the old options in
+      // their old order, an admin's rename and colours, an admin-added option, a
+      // record on the retired value, and the seeded views on their first columns.
+      const OLD_COLUMNS = ["__id", "__name", "status", "urgent", "referred_from", "reason", "dob", "__owner", "charted", "__created"]
+      const current = (await tx.customObjectDef.findUnique({ where: { id: row1.id } })).properties as any[]
+      await tx.customObjectDef.update({
+        where: { id: row1.id },
+        data: {
+          properties: current.map((p) => (p.id !== "status" ? p : {
+            ...p,
+            options: ["sent_to_surgeon", "accepted", "transferred", "outpatient_followup", "p_extra"],
+            optionLabels: { sent_to_surgeon: "Text sent to surgeon", accepted: "Accepted case", transferred: "Transferred out", outpatient_followup: "Outpatient f/u needed", p_extra: "Admin's own" },
+            optionColors: { accepted: "#ff0000", transferred: "#00ff00" },
+          })),
+        },
+      })
+      const seededNames = ["Awaiting surgeon", "Urgent · last 7 days", "Not charted"]
+      for (const v of await tx.customObjectView.findMany({ where: { objectKey: RC_OBJECT_KEY, name: { in: seededNames } } })) {
+        await tx.customObjectView.update({ where: { id: v.id }, data: { config: { ...(v.config as object), columns: OLD_COLUMNS } } })
+      }
+      const mine = await tx.customObjectView.create({
+        data: { objectKey: RC_OBJECT_KEY, name: "Synthetic own view", userId: admin.id, config: { type: "table", columns: ["__id", "status"] } },
+      })
+      await ensureReferralCallObject(admin.id, tx)
+      const status = ((await tx.customObjectDef.findUnique({ where: { id: row1.id } })).properties as any[]).find((p) => p.id === "status")
+      eq(status.options, [...RC_STATUSES.map((s) => s.value), "p_extra"], "retired value gone; the six statuses in order, then the admin's option")
+      eq("accepted" in status.optionLabels || "accepted" in (status.optionColors ?? {}), false, "its label and colour go too")
+      eq(status.optionLabels.transferred, "Transferred out", "an admin's rename is kept")
+      eq(status.optionColors?.transferred, "#00ff00", "an admin's colour is kept")
+      eq(status.optionLabels.cleared_for_surgery, "Patient cleared, surgery planned/done", "a new status gets its label")
+      const recs = await tx.customObjectRecord.findMany({ where: { objectDefId: row1.id, recordNumber: { in: [900001, 900002, 900003] } }, orderBy: { recordNumber: "asc" } })
+      eq(recs.map((r: any) => (r.values as any).status ?? null), ["sent_to_surgeon", null, "sent_to_surgeon"], "the record on the retired status is left blank; others untouched")
+      eq("status" in (recs[1].values as object), false, "…the key removed, not set to an empty value")
+      const viewsAfter = await tx.customObjectView.findMany({ where: { objectKey: RC_OBJECT_KEY } })
+      eq(viewsAfter.filter((v: any) => seededNames.includes(v.name)).every((v: any) => JSON.stringify(v.config.columns) === JSON.stringify(RC_DEFAULT_COLUMNS)), true, "seeded views move to the new default columns")
+      eq((viewsAfter.find((v: any) => v.id === mine.id).config as any).columns, ["__id", "status"], "someone's own view keeps its columns")
+      const stamp = (await tx.customObjectDef.findUnique({ where: { id: row1.id } })).updatedAt.getTime()
+      await ensureReferralCallObject(admin.id, tx)
+      eq((await tx.customObjectDef.findUnique({ where: { id: row1.id } })).updatedAt.getTime(), stamp, "the next visit writes nothing")
 
       console.log("\nSomeone else's object with our key")
       await tx.customObjectDef.update({

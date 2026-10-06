@@ -392,7 +392,7 @@ export default function ReferralCallIntake(props: IntakeProps) {
 
   // Keep toasts above the sticky action bar.
   useEffect(() => {
-    document.documentElement.style.setProperty("--toast-offset", "76px")
+    document.documentElement.style.setProperty("--toast-offset", "88px")
     return () => { document.documentElement.style.removeProperty("--toast-offset") }
   }, [])
 
@@ -420,7 +420,7 @@ export default function ReferralCallIntake(props: IntakeProps) {
 
   return (
     <div className="flex min-h-full flex-col bg-zinc-50" onInputCapture={onActivity}>
-      <div id="rc-top" className="mx-auto w-full max-w-3xl flex-1 space-y-4 px-4 pb-6 pt-5 sm:px-6">
+      <div id="rc-top" className="mx-auto w-full max-w-3xl flex-1 space-y-4 px-4 pb-10 pt-5 sm:px-6">
         {/* Header */}
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -719,7 +719,10 @@ export default function ReferralCallIntake(props: IntakeProps) {
 
       {/* Actions */}
       <div className="sticky bottom-0 z-20 border-t border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 py-3 sm:px-6" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+        {/* Extra room under the buttons on phones, where they otherwise sit flush
+            against the browser's toolbar. The app sets no viewport-fit=cover, so
+            the safe-area inset is 0 in Safari and can't be relied on alone. */}
+        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 pt-3 pb-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] sm:px-6 sm:pb-3">
           <p className="mr-auto hidden items-center gap-1.5 text-xs text-zinc-500 sm:flex">
             {recordId && !dirty && <Check className="h-3.5 w-3.5 text-emerald-600" />}
             {recordId ? (dirty ? "Unsaved changes" : `Saved${recordNumber ? ` · #${recordNumber}` : ""}`) : ""}

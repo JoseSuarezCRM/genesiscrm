@@ -83,6 +83,8 @@ interface Props {
   createHref?: string
   /** Rendered under the header, e.g. the call log's stats strip. */
   headerSlot?: React.ReactNode
+  /** The default view's columns, when an object wants fewer than every property (the call log). */
+  defaultColumns?: string[]
 }
 
 const TYPE_ICON: Record<ObjectViewType, typeof Table2> = { table: Table2, board: LayoutGrid, calendar: CalendarDays }
@@ -93,6 +95,7 @@ export default function ObjectViewShell(props: Props) {
     canEdit, canDelete, savedViews, shareUsers, shareTeams, serverMode,
     serverTotal, serverPage, serverPageSize, createFormConfig, isAdmin, associations,
     pipelines, pipelineColorStyle, filterDefs, canExport = true, createHref, headerSlot,
+    defaultColumns: defaultColumnsProp,
   } = props
 
   const router = useRouter()
@@ -113,7 +116,12 @@ export default function ObjectViewShell(props: Props) {
   // which can't cross the server boundary — toFilterFields re-attaches it from
   // the serialized readPath.
   const filterFields = useMemo(() => toFilterFields(filterDefs), [filterDefs])
-  const defaultColumns = useMemo(() => catalog.baseCols.map((c) => c.key), [catalog])
+  const defaultColumnsSig = defaultColumnsProp?.join(",") ?? ""
+  const defaultColumns = useMemo(
+    () => (defaultColumnsProp?.length ? defaultColumnsProp : catalog.baseCols.map((c) => c.key)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [catalog, defaultColumnsSig],
+  )
 
   // ── View state ─────────────────────────────────────────────────────────────
   const [appliedViewId, setAppliedViewId] = useState<string | null>(urlParams.get("viewId"))
@@ -181,7 +189,9 @@ export default function ObjectViewShell(props: Props) {
 
   // The unsaved (default) view survives a reload, the way the column prefs used to.
   // Loaded in an effect, not the initializer, so SSR and the first render agree.
-  const prefsKey = `co_${objectKey}_view_v1`
+  // An object-chosen default is part of the key, so changing it reaches people
+  // whose last unsaved view would otherwise keep showing the old columns.
+  const prefsKey = `co_${objectKey}_view_v1${defaultColumnsSig ? `:${defaultColumnsSig}` : ""}`
   const [prefsLoaded, setPrefsLoaded] = useState(false)
   useEffect(() => {
     if (urlParams.get("viewId")) { setPrefsLoaded(true); return }
@@ -189,7 +199,7 @@ export default function ObjectViewShell(props: Props) {
       const raw = localStorage.getItem(prefsKey)
       if (raw) {
         setCfg((c) => ({ ...normalizeViewConfig(JSON.parse(raw), defaultColumns), type: c.type, pipelineId: c.pipelineId }))
-      } else {
+      } else if (!defaultColumnsSig) {
         // Fall back to the column prefs saved before views carried their own config.
         const legacy = JSON.parse(localStorage.getItem(`co_${objectKey}_cols_v2`) || "null")
         if (legacy?.columns?.length) setCfg((c) => ({ ...c, columns: legacy.columns, frozen: legacy.frozen ?? 0 }))

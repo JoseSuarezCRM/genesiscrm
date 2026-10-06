@@ -94,9 +94,13 @@ export interface ExtraLine {
  *
  * Appended as their own block at the end rather than woven in, so the ported
  * builder's output is untouched and the parity check keeps meaning something.
+ *
+ * The on-call staff asked for the surgeon text without the leading "URGENT"
+ * line, so it is built with `urgent` off — the only thing the flag changes in
+ * the builder. The Epic note and the copy-intake block still mark urgency.
  */
 export function surgeonTextWithExtras(f: ReferralCallTextInput, extras: ExtraLine[]): string {
-  const base = buildSurgeonText(f)
+  const base = buildSurgeonText({ ...f, urgent: false })
   const lines = extras.filter((e) => e.value.trim()).map((e) => `${e.label}: ${e.value.trim()}`)
   return lines.length ? `${base}\n\n${lines.join("\n")}` : base
 }
