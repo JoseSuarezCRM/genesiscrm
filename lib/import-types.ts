@@ -5,6 +5,12 @@
 // fieldMap target sentinel: the column carrying the app Record ID (match key).
 export const RECORD_ID_TARGET = "__recordId"
 
+// fieldMap target sentinels for a custom-object record's position: a column of
+// pipeline names (or ids) and a column of stage names (or ids). They are columns
+// on the record, never entries in its values bag (lib/import-stage.ts).
+export const PIPELINE_TARGET = "__pipeline"
+export const STAGE_TARGET = "__stage"
+
 // Providers are the one native object the importer takes. Its runs are stored
 // under this key; custom object keys are lowercase slugs, so it can't collide.
 export const PROVIDER_IMPORT_KEY = "PROVIDER"

@@ -18,7 +18,8 @@
     "check:date-presets": "tsx scripts/check-date-presets.ts --all-tz",
     "check:id-sets": "tsx scripts/check-id-sets.ts",
     "check:provider-import": "tsx --env-file=.env.local scripts/check-provider-import.ts",
-    "check:segment-table": "tsx --env-file=.env.local scripts/check-segment-table.ts"
+    "check:segment-table": "tsx --env-file=.env.local scripts/check-segment-table.ts",
+    "check:import-stage": "tsx --env-file=.env.local scripts/check-import-stage.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

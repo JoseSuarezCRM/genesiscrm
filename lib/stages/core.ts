@@ -42,41 +42,46 @@ export async function stagesForPipeline(pipelineId: string): Promise<Stage[]> {
 }
 
 // Record the current stage of a record: no-op when unchanged, else append a
-// StageTransition and update the record's pipelineId/stageId. Returns whether it moved.
+// StageTransition and update the record's pipelineId/stageId. Returns the new
+// transition's id (an import keeps it so Undo can remove exactly that move), or
+// null when the record was already there. `db` lets a caller run it inside a
+// transaction.
 export async function logStageTransition(
   recordType: string,
   recordId: string,
   pipelineId: string,
   toStageId: string,
   byUserId?: string | null,
-): Promise<boolean> {
-  const current = await currentStage(recordType, recordId)
-  if (current?.stageId === toStageId && current?.pipelineId === pipelineId) return false
+  db: any = prisma,
+): Promise<string | null> {
+  const current = await currentStage(recordType, recordId, db)
+  if (current?.stageId === toStageId && current?.pipelineId === pipelineId) return null
 
-  await (prisma as any).stageTransition.create({
+  const t = await db.stageTransition.create({
     data: { recordType, recordId, pipelineId, fromStageId: current?.stageId ?? null, toStageId, byUserId: byUserId ?? null },
+    select: { id: true },
   })
-  await setRecordStage(recordType, recordId, pipelineId, toStageId)
-  return true
+  await setRecordStage(recordType, recordId, pipelineId, toStageId, db)
+  return t.id
 }
 
 // Read a record's current pipeline/stage from its own row (fast path).
-async function currentStage(recordType: string, recordId: string): Promise<{ pipelineId: string | null; stageId: string | null } | null> {
+async function currentStage(recordType: string, recordId: string, db: any = prisma): Promise<{ pipelineId: string | null; stageId: string | null } | null> {
   if (recordType === "REFERRAL") {
-    const r = await prisma.referral.findUnique({ where: { id: recordId }, select: { pipelineId: true, stageId: true } }).catch(() => null)
-    return r ? { pipelineId: r.pipelineId, stageId: (r as any).stageId ?? null } : null
+    const r = await db.referral.findUnique({ where: { id: recordId }, select: { pipelineId: true, stageId: true } }).catch(() => null)
+    return r ? { pipelineId: r.pipelineId, stageId: r.stageId ?? null } : null
   }
   if (recordType.startsWith("CO:")) {
-    const r = await (prisma as any).customObjectRecord.findUnique({ where: { id: recordId }, select: { pipelineId: true, stageId: true } }).catch(() => null)
+    const r = await db.customObjectRecord.findUnique({ where: { id: recordId }, select: { pipelineId: true, stageId: true } }).catch(() => null)
     return r ? { pipelineId: r.pipelineId, stageId: r.stageId } : null
   }
   return null
 }
 
-async function setRecordStage(recordType: string, recordId: string, pipelineId: string, stageId: string): Promise<void> {
+async function setRecordStage(recordType: string, recordId: string, pipelineId: string, stageId: string, db: any = prisma): Promise<void> {
   if (recordType === "REFERRAL") {
-    await prisma.referral.update({ where: { id: recordId }, data: { pipelineId, stageId } as any }).catch(() => {})
+    await db.referral.update({ where: { id: recordId }, data: { pipelineId, stageId } }).catch(() => {})
   } else if (recordType.startsWith("CO:")) {
-    await (prisma as any).customObjectRecord.update({ where: { id: recordId }, data: { pipelineId, stageId } }).catch(() => {})
+    await db.customObjectRecord.update({ where: { id: recordId }, data: { pipelineId, stageId } }).catch(() => {})
   }
 }

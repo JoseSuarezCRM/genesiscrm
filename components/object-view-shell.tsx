@@ -10,6 +10,7 @@ import FilterBuilder from "@/components/ui/filter-builder"
 import ExportDialog from "@/components/ui/export-dialog"
 import ColumnChooserModal from "@/components/ui/column-chooser"
 import CreateRecordModal from "@/components/create-record-modal"
+import { PipelineField, StageField, effectiveStage, pipelineStageFields } from "@/components/pipeline-stage-picker"
 import PipelineSelector from "@/components/pipeline-selector"
 import QuickFilterBar from "@/components/quick-filter-bar"
 import SortByControl from "@/components/sort-by-control"
@@ -715,10 +716,14 @@ export default function ObjectViewShell(props: Props) {
       </p>
 
       {canEdit && addOpen && (() => {
-        // Catalog = every property (as a RecordFieldDef) + the owner field.
+        // Catalog = every property (as a RecordFieldDef) + the owner field, and —
+        // when the object has pipelines — Pipeline and Stage (default pipeline,
+        // first stage unless changed).
+        const stageFields = pipelineStageFields(pipelines)
         const createCatalog: RecordFieldDef[] = [
           ...properties.map((p) => ({ ...cpToFieldDef(p as any, p.id), required: !!(p as any).required || !!p.primary })),
           { key: "__owner", label: ownerLabel, type: "user" as const },
+          ...stageFields,
         ]
         return (
           <CreateRecordModal
@@ -731,9 +736,18 @@ export default function ObjectViewShell(props: Props) {
             onClose={() => setAddOpen(false)}
             onSaved={() => { setAddOpen(false); router.refresh() }}
             onConfigChanged={() => router.refresh()}
+            specialFields={stageFields.length ? {
+              __pipeline: (v, set) => <PipelineField pipelines={pipelines} value={v} onChange={set} />,
+              __stage: (v, set, vals) => <StageField pipelines={pipelines} pipelineId={vals.__pipeline} value={v} onChange={set} />,
+            } : undefined}
             onSubmit={async (values) => {
-              const { __owner, ...propValues } = values
-              return await createCustomObjectRecord(objectKey, propValues, (__owner as string) || undefined) as any
+              const { __owner, __pipeline, __stage, ...propValues } = values
+              // Only when the form shows Pipeline or Stage; otherwise the server
+              // places the record in the default pipeline's first stage as before.
+              const shown = (createFormConfig ?? []).length === 0
+                || (createFormConfig ?? []).some((f) => f.key === "__pipeline" || f.key === "__stage")
+              const stage = stageFields.length && shown ? effectiveStage(pipelines, __pipeline, __stage) : null
+              return await createCustomObjectRecord(objectKey, propValues, (__owner as string) || undefined, stage) as any
             }}
           />
         )

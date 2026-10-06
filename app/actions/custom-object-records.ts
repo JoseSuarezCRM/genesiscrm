@@ -313,11 +313,40 @@ export async function getCustomObjectRecord(objectKey: string, id: string): Prom
   }
 }
 
-export async function createCustomObjectRecord(objectKey: string, values: Record<string, any>, ownerId?: string) {
+/**
+ * Create a record. `stage` places it in a chosen pipeline and stage (the create
+ * form's Pipeline / Stage fields); without it the record goes to the default
+ * pipeline's first stage, as before.
+ */
+export async function createCustomObjectRecord(
+  objectKey: string,
+  values: Record<string, any>,
+  ownerId?: string,
+  stage?: { pipelineId: string; stageId: string } | null,
+) {
   const session = await requireAccess(objKey(objectKey), "EDIT")
   const uid = (session!.user as any).id
-  const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true } })
+  const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })
   if (!def) return { error: "Object not found" }
+
+  // A chosen stage must belong to a pipeline of THIS object, and its
+  // required-to-enter fields must be filled — the same rule moving a record
+  // into that stage enforces (moveRecordStage).
+  if (stage) {
+    const target = await (prisma as any).pipelineStage.findFirst({
+      where: { id: stage.stageId, pipelineId: stage.pipelineId, pipeline: { objectType: objKey(objectKey) } },
+      select: { name: true, requiredPropertyIds: true },
+    })
+    if (!target) return { error: "That pipeline stage doesn't belong to this object." }
+    const props: { id: string; name: string }[] = (def.properties as any[]) ?? []
+    const missing = (target.requiredPropertyIds ?? [])
+      .filter((id: string) => {
+        const v = values?.[id]
+        return v == null || v === "" || (Array.isArray(v) && v.length === 0)
+      })
+      .map((id: string) => props.find((p) => p.id === id)?.name ?? id)
+    if (missing.length) return { error: `Fill ${missing.join(", ")} to create in ${target.name}` }
+  }
   // Next sequential Record ID for this object.
   const last = await (prisma as any).customObjectRecord.findFirst({
     where: { objectDefId: def.id }, orderBy: { recordNumber: "desc" }, select: { recordNumber: true },
@@ -333,8 +362,14 @@ export async function createCustomObjectRecord(objectKey: string, values: Record
     },
   })
   await runTrigger_RecordCreated(`CO:${objectKey}`, rec.id, uid).catch(() => {})
-  // Auto-enroll into the object's default pipeline (first stage) if one exists.
-  await assignDefaultStage(`CO:${objectKey}`, rec.id, uid).catch(() => {})
+  if (stage) {
+    // Logged as a transition, so time-in-stage starts now.
+    const { logStageTransition } = await import("@/lib/stages/core")
+    await logStageTransition(`CO:${objectKey}`, rec.id, stage.pipelineId, stage.stageId, uid).catch(() => {})
+  } else {
+    // Auto-enroll into the object's default pipeline (first stage) if one exists.
+    await assignDefaultStage(`CO:${objectKey}`, rec.id, uid).catch(() => {})
+  }
   revalidatePath(`/objects/${objectKey}`)
   return { success: true, id: rec.id }
 }

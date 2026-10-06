@@ -11,7 +11,9 @@ import { coerceValue } from "@/lib/import-coerce"
 import { resolveTargetId } from "@/lib/import-resolve"
 import { runProviderImportBatch, undoProviderImportRun } from "@/lib/import-providers"
 import { createCustomProperty } from "@/app/actions/custom-properties"
-import { RECORD_ID_TARGET, PROVIDER_IMPORT_KEY, importPermKey, type ImportConfig, type ImportBatchResult } from "@/lib/import-types"
+import { RECORD_ID_TARGET, PIPELINE_TARGET, STAGE_TARGET, PROVIDER_IMPORT_KEY, importPermKey, type ImportConfig, type ImportBatchResult } from "@/lib/import-types"
+import { pipelinesForObject } from "@/lib/stages/core"
+import { resolveImportStage, applyImportStage, revertImportStage, type ImportPipeline } from "@/lib/import-stage"
 
 interface PropDef { id: string; name: string; type: string; options?: string[]; optionLabels?: Record<string, string> | null }
 
@@ -61,6 +63,12 @@ export async function runImportBatch(
   const recordIdCol = Object.entries(config.fieldMap).find(([, target]) => target === RECORD_ID_TARGET)?.[0] ?? null
   // Property columns (skip the record-id column and any mapping to a missing prop).
   const propCols = Object.entries(config.fieldMap).filter(([, target]) => target !== RECORD_ID_TARGET && propById.has(target))
+  // Pipeline / Stage columns place the record; they never go into its values.
+  const pipelineCol = Object.entries(config.fieldMap).find(([, target]) => target === PIPELINE_TARGET)?.[0] ?? null
+  const stageCol = Object.entries(config.fieldMap).find(([, target]) => target === STAGE_TARGET)?.[0] ?? null
+  const pipelines: ImportPipeline[] = (await pipelinesForObject(type)).map((p) => ({
+    id: p.id, name: p.name, stages: p.stages.map((st) => ({ id: st.id, name: st.name })),
+  }))
 
   const result: ImportBatchResult = { created: 0, updated: 0, skipped: 0, errors: [] }
   const coDefCache = new Map<string, string>()
@@ -71,11 +79,11 @@ export async function runImportBatch(
     try {
       // Match an existing record by Record ID (recordNumber).
       const idRaw = recordIdCol ? (row[recordIdCol] ?? "").trim() : ""
-      let existing: { id: string; values: Record<string, unknown> } | null = null
+      let existing: { id: string; values: Record<string, unknown>; pipelineId: string | null; stageId: string | null } | null = null
       if (idRaw && /^\d+$/.test(idRaw)) {
         existing = await (prisma as any).customObjectRecord.findFirst({
           where: { objectDefId: def.id, recordNumber: Number(idRaw) },
-          select: { id: true, values: true },
+          select: { id: true, values: true, pipelineId: true, stageId: true },
         })
       }
 
@@ -95,6 +103,16 @@ export async function runImportBatch(
       }
       if (cellError) { result.errors.push({ row: rowNum, message: cellError }); result.skipped++; continue }
 
+      // Where the record sits: its Pipeline / Stage cells, or — for a new record
+      // the file says nothing about — the default pipeline's first stage.
+      const placement = resolveImportStage(
+        pipelines,
+        pipelineCol ? row[pipelineCol] ?? "" : "",
+        stageCol ? row[stageCol] ?? "" : "",
+        isUpdate ? { pipelineId: existing!.pipelineId, stageId: existing!.stageId } : null,
+      )
+      if ("error" in placement) { result.errors.push({ row: rowNum, message: placement.error }); result.skipped++; continue }
+
       // Create or update the record (no workflow triggers).
       let recordId: string
       if (isUpdate) {
@@ -105,10 +123,17 @@ export async function runImportBatch(
         const merged = { ...prev, ...coerced }
         await (prisma as any).customObjectRecord.update({ where: { id: existing!.id }, data: { values: merged, updatedById: uid } })
         recordId = existing!.id
+        // A stage move is logged as a transition; its id goes in the snapshot so
+        // Undo can take back exactly this move.
+        const moved = await applyImportStage(type, recordId, placement, { pipelineId: existing!.pipelineId, stageId: existing!.stageId }, uid)
+        if (moved) Object.assign(before, moved)
         result.updated++
         if (runId) changes.push({ runId, kind: "update", recordId, before })
       } else {
-        recordId = await createRecordFor(type, coerced, { ownerId: uid, createdById: uid })
+        recordId = await createRecordFor(type, coerced, {
+          ownerId: uid, createdById: uid,
+          ...("pipelineId" in placement ? { pipelineId: placement.pipelineId, stageId: placement.stageId } : {}),
+        })
         result.created++
         if (runId) changes.push({ runId, kind: "create", recordId })
       }
@@ -252,8 +277,12 @@ export async function undoImportRun(runId: string): Promise<{ ok?: boolean; dele
   for (const c of updates) {
     const rec = await (prisma as any).customObjectRecord.findUnique({ where: { id: c.recordId }, select: { values: true } }).catch(() => null)
     if (!rec) continue
-    const merged = { ...((rec.values as any) ?? {}), ...((c.before as any) ?? {}) }
+    // `__`-prefixed keys are the record's pipeline position, not properties.
+    const before = (c.before as Record<string, unknown>) ?? {}
+    const restoredValues = Object.fromEntries(Object.entries(before).filter(([k]) => !k.startsWith("__")))
+    const merged = { ...((rec.values as any) ?? {}), ...restoredValues }
     await (prisma as any).customObjectRecord.update({ where: { id: c.recordId }, data: { values: merged } }).catch(() => {})
+    await revertImportStage(`CO:${run.objectKey}`, c.recordId, before).catch(() => false)
     restored++
   }
 
@@ -263,8 +292,11 @@ export async function undoImportRun(runId: string): Promise<{ ok?: boolean; dele
   if (createdIds.length) {
     const res = await (prisma as any).customObjectRecord.deleteMany({ where: { id: { in: createdIds } } }).catch(() => ({ count: 0 }))
     deleted = res.count ?? 0
-    // Clear any leftover associations pointing at the deleted records.
+    // Clear any leftover associations pointing at the deleted records, and their
+    // stage history — a transition for a record that no longer exists is noise
+    // in every time-in-stage figure.
     await (prisma as any).objectAssociation.deleteMany({ where: { OR: [{ fromId: { in: createdIds } }, { toId: { in: createdIds } }] } }).catch(() => {})
+    await (prisma as any).stageTransition.deleteMany({ where: { recordType: `CO:${run.objectKey}`, recordId: { in: createdIds } } }).catch(() => {})
   }
 
   await (prisma as any).importRun.update({ where: { id: runId }, data: { status: "undone", undoneAt: new Date() } }).catch(() => {})

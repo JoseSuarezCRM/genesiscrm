@@ -22,6 +22,8 @@ export interface ImportObject {
   canCreateProperty: boolean
   requiredForCreate?: string[] // property ids a new record can't be created without
   excludeAssocTypes?: string[] // object types linked through native fields instead
+  pipelineHint?: string // "MRI: New, Completed · PT: New, Completed" — the valid Pipeline / Stage names
+  defaultPipeline?: string // "MRI → New" — where a row without Pipeline / Stage goes
 }
 export interface AssocTarget { key: string; label: string }
 
@@ -286,6 +288,12 @@ export default function ImportWizard({ objects, assocTargets }: { objects: Impor
           <p className="mt-2 text-xs text-slate-400">
             Tip: to link a record to another object, set that column to <span className="font-medium">Associate → …</span> — it should hold the related record&apos;s <span className="font-medium">id or Record ID</span>.
           </p>
+          {object.pipelineHint && (
+            <p className="mt-1.5 text-xs text-slate-400">
+              To place records in a pipeline, map columns to <span className="font-medium">Pipeline</span> and <span className="font-medium">Stage</span> holding these names (any case): <span className="text-slate-600">{object.pipelineHint}</span>.
+              {" "}New records without them go to <span className="font-medium">{object.defaultPipeline}</span>.
+            </p>
+          )}
         </div>
       )}
 

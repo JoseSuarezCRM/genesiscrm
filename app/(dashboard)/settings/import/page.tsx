@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { userCanLevel } from "@/lib/permissions"
 import { listObjectTypes } from "@/lib/object-registry"
-import { PROVIDER_IMPORT_KEY } from "@/lib/import-types"
+import { PROVIDER_IMPORT_KEY, PIPELINE_TARGET, STAGE_TARGET } from "@/lib/import-types"
+import { pipelinesForObject } from "@/lib/stages/core"
 import { PROVIDER_IMPORT_FIELDS, PROVIDER_NATIVE_LINK_TYPES } from "@/lib/import-providers"
 import ImportWizard, { type ImportObject, type AssocTarget } from "@/components/import-wizard"
 
@@ -21,20 +22,36 @@ export default async function ImportPage() {
 
   // Custom objects the user can edit, plus Providers — the one native object the
   // importer takes (lib/import-providers.ts).
-  const objects: ImportObject[] = defs
+  const objects: ImportObject[] = await Promise.all(defs
     .filter((d: any) => userCanLevel(user, `CO:${d.key}`, "EDIT"))
-    .map((d: any) => ({
-      key: d.key,
-      singular: d.singular,
-      plural: d.plural,
-      canCreateProperty: true,
-      properties: ((d.properties as any[]) ?? []).map((p) => ({
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        options: p.options ?? undefined,
-        optionLabels: p.optionLabels ?? undefined,
-      })),
+    .map(async (d: any) => {
+      // An object with pipelines can place records by Pipeline / Stage columns
+      // (names, any case). Without them, new records go to the default
+      // pipeline's first stage — the hint shows which names are valid.
+      const pipelines = (await pipelinesForObject(`CO:${d.key}`)).filter((p) => p.stages.length > 0)
+      return {
+        key: d.key,
+        singular: d.singular,
+        plural: d.plural,
+        canCreateProperty: true,
+        properties: [
+          ...((d.properties as any[]) ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            type: p.type,
+            options: p.options ?? undefined,
+            optionLabels: p.optionLabels ?? undefined,
+          })),
+          ...(pipelines.length ? [
+            { id: PIPELINE_TARGET, name: "Pipeline", type: "TEXT", aliases: ["Pipeline Name"] },
+            { id: STAGE_TARGET, name: "Stage", type: "TEXT", aliases: ["Deal Stage", "Pipeline Stage", "Stage Name"] },
+          ] : []),
+        ],
+        pipelineHint: pipelines.length
+          ? pipelines.map((p) => `${p.name}: ${p.stages.map((st) => st.name).join(", ")}`).join(" · ")
+          : undefined,
+        defaultPipeline: pipelines[0] ? `${pipelines[0].name} → ${pipelines[0].stages[0].name}` : undefined,
+      }
     }))
 
   if (userCanLevel(user, "PROVIDERS", "EDIT")) {
