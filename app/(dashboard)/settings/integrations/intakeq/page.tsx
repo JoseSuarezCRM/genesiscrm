@@ -1,17 +1,13 @@
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { settingsPageOrRedirect } from "@/lib/auth-guard"
-import { canOpenSettingsPage } from "@/lib/settings-pages"
-import { userCanLevel } from "@/lib/permissions"
 import { getReferralSourceReport, getIntegrationSettings, getIntegrationActivity, getRecentIntakeSubmissions } from "@/app/actions/intakeq"
 import IntakeqIntegrationClient from "@/components/intakeq-integration-client"
 
 export default async function IntakeqIntegrationPage() {
-  const session = await settingsPageOrRedirect("integrations")
-  // Full use with the Connected Apps box; with Reports alone, editing still needs Reports Edit.
-  const user = session.user as any
-  const canEdit = (user?.role === "ADMIN" || (user?.permissions ?? []).includes("SETTINGS_INTEGRATIONS"))
-    || userCanLevel(user, "REPORTS", "EDIT")
+  // The Connected Apps box is full use of the page, the report included.
+  await settingsPageOrRedirect("integrations")
+  const canEdit = true
   const [report, settings, activity, submissions] = await Promise.all([getReferralSourceReport("week"), getIntegrationSettings(), getIntegrationActivity(), getRecentIntakeSubmissions(25)])
 
   return (

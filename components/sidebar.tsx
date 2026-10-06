@@ -134,7 +134,7 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
   // If no NAV_* perms set (no team assigned), show all non-admin sections
   const me = { role: userRole, permissions: userPermissions }
   // Settings shows for the Settings menu permission or any settings page's box.
-  // Not for older ways into a page (Reports opens Connected Apps): those people
+  // Not for older ways into a page (Manage Users opens API Keys): those people
   // never had a Settings entry and still reach the page as before.
   const canSettings = userPermissions.includes("NAV_ADMIN") || userPermissions.some((p) => SETTINGS_PAGE_KEYS.includes(p))
   const can = (key: string) => key === "NAV_ADMIN"

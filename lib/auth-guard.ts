@@ -61,10 +61,8 @@ export interface SettingsGateOptions {
   /** Another permission that also allows THIS action or sub-page. */
   alsoAllow?: (user: SessionUserLike) => boolean
   /**
-   * Ignore the page's own older way in (`alsoOpenedBy`). Connected Apps opens to
-   * anyone with Reports View, but IntakeQ's saves need Reports Edit and
-   * FilesAnywhere needed Manage Users — those pass `boxOnly` plus their own
-   * `alsoAllow`, so view-only Reports users don't gain them.
+   * Ignore the page's own older way in (`alsoOpenedBy`), for an action or
+   * sub-page that should only honour the box plus its own `alsoAllow`.
    */
   boxOnly?: boolean
 }

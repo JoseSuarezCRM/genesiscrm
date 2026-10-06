@@ -8,7 +8,7 @@
 // reachable through an older permission; those keep working (`alsoOpenedBy`) so
 // granting page access only ever adds a way in.
 
-import { userCan, userCanLevel, type SessionUserLike } from "@/lib/permissions"
+import { userCan, type SessionUserLike } from "@/lib/permissions"
 
 export type SettingsSection = "Team & Access" | "Objects & Data" | "Tools" | "Integrations" | "Automations"
 
@@ -53,10 +53,9 @@ export const SETTINGS_PAGES: SettingsPage[] = [
   page("surgeon-sites", "Surgeon Websites", "Tools", "Each surgeon's public website content and publishing"),
   page("on-call-ai", "On-call AI", "Tools", "What the AI pulls from referral calls, and where"),
   page("practice", "Practice", "Tools", "The practice record the surgeon websites share"),
-  page("integrations", "Connected Apps", "Integrations", "IntakeQ, FilesAnywhere and other connected apps", {
-    // Reports access has always opened Connected Apps and IntakeQ (its referral-source report).
-    alsoOpenedBy: (u) => userCanLevel(u, "REPORTS", "VIEW"),
-  }),
+  // Its own box only (user's decision, 2026-10-06) — Reports no longer opens it,
+  // including the IntakeQ referral-source report that lives there.
+  page("integrations", "Connected Apps", "Integrations", "IntakeQ (incl. its referral-source report), FilesAnywhere and other connected apps"),
   page("api-keys", "API Keys", "Integrations", "Keys that let outside systems read and write CRM data", {
     href: "/settings/integrations/api-keys",
     alsoOpenedBy: (u) => userCan(u, "MANAGE_USERS"),

@@ -136,6 +136,7 @@ async function main() {
   check("can't manage an admin", !canManageAccess(mgr, { role: "ADMIN", permissions: [] }))
   check("can't manage someone with more access", !canManageAccess(mgr, { role: "STAFF", permissions: ["SURGERY:EDIT"] }))
   check("can manage someone within their access", canManageAccess(mgr, { role: "STAFF", permissions: ["REFERRALS:VIEW"] }))
+  check("Reports alone doesn't open Connected Apps", !canOpenSettingsPage({ role: "STAFF", permissions: ["REPORTS:EDIT"] }, "integrations"))
   check("an admin can grant and manage anything", ungrantable({ role: "ADMIN" }, ["X"]).length === 0 && canManageAccess({ role: "ADMIN" }, { role: "ADMIN", permissions: ["X"] }))
 
   // 4. Nobody loses a way in they have today (real permission sets, own + teams).
@@ -149,7 +150,9 @@ async function main() {
     const me = { role: u.role, permissions: Array.from(new Set([...u.permissions, ...u.teamMemberships.flatMap((m) => m.team.permissions)])) }
     if (userCanLevel(me, "REPORTS", "VIEW")) {
       reportsUsers++
-      check(`${u.name}: Reports still opens Connected Apps / IntakeQ`, canOpenSettingsPage(me, "integrations"))
+      // User's decision (2026-10-06): Connected Apps is its own box; Reports alone no longer opens it.
+      const hasBox = me.permissions.includes("SETTINGS_INTEGRATIONS")
+      check(`${u.name}: Connected Apps follows its box only (has box: ${hasBox})`, canOpenSettingsPage(me, "integrations") === hasBox)
     }
     if (userCan(me, "MANAGE_USERS")) check(`${u.name}: Manage Users still opens API Keys`, canOpenSettingsPage(me, "api-keys"))
     if (userCan(me, "MERGE_RECORDS")) mergeUsers++

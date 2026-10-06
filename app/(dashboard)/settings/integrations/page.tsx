@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { Plug, ChevronRight } from "lucide-react"
 
 export default async function ConnectedAppsPage() {
-  // Connected Apps — also open to Reports access, as it always was (see lib/settings-pages.ts).
+  // Connected Apps: its own box in User Management (lib/settings-pages.ts).
   await settingsPageOrRedirect("integrations")
   const apps = await getIntegrationsList()
 

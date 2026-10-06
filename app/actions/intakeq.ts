@@ -1,7 +1,6 @@
 "use server"
 
 import { requireSettingsPage } from "@/lib/auth-guard"
-import { userCanLevel } from "@/lib/permissions"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
@@ -14,12 +13,10 @@ import { getIntegration, getIntakeForms } from "@/lib/integration-store"
 import { sendReferralReport, sendScheduledIntakeReport, type IntakeEmailReportConfig } from "@/lib/intakeq-report"
 import { attributeReferralSources, type SourceMapping, type AttributionResult } from "@/lib/appointment-source"
 
-// Connected Apps (lib/settings-pages.ts): the page's box, or Reports as it always
-// was — View to read, Edit to change. boxOnly keeps view-only Reports users from
-// passing the Edit gate through the page's own Reports-View way in.
+// Connected Apps (lib/settings-pages.ts): its own box, full use — reading and
+// changing alike. Reports no longer opens it (user's decision, 2026-10-06).
 const requireIntegrationView = () => requireSettingsPage("integrations")
-const requireIntegrationEdit = () =>
-  requireSettingsPage("integrations", { boxOnly: true, alsoAllow: (u) => userCanLevel(u, "REPORTS", "EDIT") })
+const requireIntegrationEdit = () => requireSettingsPage("integrations")
 
 export interface ReferralSourceReport {
   configured: boolean
