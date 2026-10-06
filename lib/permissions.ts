@@ -51,7 +51,10 @@ export const CAPABILITIES: PermissionDef[] = [
   { key: "EXPORT_DATA",       label: "Export Data",          description: "Export record lists to CSV" },
   { key: "IMPORT_DATA",       label: "Import Data",          description: "Import referrals and surgery cases from CSV / XLSX" },
   { key: "MANAGE_SCHEDULING", label: "Manage Scheduling",    description: "Use the staff scheduler, assign staff, auto-generate schedules" },
-  { key: "MANAGE_USERS",      label: "Manage Users & Teams", description: "Add users, manage teams and permission sets" },
+  // MANAGE_USERS ("Manage Users & Teams") is no longer offered: User Management
+  // and API Keys are settings pages with their own boxes (lib/settings-pages.ts).
+  // The key is still honoured where it was checked (API Keys, FilesAnywhere,
+  // document preview) so nothing anyone holds stops working.
   { key: "DELETE_ACTIVITIES", label: "Delete Activities",    description: "Delete notes, calls, meetings, emails and SMS from a record's activity feed" },
 ]
 
@@ -99,6 +102,38 @@ export function userCanDelete(user: SessionUserLike | null | undefined, objectKe
   if (!user) return false
   if (user.role === "ADMIN") return true
   return canDeleteFromPerms(user.permissions, objectKey)
+}
+
+// ── Delegated user management ─────────────────────────────────────────────────
+// A non-admin given the User Management settings page may only hand out what
+// they hold themselves, and only manage people whose access fits inside theirs —
+// otherwise the page is a way to give yourself everything.
+
+/** Does a permission set hold `p`? "X:VIEW" is held by "X:EDIT" too. */
+export function holdsPermission(perms: string[] | null | undefined, p: string): boolean {
+  const have = perms ?? []
+  if (have.includes(p)) return true
+  if (p.endsWith(":VIEW")) return have.includes(p.slice(0, -":VIEW".length) + ":EDIT")
+  return false
+}
+
+/** The permissions in `wanted` that `actor` can't grant (none for an admin). */
+export function ungrantable(actor: SessionUserLike | null | undefined, wanted: string[]): string[] {
+  if (!actor) return wanted
+  if (actor.role === "ADMIN") return []
+  return Array.from(new Set(wanted)).filter((p) => !holdsPermission(actor.permissions, p))
+}
+
+/**
+ * May `actor` manage someone with this role and these effective permissions
+ * (own + teams)? Admins manage anyone; others only non-admins whose every
+ * permission they hold themselves.
+ */
+export function canManageAccess(actor: SessionUserLike | null | undefined, target: { role?: string | null; permissions: string[] }): boolean {
+  if (!actor) return false
+  if (actor.role === "ADMIN") return true
+  if (target.role === "ADMIN") return false
+  return ungrantable(actor, target.permissions).length === 0
 }
 
 // Binary check (capabilities + nav sections). Admins always pass.

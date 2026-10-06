@@ -1,9 +1,11 @@
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { listSurgeonSites } from "@/app/actions/surgeon-sites"
 import { SurgeonSitesManager } from "@/components/surgeon-sites-manager"
 
 export const dynamic = "force-dynamic"
 
 export default async function SurgeonSitesPage() {
+  await settingsPageOrRedirect("surgeon-sites")
   const sites = await listSurgeonSites()
 
   return (

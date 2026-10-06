@@ -2,48 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { cn } from "@/lib/utils"
+import { openableSettingsPages, type SettingsSection } from "@/lib/settings-pages"
 
-const settingsSections = [
-  {
-    title: "Team & Access",
-    items: [
-      { href: "/settings/users", label: "User Management" },
-    ],
-  },
-  {
-    title: "Objects & Data",
-    items: [
-      { href: "/settings/objects", label: "Custom Objects" },
-      { href: "/settings/data-model", label: "Data Model" },
-      { href: "/settings/custom-properties", label: "Custom Properties" },
-      { href: "/settings/customization", label: "Property Customization" },
-      { href: "/settings/import", label: "Import Records" },
-      { href: "/settings/pipelines", label: "Pipelines" },
-      { href: "/settings/org-rules", label: "Org Name Rules" },
-    ],
-  },
-  {
-    title: "Tools",
-    items: [
-      { href: "/settings/email", label: "Email" },
-      { href: "/settings/outreach", label: "Outreach Templates" },
-      { href: "/settings/embed", label: "Embed Referral Form" },
-      { href: "/settings/duplicates", label: "Duplicate Detection" },
-      { href: "/settings/marketing", label: "Marketing Materials" },
-      { href: "/settings/surgeon-sites", label: "Surgeon Websites" },
-      { href: "/settings/on-call-ai", label: "On-call AI" },
-      { href: "/settings/practice", label: "Practice" },
-    ],
-  },
-  {
-    title: "Integrations",
-    items: [
-      { href: "/settings/integrations", label: "Connected Apps" },
-      { href: "/settings/integrations/api-keys", label: "API Keys" },
-    ],
-  },
-]
+// The menu comes from the one settings registry, filtered to the pages this
+// user can open — a page they can't open isn't listed (lib/settings-pages.ts).
+const SECTION_ORDER: SettingsSection[] = ["Team & Access", "Objects & Data", "Tools", "Integrations"]
 
 function SettingLink({
   href,
@@ -75,6 +40,11 @@ export default function SettingsLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const { data: session } = useSession()
+  const pages = openableSettingsPages(session?.user as any).filter((p) => p.inMenu)
+  const settingsSections = SECTION_ORDER
+    .map((title) => ({ title, items: pages.filter((p) => p.section === title).map((p) => ({ href: p.href, label: p.label })) }))
+    .filter((s) => s.items.length > 0)
   // Highlight the most specific matching item (longest href that's a prefix),
   // so e.g. /settings/integrations/api-keys lights up "API Keys", not "Connected Apps".
   const activeHref = settingsSections

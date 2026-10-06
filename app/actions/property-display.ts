@@ -1,18 +1,16 @@
 "use server"
 
+import { requireSettingsPage } from "@/lib/auth-guard"
+
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
 type EntityType = "REFERRAL" | "PROVIDER" | "PRACTICE"
 
-// Admin-only guard
-async function requireAdmin() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") {
-    throw new Error("Admin access required")
-  }
-}
+// Everything here belongs to the customization settings page: admins, or anyone given
+// that page's box in User Management (lib/settings-pages.ts).
+const requirePageAccess = () => requireSettingsPage("customization")
 
 export async function getPropertyDisplays(entityType: EntityType) {
   const properties = await prisma.customProperty.findMany({
@@ -50,7 +48,7 @@ export async function updatePropertyDisplay(
   visible: boolean,
   order: number
 ) {
-  await requireAdmin()
+  await requirePageAccess()
 
   try {
     const prismaAny = prisma as any
@@ -80,7 +78,7 @@ export async function updatePropertyOrder(
   entityType: EntityType,
   updates: Array<{ customPropertyId: string; order: number }>
 ) {
-  await requireAdmin()
+  await requirePageAccess()
 
   await Promise.all(
     updates.map((update) =>
@@ -102,7 +100,7 @@ export async function togglePropertyVisibility(
   entityType: EntityType,
   visible: boolean
 ) {
-  await requireAdmin()
+  await requirePageAccess()
 
   const existing = await prisma.propertyDisplayConfig.findFirst({
     where: { customPropertyId, entityType },

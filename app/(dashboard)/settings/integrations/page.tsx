@@ -1,11 +1,12 @@
 import Link from "next/link"
-import { requireView } from "@/lib/auth-guard"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { getIntegrationsList } from "@/app/actions/intakeq"
 import { cn } from "@/lib/utils"
 import { Plug, ChevronRight } from "lucide-react"
 
 export default async function ConnectedAppsPage() {
-  await requireView("REPORTS")
+  // Connected Apps — also open to Reports access, as it always was (see lib/settings-pages.ts).
+  await settingsPageOrRedirect("integrations")
   const apps = await getIntegrationsList()
 
   return (

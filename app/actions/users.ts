@@ -10,18 +10,45 @@ import { sendEmail } from "@/lib/graph-mailer"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
 import { Role, AuditAction } from "@prisma/client"
+import { requireSettingsPage } from "@/lib/auth-guard"
+import { canManageAccess, ungrantable } from "@/lib/permissions"
 
 function appBaseUrl(): string {
   return (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).replace(/\/$/, "")
 }
 
-async function requireAdmin() {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
-  if ((session.user as { role?: string }).role !== "ADMIN") {
-    throw new Error("Admin access required")
-  }
-  return session
+// The User Management settings page: admins, or anyone given its box. A
+// non-admin can only manage people whose access fits inside their own and only
+// hand out what they hold (lib/permissions.ts canManageAccess / ungrantable).
+const requireAdmin = () => requireSettingsPage("users")
+
+type Actor = { id: string; role?: string | null; permissions?: string[] | null }
+
+/** A user's effective permissions — their own plus their teams', as the session merges them. */
+async function effectiveAccess(id: string): Promise<{ role: string; permissions: string[] } | null> {
+  const u = await prisma.user.findUnique({
+    where: { id },
+    select: { role: true, permissions: true, teamMemberships: { select: { team: { select: { permissions: true } } } } },
+  })
+  if (!u) return null
+  const all = [...u.permissions, ...u.teamMemberships.flatMap((m) => m.team.permissions)]
+  return { role: u.role, permissions: Array.from(new Set(all)) }
+}
+
+/** Null when `actor` may manage user `id`; otherwise the reason they may not. */
+async function cannotManage(actor: Actor, id: string): Promise<string | null> {
+  if (actor.role === "ADMIN") return null
+  const target = await effectiveAccess(id)
+  if (!target) return "User not found"
+  return canManageAccess(actor, target) ? null : "You can only manage people whose access is within your own."
+}
+
+/** Null when `actor` may give someone this role and these permissions. */
+function cannotGrant(actor: Actor, role: string | null | undefined, permissions: string[]): string | null {
+  if (actor.role === "ADMIN") return null
+  if (role === "ADMIN") return "Only an admin can make someone an admin."
+  const extra = ungrantable(actor, permissions)
+  return extra.length ? `You can't grant access you don't have yourself (${extra.slice(0, 3).join(", ")}${extra.length > 3 ? "…" : ""}).` : null
 }
 
 const CreateUserSchema = z.object({
@@ -38,6 +65,8 @@ export async function createUser(data: unknown) {
   if (!parsed.success) {
     return { error: parsed.error.flatten().fieldErrors }
   }
+  const denied = cannotGrant(session.user as Actor, parsed.data.role, [])
+  if (denied) return { error: { role: [denied] } }
 
   const existing = await prisma.user.findUnique({
     where: { email: parsed.data.email },
@@ -95,6 +124,8 @@ export async function inviteUser(data: unknown) {
   const session = await requireAdmin()
   const parsed = InviteUserSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+  const denied = cannotGrant(session.user as Actor, parsed.data.role, parsed.data.permissions ?? [])
+  if (denied) return { error: { permissions: [denied] } }
 
   const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } })
   if (existing) return { error: { email: ["Email already in use"] } }
@@ -139,7 +170,9 @@ export async function inviteUser(data: unknown) {
 
 // Regenerate the token and re-send the invite email for a still-pending user.
 export async function resendInvite(userId: string) {
-  await requireAdmin()
+  const session = await requireAdmin()
+  const denied = await cannotManage(session.user as Actor, userId)
+  if (denied) return { error: denied }
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user) return { error: "User not found" }
   if (user.isActive) return { error: "This user has already accepted their invitation." }
@@ -201,6 +234,8 @@ export async function updateUserRole(id: string, role: Role) {
   if (session.user.id === id) {
     return { error: "You cannot change your own role." }
   }
+  const denied = (await cannotManage(session.user as Actor, id)) ?? cannotGrant(session.user as Actor, role, [])
+  if (denied) return { error: denied }
 
   await prisma.user.update({ where: { id }, data: { role } })
 
@@ -218,7 +253,13 @@ export async function updateUserRole(id: string, role: Role) {
 
 export async function updateUserPermissions(id: string, permissions: string[]) {
   try {
-    await requireAdmin()
+    const session = await requireAdmin()
+    const actor = session.user as Actor
+    if (actor.role !== "ADMIN") {
+      if (actor.id === id) return { success: false, error: "You can't change your own permissions." }
+      const denied = (await cannotManage(actor, id)) ?? cannotGrant(actor, null, permissions)
+      if (denied) return { success: false, error: denied }
+    }
     await prisma.user.update({ where: { id }, data: { permissions: { set: permissions } } })
     revalidatePath("/settings/users")
     return { success: true, error: null }
@@ -233,6 +274,8 @@ export async function deleteUser(id: string) {
   if (session.user.id === id) {
     return { error: "You cannot delete your own account." }
   }
+  const denied = await cannotManage(session.user as Actor, id)
+  if (denied) return { error: denied }
 
   await prisma.user.delete({ where: { id } })
 
@@ -249,6 +292,11 @@ export async function deleteUser(id: string) {
 
 export async function resetPassword(id: string, newPassword: string) {
   const session = await requireAdmin()
+
+  // Setting someone's password is taking over their account — only for people
+  // whose access is within your own.
+  const denied = await cannotManage(session.user as Actor, id)
+  if (denied) return { error: denied }
 
   const { valid, errors } = validatePassword(newPassword)
   if (!valid) {

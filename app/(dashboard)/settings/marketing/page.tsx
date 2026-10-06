@@ -1,12 +1,10 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { listCategories, listMarketingOrders, getMarketingConfig } from "@/app/actions/marketing"
 import MarketingManager from "@/components/marketing-manager"
 import { ExternalLink } from "lucide-react"
 
 export default async function MarketingSettingsPage() {
-  const session = await auth()
-  if (!session) redirect("/login")
+  await settingsPageOrRedirect("marketing")
 
   const [categories, orders, config] = await Promise.all([
     listCategories(),

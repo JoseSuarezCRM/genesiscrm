@@ -1,12 +1,11 @@
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
 import { redirect, notFound } from "next/navigation"
 import PipelineManage from "@/components/pipeline-manage"
 import { getPipelineColorStyle, getPipelineRules } from "@/app/actions/pipelines"
 
 export default async function ManagePipelinePage({ params }: { params: { id: string } }) {
-  const session = await auth()
-  if ((session?.user as { role?: string })?.role !== "ADMIN") redirect("/")
+  const session = await settingsPageOrRedirect("pipelines")
 
   const pipeline = await (prisma as any).pipeline.findUnique({
     where: { id: params.id },

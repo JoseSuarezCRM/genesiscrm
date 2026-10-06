@@ -21,10 +21,19 @@ import { cn } from "@/lib/utils"
 import {
   NAV_PERMISSIONS, CAPABILITIES, ACCESS_OBJECTS, ACCESS_LEVELS,
   type PermissionDef, type AccessLevel, accessLevelFromPerms, canDeleteFromPerms,
+  holdsPermission, canManageAccess,
 } from "@/lib/permissions"
+import { SETTINGS_PAGES, SETTINGS_PAGE_KEYS, type SettingsSection } from "@/lib/settings-pages"
 
 // Custom objects appear in the access matrix as extra rows (key "CO:<key>").
 const ExtraAccessContext = createContext<{ key: string; label: string }[]>([])
+
+// Who is editing. An admin can grant anything; someone given the User Management
+// page can only grant what they hold (the server enforces it too — this only
+// greys out what would be refused).
+type Actor = { isAdmin: boolean; permissions: string[] }
+const ActorContext = createContext<Actor>({ isAdmin: true, permissions: [] })
+const canGrant = (actor: Actor, key: string) => actor.isAdmin || holdsPermission(actor.permissions, key)
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,6 +67,8 @@ interface Props {
   teams: TeamRow[]
   currentUserId: string
   customObjects?: { key: string; label: string }[]
+  /** The person editing; omitted means an admin. */
+  actor?: Actor
 }
 
 // ── Permission definitions ────────────────────────────────────────────────────
@@ -68,10 +79,12 @@ interface Props {
 function PermissionChecklist({
   selected, onChange, disabled, items,
 }: { selected: string[]; onChange: (v: string[]) => void; disabled?: boolean; items: PermissionDef[] }) {
+  const actor = useContext(ActorContext)
   return (
     <div className="space-y-3">
       {items.map((p) => (
-        <label key={p.key} className={cn("flex items-start gap-3 cursor-pointer group", disabled && "opacity-40 pointer-events-none")}>
+        <label key={p.key} title={canGrant(actor, p.key) ? undefined : "You can only grant access you have yourself"}
+          className={cn("flex items-start gap-3 cursor-pointer group", (disabled || !canGrant(actor, p.key)) && "opacity-40 pointer-events-none")}>
           <Checkbox
             checked={selected.includes(p.key)}
             onCheckedChange={(checked) =>
@@ -91,6 +104,7 @@ function PermissionChecklist({
 
 // Per-object access: a level (No access / View / View & Edit) + a separate Delete toggle.
 function ObjectAccessMatrix({ perms, onChange, disabled }: { perms: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  const actor = useContext(ActorContext)
   const setLevel = (obj: string, level: AccessLevel) => {
     const next = perms.filter((p) => p !== `${obj}:VIEW` && p !== `${obj}:EDIT`)
     if (level === "VIEW") next.push(`${obj}:VIEW`)
@@ -119,10 +133,12 @@ function ObjectAccessMatrix({ perms, onChange, disabled }: { perms: string[]; on
                 onChange={(e) => setLevel(o.key, e.target.value as AccessLevel)}
                 className="w-40 h-8 px-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:border-slate-400"
               >
-                {ACCESS_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                {ACCESS_LEVELS.map((l) => (
+                  <option key={l.value} value={l.value} disabled={l.value !== "NONE" && !canGrant(actor, `${o.key}:${l.value}`)}>{l.label}</option>
+                ))}
               </select>
               <div className="flex justify-center w-14">
-                <Checkbox checked={canDel} disabled={level === "NONE"} onCheckedChange={(c) => toggleDelete(o.key, !!c)} />
+                <Checkbox checked={canDel} disabled={level === "NONE" || !canGrant(actor, `${o.key}:DELETE`)} onCheckedChange={(c) => toggleDelete(o.key, !!c)} />
               </div>
             </div>
           )
@@ -132,14 +148,51 @@ function ObjectAccessMatrix({ perms, onChange, disabled }: { perms: string[]; on
   )
 }
 
-// The full permission editor: menu access + object access matrix + capabilities.
-function PermissionEditor({ perms, onChange, disabled }: { perms: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+// One checkbox per settings page (lib/settings-pages.ts), grouped like the
+// settings menu. Each box is full use of that page.
+const SETTINGS_GROUPS: SettingsSection[] = ["Team & Access", "Objects & Data", "Tools", "Integrations", "Automations"]
+function SettingsPagesChecklist({ perms, onChange, disabled }: { perms: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  return (
+    <div className={cn("grid gap-4 sm:grid-cols-2", disabled && "opacity-40 pointer-events-none")}>
+      {SETTINGS_GROUPS.map((section) => {
+        const items = SETTINGS_PAGES.filter((p) => p.section === section)
+        if (!items.length) return null
+        return (
+          <div key={section}>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{section}</p>
+            <PermissionChecklist selected={perms} onChange={onChange} disabled={disabled}
+              items={items.map((p) => ({ key: p.key, label: p.label, description: p.description }))} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// The full permission editor: menu access + settings pages + object access matrix + capabilities.
+function PermissionEditor({ perms, onChange: setPerms, disabled }: { perms: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+  const actor = useContext(ActorContext)
+  // Settings pages and the Settings menu entry move together: a page brings the
+  // entry with it, and taking the entry away takes the pages too.
+  const onChange = (next: string[]) => {
+    const hadNav = perms.includes("NAV_ADMIN")
+    const hasNav = next.includes("NAV_ADMIN")
+    const pages = next.filter((p) => SETTINGS_PAGE_KEYS.includes(p))
+    if (hadNav && !hasNav) next = next.filter((p) => !SETTINGS_PAGE_KEYS.includes(p))
+    else if (!hasNav && pages.length && canGrant(actor, "NAV_ADMIN")) next = [...next, "NAV_ADMIN"]
+    setPerms(next)
+  }
   return (
     <div className="space-y-5">
       <div>
         <Label className="mb-1 block">Menu Access</Label>
         <p className="text-xs text-slate-500 mb-3">Which sections of the navigation this {disabled ? "user" : "set"} can see.</p>
         <PermissionChecklist selected={perms} onChange={onChange} items={NAV_PERMISSIONS} disabled={disabled} />
+      </div>
+      <div>
+        <Label className="mb-1 block">Settings Pages</Label>
+        <p className="text-xs text-slate-500 mb-3">Which settings pages they can open and use. Admins can open all of them.</p>
+        <SettingsPagesChecklist perms={perms} onChange={onChange} disabled={disabled} />
       </div>
       <div>
         <Label className="mb-1 block">Object Access</Label>
@@ -220,17 +273,22 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
   const navPerms = team.permissions.filter(p => p.startsWith("NAV_"))
   const objectGrants = ACCESS_OBJECTS.filter(o => team.permissions.some(p => p.startsWith(o.key + ":"))).length
   const capPerms = team.permissions.filter(p => CAPABILITIES.some(c => c.key === p))
+  const settingsGrants = team.permissions.filter(p => SETTINGS_PAGE_KEYS.includes(p)).length
 
   function handleAddMember() {
     if (!addUserId) return
     startTransition(async () => {
-      await addTeamMember(team.id, addUserId)
+      const res = await addTeamMember(team.id, addUserId)
+      if (!res.success) { alert(res.error ?? "Couldn't add them to the team."); return }
       setAddUserId("")
     })
   }
 
   function handleRemoveMember(userId: string) {
-    startTransition(async () => { await removeTeamMember(team.id, userId) })
+    startTransition(async () => {
+      const res = await removeTeamMember(team.id, userId)
+      if (!res.success) alert(res.error ?? "Couldn't remove them from the team.")
+    })
   }
 
   async function handleDelete() {
@@ -264,6 +322,9 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
             ))}
             {objectGrants > 0 && (
               <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{objectGrants} object{objectGrants !== 1 ? "s" : ""}</span>
+            )}
+            {settingsGrants > 0 && (
+              <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{settingsGrants} settings page{settingsGrants !== 1 ? "s" : ""}</span>
             )}
             {capPerms.slice(0, 2).map(p => (
               <span key={p} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
@@ -352,7 +413,14 @@ function TeamCard({ team, users }: { team: TeamRow; users: UserRow[] }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function UserManager({ users, teams, currentUserId, customObjects = [] }: Props) {
+export default function UserManager({ users, teams, currentUserId, customObjects = [], actor = { isAdmin: true, permissions: [] } }: Props) {
+  // A delegated manager may only act on people whose access fits inside theirs.
+  const effectivePerms = (u: UserRow) => Array.from(new Set([
+    ...u.permissions,
+    ...teams.filter((t) => u.teamMemberships.some((m) => m.team.id === t.id)).flatMap((t) => t.permissions),
+  ]))
+  const canManage = (u: UserRow) =>
+    canManageAccess({ role: actor.isAdmin ? "ADMIN" : null, permissions: actor.permissions }, { role: u.role, permissions: effectivePerms(u) })
   const [tab, setTab] = useState<"users" | "teams">("users")
   const [isPending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
@@ -455,6 +523,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
   }
 
   return (
+    <ActorContext.Provider value={actor}>
     <ExtraAccessContext.Provider value={customObjects}>
     <div className="space-y-4">
       {/* Tabs + action */}
@@ -505,7 +574,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
                     {addErrors.email && <p className="text-xs text-red-600">{addErrors.email[0]}</p>}
                   </div>
 
-                  <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-slate-200 px-3 py-2.5 hover:bg-slate-50">
+                  {actor.isAdmin && <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-slate-200 px-3 py-2.5 hover:bg-slate-50">
                     <Checkbox
                       checked={newIsSuperAdmin}
                       onCheckedChange={v => { setNewIsSuperAdmin(!!v); if (v) setNewTeamId("") }}
@@ -515,7 +584,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
                       <p className="text-xs text-slate-500">Full access to all sections and features</p>
                     </div>
                     <Crown className="h-4 w-4 text-amber-500 ml-auto" />
-                  </label>
+                  </label>}
 
                   {!newIsSuperAdmin && (
                     <div className="space-y-1.5">
@@ -609,7 +678,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
                     <td className="px-6 py-3 text-slate-600">{u._count.referralsCreated}</td>
                     <td className="px-6 py-3 text-right">
                       <div className="flex justify-end gap-1">
-                        {u.id !== currentUserId && (
+                        {actor.isAdmin && u.id !== currentUserId && (
                           <Button
                             size="icon" variant="ghost"
                             className={cn("h-8 w-8", isSuperAdmin ? "text-amber-500 hover:text-amber-700 hover:bg-amber-50" : "text-slate-400 hover:text-amber-500 hover:bg-amber-50")}
@@ -620,6 +689,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
                             <Crown className="h-4 w-4" />
                           </Button>
                         )}
+                        {(actor.isAdmin || (canManage(u) && u.id !== currentUserId)) && (
                         <Button
                           size="icon" variant="ghost" className="h-8 w-8"
                           title="Manage individual permissions"
@@ -627,7 +697,8 @@ export default function UserManager({ users, teams, currentUserId, customObjects
                         >
                           <ShieldCheck className="h-4 w-4" />
                         </Button>
-                        {!u.isActive && (
+                        )}
+                        {!u.isActive && canManage(u) && (
                           <Button
                             size="icon" variant="ghost"
                             className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
@@ -638,7 +709,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
                             <Mail className="h-4 w-4" />
                           </Button>
                         )}
-                        {u.isActive && (
+                        {u.isActive && canManage(u) && (
                           <Button
                             size="icon" variant="ghost" className="h-8 w-8"
                             title="Reset password"
@@ -647,7 +718,7 @@ export default function UserManager({ users, teams, currentUserId, customObjects
                             <KeyRound className="h-4 w-4" />
                           </Button>
                         )}
-                        {u.id !== currentUserId && (
+                        {u.id !== currentUserId && canManage(u) && (
                           <Button
                             size="icon" variant="ghost"
                             className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
@@ -744,5 +815,6 @@ export default function UserManager({ users, teams, currentUserId, customObjects
       </Dialog>
     </div>
     </ExtraAccessContext.Provider>
+    </ActorContext.Provider>
   )
 }

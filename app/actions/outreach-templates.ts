@@ -1,22 +1,19 @@
 "use server"
 
+import { requireSettingsPage } from "@/lib/auth-guard"
+
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { createAuditLog } from "@/lib/audit"
 import { AuditAction } from "@prisma/client"
 
-async function requireAdmin() {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
-  if ((session.user as { role?: string }).role !== "ADMIN") {
-    throw new Error("Admin access required")
-  }
-  return session
-}
+// Everything here belongs to the outreach settings page: admins, or anyone given
+// that page's box in User Management (lib/settings-pages.ts).
+const requirePageAccess = () => requireSettingsPage("outreach")
 
 export async function getOutreachTemplates() {
-  await requireAdmin()
+  await requirePageAccess()
   return prisma.outreachTemplate.findMany({
     orderBy: [{ trigger: "asc" }, { channel: "asc" }],
   })
@@ -34,7 +31,7 @@ export async function getEmailTemplates() {
 }
 
 export async function toggleOutreachTemplate(id: string) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
 
   const current = await prisma.outreachTemplate.findUniqueOrThrow({ where: { id } })
   const template = await prisma.outreachTemplate.update({
@@ -58,7 +55,7 @@ export async function updateOutreachTemplate(
   id: string,
   data: { body: string; subject?: string | null; isActive: boolean }
 ) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
 
   const template = await prisma.outreachTemplate.update({
     where: { id },

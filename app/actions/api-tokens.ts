@@ -1,6 +1,6 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireSettingsPage } from "@/lib/auth-guard"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
@@ -19,12 +19,12 @@ export interface ApiTokenRow {
 
 // The live scope catalog (built-in + custom objects) for the key-creation UI.
 export async function listApiScopes(): Promise<ApiScopeDef[]> {
-  await requirePermission("MANAGE_USERS")
+  await requireSettingsPage("api-keys")
   return getApiScopes()
 }
 
 export async function listApiTokens(): Promise<ApiTokenRow[]> {
-  await requirePermission("MANAGE_USERS")
+  await requireSettingsPage("api-keys")
   const rows = await (prisma as any).apiToken.findMany({ orderBy: { createdAt: "desc" } })
   return rows.map((r: any) => ({
     id: r.id,
@@ -39,7 +39,7 @@ export async function listApiTokens(): Promise<ApiTokenRow[]> {
 
 // Create a key. The plaintext token is returned ONCE — it can't be retrieved again.
 export async function createApiToken(name: string, scopes: string[]): Promise<{ token?: string; prefix?: string; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireSettingsPage("api-keys")
   const clean = (name ?? "").trim()
   if (!clean) return { error: "Give the key a name." }
   const valid = await getApiScopeKeys()
@@ -68,7 +68,7 @@ export async function updateApiTokenScopes(
   id: string,
   scopes: string[],
 ): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireSettingsPage("api-keys")
 
   // Filtered against the live catalog, exactly as creation is: a scope string
   // that no longer exists must not survive an edit just because it was saved
@@ -93,7 +93,7 @@ export async function updateApiTokenScopes(
 }
 
 export async function revokeApiToken(id: string): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireSettingsPage("api-keys")
   try {
     await (prisma as any).apiToken.update({ where: { id }, data: { revokedAt: new Date() } })
     revalidatePath("/settings/integrations/api-keys")
@@ -104,7 +104,7 @@ export async function revokeApiToken(id: string): Promise<{ ok?: boolean; error?
 }
 
 export async function deleteApiToken(id: string): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireSettingsPage("api-keys")
   try {
     await (prisma as any).apiToken.delete({ where: { id } })
     revalidatePath("/settings/integrations/api-keys")

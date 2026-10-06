@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
 import { auth } from "@/lib/auth"
-import { userCan } from "@/lib/permissions"
+import { canOpenSettingsPage } from "@/lib/settings-pages"
 
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"]
 const MAX_SIZE = 20 * 1024 * 1024
@@ -9,8 +9,8 @@ const MAX_SIZE = 20 * 1024 * 1024
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  // Marketing materials are an admin/settings surface.
-  if (!userCan(session.user as any, "NAV_ADMIN")) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // The Marketing Materials settings page's box (lib/settings-pages.ts).
+  if (!canOpenSettingsPage(session.user as any, "marketing")) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const formData = await req.formData()
   const file = formData.get("file") as File | null

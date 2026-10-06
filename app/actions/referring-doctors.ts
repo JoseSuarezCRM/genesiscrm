@@ -5,7 +5,8 @@ import { runTrigger_RecordCreated, runTrigger_RecordPropertyChanged } from "@/li
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { requireAccess, requireDelete, requirePermission, requireAnyAccess, requireAnyDelete } from "@/lib/auth-guard"
+import { requireAccess, requireDelete, requirePermission, requireAnyAccess, requireAnyDelete, requireSettingsPage } from "@/lib/auth-guard"
+import { userCan } from "@/lib/permissions"
 import { recordMergeRedirect } from "@/lib/merge-redirect"
 import { toProperCase } from "@/lib/name-format"
 
@@ -274,7 +275,7 @@ export async function getLocations() {
 }
 
 export async function mergeLocation(sourceId: string, targetId: string) {
-  const session = await requirePermission("MERGE_RECORDS")
+  const session = await requireSettingsPage("duplicates", { alsoAllow: (u) => userCan(u, "MERGE_RECORDS") })
 
   if (sourceId === targetId) return { error: "Cannot merge a location into itself." }
 
@@ -317,7 +318,7 @@ export async function mergeLocation(sourceId: string, targetId: string) {
 }
 
 export async function mergePractice(sourceId: string, targetId: string) {
-  const session = await requirePermission("MERGE_RECORDS")
+  const session = await requireSettingsPage("duplicates", { alsoAllow: (u) => userCan(u, "MERGE_RECORDS") })
 
   if (sourceId === targetId) return { error: "Cannot merge a practice into itself." }
 
@@ -488,7 +489,7 @@ export async function updateDoctorField(id: string, field: string, value: string
 }
 
 export async function mergeDoctor(sourceId: string, targetId: string) {
-  const session = await requirePermission("MERGE_RECORDS")
+  const session = await requireSettingsPage("duplicates", { alsoAllow: (u) => userCan(u, "MERGE_RECORDS") })
 
   if (sourceId === targetId) return { error: "Cannot merge a provider into itself." }
 
@@ -527,7 +528,7 @@ export async function mergeDoctor(sourceId: string, targetId: string) {
 export async function mergeExactDuplicates(
   pairs: { kind: "practice" | "location" | "doctor"; keepId: string; sourceId: string }[]
 ) {
-  await requirePermission("MERGE_RECORDS")
+  await requireSettingsPage("duplicates", { alsoAllow: (u) => userCan(u, "MERGE_RECORDS") })
 
   // removed id → survivor id (followed transitively)
   const redirect = new Map<string, string>()

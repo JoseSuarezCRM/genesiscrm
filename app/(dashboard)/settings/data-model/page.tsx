@@ -1,11 +1,9 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { listAssociationDefs, listObjectTypes } from "@/app/actions/associations"
 import DataModelSettings from "@/components/data-model-settings"
 
 export default async function DataModelPage() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") redirect("/")
+  const session = await settingsPageOrRedirect("data-model")
 
   const [defs, types] = await Promise.all([listAssociationDefs(), listObjectTypes()])
 

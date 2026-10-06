@@ -1,6 +1,5 @@
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import Link from "next/link"
-import { redirect } from "next/navigation"
-import { auth } from "@/lib/auth"
 import AiRulesEditor from "@/components/referral-calls/ai-rules-editor"
 import { getReferralCallDef } from "@/lib/referral-calls/provision"
 import { getExtractionProfile } from "@/lib/referral-calls/profile"
@@ -10,8 +9,7 @@ export const dynamic = "force-dynamic"
 export const metadata = { title: "On-call AI" }
 
 export default async function OnCallAiSettingsPage() {
-  const session = await auth()
-  if ((session?.user as { role?: string } | undefined)?.role !== "ADMIN") redirect("/")
+  const session = await settingsPageOrRedirect("on-call-ai")
 
   const def = await getReferralCallDef()
   const profile = def ? await getExtractionProfile() : null

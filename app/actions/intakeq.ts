@@ -1,6 +1,7 @@
 "use server"
 
-import { requireAccess } from "@/lib/auth-guard"
+import { requireSettingsPage } from "@/lib/auth-guard"
+import { userCanLevel } from "@/lib/permissions"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
@@ -12,6 +13,13 @@ import { encryptSecret, maskTail, randomToken, hasEncryptionKey } from "@/lib/cr
 import { getIntegration, getIntakeForms } from "@/lib/integration-store"
 import { sendReferralReport, sendScheduledIntakeReport, type IntakeEmailReportConfig } from "@/lib/intakeq-report"
 import { attributeReferralSources, type SourceMapping, type AttributionResult } from "@/lib/appointment-source"
+
+// Connected Apps (lib/settings-pages.ts): the page's box, or Reports as it always
+// was — View to read, Edit to change. boxOnly keeps view-only Reports users from
+// passing the Edit gate through the page's own Reports-View way in.
+const requireIntegrationView = () => requireSettingsPage("integrations")
+const requireIntegrationEdit = () =>
+  requireSettingsPage("integrations", { boxOnly: true, alsoAllow: (u) => userCanLevel(u, "REPORTS", "EDIT") })
 
 export interface ReferralSourceReport {
   configured: boolean
@@ -41,7 +49,7 @@ export async function getReferralSourceReport(
   granularity: Granularity = "week",
   form: string = ALL_FORMS,
 ): Promise<ReferralSourceReport> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
 
   const periods = recentPeriods(granularity, defaultPeriodCount(granularity))
   const since = periodStartDate(periods[0], granularity)
@@ -163,7 +171,7 @@ async function listReportForms(): Promise<ReportFormOption[]> {
 // Pull + categorize existing submissions for a date range (bounded; run again if
 // `remaining` > 0). Used to backfill history the webhook didn't capture.
 export async function runIntakeBackfill(startDate: string, endDate: string): Promise<{ processed?: number; remaining?: number; candidates?: number; rateLimited?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   if (!(await isIntakeqConfigured())) return { error: "IntakeQ API key isn't configured yet." }
   if (!startDate || !endDate) return { error: "Pick a start and end date." }
   try {
@@ -204,7 +212,7 @@ function backfillStatusOf(cfg: any): IntakeBackfillStatus {
 // (/api/cron/intakeq-backfill) drains it to completion — closing the page no
 // longer stops it.
 export async function startIntakeBackfill(startDate: string, endDate: string): Promise<{ ok?: boolean; error?: string }> {
-  const session = await requireAccess("REPORTS", "EDIT")
+  const session = await requireIntegrationEdit()
   if (!(await isIntakeqConfigured())) return { error: "IntakeQ API key isn't configured yet." }
   if (!startDate || !endDate) return { error: "Pick a start and end date." }
   const row = await getIntegration()
@@ -221,7 +229,7 @@ export async function startIntakeBackfill(startDate: string, endDate: string): P
 }
 
 export async function stopIntakeBackfill(): Promise<{ ok?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   const row = await getIntegration()
   const cfg = (row?.config ?? {}) as any
   if (cfg.backfill) {
@@ -231,7 +239,7 @@ export async function stopIntakeBackfill(): Promise<{ ok?: boolean; error?: stri
 }
 
 export async function getIntakeBackfillStatus(): Promise<IntakeBackfillStatus> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
   const row = await getIntegration()
   return backfillStatusOf(row?.config ?? {})
 }
@@ -249,7 +257,7 @@ export interface IntegrationListItem {
 }
 
 export async function getIntegrationsList(): Promise<IntegrationListItem[]> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
   const row = await getIntegration()
   const configured = await isIntakeqConfigured()
   const [lastEvent, lastSub] = await Promise.all([
@@ -309,7 +317,7 @@ export interface IntegrationSettings {
 }
 
 export async function getIntegrationSettings(): Promise<IntegrationSettings> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
   const row = await getIntegration()
   const cfg = (row?.config ?? {}) as any
   return {
@@ -349,7 +357,7 @@ export interface SourceMappingObject {
 
 /** Custom objects + their DATE / text-ish properties, for the mapping pickers. */
 export async function getSourceMappingOptions(): Promise<SourceMappingObject[]> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
   const defs = await (prisma as any).customObjectDef.findMany({
     orderBy: { plural: "asc" }, select: { key: true, plural: true, properties: true },
   }).catch(() => [])
@@ -365,7 +373,7 @@ export async function getSourceMappingOptions(): Promise<SourceMappingObject[]> 
 }
 
 export async function saveIntakeqSourceMapping(input: SourceMapping | null): Promise<{ ok?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   try {
     const row = await getIntegration()
     const cfg = (row?.config ?? {}) as any
@@ -381,7 +389,7 @@ export async function saveIntakeqSourceMapping(input: SourceMapping | null): Pro
 
 /** Backfill: attribute referral sources to mapped records that don't have one yet. */
 export async function runSourceAttribution(): Promise<AttributionResult> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   const res = await attributeReferralSources({ onlyMissing: true })
   revalidatePath("/settings/integrations/intakeq")
   return res
@@ -394,7 +402,7 @@ export async function runSourceAttribution(): Promise<AttributionResult> {
  * report (which can be filtered to a single form on screen).
  */
 export async function saveIntakeForms(forms: string[]): Promise<{ ok?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   const clean = (forms ?? []).map((f) => f.trim()).filter(Boolean)
   if (!clean.length) return { error: "Keep at least one form — an empty list would stop all ingestion." }
   try {
@@ -416,7 +424,7 @@ export async function saveIntakeForms(forms: string[]): Promise<{ ok?: boolean; 
  * missing data weeks later.
  */
 export async function checkIntakeForms(forms: string[]): Promise<{ items?: { name: string; archived: boolean; matched: boolean }[]; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   if (!(await isIntakeqConfigured())) return { error: "IntakeQ API key isn't configured yet." }
   try {
     const list = await listQuestionnaires()
@@ -434,7 +442,7 @@ export async function checkIntakeForms(forms: string[]): Promise<{ items?: { nam
 
 // Save the scheduled-pull settings (when it runs + which date window to reconcile).
 export async function saveIntakeqSchedule(input: { frequency: "daily" | "weekly"; dayOfWeek: number; hour: number; window: IntakeWindow }): Promise<{ ok?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   try {
     const row = await getIntegration()
     const cfg = (row?.config ?? {}) as any
@@ -450,7 +458,7 @@ export async function saveIntakeqSchedule(input: { frequency: "daily" | "weekly"
 
 // Store (or rotate) the IntakeQ API key — encrypted; enables the integration.
 export async function saveIntakeqApiKey(apiKey: string): Promise<{ ok?: boolean; error?: string; hint?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   const key = (apiKey ?? "").trim()
   if (!key) return { error: "Paste an API key." }
   if (!hasEncryptionKey()) return { error: "ENCRYPTION_KEY isn't set on the server yet." }
@@ -472,7 +480,7 @@ export async function saveIntakeqApiKey(apiKey: string): Promise<{ ok?: boolean;
 // Generate a new webhook secret and return it (shown once) so the admin can paste
 // the full webhook URL into IntakeQ.
 export async function generateWebhookSecret(): Promise<{ secret?: string; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   const uid = (await auth())?.user?.id ?? null
   const secret = randomToken(24)
   try {
@@ -489,7 +497,7 @@ export async function generateWebhookSecret(): Promise<{ secret?: string; error?
 }
 
 export async function setIntakeqEnabled(enabled: boolean): Promise<{ ok?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   try {
     await (prisma as any).integration.update({ where: { provider: "intakeq" }, data: { enabled } })
     revalidatePath("/settings/integrations/intakeq")
@@ -501,7 +509,7 @@ export async function setIntakeqEnabled(enabled: boolean): Promise<{ ok?: boolea
 
 // Remove the stored key (and disable). Keeps history rows intact.
 export async function disconnectIntakeq(): Promise<{ ok?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   try {
     await (prisma as any).integration.updateMany({
       where: { provider: "intakeq" },
@@ -518,14 +526,14 @@ export async function disconnectIntakeq(): Promise<{ ok?: boolean; error?: strin
 
 // Emails a per-day referral-source report for a selected date range (manual).
 export async function sendReferralReportEmail(input: { startDate: string; endDate: string; recipients: string[] }): Promise<{ ok?: boolean; sent?: number; error?: string }> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
   if (!input.startDate || !input.endDate) return { error: "Pick a start and end date." }
   return sendReferralReport(input.startDate, input.endDate, input.recipients ?? [])
 }
 
 // Save the scheduled email-report settings.
 export async function saveIntakeqReportSchedule(input: { enabled: boolean; recipients: string[]; frequency: "daily" | "weekly"; dayOfWeek: number; hour: number; window: IntakeWindow }): Promise<{ ok?: boolean; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   try {
     const row = await getIntegration()
     const cfg = (row?.config ?? {}) as any
@@ -543,7 +551,7 @@ export async function saveIntakeqReportSchedule(input: { enabled: boolean; recip
 
 // Send the scheduled report now (manual test — doesn't touch lastSentAt).
 export async function sendIntakeReportNow(): Promise<{ ok?: boolean; message?: string; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   const r = await sendScheduledIntakeReport({ manual: true })
   if (r.error) return { error: r.error }
   return { ok: true, message: `Sent to ${r.sent} recipient(s) — ${r.total} total responses in the window.` }
@@ -559,7 +567,7 @@ export interface IntegrationActivity {
 }
 
 export async function getIntegrationActivity(): Promise<IntegrationActivity> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
 
   // Keep the log bounded — drop events older than 30 days.
   await (prisma as any).integrationEvent.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 30 * 86400000) } } }).catch(() => {})
@@ -611,7 +619,7 @@ export interface IntakeSubmission {
 // The most recent stored intake submissions, newest first (paginated). Contains
 // patient names (PHI) — gated by REPORTS VIEW, same as the rest of the page.
 export async function getRecentIntakeSubmissions(limit = 50, offset = 0): Promise<IntakeSubmission[]> {
-  await requireAccess("REPORTS", "VIEW")
+  await requireIntegrationView()
   const rows = await (prisma as any).intakeReferralResponse.findMany({
     orderBy: { submittedAt: "desc" },
     take: Math.min(200, Math.max(1, limit)),
@@ -631,7 +639,7 @@ export async function getRecentIntakeSubmissions(limit = 50, offset = 0): Promis
 
 // Diagnostics: list questionnaire templates so we can confirm the exact form name.
 export async function listIntakeQuestionnaires(): Promise<{ items?: { Id: string; Name: string; Archived: boolean }[]; error?: string }> {
-  await requireAccess("REPORTS", "EDIT")
+  await requireIntegrationEdit()
   if (!(await isIntakeqConfigured())) return { error: "IntakeQ API key isn't configured yet." }
   try {
     return { items: await listQuestionnaires() }

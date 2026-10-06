@@ -1,12 +1,14 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { getSurgeonSite } from "@/app/actions/surgeon-sites"
 import { SurgeonSiteEditor } from "@/components/surgeon-site-editor"
 
 export const dynamic = "force-dynamic"
 
 export default async function SurgeonSiteDetailPage({ params }: { params: { id: string } }) {
+  await settingsPageOrRedirect("surgeon-sites")
   const site = await getSurgeonSite(params.id)
   if (!site) notFound()
 

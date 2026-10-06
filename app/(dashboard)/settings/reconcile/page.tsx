@@ -1,12 +1,8 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import ReconcileManager from "@/components/reconcile-manager"
 
 export default async function ReconcilePage() {
-  const session = await auth()
-  if ((session?.user as { role?: string })?.role !== "ADMIN") {
-    redirect("/")
-  }
+  const session = await settingsPageOrRedirect("reconcile")
 
   return (
     <div className="p-6 space-y-6">

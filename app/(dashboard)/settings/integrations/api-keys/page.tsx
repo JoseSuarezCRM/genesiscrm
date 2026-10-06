@@ -1,14 +1,12 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
-import { auth } from "@/lib/auth"
-import { userCan } from "@/lib/permissions"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { listApiTokens, listApiScopes } from "@/app/actions/api-tokens"
 import ApiKeysManager from "@/components/api-keys-manager"
 
 export default async function ApiKeysPage() {
-  const session = await auth()
-  if (!userCan(session?.user as any, "MANAGE_USERS")) redirect("/settings/integrations")
+  // API Keys box, or Manage Users as before (lib/settings-pages.ts).
+  const session = await settingsPageOrRedirect("api-keys")
   const [tokens, scopes] = await Promise.all([listApiTokens(), listApiScopes()])
 
   return (

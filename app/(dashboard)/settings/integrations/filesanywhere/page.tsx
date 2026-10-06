@@ -1,7 +1,6 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
-import { auth } from "@/lib/auth"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { userCan } from "@/lib/permissions"
 import { getFaSettings } from "@/app/actions/filesanywhere"
 import FilesanywhereConfig from "@/components/filesanywhere-config"
@@ -11,8 +10,8 @@ import FilesanywhereConfig from "@/components/filesanywhere-config"
 export const maxDuration = 60
 
 export default async function FilesanywherePage() {
-  const session = await auth()
-  if (!userCan(session?.user as any, "MANAGE_USERS")) redirect("/settings/integrations")
+  // Connected Apps box, or Manage Users as before.
+  const session = await settingsPageOrRedirect("integrations", { boxOnly: true, alsoAllow: (u) => userCan(u, "MANAGE_USERS") })
   const settings = await getFaSettings()
 
   return (

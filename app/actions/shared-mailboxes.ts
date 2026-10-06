@@ -1,5 +1,7 @@
 "use server"
 
+import { requireSettingsPage } from "@/lib/auth-guard"
+
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
@@ -10,13 +12,9 @@ import {
 import { invalidateSignatureCache } from "@/lib/email-signature"
 import { sanitizeSignatureHtml } from "@/lib/sanitize-signature"
 
-async function requireAdmin() {
-  const session = await auth()
-  const user = session?.user as any
-  if (!user) throw new Error("Unauthorized")
-  if (user.role !== "ADMIN") throw new Error("You don't have permission to do this")
-  return session!
-}
+// Everything here belongs to the email settings page: admins, or anyone given
+// that page's box in User Management (lib/settings-pages.ts).
+const requirePageAccess = () => requireSettingsPage("email")
 
 /** Sender options for the workflow editor's email/invite actions. */
 export async function getSharedMailboxOptions(): Promise<{ value: string; label: string }[]> {
@@ -28,7 +26,7 @@ export async function getSharedMailboxOptions(): Promise<{ value: string; label:
 
 /** The full list for the Settings screen, disabled rows included. */
 export async function listMailboxesForSettings() {
-  await requireAdmin()
+  await requirePageAccess()
   await ensureSeeded()
   return (prisma as any).sharedMailbox.findMany({
     orderBy: [{ order: "asc" }, { email: "asc" }],
@@ -36,7 +34,7 @@ export async function listMailboxesForSettings() {
 }
 
 export async function createSharedMailbox(input: { email: string; label: string }) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   const email = input.email.trim()
   const label = input.label.trim() || email
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "That doesn't look like an email address." }
@@ -60,7 +58,7 @@ export async function updateSharedMailbox(
   id: string,
   data: { label?: string; signatureHtml?: string | null; enabled?: boolean; order?: number },
 ) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   // Same rule as the org/personal signatures: raw HTML in, nothing executable stored.
   const signatureHtml = data.signatureHtml == null
     ? data.signatureHtml
@@ -76,7 +74,7 @@ export async function updateSharedMailbox(
 }
 
 export async function deleteSharedMailbox(id: string) {
-  await requireAdmin()
+  await requirePageAccess()
   await (prisma as any).sharedMailbox.delete({ where: { id } })
   invalidateMailboxCache()
   invalidateSignatureCache()
@@ -97,7 +95,7 @@ export async function deleteSharedMailbox(id: string) {
  * leave that untestable.
  */
 export async function testSharedMailbox(id: string) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   const box = await (prisma as any).sharedMailbox.findUnique({ where: { id } })
   if (!box) return { error: "Mailbox not found." }
   const to = (session.user as any).email as string

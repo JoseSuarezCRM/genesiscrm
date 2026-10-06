@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
-import { auth } from "@/lib/auth"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
+import { canOpenSettingsPage } from "@/lib/settings-pages"
 import { prisma } from "@/lib/prisma"
 import { userCanLevel } from "@/lib/permissions"
 import { listObjectTypes } from "@/lib/object-registry"
@@ -11,9 +11,9 @@ import ImportWizard, { type ImportObject, type AssocTarget } from "@/components/
 export const metadata = { title: "Import Records" }
 
 export default async function ImportPage() {
-  const session = await auth()
-  const user = session?.user as any
-  if (!user) redirect("/login")
+  // The page needs Import Records; each object in it still needs Edit on that object.
+  const session = await settingsPageOrRedirect("import")
+  const user = session.user as any
 
   const defs = await (prisma as any).customObjectDef.findMany({
     orderBy: { plural: "asc" },
@@ -60,8 +60,8 @@ export default async function ImportPage() {
       key: PROVIDER_IMPORT_KEY,
       singular: "Provider",
       plural: "Providers",
-      // Provider properties are CustomProperty rows; adding one is admin-only.
-      canCreateProperty: user.role === "ADMIN",
+      // Provider properties are CustomProperty rows; adding one needs the Custom Properties page.
+      canCreateProperty: canOpenSettingsPage(user, "custom-properties"),
       requiredForCreate: ["name", "__practice"],
       excludeAssocTypes: PROVIDER_NATIVE_LINK_TYPES,
       properties: [

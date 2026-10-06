@@ -1,14 +1,10 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { headers } from "next/headers"
 import { getEmbedNotificationUsers } from "@/app/actions/embed-notifications"
 import EmbedFormSettings from "@/components/embed-form-settings"
 
 export default async function EmbedPage() {
-  const session = await auth()
-  if ((session?.user as { role?: string })?.role !== "ADMIN") {
-    redirect("/")
-  }
+  const session = await settingsPageOrRedirect("embed")
 
   const headersList = await headers()
   const host = headersList.get("host") ?? "your-domain.com"

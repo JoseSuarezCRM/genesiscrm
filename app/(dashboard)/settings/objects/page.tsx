@@ -1,11 +1,9 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { listCustomObjects } from "@/app/actions/custom-objects"
 import CustomObjectSettings from "@/components/custom-object-settings"
 
 export default async function ObjectsSettingsPage({ searchParams }: { searchParams?: { key?: string } }) {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") redirect("/")
+  const session = await settingsPageOrRedirect("objects")
 
   const objects = await listCustomObjects()
 

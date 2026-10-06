@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { hasSettingsPage } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { runImportBatch, startImportRun } from "@/app/actions/import-records"
 import { attributeReferralSources, previewSourceMatches } from "@/lib/appointment-source"
@@ -56,7 +57,7 @@ export interface AppliedRecord {
 /** Strip "MRN: " prefix and non-digit chars from all existing genesisMrn values */
 export async function cleanupGenesisMrn() {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") return { error: "Unauthorized" }
+  if (!(await hasSettingsPage("reconcile"))) return { error: "Unauthorized" }
 
   const referrals = await prisma.referral.findMany({
     where: { genesisMrn: { not: null } },
@@ -87,7 +88,7 @@ export async function matchAppointments(
   dateTo: string
 ): Promise<{ matches: MatchResult[]; noShowCandidates: NoShowCandidate[]; unmatchedCsvRows: number }> {
   const session = await auth()
-  if (!session?.user) return { matches: [], noShowCandidates: [], unmatchedCsvRows: rows.length }
+  if (!session?.user || !(await hasSettingsPage("reconcile"))) return { matches: [], noShowCandidates: [], unmatchedCsvRows: rows.length }
 
   const from = new Date(dateFrom)
   const to = new Date(dateTo)
@@ -153,7 +154,7 @@ export async function matchAppointments(
 /** Properties of the Appointments object, for the column-mapping step. */
 export async function getAppointmentProperties(): Promise<{ id: string; name: string; type: string }[]> {
   const session = await auth()
-  if (!session?.user) return []
+  if (!session?.user || !(await hasSettingsPage("reconcile"))) return []
   const def = await (prisma as any).customObjectDef.findUnique({
     where: { key: APPOINTMENTS_OBJECT_KEY }, select: { properties: true },
   }).catch(() => null)
@@ -165,7 +166,7 @@ export async function previewIntakeMatches(
   rows: { dob?: string; visitDate?: string }[],
 ): Promise<{ eligible: number; matched: number; error?: string }> {
   const session = await auth()
-  if (!session?.user) return { eligible: 0, matched: 0, error: "Unauthorized" }
+  if (!session?.user || !(await hasSettingsPage("reconcile"))) return { eligible: 0, matched: 0, error: "Unauthorized" }
   return previewSourceMatches(rows)
 }
 
@@ -173,14 +174,14 @@ export async function previewIntakeMatches(
 
 export async function getImportMapping(objectKey: string): Promise<Record<string, string>> {
   const session = await auth()
-  if (!session?.user) return {}
+  if (!session?.user || !(await hasSettingsPage("reconcile"))) return {}
   const row = await (prisma as any).importMappingConfig.findUnique({ where: { objectKey } }).catch(() => null)
   return (row?.fieldMap as Record<string, string>) ?? {}
 }
 
 export async function saveImportMapping(objectKey: string, fieldMap: Record<string, string>) {
   const session = await auth()
-  if (!session?.user) return { error: "Unauthorized" }
+  if (!session?.user || !(await hasSettingsPage("reconcile"))) return { error: "Unauthorized" }
   await (prisma as any).importMappingConfig.upsert({
     where: { objectKey }, create: { objectKey, fieldMap }, update: { fieldMap },
   }).catch(() => {})
@@ -212,7 +213,7 @@ export async function applyReconciliationImport(input: {
   matchMap: Record<string, { reportMrn: string; reportVisitDate: string }>
 }): Promise<ReconcileImportResult> {
   const session = await auth()
-  if (!session?.user) return { created: 0, skipped: 0, importErrors: [], sourcesMatched: 0, error: "Unauthorized" }
+  if (!session?.user || !(await hasSettingsPage("reconcile"))) return { created: 0, skipped: 0, importErrors: [], sourcesMatched: 0, error: "Unauthorized" }
 
   const base: ReconcileImportResult = { created: 0, skipped: 0, importErrors: [], sourcesMatched: 0 }
 
@@ -264,7 +265,7 @@ export async function applyReconciliation(
   matchMap: Record<string, { reportMrn: string; reportVisitDate: string }>
 ) {
   const session = await auth()
-  if (!session?.user) return { error: "Unauthorized" }
+  if (!session?.user || !(await hasSettingsPage("reconcile"))) return { error: "Unauthorized" }
   if (!completedIds.length && !noShowIds.length) return { error: "Nothing selected." }
 
   try {

@@ -1,5 +1,7 @@
 "use server"
 
+import { requireSettingsPage } from "@/lib/auth-guard"
+
 /**
  * Authoring for the surgeons' public websites.
  *
@@ -28,16 +30,12 @@ import {
   type SurgeonSiteContent,
 } from "@/lib/surgeon-site"
 
-async function requireAdmin() {
-  const session = await auth()
-  const user = session?.user as any
-  if (!user) throw new Error("Unauthorized")
-  if (user.role !== "ADMIN") throw new Error("You don't have permission to do this")
-  return session!
-}
+// Everything here belongs to the surgeon-sites settings page: admins, or anyone given
+// that page's box in User Management (lib/settings-pages.ts).
+const requirePageAccess = () => requireSettingsPage("surgeon-sites")
 
 export async function listSurgeonSites() {
-  await requireAdmin()
+  await requirePageAccess()
   const rows = await (prisma as any).surgeonSite.findMany({
     orderBy: [{ name: "asc" }],
     select: {
@@ -55,7 +53,7 @@ export async function listSurgeonSites() {
 }
 
 export async function getSurgeonSite(id: string) {
-  await requireAdmin()
+  await requirePageAccess()
   const row = await (prisma as any).surgeonSite.findUnique({ where: { id } })
   if (!row) return null
   const content = parseContent(row.content)
@@ -69,7 +67,7 @@ export async function getSurgeonSite(id: string) {
 }
 
 export async function createSurgeonSite(input: { name: string; credential?: string }) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   const name = input.name.trim()
   if (!name) throw new Error("A name is required")
 
@@ -116,7 +114,7 @@ export async function updateSurgeonSite(
     content?: SurgeonSiteContent
   },
 ) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   const data: Record<string, unknown> = { updatedById: (session.user as any).id ?? null }
 
   if (patch.domain !== undefined) {
@@ -149,7 +147,7 @@ export async function updateSurgeonSite(
  * whatever the template carried.
  */
 export async function publishSurgeonSite(id: string) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   const row = await (prisma as any).surgeonSite.findUnique({ where: { id } })
   if (!row) throw new Error("Site not found")
 
@@ -198,7 +196,7 @@ export async function setSurgeonSiteStatus(
   id: string,
   status: "DRAFT" | "PUBLISHED" | "REDIRECTED" | "RETIRED",
 ) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   if (status === "PUBLISHED") return publishSurgeonSite(id)
 
   if (status === "REDIRECTED") {
@@ -236,7 +234,7 @@ export async function setSurgeonSiteStatus(
 export async function surgeonSitePreviewUrl(
   id: string,
 ): Promise<{ url?: string; error?: string }> {
-  await requireAdmin()
+  await requirePageAccess()
 
   const base = (process.env.SURGEON_SITE_PREVIEW_URL ?? "").trim().replace(/\/+$/, "")
   if (!base) {
@@ -270,7 +268,7 @@ export async function surgeonSitePreviewUrl(
 export async function rotateSurgeonSitePreviewToken(
   id: string,
 ): Promise<{ ok?: boolean; error?: string }> {
-  await requireAdmin()
+  await requirePageAccess()
   try {
     await (prisma as any).surgeonSite.update({
       where: { id },
@@ -284,7 +282,7 @@ export async function rotateSurgeonSitePreviewToken(
 }
 
 export async function deleteSurgeonSite(id: string) {
-  await requireAdmin()
+  await requirePageAccess()
   await (prisma as any).surgeonSite.delete({ where: { id } })
   revalidatePath("/settings/surgeon-sites")
 }

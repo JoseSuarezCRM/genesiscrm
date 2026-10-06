@@ -1,15 +1,10 @@
 "use server"
 
-import { requireAccess, requireDelete } from "@/lib/auth-guard"
+import { requireSettingsPage } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 
-async function requireAdmin() {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
-  if ((session.user as { role?: string }).role !== "ADMIN") throw new Error("Admin access required")
-}
 
 // Per-object pipeline display style ("text" | "dot" | "badge").
 export async function getPipelineColorStyle(objectType: string): Promise<string> {
@@ -18,8 +13,7 @@ export async function getPipelineColorStyle(objectType: string): Promise<string>
 }
 
 export async function setPipelineColorStyle(objectType: string, colorStyle: string) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   const style = ["text", "dot", "badge"].includes(colorStyle) ? colorStyle : "dot"
   await (prisma as any).pipelineSettings.upsert({
     where: { objectType }, create: { objectType, colorStyle: style }, update: { colorStyle: style },
@@ -37,8 +31,7 @@ export async function getPipelines(objectType = "REFERRAL") {
 }
 
 export async function createPipeline(data: { name: string; color: string; objectType?: string }) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   if (!data.name.trim()) return { error: "Name is required" }
   const objectType = data.objectType ?? "REFERRAL"
   const maxOrder = await prisma.pipeline.aggregate({ where: { objectType } as any, _max: { order: true } })
@@ -62,8 +55,7 @@ export async function createPipeline(data: { name: string; color: string; object
 // "stageId"); only touches unruled or already-stage-ruled properties so pipeline/
 // status rules are never clobbered. (REFERRAL / built-in objects using CustomProperty.)
 export async function setStageConditionalFields(objectType: string, stageId: string, propertyIds: string[]) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   if (objectType.startsWith("CO:")) return { error: "Custom-object conditional logic is not supported yet." }
   const entityType = objectType // "REFERRAL", etc.
   const props = await prisma.customProperty.findMany({ where: { entityType: entityType as any }, select: { id: true, visibilityRule: true } })
@@ -93,8 +85,7 @@ export async function getPipelineRules(pipelineId: string): Promise<Record<strin
 }
 
 export async function setPipelineRule(pipelineId: string, fromStageId: string, toStageIds: string[]) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   if (!toStageIds.length) {
     await (prisma as any).pipelineRule.deleteMany({ where: { pipelineId, fromStageId } })
   } else {
@@ -110,16 +101,14 @@ export async function setPipelineRule(pipelineId: string, fromStageId: string, t
 
 // Fields required before a record can ENTER a stage (enforced in moveRecordStage).
 export async function setStageRequiredFields(stageId: string, propertyIds: string[]) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   await (prisma as any).pipelineStage.update({ where: { id: stageId }, data: { requiredPropertyIds: propertyIds } })
   revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
 export async function reorderPipelines(objectType: string, ids: string[]) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   await Promise.all(ids.map((id, i) => (prisma as any).pipeline.updateMany({ where: { id, objectType }, data: { order: i } })))
   revalidatePath("/settings/pipelines", "layout")
   return { success: true }
@@ -127,8 +116,7 @@ export async function reorderPipelines(objectType: string, ids: string[]) {
 
 // Make a pipeline the default (first) — new records auto-enroll into the first pipeline.
 export async function setDefaultPipeline(objectType: string, id: string) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   const rows = await prisma.pipeline.findMany({ where: { objectType }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true } })
   const ids = [id, ...rows.map((r) => r.id).filter((x) => x !== id)]
   await Promise.all(ids.map((pid, i) => prisma.pipeline.update({ where: { id: pid }, data: { order: i } })))
@@ -138,8 +126,7 @@ export async function setDefaultPipeline(objectType: string, id: string) {
 
 // Duplicate a pipeline and its stages.
 export async function clonePipeline(id: string) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   const src = await (prisma as any).pipeline.findUnique({ where: { id }, include: { stages: { orderBy: { order: "asc" } } } })
   if (!src) return { error: "Pipeline not found" }
   const maxOrder = await prisma.pipeline.aggregate({ where: { objectType: src.objectType } as any, _max: { order: true } })
@@ -158,8 +145,7 @@ export async function clonePipeline(id: string) {
 
 // ── Stages ───────────────────────────────────────────────────────────────────
 export async function upsertStage(pipelineId: string, stage: { id?: string; name: string; probability?: number | null; isClosed?: boolean; isWon?: boolean; color?: string | null }) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   if (!stage.name.trim()) return { error: "Stage name is required" }
   const data = { name: stage.name.trim(), probability: stage.probability ?? null, isClosed: !!stage.isClosed, isWon: !!stage.isWon, color: stage.color ?? null }
   if (stage.id) {
@@ -173,16 +159,14 @@ export async function upsertStage(pipelineId: string, stage: { id?: string; name
 }
 
 export async function reorderStages(pipelineId: string, ids: string[]) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   await Promise.all(ids.map((id, i) => (prisma as any).pipelineStage.updateMany({ where: { id, pipelineId }, data: { order: i } })))
   revalidatePath("/settings/pipelines", "layout")
   return { success: true }
 }
 
 export async function deleteStage(id: string) {
-  await requireDelete("PIPELINES")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   // Clear the stage off any records currently in it (they keep their pipeline).
   await (prisma as any).customObjectRecord.updateMany({ where: { stageId: id }, data: { stageId: null } }).catch(() => {})
   await (prisma as any).referral.updateMany({ where: { stageId: id } as any, data: { stageId: null } as any }).catch(() => {})
@@ -192,8 +176,7 @@ export async function deleteStage(id: string) {
 }
 
 export async function updatePipeline(id: string, data: { name?: string; color?: string }) {
-  await requireAccess("PIPELINES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   const pipeline = await prisma.pipeline.update({
     where: { id },
     data: {
@@ -207,8 +190,7 @@ export async function updatePipeline(id: string, data: { name?: string; color?: 
 }
 
 export async function deletePipeline(id: string) {
-  await requireDelete("PIPELINES")
-  await requireAdmin()
+  await requireSettingsPage("pipelines")
   const refs = await prisma.referral.count({ where: { pipelineId: id } })
   const cos = await (prisma as any).customObjectRecord.count({ where: { pipelineId: id } }).catch(() => 0)
   const count = refs + cos

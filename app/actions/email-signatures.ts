@@ -1,5 +1,7 @@
 "use server"
 
+import { requireSettingsPage } from "@/lib/auth-guard"
+
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
@@ -23,11 +25,9 @@ async function requireUser() {
   return session
 }
 
-async function requireAdmin() {
-  const session = await requireUser()
-  if ((session.user as any).role !== "ADMIN") throw new Error("You don't have permission to do this")
-  return session
-}
+// Everything here belongs to the email settings page: admins, or anyone given
+// that page's box in User Management (lib/settings-pages.ts).
+const requirePageAccess = () => requireSettingsPage("email")
 
 async function read(id: string): Promise<SignatureState> {
   const row = await (prisma as any).emailSignature.findUnique({ where: { id } })
@@ -66,7 +66,7 @@ export async function getOrgSignature(): Promise<SignatureState> {
 }
 
 export async function saveOrgSignature(state: SignatureState) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   await write(ORG_SIGNATURE_ID, state, (session.user as any).id)
   revalidatePath("/settings/email")
   return { success: true }

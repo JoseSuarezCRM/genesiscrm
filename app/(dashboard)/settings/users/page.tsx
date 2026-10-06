@@ -1,15 +1,12 @@
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
 import UserManager from "@/components/user-manager"
 import { getTeams } from "@/app/actions/teams"
 import { listCustomObjects } from "@/app/actions/custom-objects"
 
 export default async function UsersPage() {
-  const session = await auth()
-  if ((session?.user as { role?: string })?.role !== "ADMIN") {
-    redirect("/")
-  }
+  const session = await settingsPageOrRedirect("users")
+  const me = session.user as any
 
   const [users, teams] = await Promise.all([
     prisma.user.findMany({
@@ -39,7 +36,10 @@ export default async function UsersPage() {
         </p>
       </div>
 
-      <UserManager users={users} teams={teams} currentUserId={session!.user.id} customObjects={customObjects} />
+      <UserManager
+        users={users} teams={teams} currentUserId={session!.user.id} customObjects={customObjects}
+        actor={{ isAdmin: me?.role === "ADMIN", permissions: me?.permissions ?? [] }}
+      />
     </div>
   )
 }

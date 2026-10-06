@@ -1,5 +1,7 @@
 "use server"
 
+import { hasSettingsPage } from "@/lib/auth-guard"
+
 /**
  * Saving the On-call AI rules ("what to pull and where"). Admin only.
  *
@@ -34,7 +36,7 @@ const Input = z
 export async function saveExtractionRules(raw: unknown): Promise<{ ok: true; updatedAt: string } | { ok: false; error: string }> {
   const session = await auth()
   const user = session?.user as { id?: string; role?: string } | undefined
-  if (!user?.id || user.role !== "ADMIN") return { ok: false, error: "Only admins can change the On-call AI rules." }
+  if (!user?.id || !(await hasSettingsPage("on-call-ai"))) return { ok: false, error: "You don't have access to the On-call AI settings." }
 
   const parsed = Input.safeParse(raw)
   if (!parsed.success) return { ok: false, error: "Some rules couldn't be read. Nothing was saved." }

@@ -1,13 +1,9 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import PropertyCustomizationManager from "@/components/property-customization-manager"
 import { getPropertyDisplays } from "@/app/actions/property-display"
 
 export default async function CustomizationPage() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") {
-    redirect("/")
-  }
+  const session = await settingsPageOrRedirect("customization")
 
   const [referralProps, providerProps, practiceProps] = await Promise.all([
     getPropertyDisplays("REFERRAL"),

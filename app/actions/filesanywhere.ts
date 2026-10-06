@@ -1,6 +1,12 @@
 "use server"
 
-import { requirePermission } from "@/lib/auth-guard"
+import { requireSettingsPage } from "@/lib/auth-guard"
+import { userCan } from "@/lib/permissions"
+
+// FilesAnywhere sits under Connected Apps: that page's box, or Manage Users as
+// before. Not Reports — boxOnly skips the page's Reports-View way in.
+const requireFilesAnywhere = () =>
+  requireSettingsPage("integrations", { boxOnly: true, alsoAllow: (u) => userCan(u, "MANAGE_USERS") })
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { encryptSecret, decryptSecret, hasEncryptionKey } from "@/lib/crypto"
@@ -49,7 +55,7 @@ function connFromCfg(cfg: Partial<FaConfig>): SftpConn {
 }
 
 export async function getFaSettings(): Promise<FaSettings> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const cfg = await cfgOf()
   const row = await getIntegration(PROVIDER)
   const defs = await (prisma as any).customObjectDef.findMany({ orderBy: { order: "asc" } }).catch(() => [])
@@ -94,7 +100,7 @@ export async function getFaSettings(): Promise<FaSettings> {
 
 // Save the weekly report settings (recipients + schedule + enabled).
 export async function saveFaReportConfig(input: { enabled: boolean; recipients: string[]; dayOfWeek: number; hour: number; providerFields?: string[]; appointmentFields?: string[]; windowDays?: number }): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const cfg = await cfgOf()
   const recipients = (input.recipients ?? []).map((r) => r.trim()).filter(Boolean)
   const windowDaysNum = Math.round(Number(input.windowDays))
@@ -112,7 +118,7 @@ export async function saveFaReportConfig(input: { enabled: boolean; recipients: 
 
 // Build + email the report now (manual test — doesn't touch the schedule guard).
 export async function sendFaReportNow(): Promise<{ ok?: boolean; message?: string; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const r = await sendFilesanywhereReport({ manual: true })
   if (r.error) return { error: r.error }
   if (r.skipped) return { ok: true, message: r.message ?? "Nothing to send." }
@@ -121,7 +127,7 @@ export async function sendFaReportNow(): Promise<{ ok?: boolean; message?: strin
 
 // Store the SFTP connection (host/port/user + encrypted password). Empty password keeps the existing.
 export async function saveFaConnection(input: { host: string; port: number; userName: string; password?: string }): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   if (!hasEncryptionKey()) return { error: "ENCRYPTION_KEY isn't set on the server." }
   const cfg = await cfgOf()
   if (!input.host?.trim() || !input.userName?.trim()) return { error: "Host and username are required." }
@@ -143,7 +149,7 @@ export async function saveFaImportConfig(input: {
   providerMap: Record<string, string>; appointmentMap: Record<string, string>
   frequency: "daily" | "weekly"; dayOfWeek: number; hour: number
 }): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const cfg = await cfgOf()
   await (prisma as any).integration.update({ where: { provider: PROVIDER }, data: { config: { ...cfg, ...input } } })
   revalidate()
@@ -152,7 +158,7 @@ export async function saveFaImportConfig(input: {
 
 // Delete everything a prior import created (both objects + legacy built-in providers).
 export async function resetFaImport(): Promise<{ ok?: boolean; message?: string; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   try {
     const r = await resetFilesanywhereImport()
     revalidate()
@@ -161,7 +167,7 @@ export async function resetFaImport(): Promise<{ ok?: boolean; message?: string;
 }
 
 export async function setFaEnabled(enabled: boolean): Promise<{ ok?: boolean; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   try {
     await (prisma as any).integration.update({ where: { provider: PROVIDER }, data: { enabled } })
     revalidate()
@@ -172,7 +178,7 @@ export async function setFaEnabled(enabled: boolean): Promise<{ ok?: boolean; er
 // Connect over SFTP + list everything at the path (files AND folders, unfiltered),
 // plus how many files match the pattern — so we can find the right folder.
 export async function testFaConnection(pathOverride?: string): Promise<{ entries?: { name: string; modified: string | null; dir: boolean; imported: boolean; matches: boolean }[]; matched?: number; path?: string; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const cfg = await cfgOf()
   if (!cfg.host || !cfg.passwordEnc) return { error: "Save the connection first." }
   const path = (pathOverride && pathOverride.trim()) || cfg.folderPath || "/"
@@ -196,7 +202,7 @@ export async function testFaConnection(pathOverride?: string): Promise<{ entries
 
 // Import one specific file (historical backfill). force re-imports even if already done.
 export async function importFaFile(fileName: string, folderPath?: string, force = false): Promise<import("@/lib/filesanywhere-import").FaImportResult> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const r = await runFilesanywhereImportFile(fileName, { force, folderPath })
   revalidate()
   return r
@@ -204,7 +210,7 @@ export async function importFaFile(fileName: string, folderPath?: string, force 
 
 // Import a bounded batch of matching files (the client loops until remaining=0).
 export async function importAllFaFiles(folderPath?: string): Promise<{ imported: number; remaining: number; appointmentsCreated: number; providersCreated: number; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const r = await runFilesanywhereImportAll({ folderPath })
   revalidate()
   return { imported: r.imported, remaining: r.remaining, appointmentsCreated: r.appointmentsCreated, providersCreated: r.providersCreated, ...(r.error ? { error: r.error } : {}) }
@@ -212,7 +218,7 @@ export async function importAllFaFiles(folderPath?: string): Promise<{ imported:
 
 // Download the newest matching file and return its CSV column headers, for mapping.
 export async function loadFaColumns(folderPath?: string, filenamePattern?: string): Promise<{ columns?: string[]; file?: string; error?: string }> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   const cfg = await cfgOf()
   if (!cfg.host || !cfg.passwordEnc) return { error: "Save the connection first." }
   const dir = (folderPath && folderPath.trim()) || cfg.folderPath || "/"
@@ -230,6 +236,6 @@ export async function loadFaColumns(folderPath?: string, filenamePattern?: strin
 }
 
 export async function runFaImportNow(): Promise<import("@/lib/filesanywhere-import").FaImportResult> {
-  await requirePermission("MANAGE_USERS")
+  await requireFilesAnywhere()
   return runFilesanywhereImport({ force: true })
 }

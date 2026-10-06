@@ -1,14 +1,10 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import CustomPropertyManager from "@/components/custom-property-manager"
 import { listCustomProperties } from "@/app/actions/custom-properties"
 import { CP_ENTITIES } from "@/lib/custom-property-entities"
 
 export default async function CustomPropertiesPage() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") {
-    redirect("/")
-  }
+  const session = await settingsPageOrRedirect("custom-properties")
 
   const lists = await Promise.all(CP_ENTITIES.map((e) => listCustomProperties(e.type)))
   const propsByEntity = Object.fromEntries(CP_ENTITIES.map((e, i) => [e.type, lists[i]]))

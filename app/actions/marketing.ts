@@ -1,14 +1,12 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { requireSettingsPage } from "@/lib/auth-guard"
 
-async function requireAuth() {
-  const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
-  return session
-}
+// The Marketing Materials settings page: admins, or anyone given that page's box
+// (lib/settings-pages.ts). It used to check only for a login.
+const requireAuth = () => requireSettingsPage("marketing")
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 

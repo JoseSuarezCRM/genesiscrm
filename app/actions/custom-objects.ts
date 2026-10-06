@@ -1,5 +1,7 @@
 "use server"
 
+import { requireSettingsPage } from "@/lib/auth-guard"
+
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -55,11 +57,9 @@ export interface CustomObjectDefLite {
   order: number
 }
 
-async function requireAdmin() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") throw new Error("Admin access required")
-  return session
-}
+// Everything here belongs to the objects settings page: admins, or anyone given
+// that page's box in User Management (lib/settings-pages.ts).
+const requirePageAccess = () => requireSettingsPage("objects")
 
 function slugify(s: string): string {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "object"
@@ -77,7 +77,7 @@ function mapDef(d: any): CustomObjectDefLite {
 
 // Replace the detail card layout (title, column, grouped property ids).
 export async function saveCustomObjectCards(id: string, cards: CustomObjectCard[]) {
-  await requireAdmin()
+  await requirePageAccess()
   await (prisma as any).customObjectDef.update({ where: { id }, data: { cards } })
   revalidatePath("/settings/objects")
   return { success: true }
@@ -95,7 +95,7 @@ export async function getCustomObject(key: string): Promise<CustomObjectDefLite 
 }
 
 export async function createCustomObject(data: { singular: string; plural: string; icon?: string }) {
-  const session = await requireAdmin()
+  const session = await requirePageAccess()
   const singular = data.singular.trim()
   const plural = data.plural.trim()
   if (!singular || !plural) return { error: "Singular and plural names are required." }
@@ -125,7 +125,7 @@ export async function createCustomObject(data: { singular: string; plural: strin
 }
 
 export async function updateCustomObject(id: string, data: { singular?: string; plural?: string; icon?: string | null }) {
-  await requireAdmin()
+  await requirePageAccess()
   const patch: Record<string, unknown> = {}
   if (data.singular !== undefined) { patch.singular = data.singular.trim(); patch.ownerLabel = `${data.singular.trim()} Owner` }
   if (data.plural !== undefined) patch.plural = data.plural.trim()
@@ -137,7 +137,7 @@ export async function updateCustomObject(id: string, data: { singular?: string; 
 
 // Replace the object's property schema (the editor manages the array client-side).
 export async function saveCustomObjectProperties(id: string, properties: CustomObjectProperty[]) {
-  await requireAdmin()
+  await requirePageAccess()
   // Properties that code depends on are checked against what is STORED, not
   // what the client sent — see lib/custom-object-locks.ts.
   const current = await (prisma as any).customObjectDef.findUnique({ where: { id }, select: { properties: true } })
@@ -153,7 +153,7 @@ export async function saveCustomObjectProperties(id: string, properties: CustomO
 }
 
 export async function deleteCustomObject(id: string) {
-  await requireAdmin()
+  await requirePageAccess()
   // Deleting an object deletes every record in it. For one that code depends on
   // — the on-call call log — that would be an entire history of patient calls.
   const def = await (prisma as any).customObjectDef.findUnique({ where: { id }, select: { properties: true } })

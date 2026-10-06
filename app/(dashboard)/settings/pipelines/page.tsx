@@ -1,6 +1,5 @@
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
 import PipelineOverview from "@/components/pipeline-overview"
 import PipelineObjectSelect from "@/components/pipeline-object-select"
 import { getPipelineColorStyle } from "@/app/actions/pipelines"
@@ -10,8 +9,7 @@ import { getPipelineColorStyle } from "@/app/actions/pipelines"
 export const dynamic = "force-dynamic"
 
 export default async function PipelinesPage({ searchParams }: { searchParams: { object?: string } }) {
-  const session = await auth()
-  if ((session?.user as { role?: string })?.role !== "ADMIN") redirect("/")
+  const session = await settingsPageOrRedirect("pipelines")
   const isAdmin = true
 
   const requested = searchParams.object ?? "REFERRAL"

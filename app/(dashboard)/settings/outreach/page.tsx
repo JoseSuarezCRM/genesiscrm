@@ -1,13 +1,9 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { getOutreachTemplates } from "@/app/actions/outreach-templates"
 import OutreachTemplateManager from "@/components/outreach-template-manager"
 
 export default async function OutreachTemplatesPage() {
-  const session = await auth()
-  if ((session?.user as { role?: string })?.role !== "ADMIN") {
-    redirect("/")
-  }
+  const session = await settingsPageOrRedirect("outreach")
 
   const templates = await getOutreachTemplates()
 

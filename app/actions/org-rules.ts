@@ -1,5 +1,7 @@
 "use server"
 
+import { hasSettingsPage } from "@/lib/auth-guard"
+
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -83,7 +85,7 @@ export async function createOrgRule(
   input: OrgRuleInput
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") return { success: false, error: "Unauthorized" }
+  if (!(await hasSettingsPage("org-rules"))) return { success: false, error: "Unauthorized" }
   if (!input.contains.trim() || !input.normalizedName.trim())
     return { success: false, error: "Both fields are required." }
 
@@ -108,7 +110,7 @@ export async function updateOrgRule(
   input: OrgRuleInput
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") return { success: false, error: "Unauthorized" }
+  if (!(await hasSettingsPage("org-rules"))) return { success: false, error: "Unauthorized" }
 
   try {
     await prisma.orgNameRule.update({
@@ -130,7 +132,7 @@ export async function deleteOrgRule(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") return { success: false, error: "Unauthorized" }
+  if (!(await hasSettingsPage("org-rules"))) return { success: false, error: "Unauthorized" }
 
   try {
     await prisma.orgNameRule.delete({ where: { id } })
@@ -148,7 +150,7 @@ export async function deleteOrgRule(
  */
 export async function applyRulesToExistingPractices(): Promise<{ success: boolean; merged: number; error?: string }> {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") return { success: false, merged: 0, error: "Unauthorized" }
+  if (!(await hasSettingsPage("org-rules"))) return { success: false, merged: 0, error: "Unauthorized" }
 
   const merges = await mergeAndLog("manual")
 
@@ -205,7 +207,7 @@ export async function setOrgRulesPoller(
   input: { enabled: boolean; intervalMinutes: number }
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") return { success: false, error: "Unauthorized" }
+  if (!(await hasSettingsPage("org-rules"))) return { success: false, error: "Unauthorized" }
 
   const interval = Math.max(15, Math.min(10080, Math.round(input.intervalMinutes) || 60))
   await (prisma as any).orgRulesPoller.upsert({
@@ -219,7 +221,7 @@ export async function setOrgRulesPoller(
 
 export async function reorderOrgRules(ids: string[]): Promise<{ success: boolean }> {
   const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") return { success: false }
+  if (!(await hasSettingsPage("org-rules"))) return { success: false }
 
   await Promise.all(
     ids.map((id, i) => prisma.orgNameRule.update({ where: { id }, data: { order: i } }))

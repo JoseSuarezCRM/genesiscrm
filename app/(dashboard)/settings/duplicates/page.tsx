@@ -1,6 +1,5 @@
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
 import DuplicateManager from "@/components/duplicate-manager"
 
 // Words that are too common to count as a meaningful shared prefix
@@ -59,10 +58,7 @@ function matchReason(a: string, b: string): MatchReason | null {
 }
 
 export default async function DuplicatesPage() {
-  const session = await auth()
-  if ((session?.user as { role?: string })?.role !== "ADMIN") {
-    redirect("/")
-  }
+  const session = await settingsPageOrRedirect("duplicates")
 
   const practices = await prisma.referringPractice.findMany({
     select: {

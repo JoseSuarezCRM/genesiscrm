@@ -1,12 +1,10 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
+import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { getOrgRules, getOrgRulesPoller, getOrgRulesRunLogs } from "@/app/actions/org-rules"
 import OrgRulesManager from "@/components/org-rules-manager"
 
 export default async function OrgRulesPage() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") redirect("/")
+  const session = await settingsPageOrRedirect("org-rules")
 
   const [rules, poller, logs, practices] = await Promise.all([
     getOrgRules(),

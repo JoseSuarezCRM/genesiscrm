@@ -1,6 +1,6 @@
 "use server"
 
-import { requireAccess, requireDelete } from "@/lib/auth-guard"
+import { requireAccess, requireSettingsPage } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
@@ -90,13 +90,6 @@ interface UpdateCustomPropertyInput extends Partial<CreateCustomPropertyInput> {
   id: string
 }
 
-// Admin-only guard
-async function requireAdmin() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") {
-    throw new Error("Admin access required")
-  }
-}
 
 export async function listCustomProperties(entityType: CPEntity) {
   return prisma.customProperty.findMany({
@@ -106,8 +99,7 @@ export async function listCustomProperties(entityType: CPEntity) {
 }
 
 export async function createCustomProperty(data: CreateCustomPropertyInput) {
-  await requireAccess("CUSTOM_PROPERTIES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("custom-properties")
 
   // Check for duplicate
   const existing = await prisma.customProperty.findFirst({
@@ -146,8 +138,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
 }
 
 export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
-  await requireAccess("CUSTOM_PROPERTIES", "EDIT")
-  await requireAdmin()
+  await requireSettingsPage("custom-properties")
   const { id, ...rest } = data
 
   try {
@@ -185,8 +176,7 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
 }
 
 export async function deleteCustomProperty(id: string) {
-  await requireDelete("CUSTOM_PROPERTIES")
-  await requireAdmin()
+  await requireSettingsPage("custom-properties")
 
   try {
     await prisma.customProperty.delete({ where: { id } })

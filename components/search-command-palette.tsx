@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { SETTINGS_PAGES, canOpenSettingsPage, openableSettingsPages } from "@/lib/settings-pages"
 import { useRouter } from "next/navigation"
 import { Search, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -11,6 +12,8 @@ interface SearchItem {
   category: string
   href: string
   requiredPermission?: string
+  settingsPage?: string
+  anySettingsPage?: boolean
 }
 
 const allItems: SearchItem[] = [
@@ -48,17 +51,10 @@ const allItems: SearchItem[] = [
   { id: "on-call-log", title: "Referral call log", category: "On-call", href: "/objects/referral-calls", requiredPermission: "NAV_ONCALL" },
 
   // Admin/Settings
-  { id: "settings", title: "Settings", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },
-  { id: "user-mgmt", title: "User Management", category: "Admin", href: "/settings/users", requiredPermission: "NAV_ADMIN" },
-  { id: "custom-props", title: "Custom Properties", category: "Admin", href: "/settings/custom-properties", requiredPermission: "NAV_ADMIN" },
-  { id: "customization", title: "Property Customization", category: "Admin", href: "/settings/customization", requiredPermission: "NAV_ADMIN" },
-  { id: "pipelines", title: "Pipelines", category: "Admin", href: "/settings/pipelines", requiredPermission: "NAV_ADMIN" },
-  { id: "org-rules", title: "Org Name Rules", category: "Admin", href: "/settings/org-rules", requiredPermission: "NAV_ADMIN" },
+  { id: "settings", title: "Settings", category: "Admin", href: "/settings", anySettingsPage: true },
   { id: "automations", title: "Automations", category: "Admin", href: "/automations", requiredPermission: "NAV_ADMIN" },
-  { id: "outreach", title: "Outreach Templates", category: "Admin", href: "/settings/outreach", requiredPermission: "NAV_ADMIN" },
-  { id: "embed", title: "Embed Referral Form", category: "Admin", href: "/settings/embed", requiredPermission: "NAV_ADMIN" },
-  { id: "duplicates", title: "Duplicate Detection", category: "Admin", href: "/settings/duplicates", requiredPermission: "NAV_ADMIN" },
-  { id: "reconcile", title: "Appt Reconciliation", category: "Admin", href: "/settings/reconcile", requiredPermission: "NAV_ADMIN" },
+  // Every settings page, from the one registry — shown only if this person can open it.
+  ...SETTINGS_PAGES.map((p) => ({ id: `settings-${p.slug}`, title: p.label, category: "Admin", href: p.href, settingsPage: p.slug })),
 ]
 
 interface Props {
@@ -76,6 +72,9 @@ export default function SearchCommandPalette({ permissions, isAdmin }: Props) {
   const hasPermission = (item: SearchItem) => {
     // Super admins have access to everything
     if (isAdmin) return true
+    const me = { role: isAdmin ? "ADMIN" : null, permissions }
+    if (item.settingsPage) return canOpenSettingsPage(me, item.settingsPage)
+    if (item.anySettingsPage) return openableSettingsPages(me).length > 0
     if (!item.requiredPermission) return true
     return permissions.includes(item.requiredPermission)
   }

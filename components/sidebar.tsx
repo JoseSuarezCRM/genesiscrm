@@ -24,10 +24,12 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { userCanLevel, type AccessLevel } from "@/lib/permissions"
+import { canOpenSettingsPage, SETTINGS_PAGE_KEYS } from "@/lib/settings-pages"
 
 // `level` is the access the item needs on `object` (View unless stated) — "New call"
 // is useless to someone who can only read the call log.
-type NavItem = { href: string; label: string; object?: string; level?: AccessLevel }
+// `settingsPage`: shown only to people who can open that settings page (lib/settings-pages.ts).
+type NavItem = { href: string; label: string; object?: string; level?: AccessLevel; settingsPage?: string }
 
 const referralItems: NavItem[] = [
   { href: "/",                  label: "Dashboard" },
@@ -81,13 +83,13 @@ const communicationsItems: NavItem[] = [
 
 const automationItems: NavItem[] = [
   { href: "/automations",        label: "Workflows", object: "AUTOMATIONS" },
-  { href: "/settings/reconcile", label: "Appt Reconciliation" },
+  { href: "/settings/reconcile", label: "Appt Reconciliation", settingsPage: "reconcile" },
 ]
 
 // Admin/config pages now live in the Settings page's own nav; the sidebar just
-// links to Settings.
+// links to Settings, which lands on the first page this person can open.
 const adminItems: NavItem[] = [
-  { href: "/settings/users", label: "Settings" },
+  { href: "/settings", label: "Settings" },
 ]
 
 const onCallItems: NavItem[] = [
@@ -130,10 +132,20 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
   const isSuperAdmin = userRole === "ADMIN"
   const hasNavPerms = userPermissions.some(p => p.startsWith("NAV_"))
   // If no NAV_* perms set (no team assigned), show all non-admin sections
-  const can = (key: string) => isSuperAdmin || (hasNavPerms ? userPermissions.includes(key) : key !== "NAV_ADMIN")
+  const me = { role: userRole, permissions: userPermissions }
+  // Settings shows for the Settings menu permission or any settings page's box.
+  // Not for older ways into a page (Reports opens Connected Apps): those people
+  // never had a Settings entry and still reach the page as before.
+  const canSettings = userPermissions.includes("NAV_ADMIN") || userPermissions.some((p) => SETTINGS_PAGE_KEYS.includes(p))
+  const can = (key: string) => key === "NAV_ADMIN"
+    ? isSuperAdmin || canSettings
+    : isSuperAdmin || (hasNavPerms ? userPermissions.includes(key) : true)
   // An item tied to an object is hidden when the user has no View access to it.
-  const canViewItem = (item: { object?: string; level?: AccessLevel }) =>
-    isSuperAdmin || !item.object || userCanLevel({ role: userRole, permissions: userPermissions }, item.object, item.level ?? "VIEW")
+  const canViewItem = (item: NavItem) =>
+    isSuperAdmin || (
+      (!item.object || userCanLevel(me, item.object, item.level ?? "VIEW")) &&
+      (!item.settingsPage || canOpenSettingsPage(me, item.settingsPage))
+    )
 
   // Custom objects form their own section, gated per-object by CO:<key> view access.
   // The call log already has a home under On-call; list it here only for someone

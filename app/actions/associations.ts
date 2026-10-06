@@ -2,14 +2,13 @@
 
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { requireAccess } from "@/lib/auth-guard"
+import { requireAccess, requireSettingsPage } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
 import { resolverFor, labelFor, listObjectTypes, type RegistryRecord } from "@/lib/object-registry"
 
-async function requireAdmin() {
-  const session = await auth()
-  if ((session?.user as any)?.role !== "ADMIN") throw new Error("Admin access required")
-}
+// Everything here belongs to the data-model settings page: admins, or anyone given
+// that page's box in User Management (lib/settings-pages.ts).
+const requirePageAccess = () => requireSettingsPage("data-model")
 
 // The permission object key that gates editing records of a given type.
 function permKeyFor(typeKey: string): string {
@@ -29,7 +28,7 @@ export async function listAssociationDefs() {
 }
 
 export async function createAssociationDef(typeA: string, typeB: string, label?: string) {
-  await requireAdmin()
+  await requirePageAccess()
   if (!typeA || !typeB || typeA === typeB) return { error: "Pick two different objects." }
   const existing = await (prisma as any).objectAssociationDef.findFirst({
     where: { OR: [{ typeA, typeB }, { typeA: typeB, typeB: typeA }] },
@@ -41,7 +40,7 @@ export async function createAssociationDef(typeA: string, typeB: string, label?:
 }
 
 export async function deleteAssociationDef(id: string) {
-  await requireAdmin()
+  await requirePageAccess()
   await (prisma as any).objectAssociationDef.delete({ where: { id } })
   revalidatePath("/settings/data-model")
   return { success: true }
