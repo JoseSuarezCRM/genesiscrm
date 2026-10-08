@@ -147,7 +147,7 @@ export default function PipelineOverview({ pipelines: initial, objectType, color
                         onKeyDown={(e) => { if (e.key === "Enter") saveRename(p.id); if (e.key === "Escape") setEditId(null) }}
                         className="rounded border border-slate-300 px-1.5 py-0.5 text-sm outline-none focus:border-blue-500" />
                     ) : (
-                      <Link href={`/settings/pipelines/${p.id}`} className="hover:underline">
+                      <Link href={`/settings/objects/pipelines/${p.id}`} className="hover:underline">
                         <PipelineChip name={p.name} color={p.color} style={style} />
                       </Link>
                     )}
@@ -174,7 +174,7 @@ export default function PipelineOverview({ pipelines: initial, objectType, color
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setMenuId(null)} />
                       <div className="absolute right-4 top-10 z-20 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-                        <Link href={`/settings/pipelines/${p.id}`} className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5 text-slate-400" /> Manage stages</Link>
+                        <Link href={`/settings/objects/pipelines/${p.id}`} className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5 text-slate-400" /> Manage stages</Link>
                         <button onClick={() => { setEditId(p.id); setEditName(p.name); setMenuId(null) }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5 text-slate-400" /> Rename</button>
                         <button onClick={() => makeDefault(p)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"><Star className="h-3.5 w-3.5 text-slate-400" /> Set as default</button>
                         <button onClick={() => cloneOne(p)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"><CopyPlus className="h-3.5 w-3.5 text-slate-400" /> Clone</button>

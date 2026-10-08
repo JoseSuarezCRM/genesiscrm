@@ -176,14 +176,14 @@ export async function createImportProperty(objectKey: string, name: string, type
   const seeded = (t === "DROPDOWN" || t === "MULTI_SELECT") ? Array.from(new Set((options ?? []).map((o) => o.trim()).filter(Boolean))).slice(0, 500) : []
 
   // Providers keep their properties as CustomProperty rows; creating one needs
-  // the Custom Properties settings page, enforced inside createCustomProperty.
+  // the Properties settings page, enforced inside createCustomProperty.
   if (objectKey === PROVIDER_IMPORT_KEY) {
     try {
       const res = await createCustomProperty({ name: clean, type: t as any, entityType: "PROVIDER", options: seeded })
       if (res.error || !res.id) return { error: res.error ?? "Couldn't create the property." }
       return { property: { id: `cp_${res.id}`, name: clean, type: t, options: seeded, optionLabels: {} } }
     } catch {
-      return { error: "Adding properties to Providers needs the Custom Properties settings page." }
+      return { error: "Adding properties to Providers needs the Properties settings page." }
     }
   }
   const def = await (prisma as any).customObjectDef.findUnique({ where: { key: objectKey }, select: { id: true, properties: true } })

@@ -60,8 +60,8 @@ export default async function ImportPage() {
       key: PROVIDER_IMPORT_KEY,
       singular: "Provider",
       plural: "Providers",
-      // Provider properties are CustomProperty rows; adding one needs the Custom Properties page.
-      canCreateProperty: canOpenSettingsPage(user, "custom-properties"),
+      // Provider properties are CustomProperty rows; adding one needs the Properties page.
+      canCreateProperty: canOpenSettingsPage(user, "properties"),
       requiredForCreate: ["name", "__practice"],
       excludeAssocTypes: PROVIDER_NATIVE_LINK_TYPES,
       properties: [
@@ -92,7 +92,7 @@ export default async function ImportPage() {
       {objects.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-200 p-10 text-center text-sm text-slate-500">
           You don&apos;t have edit access to Providers or any custom object yet. Create one under{" "}
-          <a href="/settings/objects" className="text-blue-600 hover:underline">Custom Objects</a> to import records.
+          <a href="/settings/objects" className="text-blue-600 hover:underline">Objects</a> to import records.
         </div>
       ) : (
         <ImportWizard objects={objects} assocTargets={assocTargets} />

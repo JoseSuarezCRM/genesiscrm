@@ -587,7 +587,7 @@ export default function ObjectViewShell(props: Props) {
             // exactly one, so there it falls back to whichever one loaded.
             <PipelineSelector pipelines={pipelines}
               activePipelineId={cfg.type === "table" ? cfg.pipelineId : (cfg.pipelineId ?? board?.pipeline?.id ?? null)}
-              managePath={`/settings/pipelines?object=CO:${objectKey}`} colorStyle={pipelineColorStyle}
+              managePath={`/settings/objects/pipelines?object=CO:${objectKey}`} colorStyle={pipelineColorStyle}
               onSelect={(id) => setCfg((c) => ({ ...c, pipelineId: id }))} />
           )}
           <div className="inline-flex items-center overflow-hidden rounded-lg border border-zinc-200">
@@ -669,7 +669,7 @@ export default function ObjectViewShell(props: Props) {
           {cfg.type === "board" && (
             pipelines.length === 0 ? (
               <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
-                No pipelines yet. <a href={`/settings/pipelines?object=CO:${objectKey}`} className="text-blue-600 hover:underline">Create a pipeline &amp; stages</a> to use the board.
+                No pipelines yet. <a href={`/settings/objects/pipelines?object=CO:${objectKey}`} className="text-blue-600 hover:underline">Create a pipeline &amp; stages</a> to use the board.
               </div>
             ) : boardLoading && !board ? (
               <div className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white p-12 text-sm text-zinc-400">
@@ -677,7 +677,7 @@ export default function ObjectViewShell(props: Props) {
               </div>
             ) : board?.pipeline && board.stages.length === 0 ? (
               <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
-                This pipeline has no stages yet. <a href={`/settings/pipelines?object=CO:${objectKey}`} className="text-blue-600 hover:underline">Add stages</a>.
+                This pipeline has no stages yet. <a href={`/settings/objects/pipelines?object=CO:${objectKey}`} className="text-blue-600 hover:underline">Add stages</a>.
               </div>
             ) : board?.pipeline ? (
               <ObjectBoard objectType={`CO:${objectKey}`} hrefBase={`/objects/${objectKey}`}
@@ -763,7 +763,7 @@ export default function ObjectViewShell(props: Props) {
         selected={cfg.columns}
         frozen={cfg.frozen}
         onApply={(sel, fr) => setCfg((c) => ({ ...c, columns: sel, frozen: fr }))}
-        createHref="/settings/objects"
+        createHref={`/settings/properties?object=${encodeURIComponent(`CO:${objectKey}`)}`}
       />
     </div>
   )

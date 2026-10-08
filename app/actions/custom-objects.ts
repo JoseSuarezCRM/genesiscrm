@@ -137,7 +137,8 @@ export async function updateCustomObject(id: string, data: { singular?: string; 
 
 // Replace the object's property schema (the editor manages the array client-side).
 export async function saveCustomObjectProperties(id: string, properties: CustomObjectProperty[]) {
-  await requirePageAccess()
+  // Properties are edited on the Properties settings page, so its box gates them.
+  await requireSettingsPage("properties")
   // Properties that code depends on are checked against what is STORED, not
   // what the client sent — see lib/custom-object-locks.ts.
   const current = await (prisma as any).customObjectDef.findUnique({ where: { id }, select: { properties: true } })
@@ -149,6 +150,7 @@ export async function saveCustomObjectProperties(id: string, properties: CustomO
   const clean = properties.map((p, i) => ({ ...p, primary: hasPrimary ? !!p.primary : i === 0 }))
   await (prisma as any).customObjectDef.update({ where: { id }, data: { properties: clean } })
   revalidatePath("/settings/objects")
+  revalidatePath("/settings/properties")
   return { success: true }
 }
 

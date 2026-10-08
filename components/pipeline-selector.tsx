@@ -11,7 +11,7 @@ interface Pipeline { id: string; name: string; color: string }
 
 // Searchable pipeline dropdown (replaces the horizontal tabs). Preserves the
 // other list filters and just swaps the `pipeline` param.
-export default function PipelineSelector({ pipelines, activePipelineId, managePath = "/settings/pipelines", colorStyle = "dot", onSelect }: {
+export default function PipelineSelector({ pipelines, activePipelineId, managePath = "/settings/objects/pipelines", colorStyle = "dot", onSelect }: {
   pipelines: Pipeline[]; activePipelineId: string | null; managePath?: string; colorStyle?: string
   /** Handle the choice in state instead of navigating (used by the object view shell). */
   onSelect?: (id: string | null) => void

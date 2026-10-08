@@ -25,7 +25,7 @@ export default function PipelineObjectSelect({ objects, value }: {
           setPending(true)
           // A full navigation (not router.push) so the page is re-fetched for the new
           // object rather than served from the client router cache.
-          window.location.href = `/settings/pipelines?object=${encodeURIComponent(next)}`
+          window.location.href = `/settings/objects/pipelines?object=${encodeURIComponent(next)}`
         }}
         className="h-9 min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 text-sm"
         searchable={objects.length > 8}

@@ -133,14 +133,14 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
   async function removePipeline() {
     setActionsOpen(false)
     if (!(await confirmDialog(`Delete pipeline "${pipeline.name}"?`))) return
-    startTransition(async () => { const r = await deletePipeline(pipeline.id); if ((r as any)?.error) { alert((r as any).error); return } router.push("/settings/pipelines" + (pipeline.objectType === "REFERRAL" ? "" : `?object=${encodeURIComponent(pipeline.objectType)}`)) })
+    startTransition(async () => { const r = await deletePipeline(pipeline.id); if ((r as any)?.error) { alert((r as any).error); return } router.push("/settings/objects/pipelines" + (pipeline.objectType === "REFERRAL" ? "" : `?object=${encodeURIComponent(pipeline.objectType)}`)) })
   }
 
   const sel = "h-8 rounded-md border border-slate-200 bg-white px-2 text-sm outline-none focus:border-slate-400"
 
   return (
     <div className="space-y-5">
-      <Link href={`/settings/pipelines${pipeline.objectType === "REFERRAL" ? "" : `?object=${encodeURIComponent(pipeline.objectType)}`}`}
+      <Link href={`/settings/objects/pipelines${pipeline.objectType === "REFERRAL" ? "" : `?object=${encodeURIComponent(pipeline.objectType)}`}`}
         className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"><ChevronLeft className="h-4 w-4" /> Back to Pipelines</Link>
 
       <div className="flex items-start justify-between gap-3">
@@ -163,7 +163,7 @@ export default function PipelineManage({ pipeline, stages: initial, siblings, co
 
       {/* Pipeline switcher */}
       <div className="flex items-center gap-3">
-        <select value={pipeline.id} onChange={(e) => router.push(`/settings/pipelines/${e.target.value}`)} className={`${sel} h-9 min-w-[220px] font-medium`}>
+        <select value={pipeline.id} onChange={(e) => router.push(`/settings/objects/pipelines/${e.target.value}`)} className={`${sel} h-9 min-w-[220px] font-medium`}>
           {siblings.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <span className="text-xs text-slate-400">{objectLabel}</span>

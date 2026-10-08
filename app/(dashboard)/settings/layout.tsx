@@ -41,7 +41,13 @@ export default function SettingsLayout({
 }) {
   const pathname = usePathname()
   const { data: session } = useSession()
-  const pages = openableSettingsPages(session?.user as any).filter((p) => p.inMenu)
+  const openable = openableSettingsPages(session?.user as any)
+  // Pipelines is a tab inside Objects, not its own menu item. Someone with the
+  // Pipelines box but not Objects still gets an "Objects" entry, landing on it.
+  const pipelines = openable.find((p) => p.slug === "pipelines")
+  const pages = openable
+    .filter((p) => p.inMenu || (p === pipelines && !openable.some((o) => o.slug === "objects")))
+    .map((p) => (p === pipelines ? { ...p, label: "Objects" } : p))
   const settingsSections = SECTION_ORDER
     .map((title) => ({ title, items: pages.filter((p) => p.section === title).map((p) => ({ href: p.href, label: p.label })) }))
     .filter((s) => s.items.length > 0)

@@ -28,19 +28,19 @@ export default async function ReferralBoardPage({ searchParams }: { searchParams
 
       {pipelines.length === 0 ? (
         <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
-          No pipelines yet. <Link href="/settings/pipelines" className="text-blue-600 hover:underline">Create a pipeline &amp; stages</Link> to use the board.
+          No pipelines yet. <Link href="/settings/objects/pipelines" className="text-blue-600 hover:underline">Create a pipeline &amp; stages</Link> to use the board.
         </div>
       ) : (
         <>
           <PipelineSelector
             pipelines={pipelines.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
             activePipelineId={board.pipeline?.id ?? null}
-            managePath="/settings/pipelines"
+            managePath="/settings/objects/pipelines"
             colorStyle={colorStyle}
           />
           {board.pipeline && board.stages.length === 0 ? (
             <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
-              This pipeline has no stages yet. <Link href={`/settings/pipelines/${board.pipeline.id}`} className="text-blue-600 hover:underline">Add stages</Link>.
+              This pipeline has no stages yet. <Link href={`/settings/objects/pipelines/${board.pipeline.id}`} className="text-blue-600 hover:underline">Add stages</Link>.
             </div>
           ) : board.pipeline ? (
             <KanbanBoard recordType="REFERRAL" hrefBase="/referrals" pipelineId={board.pipeline.id} stages={board.stages} cards={board.cards} colorStyle={colorStyle} />

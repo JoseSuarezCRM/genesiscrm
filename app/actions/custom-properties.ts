@@ -99,7 +99,7 @@ export async function listCustomProperties(entityType: CPEntity) {
 }
 
 export async function createCustomProperty(data: CreateCustomPropertyInput) {
-  await requireSettingsPage("custom-properties")
+  await requireSettingsPage("properties")
 
   // Check for duplicate
   const existing = await prisma.customProperty.findFirst({
@@ -130,7 +130,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
         numberFormat: data.numberFormat || null,
       },
     })
-    revalidatePath("/settings/custom-properties")
+    revalidatePath("/settings/properties")
     return { success: true, id: prop.id }
   } catch (err: any) {
     return { error: err.message }
@@ -138,7 +138,7 @@ export async function createCustomProperty(data: CreateCustomPropertyInput) {
 }
 
 export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
-  await requireSettingsPage("custom-properties")
+  await requireSettingsPage("properties")
   const { id, ...rest } = data
 
   try {
@@ -168,7 +168,7 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
         options: rest.options,
       },
     })
-    revalidatePath("/settings/custom-properties")
+    revalidatePath("/settings/properties")
     return { success: true }
   } catch (err: any) {
     return { error: err.message }
@@ -176,11 +176,11 @@ export async function updateCustomProperty(data: UpdateCustomPropertyInput) {
 }
 
 export async function deleteCustomProperty(id: string) {
-  await requireSettingsPage("custom-properties")
+  await requireSettingsPage("properties")
 
   try {
     await prisma.customProperty.delete({ where: { id } })
-    revalidatePath("/settings/custom-properties")
+    revalidatePath("/settings/properties")
     return { success: true }
   } catch (err: any) {
     return { error: err.message }

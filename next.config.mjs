@@ -93,6 +93,17 @@ const nextConfig = {
       bodySizeLimit: "8mb",
     },
   },
+  // Settings pages that moved (2026-10-07): Custom Properties and Property
+  // Customization became Properties; Pipelines became a tab inside Objects.
+  // Bookmarks and old links land on the new pages (query strings carry over).
+  async redirects() {
+    return [
+      { source: "/settings/custom-properties", destination: "/settings/properties", permanent: false },
+      { source: "/settings/customization", destination: "/settings/properties", permanent: false },
+      { source: "/settings/pipelines", destination: "/settings/objects/pipelines", permanent: false },
+      { source: "/settings/pipelines/:id", destination: "/settings/objects/pipelines/:id", permanent: false },
+    ]
+  },
   async headers() {
     // Embed page: strip X-Frame-Options and open frame-ancestors so any site can iframe it
     const embedHeaders = securityHeaders

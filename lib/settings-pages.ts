@@ -38,12 +38,21 @@ const page = (slug: string, label: string, section: SettingsSection, description
 
 export const SETTINGS_PAGES: SettingsPage[] = [
   page("users", "User Management", "Team & Access", "Users, teams and their permissions — they can't grant more than they hold"),
-  page("objects", "Custom Objects", "Objects & Data", "Create and edit custom objects and their properties"),
+  page("objects", "Objects", "Objects & Data", "Every object, built-in and custom — create, rename and delete custom objects"),
+  // A tab inside Objects, with its own box. Not a menu item: the Objects entry
+  // links here for someone who has this box but not Objects (settings layout).
+  page("pipelines", "Pipelines", "Objects & Data", "Pipelines, stages and stage rules (a tab inside Objects)", {
+    href: "/settings/objects/pipelines",
+    inMenu: false,
+  }),
+  // Replaced the Custom Properties and Property Customization pages (2026-10-07).
+  // Their old boxes still open it until every holder has the new one
+  // (scripts/migrate-settings-properties.ts adds it).
+  page("properties", "Properties", "Objects & Data", "Every property of every object — built-in fields, and custom properties on built-in and custom objects", {
+    alsoOpenedBy: (u) => (u.permissions ?? []).some((p) => p === "SETTINGS_CUSTOM_PROPERTIES" || p === "SETTINGS_CUSTOMIZATION"),
+  }),
   page("data-model", "Data Model", "Objects & Data", "Which objects can be associated with each other"),
-  page("custom-properties", "Custom Properties", "Objects & Data", "Properties on Referrals, Providers, Practices and other built-in objects"),
-  page("customization", "Property Customization", "Objects & Data", "Labels, order and visibility of built-in properties"),
   page("import", "Import Records", "Objects & Data", "Import CSV / Excel files into objects they can edit"),
-  page("pipelines", "Pipelines", "Objects & Data", "Pipelines, stages and stage rules"),
   page("org-rules", "Org Name Rules", "Objects & Data", "Rules that normalise practice names"),
   page("email", "Email", "Tools", "Organization signature and shared mailboxes"),
   page("outreach", "Outreach Templates", "Tools", "Templates for outreach emails"),

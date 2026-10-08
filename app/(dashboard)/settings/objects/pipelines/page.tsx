@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import PipelineOverview from "@/components/pipeline-overview"
 import PipelineObjectSelect from "@/components/pipeline-object-select"
 import { getPipelineColorStyle } from "@/app/actions/pipelines"
+import ObjectsTabs from "@/components/objects-tabs"
 
 // Never serve this from a cache: it's keyed on ?object=, and a stale entry would show
 // one object's pipelines while the picker names another.
@@ -40,13 +41,11 @@ export default async function PipelinesPage({ searchParams }: { searchParams: { 
 
   return (
     <div className="max-w-5xl space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Pipelines &amp; Stages</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Create pipelines and their stages for an object. Records move through stages and the time spent
-          in each stage is tracked automatically.
-        </p>
-      </div>
+      <ObjectsTabs active="pipelines" user={session.user as any} />
+      <p className="text-sm text-slate-500">
+        Create pipelines and their stages for an object. Records move through stages and the time spent
+        in each stage is tracked automatically.
+      </p>
 
       <PipelineObjectSelect objects={objects.map((o) => ({ key: o.key, label: o.label }))} value={current.key} />
 
