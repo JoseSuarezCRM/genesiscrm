@@ -1,3 +1,4 @@
+import { getNativeLabels, labelFrom } from "@/lib/native-labels"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
@@ -9,7 +10,6 @@ import { ChevronLeft, Building2, MapPin } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
-import ProviderInfoEditor from "@/components/provider-info-editor"
 import RecordActivityFeed from "@/components/record-activity-feed"
 import RecordEngagementBar from "@/components/record-engagement-bar"
 import RecordDetailShell from "@/components/record-detail-shell"
@@ -38,6 +38,7 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 
 export default async function ProviderDetailPage({ params }: Props) {
   const session = await requireView("PROVIDERS")
+  const renamed = await getNativeLabels()
   const isAdmin = userCanLevel(session?.user as any, "PROVIDERS", "EDIT")
 
   const [provider, activities, allPractices, customProperties] = await Promise.all([
@@ -152,7 +153,7 @@ export default async function ProviderDetailPage({ params }: Props) {
                         className="flex items-center justify-between gap-4 py-3 hover:bg-slate-50 -mx-2 px-2 rounded-md transition-colors">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-900">{r.patientFirstName} {r.patientLastName}</p>
-                          {r.patientMrn && <p className="text-xs text-slate-400">MRN: {r.patientMrn}</p>}
+                          {r.patientMrn && <p className="text-xs text-slate-400">{labelFrom(renamed, "REFERRAL", "patientMrn", "MRN")}: {r.patientMrn}</p>}
                         </div>
                         <StatusBadge status={r.status} />
                         <span className="text-xs text-slate-400 shrink-0">{formatDate(r.referralDate)}</span>

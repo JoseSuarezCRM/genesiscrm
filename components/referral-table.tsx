@@ -1,5 +1,7 @@
 "use client"
 
+import { relabel, labelFrom } from "@/lib/native-labels-shared"
+import { useNativeLabels } from "@/components/native-labels-provider"
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Phone, ChevronDown, ChevronUp, Loader2, Columns3 } from "lucide-react"
@@ -154,10 +156,13 @@ const REFERRAL_COL_W: Record<string, number> = {
 }
 
 export default function ReferralTable({ referrals, pipelines, pipelineColorStyle = "dot", allTags, customProps = [], associations = [], listUrl, total, allMatchingIds, canEdit = false, users = [] }: Props) {
+  // Admins' names for built-in fields (Settings → Properties) — columns, inline
+  // edit and the export all follow a rename.
+  const renamed = useNativeLabels()
   const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Full column catalog = static columns + every referral custom property.
   const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
-  const REFERRAL_COLUMNS = [...STATIC_REFERRAL_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns]
+  const REFERRAL_COLUMNS = [...relabel(renamed, "REFERRAL", STATIC_REFERRAL_COLUMNS), ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns]
   const cpDefById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const pipelineNameById = Object.fromEntries(pipelines.map((p) => [p.id, p.name]))
   const pipelineById = Object.fromEntries(pipelines.map((p) => [p.id, p]))
@@ -338,18 +343,18 @@ export default function ReferralTable({ referrals, pipelines, pipelineColorStyle
       return { def: cpToFieldDef(p, key), value: r.customProperties?.[id], field: key }
     }
     if (key === "assignedTo") {
-      return { def: { key: "assignedTo", label: "Assigned To", type: "user" }, value: r.assignedTo?.id ?? "", field: "assignedToId", owner: true }
+      return { def: { key: "assignedTo", label: labelFrom(renamed, "REFERRAL", "assignedTo", "Assigned To"), type: "user" }, value: r.assignedTo?.id ?? "", field: "assignedToId", owner: true }
     }
     if (key === "status") {
       return {
-        def: { key: "status", label: "Status", type: "select", options: Object.keys(STATUS_LABELS), optionLabels: STATUS_LABELS as any },
+        def: { key: "status", label: labelFrom(renamed, "REFERRAL", "status", "Status"), type: "select", options: Object.keys(STATUS_LABELS), optionLabels: STATUS_LABELS as any },
         value: r.status, field: "status", read: <StatusBadge status={r.status as any} />,
       }
     }
     const m = REFERRAL_EDIT[key]
     if (!m) return null
     const { field, get, ...def } = m
-    return { def: def as RecordFieldDef, value: get(r), field }
+    return { def: { ...def, label: labelFrom(renamed, "REFERRAL", def.key, def.label) } as RecordFieldDef, value: get(r), field }
   }
 
   function renderReferralCell(r: Referral, key: string) {

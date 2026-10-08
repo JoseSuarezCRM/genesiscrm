@@ -14,6 +14,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { formatDate } from "@/lib/utils"
 import Link from "next/link"
 import CustomPropertiesDisplay from "@/components/custom-properties-display"
+import { useFieldLabel } from "@/components/native-labels-provider"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ function InlineForm({ onCancel, onSubmit, isPending, children }: {
 export default function PracticeDetailClient({ practice, referrals, isAdmin, customProperties }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const fl = useFieldLabel()
 
   // Practice edit
   const [editingPractice, setEditingPractice] = useState(false)
@@ -217,17 +219,17 @@ export default function PracticeDetailClient({ practice, referrals, isAdmin, cus
         {editingPractice ? (
           <InlineForm onCancel={() => setEditingPractice(false)} onSubmit={savePractice} isPending={isPending}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className={labelCls}>Name *</label><input value={pracName} onChange={(e) => setPracName(e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>Phone</label><PhoneInput value={pracPhone} onChange={setPracPhone} /></div>
-              <div><label className={labelCls}>Fax</label><input value={pracFax} onChange={(e) => setPracFax(e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>Address</label><input value={pracAddress} onChange={(e) => setPracAddress(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>{fl("PRACTICE", "name", "Name")} *</label><input value={pracName} onChange={(e) => setPracName(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>{fl("PRACTICE", "phone", "Phone")}</label><PhoneInput value={pracPhone} onChange={setPracPhone} /></div>
+              <div><label className={labelCls}>{fl("PRACTICE", "fax", "Fax")}</label><input value={pracFax} onChange={(e) => setPracFax(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>{fl("PRACTICE", "address", "Address")}</label><input value={pracAddress} onChange={(e) => setPracAddress(e.target.value)} className={inputCls} /></div>
             </div>
           </InlineForm>
         ) : (
           <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-            <InfoRow label="Phone" value={practice.phone} />
-            <InfoRow label="Fax" value={practice.fax} />
-            <InfoRow label="Address" value={practice.address} />
+            <InfoRow label={fl("PRACTICE", "phone", "Phone")} value={practice.phone} />
+            <InfoRow label={fl("PRACTICE", "fax", "Fax")} value={practice.fax} />
+            <InfoRow label={fl("PRACTICE", "address", "Address")} value={practice.address} />
           </div>
         )}
       </SectionCard>
@@ -355,12 +357,13 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 }
 
 function LocationFormFields({ form, onChange }: { form: { name: string; phone: string; fax: string; address: string }; onChange: (f: any) => void }) {
+  const fl = useFieldLabel()
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div><label className={labelCls}>Location Name *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} placeholder="Main Office" /></div>
-      <div><label className={labelCls}>Phone</label><PhoneInput value={form.phone} onChange={(v) => onChange((f: any) => ({ ...f, phone: v }))} /></div>
-      <div><label className={labelCls}>Fax</label><input value={form.fax} onChange={(e) => onChange((f: any) => ({ ...f, fax: e.target.value }))} className={inputCls} /></div>
-      <div><label className={labelCls}>Address</label><input value={form.address} onChange={(e) => onChange((f: any) => ({ ...f, address: e.target.value }))} className={inputCls} /></div>
+      <div><label className={labelCls}>{fl("LOCATION", "name", "Location Name")} *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} placeholder="Main Office" /></div>
+      <div><label className={labelCls}>{fl("LOCATION", "phone", "Phone")}</label><PhoneInput value={form.phone} onChange={(v) => onChange((f: any) => ({ ...f, phone: v }))} /></div>
+      <div><label className={labelCls}>{fl("LOCATION", "fax", "Fax")}</label><input value={form.fax} onChange={(e) => onChange((f: any) => ({ ...f, fax: e.target.value }))} className={inputCls} /></div>
+      <div><label className={labelCls}>{fl("LOCATION", "address", "Address")}</label><input value={form.address} onChange={(e) => onChange((f: any) => ({ ...f, address: e.target.value }))} className={inputCls} /></div>
     </div>
   )
 }
@@ -369,20 +372,21 @@ function DoctorFormFields({ form, onChange, locations, onToggleLoc }: {
   form: { name: string; title: string; npi: string; specialty: string; phone: string; email: string; locationIds: string[] }
   onChange: (f: any) => void; locations: Location[]; onToggleLoc: (id: string) => void
 }) {
+  const fl = useFieldLabel()
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label className={labelCls}>Name *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} /></div>
+        <div><label className={labelCls}>{fl("PROVIDER", "name", "Name")} *</label><input value={form.name} onChange={(e) => onChange((f: any) => ({ ...f, name: e.target.value }))} className={inputCls} /></div>
         <div>
-          <label className={labelCls}>Title</label>
+          <label className={labelCls}>{fl("PROVIDER", "title", "Title")}</label>
           <StyledSelect value={form.title} onChange={(e) => onChange((f: any) => ({ ...f, title: e.target.value }))} className={inputCls}>
             <option value="">— Select —</option>
             {PROVIDER_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
           </StyledSelect>
         </div>
-        <div><label className={labelCls}>NPI</label><input value={form.npi} onChange={(e) => onChange((f: any) => ({ ...f, npi: e.target.value }))} className={inputCls} maxLength={10} /></div>
-        <div><label className={labelCls}>Phone</label><PhoneInput value={form.phone} onChange={(v) => onChange((f: any) => ({ ...f, phone: v }))} /></div>
-        <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={(e) => onChange((f: any) => ({ ...f, email: e.target.value }))} className={inputCls} /></div>
+        <div><label className={labelCls}>{fl("PROVIDER", "npi", "NPI")}</label><input value={form.npi} onChange={(e) => onChange((f: any) => ({ ...f, npi: e.target.value }))} className={inputCls} maxLength={10} /></div>
+        <div><label className={labelCls}>{fl("PROVIDER", "phone", "Phone")}</label><PhoneInput value={form.phone} onChange={(v) => onChange((f: any) => ({ ...f, phone: v }))} /></div>
+        <div><label className={labelCls}>{fl("PROVIDER", "email", "Email")}</label><input type="email" value={form.email} onChange={(e) => onChange((f: any) => ({ ...f, email: e.target.value }))} className={inputCls} /></div>
       </div>
       {locations.length > 0 && (
         <div>

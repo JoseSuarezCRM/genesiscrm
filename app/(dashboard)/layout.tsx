@@ -8,6 +8,8 @@ import ToastHost from "@/components/toast"
 import UpdateBanner from "@/components/update-banner"
 import NavHistoryTracker from "@/components/nav-history-tracker"
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog"
+import { NativeLabelsProvider } from "@/components/native-labels-provider"
+import { getNativeLabels } from "@/lib/native-labels"
 
 export default async function DashboardLayout({
   children,
@@ -28,8 +30,12 @@ export default async function DashboardLayout({
     orderBy: [{ order: "asc" }, { plural: "asc" }],
     select: { key: true, plural: true },
   })
+  // Admins' names for built-in fields — every screen below reads them
+  // (Settings → Properties → Rename).
+  const nativeLabels = await getNativeLabels()
 
   return (
+    <NativeLabelsProvider labels={nativeLabels}>
     <div className="flex h-screen h-dvh bg-slate-50 overflow-hidden">
       <Sidebar
         userName={session.user.name}
@@ -54,5 +60,6 @@ export default async function DashboardLayout({
       <ConfirmDialogHost />
       <NavHistoryTracker />
     </div>
+    </NativeLabelsProvider>
   )
 }

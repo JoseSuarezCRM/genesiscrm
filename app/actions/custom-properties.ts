@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache"
 import { cpMeta, type CPEntity } from "@/lib/custom-property-entities"
 import { runTrigger_RecordPropertyChanged } from "@/lib/automation-engine"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { applyNativeLabels, nativeLabel } from "@/lib/native-labels"
 
 // One delegate per object that carries a customProperties JSON bag.
 function cpDelegate(type: CPEntity): any {
@@ -51,17 +52,17 @@ export async function getNativeVisibilityControllers(
 
   if (entity === "REFERRAL") {
     const pipelines = await (prisma as any).pipeline.findMany({ where: { isActive: true, objectType: "REFERRAL" }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, stages: { orderBy: { order: "asc" }, select: { id: true, name: true } } } })
-    out.push({ key: "pipelineId", name: "Pipeline", options: pipelines.map((p: any) => p.id), optionLabels: Object.fromEntries(pipelines.map((p: any) => [p.id, p.name])) })
+    out.push({ key: "pipelineId", name: await nativeLabel("REFERRAL", "pipelineId", "Pipeline"), options: pipelines.map((p: any) => p.id), optionLabels: Object.fromEntries(pipelines.map((p: any) => [p.id, p.name])) })
     // Stage controller (conditional logic per stage) — options across all referral pipelines.
     const stages = pipelines.flatMap((p: any) => (p.stages ?? []).map((s: any) => ({ id: s.id, label: `${p.name} — ${s.name}` })))
     if (stages.length) out.push({ key: "stageId", name: "Stage", options: stages.map((s: any) => s.id), optionLabels: Object.fromEntries(stages.map((s: any) => [s.id, s.label])) })
-    out.push({ key: "status", name: "Status", options: ["NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "NO_SHOW"] })
+    out.push({ key: "status", name: await nativeLabel("REFERRAL", "status", "Status"), options: ["NEW", "CONTACTED", "SCHEDULED", "COMPLETED", "NO_SHOW"] })
   }
 
   // Every other native field of the object as a controller. Select fields expose
   // their options as checkboxes; everything else takes a typed value.
   const covered = new Set(out.map((c) => c.key))
-  for (const f of RECORD_FIELDS[entity] ?? []) {
+  for (const f of await applyNativeLabels(entity, RECORD_FIELDS[entity] ?? [])) {
     if (covered.has(f.key) || f.readOnly) continue
     out.push({ key: f.key, name: f.label, options: f.type === "select" ? (f.options ?? []) : [], optionLabels: f.optionLabels })
   }

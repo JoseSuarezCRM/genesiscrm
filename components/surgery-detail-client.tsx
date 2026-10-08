@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation"
 import { Phone, Trash2, Upload, FileText, X, Loader2, Check } from "lucide-react"
 import { updateSurgeryCase, addSurgeryCallAttempt, deleteSurgeryCallAttempt, deleteSurgeryDocument } from "@/app/actions/surgery"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
-import { PROCEDURE_DATA, findProcedureLocation, DME_OPTIONS, REFERRAL_PRESETS, PHYSICAL_THERAPY_OPTIONS, toOptions } from "@/lib/surgery-procedures"
-import { LANGUAGE_OPTIONS } from "@/lib/automation-properties"
+import { PROCEDURE_DATA, findProcedureLocation, REFERRAL_PRESETS, PHYSICAL_THERAPY_OPTIONS } from "@/lib/surgery-procedures"
 import { clinicDatetimeLocalValue, clinicDatetimeLocalToISO } from "@/lib/tz"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useFieldLabel } from "@/components/native-labels-provider"
 
 const MAX_CALLS = 4
 
@@ -48,12 +48,13 @@ function ProcedureField({ value, onChange }: { value: string; onChange: (v: stri
     onChange("")
   }
 
+  const procedureLabel = useFieldLabel()("SURGERY", "procedure", "Procedure")
   const bodyParts = provider ? Object.keys(PROCEDURE_DATA[provider] ?? {}) : []
   const procedures = provider && bodyPart ? (PROCEDURE_DATA[provider]?.[bodyPart] ?? []) : []
 
   return (
     <div className="flex flex-col gap-1 sm:col-span-3">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Procedure</label>
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{procedureLabel}</label>
       <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_0.8fr_2fr] gap-3">
         <StyledSelect value={provider} onChange={(e) => handleProviderChange(e.target.value)} className={fieldClass}>
           <option value="">— Select provider —</option>
@@ -68,121 +69,6 @@ function ProcedureField({ value, onChange }: { value: string; onChange: (v: stri
           {procedures.map((p) => <option key={p} value={p}>{p}</option>)}
         </StyledSelect>
       </div>
-    </div>
-  )
-}
-
-function SelectField({
-  label, value, options, onChange,
-}: {
-  label: string
-  value: string
-  options: { value: string; label: string }[]
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
-      <StyledSelect
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
-      >
-        <option value="">— Not set —</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </StyledSelect>
-    </div>
-  )
-}
-
-function InputField({
-  label, value, type = "text", onChange,
-}: {
-  label: string
-  value: string
-  type?: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
-      />
-    </div>
-  )
-}
-
-
-function ReferralField({
-  presets, selectVal, otherVal, onSelectChange, onOtherChange,
-}: {
-  presets: string[]
-  selectVal: string
-  otherVal: string
-  onSelectChange: (v: string) => void
-  onOtherChange: (v: string) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Referral Source</label>
-      <StyledSelect
-        value={selectVal}
-        onChange={(e) => onSelectChange(e.target.value)}
-        className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
-      >
-        <option value="">— Not set —</option>
-        {presets.map((p) => <option key={p} value={p}>{p}</option>)}
-        <option value="Other">Other</option>
-      </StyledSelect>
-      {selectVal === "Other" && (
-        <input
-          type="text"
-          value={otherVal}
-          onChange={(e) => onOtherChange(e.target.value)}
-          placeholder="Specify source..."
-          className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
-        />
-      )}
-    </div>
-  )
-}
-
-// Physical Therapy: like the Referral Source field — a select whose "External"
-// option reveals a free-text box; the typed value is stored in the single field.
-function PhysicalTherapyField({
-  selectVal, externalVal, onSelectChange, onExternalChange,
-}: {
-  selectVal: string
-  externalVal: string
-  onSelectChange: (v: string) => void
-  onExternalChange: (v: string) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Physical Therapy</label>
-      <StyledSelect
-        value={selectVal}
-        onChange={(e) => onSelectChange(e.target.value)}
-        className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
-      >
-        <option value="">— Not set —</option>
-        {PHYSICAL_THERAPY_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-      </StyledSelect>
-      {selectVal === "External" && (
-        <input
-          type="text"
-          value={externalVal}
-          onChange={(e) => onExternalChange(e.target.value)}
-          placeholder="External PT details..."
-          className="h-9 px-3 rounded-lg border border-zinc-200 text-sm text-slate-800 bg-white focus:outline-none focus:border-zinc-400 transition-colors"
-        />
-      )}
     </div>
   )
 }

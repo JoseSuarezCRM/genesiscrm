@@ -1,5 +1,6 @@
 import { RECORD_FIELDS, type RecordFieldDef } from "@/lib/record-field-catalog"
 import { cpToFieldDef } from "@/lib/cp-field-def"
+import { relabel, type NativeLabelMap } from "@/lib/native-labels-shared"
 
 // Build the create-form field catalog for a built-in object: its editable native
 // fields (from RECORD_FIELDS) + injected relation fields (extras, e.g. a Practice
@@ -11,11 +12,13 @@ export function builtinCreateCatalog(opts: {
   extras?: RecordFieldDef[]
   required?: string[]
   ownerLabel?: string
+  /** Admins' names for built-in fields (useNativeLabels()) — a renamed field shows its new name. */
+  labels?: NativeLabelMap
 }): RecordFieldDef[] {
-  const { entityType, customProps = [], extras = [], required = [], ownerLabel } = opts
+  const { entityType, customProps = [], extras = [], required = [], ownerLabel, labels } = opts
   const reqSet = new Set(required)
   const mark = (f: RecordFieldDef) => (reqSet.has(f.key) ? { ...f, required: true } : f)
-  const native = (RECORD_FIELDS[entityType] ?? []).filter((f) => !f.readOnly).map(mark)
+  const native = relabel(labels, entityType, (RECORD_FIELDS[entityType] ?? []).filter((f) => !f.readOnly)).map(mark)
   const cp = customProps.map((p) => cpToFieldDef(p, `cp_${p.id}`))
   const owner: RecordFieldDef[] = ownerLabel ? [{ key: "__owner", label: ownerLabel, type: "user" }] : []
   return [...native, ...extras.map(mark), ...cp, ...owner]

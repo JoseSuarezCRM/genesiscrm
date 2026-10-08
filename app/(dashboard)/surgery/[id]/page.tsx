@@ -1,3 +1,4 @@
+import { getNativeLabels, labelFrom } from "@/lib/native-labels"
 import { auth } from "@/lib/auth"
 import { requireView } from "@/lib/auth-guard"
 import { redirect, notFound } from "next/navigation"
@@ -76,7 +77,7 @@ export default async function SurgeryCasePage({ params }: { params: { id: string
           {SURGERY_STATUS_LABELS[surgeryCase.status] ?? surgeryCase.status}
         </span>
       }
-      subtitle={surgeryCase.mrn ? `MRN: ${surgeryCase.mrn}` : undefined}
+      subtitle={surgeryCase.mrn ? `${labelFrom(await getNativeLabels(), "SURGERY", "mrn", "MRN")}: ${surgeryCase.mrn}` : undefined}
       actions={
         <RecordActionsMenu entityType="SURGERY" recordId={params.id} title={surgeryCase.patientName}
           catalog={propertyCards.catalog} values={propertyCards.values}

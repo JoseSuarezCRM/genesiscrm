@@ -2,6 +2,7 @@
 // visits/calls). Inline styles + table layout so it renders in every mail client.
 
 import { fmtActivityWhen } from "@/lib/activity-time"
+import { labelFrom, type NativeLabelMap } from "@/lib/native-labels-shared"
 
 export interface ReportActivity {
   id: string
@@ -46,7 +47,9 @@ function providerNames(a: ReportActivity): string {
   return a.providers.map((p) => [p.doctor.title, p.doctor.name].filter(Boolean).join(" ")).join(", ")
 }
 
-export function buildActivityReportHtml(activities: ReportActivity[], opts: { orgName?: string; generatedBy?: string; message?: string } = {}): string {
+export function buildActivityReportHtml(activities: ReportActivity[], opts: { orgName?: string; generatedBy?: string; message?: string; labels?: NativeLabelMap } = {}): string {
+  // Admins' names for built-in activity fields (Settings → Properties).
+  const fl = (key: string, fallback: string) => labelFrom(opts.labels, "ACTIVITY", key, fallback)
   const org = opts.orgName ?? "Genesis Orthopedics & Sports Medicine"
   const dates = activities.map((a) => new Date(a.date).getTime()).filter((t) => !isNaN(t))
   const rangeLabel = dates.length
@@ -90,14 +93,14 @@ export function buildActivityReportHtml(activities: ReportActivity[], opts: { or
         </tr>
       </table>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px;">
-        ${detailRow("Type", a.flyer)}
+        ${detailRow(fl("flyer", "Type"), a.flyer)}
         ${detailRow("Location", a.location?.name ?? null)}
         ${detailRow("Providers", providerNames(a) || null)}
-        ${detailRow("Next step", a.nextStep)}
-        ${detailRow("Front desk", a.frontDesk)}
-        ${detailRow("Clinic Value", a.rating != null ? String(a.rating) : null)}
-        ${detailRow("Meeting Rating", a.meetingRating != null ? String(a.meetingRating) : null)}
-        ${detailRow("Notes", a.notes)}
+        ${detailRow(fl("nextStep", "Next step"), a.nextStep)}
+        ${detailRow(fl("frontDesk", "Front desk"), a.frontDesk)}
+        ${detailRow(fl("rating", "Clinic Value"), a.rating != null ? String(a.rating) : null)}
+        ${detailRow(fl("meetingRating", "Meeting Rating"), a.meetingRating != null ? String(a.meetingRating) : null)}
+        ${detailRow(fl("notes", "Notes"), a.notes)}
       </table>
       ${a.tags.length ? `<div style="margin-top:10px;">${a.tags.map((t) => chip(t.name, t.color)).join("")}</div>` : ""}
     </div>`

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { listCustomObjects } from "@/app/actions/custom-objects"
 import { CP_ENTITIES } from "@/lib/custom-property-entities"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { getNativeLabels } from "@/lib/native-labels"
 import PropertiesSettings, { type PropertiesObject } from "@/components/properties-settings"
 
 export const dynamic = "force-dynamic"
@@ -14,9 +15,10 @@ export const dynamic = "force-dynamic"
 export default async function PropertiesSettingsPage({ searchParams }: { searchParams?: { object?: string } }) {
   await settingsPageOrRedirect("properties")
 
-  const [customProps, customObjects] = await Promise.all([
+  const [customProps, customObjects, renamed] = await Promise.all([
     prisma.customProperty.findMany({ orderBy: { createdAt: "asc" } }),
     listCustomObjects(),
+    getNativeLabels(),
   ])
 
   const objects: PropertiesObject[] = [
@@ -26,7 +28,7 @@ export default async function PropertiesSettingsPage({ searchParams }: { searchP
       label: e.label,
       icon: e.icon,
       native: (RECORD_FIELDS[e.type] ?? []).map((f) => ({
-        key: f.key, label: f.label, type: f.type, options: f.options ?? [], optionLabels: f.optionLabels, readOnly: !!f.readOnly,
+        key: f.key, label: renamed[e.type]?.[f.key] ?? f.label, defaultLabel: f.label, renamed: !!renamed[e.type]?.[f.key], type: f.type, options: f.options ?? [], optionLabels: f.optionLabels, readOnly: !!f.readOnly,
       })),
       custom: customProps.filter((p) => p.entityType === e.type).map((p) => ({
         id: p.id, name: p.name, internalName: p.internalName, type: p.type, required: p.required, unique: p.unique,

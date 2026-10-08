@@ -1,3 +1,4 @@
+import { getNativeLabels } from "@/lib/native-labels"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
   })
 
   // Export the columns the user has visible (in order); fall back to a default set.
-  const catalog = referralExportColumns(referralCustomProps.map((p) => ({ id: p.id, name: p.name })))
+  const catalog = referralExportColumns(referralCustomProps.map((p) => ({ id: p.id, name: p.name })), await getNativeLabels())
   // Association columns (Practice/Provider/Location → their fields), so the CSV matches the table.
   for (const g of await associationColumnDefs("REFERRAL")) {
     for (const f of g.fields) catalog[f.key] = { key: f.key, label: `${g.label} — ${f.label}`, get: (r: any) => readAssocValue(r, f) }

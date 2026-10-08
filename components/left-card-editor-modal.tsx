@@ -18,6 +18,7 @@ import {
 import { Trash2, GripVertical, X, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { referralLeftFieldPool } from "@/lib/card-field-definitions"
+import { useNativeLabels } from "@/components/native-labels-provider"
 
 interface CardLayout {
   cardName: string
@@ -71,8 +72,9 @@ export default function LeftCardEditorModal({
   const [dragId, setDragId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
 
+  const renamed = useNativeLabels()
   const fieldPool = fieldDefs ?? [
-    ...referralLeftFieldPool,
+    ...referralLeftFieldPool(renamed),
     ...customProperties.map((p) => ({ id: `custom:${p.id}`, label: p.name })),
   ]
   const labelFor = (id: string) => fieldPool.find((f) => f.id === id)?.label ?? id

@@ -6,6 +6,7 @@ import { requireAccess } from "@/lib/auth-guard"
 import { sendEmail } from "@/lib/graph-mailer"
 import { resolveMyFromEmail } from "@/app/actions/account"
 import { buildActivityReportHtml, type ReportActivity } from "@/lib/activity-report"
+import { getNativeLabels } from "@/lib/native-labels"
 
 // Email a formatted report of the given activities to one or more recipients.
 export async function emailActivityReport(input: { activityIds: string[]; to: string[]; subject?: string; message?: string }) {
@@ -44,7 +45,7 @@ export async function emailActivityReport(input: { activityIds: string[]; to: st
 
   const me = session.user as any
   const generatedBy = me.name || me.email
-  const html = buildActivityReportHtml(activities, { generatedBy, message: input.message })
+  const html = buildActivityReportHtml(activities, { generatedBy, message: input.message, labels: await getNativeLabels() })
   const subject = (input.subject && input.subject.trim()) || `Activity Report — ${activities.length} ${activities.length === 1 ? "activity" : "activities"}`
 
   const fromEmail = await resolveMyFromEmail(null)

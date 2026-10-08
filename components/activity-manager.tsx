@@ -51,6 +51,8 @@ import BulkActionBar, { bulkBtn, bulkDanger } from "@/components/ui/bulk-action-
 import { useColumnResize, ColResizer } from "@/components/ui/use-column-resize"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+import { useNativeLabels } from "@/components/native-labels-provider"
+import { relabel, labelFrom } from "@/lib/native-labels-shared"
 
 // ─── Searchable teammate picker (email activity report) ─────────────────────────
 // Same searchable dropdown pattern as the filter builder: a search box + a list
@@ -789,9 +791,13 @@ const ACTIVITY_COL_W: Record<string, number> = { date: 120, account: 200, locati
 
 export default function ActivityManager({ activities, practices, allDoctors, allTags, currentUserId, currentUserName, assignableUsers = [], savedViews: initialSavedViews, shareUsers, shareTeams, canManage = true, canCreateTasks = false, customProps = [], associations = [] }: Props & { canManage?: boolean; canCreateTasks?: boolean; associations?: AssociationGroup[] }) {
   const ownerUserMap = Object.fromEntries(assignableUsers.map((u) => [u.id, u.label]))
+  // Admins' names for built-in fields (Settings → Properties) — columns, inline
+  // edit, export, cards and the log form follow a rename.
+  const renamed = useNativeLabels()
+  const fl = (key: string, fallback: string) => labelFrom(renamed, "ACTIVITY", key, fallback)
   // Full catalog = native activity columns + every activity custom property.
   const { columns: assocColumns, byKey: assocByKey } = associationColumns(associations)
-  const allActivityCols = [...ACTIVITY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns]
+  const allActivityCols = [...relabel(renamed, "ACTIVITY", ACTIVITY_COLUMNS), ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns]
   const activityCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -1368,13 +1374,13 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             )}
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-slate-500">
-              {a.nextStep && <span><span className="font-medium text-slate-600">Next:</span> {a.nextStep}</span>}
-              {a.frontDesk && <span><span className="font-medium text-slate-600">Front desk:</span> {a.frontDesk}</span>}
+              {a.nextStep && <span><span className="font-medium text-slate-600">{fl("nextStep", "Next")}:</span> {a.nextStep}</span>}
+              {a.frontDesk && <span><span className="font-medium text-slate-600">{fl("frontDesk", "Front desk")}:</span> {a.frontDesk}</span>}
               {a.flyer && (() => {
                 const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
                 return t
                   ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t.bg} ${t.color} ${t.border}`}>{t.value}</span>
-                  : <span><span className="font-medium text-slate-600">Type:</span> {a.flyer}</span>
+                  : <span><span className="font-medium text-slate-600">{fl("type", "Type")}:</span> {a.flyer}</span>
               })()}
             </div>
 
@@ -1464,10 +1470,10 @@ export default function ActivityManager({ activities, practices, allDoctors, all
   // (account/location/providers/tags), the colored type/rating chips, and the
   // creator stay read-only.
   const ACTIVITY_EDIT: Record<string, RecordFieldDef & { field: string; get: (a: any) => any }> = {
-    date: { key: "date", field: "date", label: "Date", type: "datetime", get: (a) => a.date },
-    nextStep: { key: "nextStep", field: "nextStep", label: "Next Step", type: "text", get: (a) => a.nextStep },
-    frontDesk: { key: "frontDesk", field: "frontDesk", label: "Front Desk", type: "text", get: (a) => a.frontDesk },
-    notes: { key: "notes", field: "notes", label: "Notes", type: "long_text", get: (a) => a.notes },
+    date: { key: "date", field: "date", label: fl("date", "Date"), type: "datetime", get: (a) => a.date },
+    nextStep: { key: "nextStep", field: "nextStep", label: fl("nextStep", "Next Step"), type: "text", get: (a) => a.nextStep },
+    frontDesk: { key: "frontDesk", field: "frontDesk", label: fl("frontDesk", "Front Desk"), type: "text", get: (a) => a.frontDesk },
+    notes: { key: "notes", field: "notes", label: fl("notes", "Notes"), type: "long_text", get: (a) => a.notes },
   }
   function activEditable(a: any, key: string): { def: RecordFieldDef; value: any; field: string; read?: React.ReactNode; owner?: boolean } | null {
     if (key.startsWith("cp_")) {
@@ -1480,7 +1486,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     if (key === "type") {
       const t = ACTIVITY_TYPES.find(x => x.value === a.flyer)
       return {
-        def: { key: "type", label: "Type", type: "select", options: ACTIVITY_TYPES.map(x => x.value) },
+        def: { key: "type", label: fl("type", "Type"), type: "select", options: ACTIVITY_TYPES.map(x => x.value) },
         value: a.flyer, field: "flyer",
         read: a.flyer
           ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${t ? `${t.bg} ${t.color} ${t.border}` : "bg-zinc-100 text-zinc-600 border-zinc-200"}`}>{a.flyer}</span>
@@ -1489,7 +1495,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
     }
     if (key === "rating") {
       return {
-        def: { key: "rating", label: "Rating", type: "select", coerce: "number", options: ACTIVITY_RATINGS.map(String), optionLabels: Object.fromEntries(ACTIVITY_RATINGS.map((v) => [String(v), String(v)])) },
+        def: { key: "rating", label: fl("rating", "Rating"), type: "select", coerce: "number", options: ACTIVITY_RATINGS.map(String), optionLabels: Object.fromEntries(ACTIVITY_RATINGS.map((v) => [String(v), String(v)])) },
         value: a.rating != null ? String(a.rating) : "", field: "rating",
         read: a.rating
           ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-zinc-100 text-zinc-700 border-zinc-200 whitespace-nowrap">{a.rating}</span>
@@ -1960,15 +1966,15 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </div>
             )}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Next Step</label>
+              <label className="text-sm font-medium text-slate-700">{fl("nextStep", "Next Step")}</label>
               <Input value={form.nextStep} onChange={e => set("nextStep", e.target.value)} placeholder="e.g. Follow up in 2 weeks" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Date &amp; Time</label>
+              <label className="text-sm font-medium text-slate-700">{fl("date", "Date & Time")}</label>
               <DatePicker withTime autoOpen={false} value={form.date} onCommit={v => set("date", v)} onCancel={() => {}} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Activity Type</label>
+              <label className="text-sm font-medium text-slate-700">{fl("type", "Activity Type")}</label>
               <div className="flex flex-wrap gap-2">
                 {ACTIVITY_TYPES.map(t => (
                   <button
@@ -1987,7 +1993,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Clinic Value (1 lowest, 6 highest)</label>
+              <label className="text-sm font-medium text-slate-700">{fl("rating", "Clinic Value")} (1 lowest, 6 highest)</label>
               <div className="flex flex-wrap gap-2">
                 {ACTIVITY_RATINGS.map(v => (
                   <button
@@ -2006,7 +2012,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Meeting Rating (1 lowest, 6 highest)</label>
+              <label className="text-sm font-medium text-slate-700">{fl("meetingRating", "Meeting Rating")} (1 lowest, 6 highest)</label>
               <div className="flex flex-wrap gap-2">
                 {MEETING_RATINGS.map(v => (
                   <button
@@ -2026,7 +2032,7 @@ export default function ActivityManager({ activities, practices, allDoctors, all
             </div>
 
             <div className="col-span-2 space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Notes</label>
+              <label className="text-sm font-medium text-slate-700">{fl("notes", "Notes")}</label>
               <NotesTextarea ref={notesRef} value={form.notes} onChange={v => set("notes", v)} placeholder="Enter notes here..." rows={4} />
             </div>
           </div>

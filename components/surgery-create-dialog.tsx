@@ -9,6 +9,7 @@ import { builtinCreateCatalog, splitCreateValues } from "@/lib/create-catalog"
 import { createSurgeryCase } from "@/app/actions/surgery"
 import { SURGERY_STATUS_OPTIONS } from "@/lib/automation-properties"
 import { type CreateFormField } from "@/app/actions/create-form"
+import { useNativeLabels } from "@/components/native-labels-provider"
 
 // Curated default fields shown before an admin configures the create form (the
 // clinical details — clearances, procedure, CT/GLP-1/DME — are added after).
@@ -26,6 +27,7 @@ export default function SurgeryCreateDialog({ customProps = [], createFormConfig
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const renamed = useNativeLabels()
 
   return (
     <>
@@ -42,6 +44,7 @@ export default function SurgeryCreateDialog({ customProps = [], createFormConfig
             extras: [{ key: "status", label: "Status", type: "select", options: SURGERY_STATUS_OPTIONS.map((s) => s.value), optionLabels: Object.fromEntries(SURGERY_STATUS_OPTIONS.map((s) => [s.value, s.label])) }],
             required: ["patientName"],
             ownerLabel: "Case Owner",
+            labels: renamed,
           })}
           config={createFormConfig}
           defaultConfig={SURGERY_DEFAULT_FIELDS}

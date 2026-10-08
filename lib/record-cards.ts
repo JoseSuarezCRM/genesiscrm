@@ -15,6 +15,7 @@ import { computeStageDurations } from "@/lib/stages/durations"
 import { stageDurationFieldsFor, durationValue } from "@/lib/stages/duration-fields"
 import { RC_PERM_KEY } from "@/lib/referral-calls/constants"
 import { RC_SERVER_SET_PROPS } from "@/lib/referral-calls/inline-edit"
+import { applyNativeLabels } from "@/lib/native-labels"
 
 const CP_TYPE: Record<string, RecordFieldType> = {
   TEXT: "text", LONG_TEXT: "long_text", NUMBER: "number", EMAIL: "email",
@@ -139,8 +140,10 @@ export async function loadPropertyCards(entityType: string, record: Record<strin
     pipelineLabels = Object.fromEntries(pipelines.map((p) => [p.id, p.name]))
   }
 
+  // Built-in fields carry an admin's rename, if any (Settings → Properties).
+  const nativeFields = await applyNativeLabels(entityType, RECORD_FIELDS[entityType] ?? [])
   const catalog: RecordFieldDef[] = [
-    ...(RECORD_FIELDS[entityType] ?? []).map((f) =>
+    ...nativeFields.map((f) =>
       f.key === "pipelineId" && pipelineField ? { ...f, options: pipelineField, optionLabels: pipelineLabels } : f
     ),
     ...customProps.map((c) => ({ key: `cp_${c.id}`, label: c.name, type: CP_TYPE[c.type] ?? "text", multi: c.type === "MULTI_SELECT", options: c.options, default: (c as any).defaultValue ?? undefined, conditional: (c as any).conditional ?? undefined, optionLabels: (c as any).optionLabels ?? undefined, optionColors: (c as any).optionColors ?? undefined, optionStyle: (c as any).optionStyle ?? undefined, visibilityRule: (c as any).visibilityRule ?? undefined, numberFormat: (c as any).numberFormat ?? undefined })),

@@ -5,6 +5,8 @@ import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { ReferralStatus } from "@prisma/client"
 import { Users, CheckCircle2, Calendar, Clock, TrendingUp, BarChart2, ChevronRight, ChevronDown, Check, Building2, User } from "lucide-react"
+import { useNativeLabels } from "@/components/native-labels-provider"
+import { labelFrom } from "@/lib/native-labels-shared"
 
 type Granularity = "daily" | "weekly" | "monthly" | "yearly"
 
@@ -153,6 +155,8 @@ export default function ReportsClient({
   filterDoctors,
   filterPipelines,
 }: Props) {
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = useNativeLabels()
   const router = useRouter()
   const [range, setRange] = useState(currentRange)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
@@ -340,7 +344,7 @@ export default function ReportsClient({
         />
         {filterPipelines.length > 0 && (
           <MultiSelectDropdown
-            label="Pipeline"
+            label={labelFrom(renamed, "REFERRAL", "pipelineId", "Pipeline")}
             icon={<ChevronRight className="h-3.5 w-3.5 shrink-0" />}
             options={filterPipelines.map((p) => ({ id: p.id, label: p.name }))}
             selected={pipelineIds}

@@ -1,5 +1,6 @@
 import { settingsPageOrRedirect } from "@/lib/auth-guard"
 import { canOpenSettingsPage } from "@/lib/settings-pages"
+import { getNativeLabels, labelFrom } from "@/lib/native-labels"
 import { prisma } from "@/lib/prisma"
 import { userCanLevel } from "@/lib/permissions"
 import { listObjectTypes } from "@/lib/object-registry"
@@ -54,6 +55,7 @@ export default async function ImportPage() {
       }
     }))
 
+  const renamed = await getNativeLabels()
   if (userCanLevel(user, "PROVIDERS", "EDIT")) {
     const providerProps = await prisma.customProperty.findMany({ where: { entityType: "PROVIDER" }, orderBy: { createdAt: "asc" } })
     objects.push({
@@ -65,7 +67,11 @@ export default async function ImportPage() {
       requiredForCreate: ["name", "__practice"],
       excludeAssocTypes: PROVIDER_NATIVE_LINK_TYPES,
       properties: [
-        ...PROVIDER_IMPORT_FIELDS,
+        // A renamed built-in field shows its new name; the old one still auto-maps a header.
+        ...PROVIDER_IMPORT_FIELDS.map((f) => {
+          const name = labelFrom(renamed, "PROVIDER", f.id, f.name)
+          return name === f.name ? f : { ...f, name, aliases: [...(f.aliases ?? []), f.name] }
+        }),
         ...providerProps.map((p) => ({
           id: `cp_${p.id}`,
           name: p.name,

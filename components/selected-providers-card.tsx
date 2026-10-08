@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { Save, X, ChevronDown } from "lucide-react"
 import { cn, formatPhone } from "@/lib/utils"
+import { useFieldLabel } from "@/components/native-labels-provider"
 
 interface Doctor {
   id: string
@@ -27,6 +28,8 @@ interface Props {
 
 export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor }: Props) {
   const [isPending, startTransition] = useTransition()
+  // Provider fields under the admin's names (Settings → Properties).
+  const fl = useFieldLabel()
   const [expandedDoctorId, setExpandedDoctorId] = useState<string | null>(null)
   const [editingField, setEditingField] = useState<{ doctorId: string; field: string } | null>(null)
   const [editValue, setEditValue] = useState("")
@@ -71,12 +74,12 @@ export default function SelectedProvidersCard({ selectedDoctors, onUpdateDoctor 
   }
 
   const fieldLabels: Record<string, string> = {
-    name: "Name",
-    title: "Title",
-    npi: "NPI",
-    phone: "Cell Phone",
-    officePhone: "Office Phone",
-    email: "Email",
+    name: fl("PROVIDER", "name", "Name"),
+    title: fl("PROVIDER", "title", "Title"),
+    npi: fl("PROVIDER", "npi", "NPI"),
+    phone: fl("PROVIDER", "phone", "Cell Phone"),
+    officePhone: fl("PROVIDER", "officePhone", "Office Phone"),
+    email: fl("PROVIDER", "email", "Email"),
   }
 
   const displayFields = ["name", "title", "npi", "phone", "officePhone", "email"] as const

@@ -32,6 +32,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { type FilterField, type FilterState, type CustomPropDef, emptyFilter, matchesFilter, activeConditionCount, customPropertyFilterFields } from "@/lib/filters"
 import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { cn } from "@/lib/utils"
+import { useNativeLabels, useFieldLabel } from "@/components/native-labels-provider"
+import { relabel, labelFrom } from "@/lib/native-labels-shared"
 import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 import AddToSegmentButton from "@/components/add-to-segment-button"
 
@@ -100,6 +102,9 @@ export default function LocationManager({ filterDefs, locations, practices, cust
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<FilterState>(emptyFilter())
   const [viewMode, setViewMode] = useState<"cards" | "table">("table")
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = useNativeLabels()
+  const nameLabel = labelFrom(renamed, "LOCATION", "name", "Name")
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_LOCATION_COLS)
   const [frozenCount, setFrozenCount] = useState(0)
   const [colModalOpen, setColModalOpen] = useState(false)
@@ -169,7 +174,7 @@ export default function LocationManager({ filterDefs, locations, practices, cust
 
   // Full catalog = native columns + every location custom property + association columns (grouped).
   const allLocCols: { key: string; label: string; sortable?: boolean; align?: "right"; group?: string }[] = [
-    ...LOCATION_COLUMNS,
+    ...relabel(renamed, "LOCATION", LOCATION_COLUMNS),
     ...customPropertyDefs.map((p) => ({ key: `cp_${p.id}`, label: p.name })),
     ...assocColumns.map((c) => ({ key: c.key, label: c.label, sortable: true, group: c.group })),
   ]
@@ -182,9 +187,9 @@ export default function LocationManager({ filterDefs, locations, practices, cust
   const cbFrozen = frozenCount > 0
   // Editable native location columns → Prisma column + type (address/phone/fax).
   const LOCATION_EDIT: Record<string, RecordFieldDef & { field: string; get: (l: LocationRow) => any }> = {
-    address: { key: "address", field: "address", label: "Address", type: "text", get: (l) => l.address },
-    phone: { key: "phone", field: "phone", label: "Phone", type: "phone", get: (l) => l.phone },
-    fax: { key: "fax", field: "fax", label: "Fax", type: "phone", get: (l) => l.fax },
+    address: { key: "address", field: "address", label: labelFrom(renamed, "LOCATION", "address", "Address"), type: "text", get: (l) => l.address },
+    phone: { key: "phone", field: "phone", label: labelFrom(renamed, "LOCATION", "phone", "Phone"), type: "phone", get: (l) => l.phone },
+    fax: { key: "fax", field: "fax", label: labelFrom(renamed, "LOCATION", "fax", "Fax"), type: "phone", get: (l) => l.fax },
   }
   function locEditable(l: LocationRow, key: string): { def: RecordFieldDef; value: any; field: string; owner?: boolean } | null {
     if (key === "owner") return { def: { key: "owner", label: "Location Owner", type: "user" }, value: l.ownerId ?? "", field: "ownerId", owner: true }
@@ -230,7 +235,8 @@ export default function LocationManager({ filterDefs, locations, practices, cust
   function buildExport() {
     // Association columns currently added to the view are appended to the export.
     const assocVisible = visibleCols.map((k) => (assocByKey[k] ? { field: assocByKey[k], label: (assocColumns.find((c) => c.key === k)?.group ?? "") + " — " + (assocColumns.find((c) => c.key === k)?.label ?? k) } : null)).filter(Boolean) as { field: any; label: string }[]
-    const headers = ["Name", "Practice", "Address", "Phone", "Fax", "Providers", "Referrals", "Activities", "Location Owner", "Created", ...assocVisible.map((a) => a.label)]
+    const fl = (key: string, fallback: string) => labelFrom(renamed, "LOCATION", key, fallback)
+    const headers = [nameLabel, "Practice", fl("address", "Address"), fl("phone", "Phone"), fl("fax", "Fax"), "Providers", "Referrals", "Activities", "Location Owner", "Created", ...assocVisible.map((a) => a.label)]
     const rows = sorted.map((l) => [
       l.name, l.practiceName, l.address ?? "", l.phone ?? "", l.fax ?? "",
       l.providerCount, l.referralCount, l.activityCount, l.ownerName ?? "", fmtDate(l.createdAt),
@@ -322,7 +328,7 @@ export default function LocationManager({ filterDefs, locations, practices, cust
                   </th>
                   <th style={frozenHeadStyle(fmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(fmap.get("name"), "bg-slate-50"))}>
                     <button onClick={() => toggleSort("name")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800">
-                      <span className="flex-1 min-w-0 truncate text-left">Name</span> {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
+                      <span className="flex-1 min-w-0 truncate text-left">{nameLabel}</span> {sortKey === "name" && (sortDir === "asc" ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />)}
                     </button>
                     <ColResizer onMouseDown={(e) => startResize("name", e)} />
                   </th>
@@ -423,7 +429,7 @@ export default function LocationManager({ filterDefs, locations, practices, cust
       <ColumnChooserModal
         open={colModalOpen}
         onClose={() => setColModalOpen(false)}
-        columns={[{ key: "name", label: "Name" }, ...allLocCols]}
+        columns={[{ key: "name", label: nameLabel }, ...allLocCols]}
         required={["name"]}
         selected={visibleCols}
         frozen={frozenCount}
@@ -442,6 +448,7 @@ export default function LocationManager({ filterDefs, locations, practices, cust
                 extras: [{ key: "practiceId", label: "Practice", type: "select", options: practices.map((p) => p.id), optionLabels: Object.fromEntries(practices.map((p) => [p.id, p.name])) }],
                 required: ["name", "practiceId"],
                 ownerLabel: "Location Owner",
+                labels: renamed,
               })}
               config={createFormConfig}
               users={users}
@@ -486,6 +493,7 @@ function LocationForm({ practices, defaultValues, onSubmit, isPending, onClose }
   const [phone, setPhone] = useState(defaultValues?.phone ?? "")
   const [fax, setFax] = useState(defaultValues?.fax ?? "")
   const [err, setErr] = useState("")
+  const fl = useFieldLabel()
 
   const inputCls = "h-9 w-full px-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
   const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1"
@@ -494,7 +502,7 @@ function LocationForm({ practices, defaultValues, onSubmit, isPending, onClose }
     <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Name is required"); return } if (!practiceId) { setErr("Practice is required"); return } await onSubmit({ name, practiceId, address, phone, fax }) }} className="space-y-4">
       {err && <p className="text-xs text-red-600 bg-red-50 px-2 py-1.5 rounded-lg border border-red-100">{err}</p>}
       <div>
-        <label className={labelCls}>Location Name *</label>
+        <label className={labelCls}>{fl("LOCATION", "name", "Location Name")} *</label>
         <input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} className={inputCls} placeholder="Main Office" />
       </div>
       <div>
@@ -505,16 +513,16 @@ function LocationForm({ practices, defaultValues, onSubmit, isPending, onClose }
         </StyledSelect>
       </div>
       <div>
-        <label className={labelCls}>Address</label>
+        <label className={labelCls}>{fl("LOCATION", "address", "Address")}</label>
         <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls} placeholder="123 Main St, City, ST 60000" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={labelCls}>Phone</label>
+          <label className={labelCls}>{fl("LOCATION", "phone", "Phone")}</label>
           <PhoneInput value={phone} onChange={setPhone} />
         </div>
         <div>
-          <label className={labelCls}>Fax</label>
+          <label className={labelCls}>{fl("LOCATION", "fax", "Fax")}</label>
           <PhoneInput value={fax} onChange={setFax} />
         </div>
       </div>

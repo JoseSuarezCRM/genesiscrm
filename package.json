@@ -20,7 +20,8 @@
     "check:provider-import": "tsx --env-file=.env.local scripts/check-provider-import.ts",
     "check:segment-table": "tsx --env-file=.env.local scripts/check-segment-table.ts",
     "check:import-stage": "tsx --env-file=.env.local scripts/check-import-stage.ts",
-    "check:settings-access": "tsx --env-file=.env.local scripts/check-settings-access.ts"
+    "check:settings-access": "tsx --env-file=.env.local scripts/check-settings-access.ts",
+    "check:native-labels": "tsx --env-file=.env.local scripts/check-native-labels.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

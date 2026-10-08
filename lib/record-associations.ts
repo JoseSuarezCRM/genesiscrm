@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma"
 import { getAssociationsFor, getAssociationCardPrefs } from "@/app/actions/associations"
 import { resolverFor } from "@/lib/object-registry"
 import { RECORD_FIELDS } from "@/lib/record-field-catalog"
+import { applyNativeLabels } from "@/lib/native-labels"
 
 export interface CardFieldValue { key: string; label: string; value: string | null }
 
@@ -65,7 +66,7 @@ async function availableFieldsFor(type: string): Promise<{ key: string; label: s
     return ((def?.properties as any[]) ?? []).map((p) => ({ key: p.id, label: p.name as string }))
   }
   // The record's own fields, minus the primary name (already the card's blue title).
-  return (RECORD_FIELDS[type] ?? []).filter((f) => f.key !== "name").map((f) => ({ key: f.key, label: f.label }))
+  return (await applyNativeLabels(type, RECORD_FIELDS[type] ?? [])).filter((f) => f.key !== "name").map((f) => ({ key: f.key, label: f.label }))
 }
 
 // Values of `fieldKeys` for each record id of `type`, keyed by record id.
@@ -86,7 +87,7 @@ async function loadCardFieldValues(type: string, ids: string[], fieldKeys: strin
 
   const model = CARD_DELEGATES[type]?.()
   if (!model) return out
-  const defs = RECORD_FIELDS[type] ?? []
+  const defs = await applyNativeLabels(type, RECORD_FIELDS[type] ?? [])
   const recs = await model.findMany({ where: { id: { in: ids } } })
   for (const r of recs) {
     out.set(r.id, fieldKeys.map((k) => ({ key: k, label: defs.find((d) => d.key === k)?.label ?? k, value: fmtFieldValue((r as any)[k]) })))

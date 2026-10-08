@@ -1,3 +1,4 @@
+import { getNativeLabels, labelFrom } from "@/lib/native-labels"
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,6 +35,8 @@ interface Props {
 
 export default async function ReferralDetailPage({ params, searchParams }: Props) {
   const session = await requireView("REFERRALS")
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = await getNativeLabels()
   const isAdmin = userCanLevel(session?.user as any, "REFERRALS", "EDIT")
   const canEditCards = userCanLevel(session?.user as any, "VIEWS", "EDIT")
 
@@ -174,7 +177,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Pipeline</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase mb-1">{labelFrom(renamed, "REFERRAL", "pipelineId", "Pipeline")}</p>
                   <ReferralPipelineSelect referralId={referral.id} value={referral.pipelineId} name={referral.pipeline?.name} pipelines={pipelines as any} canEdit={isAdmin} />
                 </div>
                 <div>
@@ -186,7 +189,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
                   <p className="text-sm font-medium text-slate-900">{referral.createdBy?.name || referral.createdBy?.email}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Appointment</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase mb-1">{labelFrom(renamed, "REFERRAL", "appointmentDate", "Appointment")}</p>
                   <p className="text-sm font-medium text-slate-900">{formatDate(referral.appointmentDate) ?? "—"}</p>
                 </div>
               </div>
@@ -206,7 +209,7 @@ export default async function ReferralDetailPage({ params, searchParams }: Props
           {/* Notes */}
           <Card>
             <CardHeader>
-              <CardTitle>Notes</CardTitle>
+              <CardTitle>{labelFrom(renamed, "REFERRAL", "notes", "Notes")}</CardTitle>
             </CardHeader>
             <CardContent>
               <ReferralNotesEditor referralId={referral.id} initialNotes={referral.notes} />

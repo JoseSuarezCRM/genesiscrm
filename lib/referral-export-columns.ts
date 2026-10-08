@@ -2,6 +2,7 @@
 // (labels + how each value is read) so the export matches what's on screen,
 // including association-backed columns and custom properties.
 import { STATUS_LABELS } from "@/lib/utils"
+import { relabel, type NativeLabelMap } from "@/lib/native-labels-shared"
 
 export interface ExportCol { key: string; label: string; get: (r: any) => string }
 
@@ -15,8 +16,9 @@ export const DEFAULT_EXPORT_COLS = [
   "insuranceGroup", "authStatus", "notes",
 ]
 
-export function referralExportColumns(customProps: { id: string; name: string }[]): Record<string, ExportCol> {
-  const native: ExportCol[] = [
+/** `labels`: admins' names for built-in fields (lib/native-labels.ts) — a renamed field's column follows. */
+export function referralExportColumns(customProps: { id: string; name: string }[], labels?: NativeLabelMap): Record<string, ExportCol> {
+  const native: ExportCol[] = relabel(labels, "REFERRAL", [
     { key: "patient", label: "Patient", get: (r) => `${r.patientFirstName ?? ""} ${r.patientLastName ?? ""}`.trim() },
     { key: "phone", label: "Phone", get: (r) => r.patientPhone ?? "" },
     { key: "email", label: "Email", get: (r) => r.patientEmail ?? "" },
@@ -42,7 +44,7 @@ export function referralExportColumns(customProps: { id: string; name: string }[
     { key: "notes", label: "Notes", get: (r) => r.notes ?? "" },
     { key: "status", label: "Status", get: (r) => STATUS_LABELS[r.status as keyof typeof STATUS_LABELS] ?? r.status ?? "" },
     { key: "createdAt", label: "Created At", get: (r) => d(r.createdAt) },
-  ]
+  ])
   const cp: ExportCol[] = customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name, get: (r) => cpVal(r.customProperties?.[p.id]) }))
   return Object.fromEntries([...native, ...cp].map((c) => [c.key, c]))
 }

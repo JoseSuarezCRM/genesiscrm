@@ -1,5 +1,7 @@
 "use client"
 
+import { relabel, labelFrom } from "@/lib/native-labels-shared"
+import { useNativeLabels } from "@/components/native-labels-provider"
 import { useState, useTransition, useEffect, useRef } from "react"
 import Link from "next/link"
 import {
@@ -122,9 +124,11 @@ function fmt(d: string | Date | null | undefined) {
 }
 
 export default function SurgeryTable({ cases, total, allMatchingIds, customProps = [], canEdit = false, users = [] }: Props) {
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = useNativeLabels()
   const ownerUserMap = Object.fromEntries(users.map((u) => [u.id, u.label]))
   // Full catalog = native surgery columns + every surgery custom property.
-  const allSurgeryCols = [...SURGERY_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
+  const allSurgeryCols = [...relabel(renamed, "SURGERY", SURGERY_COLUMNS), ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name }))]
   const surgeryCpById = Object.fromEntries(customProps.map((p) => [p.id, p]))
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -268,7 +272,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
     }
     if (key === "language") {
       return {
-        def: { key: "language", label: "Language", type: "select", options: ["EN", "ES"], optionLabels: LANGUAGE_LABELS },
+        def: { key: "language", label: labelFrom(renamed, "SURGERY", "language", "Language"), type: "select", options: ["EN", "ES"], optionLabels: LANGUAGE_LABELS },
         value: c.language ?? "EN", field: "language",
         read: <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-50 text-violet-700">{LANGUAGE_LABELS[c.language ?? "EN"] ?? "English"}</span>,
       }
@@ -276,7 +280,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
     if (SURGERY_NO_INLINE.has(key)) return null
     const f = (RECORD_FIELDS["SURGERY"] ?? []).find((x) => x.key === key)
     if (!f || f.readOnly) return null
-    return { def: f, value: (c as any)[key], field: key }
+    return { def: { ...f, label: labelFrom(renamed, "SURGERY", f.key, f.label) }, value: (c as any)[key], field: key }
   }
 
   // One table/card cell's content for a given column.
@@ -473,7 +477,7 @@ export default function SurgeryTable({ cases, total, allMatchingIds, customProps
                 <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleRow(c.id)} className="mt-1 rounded border-slate-300 cursor-pointer" />
                 <div className="flex-1 min-w-0">
                   <Link href={`/surgery/${c.id}`} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors block truncate">{c.patientName}</Link>
-                  <p className="text-xs text-slate-400">{c.mrn ? `MRN ${c.mrn}` : "No MRN"}</p>
+                  <p className="text-xs text-slate-400">{c.mrn ? `${labelFrom(renamed, "SURGERY", "mrn", "MRN")} ${c.mrn}` : `No ${labelFrom(renamed, "SURGERY", "mrn", "MRN")}`}</p>
                 </div>
                 <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${STATUS_COLORS[c.status] ?? "bg-zinc-100 text-zinc-700"}`}>
                   {SURGERY_STATUS_LABELS[c.status] ?? c.status}

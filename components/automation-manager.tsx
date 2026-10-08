@@ -44,6 +44,8 @@ import {
   type PropertyDef, type CustomPropertyInput,
 } from "@/lib/automation-properties"
 import { WORKFLOW_OBJECTS, workflowObjectFor, workflowObjectsWith, isGenericTrigger, type CustomWorkflowObject } from "@/lib/workflow-objects"
+import { useNativeLabels } from "@/components/native-labels-provider"
+import { labelFrom } from "@/lib/native-labels-shared"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -2468,6 +2470,8 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = useNativeLabels()
   const [name, setName] = useState(editing?.name ?? "")
   const [description, setDescription] = useState(editing?.description ?? "")
   const [objectKey, setObjectKey] = useState(
@@ -2558,7 +2562,11 @@ export function WorkflowEditor({ editing, users, tags, practices, locations, pip
           options: (p.options ?? []).map(o => ({ value: o, label: (p as any).optionLabels?.[o] ?? o })),
         })),
       ]
-    : OBJECT_PROPERTY_DEFS[objectKey] ?? REFERRAL_PROPERTY_DEFS
+    : (() => {
+        // Built-in objects: a def's path is its catalog field, so a rename shows here.
+        const nativeType = OBJECT_PROPERTY_DEFS[objectKey] ? objectKey : "REFERRAL"
+        return (OBJECT_PROPERTY_DEFS[nativeType] ?? REFERRAL_PROPERTY_DEFS).map((p) => ({ ...p, label: labelFrom(renamed, nativeType, p.path, p.label) }))
+      })()
   const objectEntity = OBJECT_CUSTOM_ENTITY[objectKey]
   const rawCustoms = objectEntity ? customPropsByEntity[objectEntity] ?? [] : []
   const customDefs = rawCustoms.map(customPropertyToDef)

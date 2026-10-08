@@ -10,6 +10,7 @@ import { buildIcs } from "@/lib/ics"
 import { sendSMS } from "@/lib/twilio"
 import { resolveMyFromEmail } from "@/app/actions/account"
 import { revalidatePath } from "next/cache"
+import { applyNativeLabels } from "@/lib/native-labels"
 import { runTrigger_EngagementLogged } from "@/lib/automation-engine"
 import { resolveMessageTokens, type MessageTokenGroup } from "@/lib/message-tokens"
 import { MESSAGE_TOKEN_GROUPS } from "@/lib/message-tokens"
@@ -279,7 +280,8 @@ export async function getObjectTokenGroups(recordType: string): Promise<MessageT
   }
 
   const meta = CP_CONTACT[recordType]
-  const nativeTokens = (RECORD_FIELDS[recordType] ?? []).map((f) => ({ label: f.label, value: `{${snakeToken(f.key)}}` }))
+  // The token stays keyed by field ({patient_mrn}); only its label follows a rename.
+  const nativeTokens = (await applyNativeLabels(recordType, RECORD_FIELDS[recordType] ?? [])).map((f) => ({ label: f.label, value: `{${snakeToken(f.key)}}` }))
   const customs = meta
     ? await prisma.customProperty.findMany({ where: { entityType: meta.entity as any }, orderBy: { name: "asc" } }).catch(() => [])
     : []

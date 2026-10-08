@@ -1,5 +1,7 @@
 "use client"
 
+import { useNativeLabels, useFieldLabel } from "@/components/native-labels-provider"
+import { relabel, labelFrom } from "@/lib/native-labels-shared"
 import ProviderTitleField from "@/components/provider-title-field"
 import ExportDialog from "@/components/ui/export-dialog"
 import FilterBuilder from "@/components/ui/filter-builder"
@@ -128,6 +130,7 @@ function PracticeForm({ defaultValues, onSubmit, isPending, onClose }: {
   isPending: boolean
   onClose: () => void
 }) {
+  const fl = useFieldLabel()
   const [name, setName] = useState(defaultValues?.name ?? "")
   const [phone, setPhone] = useState(defaultValues?.phone ?? "")
   const [fax, setFax] = useState(defaultValues?.fax ?? "")
@@ -136,10 +139,10 @@ function PracticeForm({ defaultValues, onSubmit, isPending, onClose }: {
 
   return (
     <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, phone, fax, address }) }} className="space-y-4">
-      <Field label="Practice Name *" error={err}><Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Downtown Family Medicine" /></Field>
-      <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
-      <Field label="Fax"><Input value={fax} onChange={(e) => setFax(e.target.value)} type="tel" placeholder="555-100-2001" /></Field>
-      <Field label="Address"><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St" /></Field>
+      <Field label={`${fl("PRACTICE", "name", "Practice Name")} *`} error={err}><Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Downtown Family Medicine" /></Field>
+      <Field label={fl("PRACTICE", "phone", "Phone")}><PhoneInput value={phone} onChange={setPhone} /></Field>
+      <Field label={fl("PRACTICE", "fax", "Fax")}><Input value={fax} onChange={(e) => setFax(e.target.value)} type="tel" placeholder="555-100-2001" /></Field>
+      <Field label={fl("PRACTICE", "address", "Address")}><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St" /></Field>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
         <Button type="submit" disabled={isPending}>{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save</Button>
@@ -157,6 +160,7 @@ function LocationForm({ practiceId, defaultValues, onSubmit, isPending, onClose 
   isPending: boolean
   onClose: () => void
 }) {
+  const fl = useFieldLabel()
   const [name, setName] = useState(defaultValues?.name ?? "")
   const [phone, setPhone] = useState(defaultValues?.phone ?? "")
   const [fax, setFax] = useState(defaultValues?.fax ?? "")
@@ -165,10 +169,10 @@ function LocationForm({ practiceId, defaultValues, onSubmit, isPending, onClose 
 
   return (
     <form onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) { setErr("Required"); return } await onSubmit({ name, phone, fax, address, practiceId }) }} className="space-y-4">
-      <Field label="Location Name *" error={err}><Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Main Office" /></Field>
-      <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
-      <Field label="Fax"><Input value={fax} onChange={(e) => setFax(e.target.value)} type="tel" placeholder="555-100-2003" /></Field>
-      <Field label="Address"><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, Suite 100" /></Field>
+      <Field label={`${fl("LOCATION", "name", "Location Name")} *`} error={err}><Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Main Office" /></Field>
+      <Field label={fl("LOCATION", "phone", "Phone")}><PhoneInput value={phone} onChange={setPhone} /></Field>
+      <Field label={fl("LOCATION", "fax", "Fax")}><Input value={fax} onChange={(e) => setFax(e.target.value)} type="tel" placeholder="555-100-2003" /></Field>
+      <Field label={fl("LOCATION", "address", "Address")}><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, Suite 100" /></Field>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
         <Button type="submit" disabled={isPending}>{isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save</Button>
@@ -188,6 +192,7 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
   onClose: () => void
   practices?: PracticeWithRelations[]  // when provided, shows a practice selector
 }) {
+  const fl = useFieldLabel()
   const [name, setName] = useState(defaultValues?.name ?? "")
   const [title, setTitle] = useState((defaultValues as any)?.title ?? "")
   const [npi, setNpi] = useState((defaultValues as any)?.npi ?? "")
@@ -219,21 +224,21 @@ function DoctorForm({ practiceId, locations, defaultValues, onSubmit, isPending,
         </Field>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Provider Name *" error={err}>
+        <Field label={`${fl("PROVIDER", "name", "Provider Name")} *`} error={err}>
           <Input value={name} onChange={(e) => { setName(e.target.value); setErr("") }} placeholder="Sarah Johnson" />
         </Field>
-        <Field label="Title">
+        <Field label={fl("PROVIDER", "title", "Title")}>
           <ProviderTitleField value={title} onChange={setTitle} />
         </Field>
       </div>
-      <Field label="NPI (National Provider Identifier)">
+      <Field label={fl("PROVIDER", "npi", "NPI (National Provider Identifier)")}>
         <Input value={npi} onChange={(e) => setNpi(e.target.value)} placeholder="1234567890" maxLength={10} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Cell Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
-        <Field label="Office Phone"><PhoneInput value={officePhone} onChange={setWorkPhone} /></Field>
+        <Field label={fl("PROVIDER", "phone", "Cell Phone")}><PhoneInput value={phone} onChange={setPhone} /></Field>
+        <Field label={fl("PROVIDER", "officePhone", "Office Phone")}><PhoneInput value={officePhone} onChange={setWorkPhone} /></Field>
       </div>
-      <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="dr.johnson@clinic.com" /></Field>
+      <Field label={fl("PROVIDER", "email", "Email")}><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="dr.johnson@clinic.com" /></Field>
       <div className="space-y-1.5">
         <Label>Locations (check all that apply)</Label>
         {activeLocations.length === 0 ? (
@@ -370,6 +375,9 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
   const [exportOpen, setExportOpen] = useState(false)
 
   // Provider table columns + saved views
+  // Admins' names for built-in fields (Settings → Properties) — columns, inline
+  // edit, forms and exports follow a rename.
+  const renamed = useNativeLabels()
   const [visibleCols, setVisibleCols] = useState<string[]>(DEFAULT_PROVIDER_COLUMNS)
   const [frozenCount, setFrozenCount] = useState(0)
   const [colModalOpen, setColModalOpen] = useState(false)
@@ -549,7 +557,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
     { key: "created", label: "Created" },
     ...providerCustomPropertyDefs.map((p) => ({ key: `cp:${p.id}`, label: p.name })),
   ]
-  const providerColumns = [...PROVIDER_COLUMNS, ...extraProviderCols]
+  const providerColumns = relabel(renamed, "PROVIDER", [...PROVIDER_COLUMNS, ...extraProviderCols])
   const cpDefById = Object.fromEntries(providerCustomPropertyDefs.map((p) => [p.id, p]))
   const cpValue = (d: any, key: string): ReactNode => {
     const id = key.slice(3)
@@ -581,7 +589,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
     if (key === "name") return null
     const f = (RECORD_FIELDS["PROVIDER"] ?? []).find((x) => x.key === key)
     if (!f || f.readOnly) return null
-    return { def: f, value: d[key], field: key }
+    return { def: { ...f, label: labelFrom(renamed, "PROVIDER", f.key, f.label) }, value: d[key], field: key }
   }
   const renderProviderCell = (d: any, key: string): ReactNode => {
     switch (key) {
@@ -608,7 +616,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
     { key: "created", label: "Created" },
     ...practiceCustomPropertyDefs.map((p) => ({ key: `cp:${p.id}`, label: p.name })),
   ]
-  const practiceColumns = [...PRACTICE_COLUMNS, ...extraPracticeCols]
+  const practiceColumns = relabel(renamed, "PRACTICE", [...PRACTICE_COLUMNS, ...extraPracticeCols])
   const practiceWidthOf = (k: string) => colWidth(k) ?? PRACTICE_COL_W[k] ?? 160
   const practiceOrderedCols = (practiceVisibleCols.map((k) => practiceColumns.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string }[])
   const practiceColReorder = useCardReorder(practiceOrderedCols, (c) => c.key, (ids) => setPracticeVisibleCols(ids))
@@ -645,7 +653,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
     if (key === "name") return null
     const f = (RECORD_FIELDS["PRACTICE"] ?? []).find((x) => x.key === key)
     if (!f || f.readOnly) return null
-    return { def: f, value: p[key], field: key }
+    return { def: { ...f, label: labelFrom(renamed, "PRACTICE", f.key, f.label) }, value: p[key], field: key }
   }
 
   // Providers after search + advanced filters — used by both the table and the export.
@@ -658,7 +666,8 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
 
   function buildProviderExport() {
     // Record ID first, so an edited export re-imports as updates (Settings → Import Records).
-    const headers = ["Record ID", "Name", "Title", "Practice", "Specialty", "NPI", "Phone", "Office Phone", "Email", "Locations", "Referrals", "Provider Owner"]
+    const fl = (key: string, fallback: string) => labelFrom(renamed, "PROVIDER", key, fallback)
+    const headers = ["Record ID", fl("name", "Name"), fl("title", "Title"), "Practice", fl("specialty", "Specialty"), fl("npi", "NPI"), fl("phone", "Phone"), fl("officePhone", "Office Phone"), fl("email", "Email"), "Locations", "Referrals", "Provider Owner"]
     const rows = filteredProviders.map((d) => [
       d.id, d.name, (d as any).title ?? "", d.practiceName, (d as any).specialty ?? "", d.npi ?? "",
       (d as any).phone ?? "", (d as any).officePhone ?? "", (d as any).email ?? "",
@@ -684,7 +693,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
               <CreateRecordModal
                 objectType="PRACTICE"
                 title="Add Referring Practice"
-                catalog={builtinCreateCatalog({ entityType: "PRACTICE", customProps: practiceCustomPropertyDefs as any, required: ["name"], ownerLabel: "Practice Owner" })}
+                catalog={builtinCreateCatalog({ entityType: "PRACTICE", customProps: practiceCustomPropertyDefs as any, required: ["name"], ownerLabel: "Practice Owner", labels: renamed })}
                 config={createFormConfig}
                 users={assignableUsers}
                 canEditForm={isAdmin}
@@ -789,6 +798,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
                     objectType="PROVIDER"
                     title="Add Provider"
                     catalog={builtinCreateCatalog({
+                      labels: renamed,
                       entityType: "PROVIDER",
                       customProps: providerCustomPropertyDefs as any,
                       extras: [{ key: "practiceId", label: "Practice", type: "select", options: practices.map((p) => p.id), optionLabels: Object.fromEntries(practices.map((p) => [p.id, p.name])) }],
@@ -946,7 +956,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
                   </colgroup>
                   <thead>
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(provFmap.get("name"), "bg-slate-50"))}><span className="block truncate">Name</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      <th style={frozenHeadStyle(provFmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden transition-colors hover:bg-slate-100", frozenClass(provFmap.get("name"), "bg-slate-50"))}><span className="block truncate">{labelFrom(renamed, "PROVIDER", "name", "Name")}</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
                       {provColReorder.order.map((c) => (
                         <th key={c.key}
                           {...provColReorder.handleProps(c.key)}
@@ -1026,7 +1036,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
                   </colgroup>
                   <thead>
                     <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      <th style={frozenHeadStyle(practiceFmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden", frozenClass(practiceFmap.get("name"), "bg-slate-50"))}><span className="block truncate">Name</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
+                      <th style={frozenHeadStyle(practiceFmap.get("name"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden", frozenClass(practiceFmap.get("name"), "bg-slate-50"))}><span className="block truncate">{labelFrom(renamed, "PRACTICE", "name", "Name")}</span><ColResizer onMouseDown={(e) => startResize("name", e)} /></th>
                       {practiceColReorder.order.map((c) => (
                         <th key={c.key}
                           {...practiceColReorder.handleProps(c.key)}
@@ -1198,7 +1208,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
       <ColumnChooserModal
         open={colModalOpen}
         onClose={() => setColModalOpen(false)}
-        columns={[{ key: "name", label: "Name" }, ...providerColumns]}
+        columns={[{ key: "name", label: labelFrom(renamed, "PROVIDER", "name", "Name") }, ...providerColumns]}
         required={["name"]}
         selected={visibleCols}
         frozen={frozenCount}
@@ -1208,7 +1218,7 @@ export default function PracticeManager({ providerFilterDefs, practices, isAdmin
       <ColumnChooserModal
         open={practiceColModalOpen}
         onClose={() => setPracticeColModalOpen(false)}
-        columns={[{ key: "name", label: "Name" }, ...practiceColumns]}
+        columns={[{ key: "name", label: labelFrom(renamed, "PRACTICE", "name", "Name") }, ...practiceColumns]}
         required={["name"]}
         selected={practiceVisibleCols}
         frozen={0}

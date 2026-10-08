@@ -420,6 +420,20 @@ model PropertyDisplayConfig {
   @@unique([customPropertyId, entityType])
 }
 
+// An admin's new name for a BUILT-IN field (lib/record-field-catalog.ts
+// RECORD_FIELDS), set in Settings → Properties. Every screen that names the field
+// reads it through lib/native-labels.ts; with no row, each screen keeps its own
+// wording. Keyed by object + field key, so renaming never touches record data.
+model NativeFieldLabel {
+  objectType  String // "REFERRAL" | "PROVIDER" | … (CustomPropertyEntityType values)
+  fieldKey    String // RECORD_FIELDS key, e.g. "patientMrn"
+  label       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@id([objectType, fieldKey])
+}
+
 model CardLayout {
   id         String                   @id @default(cuid())
   entityType CustomPropertyEntityType

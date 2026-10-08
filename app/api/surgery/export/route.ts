@@ -1,3 +1,4 @@
+import { getNativeLabels, labelFrom } from "@/lib/native-labels"
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -68,6 +69,9 @@ export async function GET(req: NextRequest) {
     calls:            { header: "Calls",               value: (c) => c._count.callAttempts },
     docs:             { header: "Documents",           value: (c) => c._count.documents },
   }
+  // A renamed built-in field's column header follows the rename (Settings → Properties).
+  const renamed = await getNativeLabels()
+  for (const [key, def] of Object.entries(COLUMN_DEFS)) def.header = labelFrom(renamed, "SURGERY", key, def.header)
   const ALL_KEYS = Object.keys(COLUMN_DEFS)
 
   // Which columns to export: the on-screen selection passed via `cols`, filtered

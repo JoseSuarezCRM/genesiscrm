@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
 import { Stethoscope, CheckCircle2, Calendar, Clock, XCircle, AlertTriangle, Phone, BarChart2, ChevronDown, Check, X } from "lucide-react"
 import { SURGERY_STATUS_LABELS } from "@/lib/surgery-constants"
+import { useNativeLabels } from "@/components/native-labels-provider"
+import { labelFrom } from "@/lib/native-labels-shared"
 
 const STATUS_COLORS: Record<string, string> = {
   NEW:                  "bg-zinc-500",
@@ -185,6 +187,8 @@ export default function SurgeryReportsClient({
   currentRange, currentFrom, currentTo,
   facilityFilter, providerFilter, allFacilities, allProviders,
 }: Props) {
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = useNativeLabels()
   const router = useRouter()
   const [range, setRange] = useState(currentRange)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
@@ -289,7 +293,7 @@ export default function SurgeryReportsClient({
       <div className="flex flex-wrap items-center gap-2">
         {allFacilities.length > 0 && (
           <MultiSelectDropdown
-            label="Facility"
+            label={labelFrom(renamed, "SURGERY", "facility", "Facility")}
             options={allFacilities}
             selected={facilities}
             onToggle={toggleFacility}
@@ -298,7 +302,7 @@ export default function SurgeryReportsClient({
         )}
         {allProviders.length > 0 && (
           <MultiSelectDropdown
-            label="Ordering Provider"
+            label={labelFrom(renamed, "SURGERY", "orderingProvider", "Ordering Provider")}
             options={allProviders}
             selected={providers}
             onToggle={toggleProvider}

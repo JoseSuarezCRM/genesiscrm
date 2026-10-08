@@ -29,6 +29,8 @@ import {
   type SavedReportConfig,
 } from "@/app/actions/saved-reports"
 import { addReportToDashboard, type DashboardSummary } from "@/app/actions/dashboards"
+import { useNativeLabels } from "@/components/native-labels-provider"
+import { labelFrom } from "@/lib/native-labels-shared"
 
 export type GroupBy = "practice" | "pipeline" | "status" | "provider" | "insurance" | "month"
 export type VizType = "bar" | "line" | "pie" | "donut" | "table"
@@ -187,6 +189,10 @@ export default function ReportBuilderClient({
   savedReports,
   dashboards,
 }: Props) {
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = useNativeLabels()
+  // Pipeline/Status/Insurance are referral fields (practice, provider and time aren't).
+  const groupOptions = GROUP_OPTIONS.map((o) => ({ ...o, label: labelFrom(renamed, "REFERRAL", o.value, o.label) }))
   const router = useRouter()
   const [exportOpen, setExportOpen] = useState(false)
   const [customFrom, setCustomFrom] = useState(currentFrom ?? "")
@@ -310,7 +316,7 @@ export default function ReportBuilderClient({
 
   const compMap = new Map(comparisonRows.map((r) => [r.key, r]))
 
-  const groupLabel = GROUP_OPTIONS.find((g) => g.value === groupBy)?.label ?? groupBy
+  const groupLabel = groupOptions.find((g) => g.value === groupBy)?.label ?? groupBy
   const rangeLabel = RANGE_OPTIONS.find((r) => r.value === range)?.label ?? range
   const currentSortOpts = getSortOptions(groupBy)
 
@@ -566,7 +572,7 @@ export default function ReportBuilderClient({
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Group by</p>
           <div className="flex flex-wrap gap-2">
-            {GROUP_OPTIONS.map((opt) => (
+            {groupOptions.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => applyGroupBy(opt.value)}
@@ -654,7 +660,7 @@ export default function ReportBuilderClient({
             />
             {filterPipelines.length > 0 && (
               <MultiSelectDropdown
-                label="Pipeline"
+                label={labelFrom(renamed, "REFERRAL", "pipelineId", "Pipeline")}
                 icon={<ChevronRight className="h-3.5 w-3.5 shrink-0" />}
                 options={filterPipelines.map((p) => ({ id: p.id, label: p.name }))}
                 selected={pipelineIds}
@@ -665,7 +671,7 @@ export default function ReportBuilderClient({
               />
             )}
             <MultiSelectDropdown
-              label="Status"
+              label={labelFrom(renamed, "REFERRAL", "status", "Status")}
               options={STATUS_OPTIONS}
               selected={statusIds}
               mode={statusMode}

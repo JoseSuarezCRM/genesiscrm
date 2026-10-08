@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Trash2, Pencil, Search, GripVertical, Box } from "lucide-react"
+import { Plus, Trash2, Pencil, Search, GripVertical, Box, Loader2 } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import PropertyEditor, { type PropertyDraft } from "@/components/property-editor"
 import { useCardReorder } from "@/components/use-card-reorder"
 import { createCustomProperty, updateCustomProperty, deleteCustomProperty, getNativeVisibilityControllers } from "@/app/actions/custom-properties"
 import { saveCustomObjectProperties, type CustomObjectProperty, type CustomPropType } from "@/app/actions/custom-objects"
+import { setNativeFieldLabel } from "@/app/actions/native-labels"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 // ── Data the page hands down ──────────────────────────────────────────────────
@@ -16,7 +18,12 @@ import { cn } from "@/lib/utils"
 /** A built-in field, defined in code (lib/record-field-catalog.ts RECORD_FIELDS). */
 export interface NativeFieldRow {
   key: string
+  /** The name shown: the admin's rename, else the catalog's. */
   label: string
+  /** The catalog's own name — what "Reset to default" goes back to. */
+  defaultLabel: string
+  /** An admin has renamed it (Settings → Properties). */
+  renamed: boolean
   type: string
   options: string[]
   optionLabels?: Record<string, string>
@@ -162,8 +169,8 @@ function Row({ name, sub, type, tags, grip, onEdit, onDelete, rowProps, dimmed }
   )
 }
 
-const Tag = ({ children, title, tone = "zinc" }: { children: React.ReactNode; title?: string; tone?: "zinc" | "amber" }) => (
-  <span title={title} className={cn("shrink-0 text-[10px] font-medium uppercase", tone === "amber" ? "text-amber-600" : "text-zinc-500")}>{children}</span>
+const Tag = ({ children, title, tone = "zinc" }: { children: React.ReactNode; title?: string; tone?: "zinc" | "amber" | "blue" }) => (
+  <span title={title} className={cn("shrink-0 text-[10px] font-medium uppercase", tone === "amber" ? "text-amber-600" : tone === "blue" ? "text-blue-600" : "text-zinc-500")}>{children}</span>
 )
 
 // ── Built-in objects: code-defined fields + CustomProperty rows ───────────────
@@ -172,13 +179,14 @@ function BuiltinPanel({ object, query, createSignal }: { object: Extract<Propert
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [editing, setEditing] = useState<BuiltinPropRow | "new" | null>(null)
+  const [renaming, setRenaming] = useState<NativeFieldRow | null>(null)
   useCreateSignal(createSignal, () => setEditing("new"))
 
   // Native fields (Pipeline, Status…) usable as visibility controllers for this object.
   const [nativeCtrls, setNativeCtrls] = useState<{ key: string; name: string; options: string[]; optionLabels?: Record<string, string> }[]>([])
   useEffect(() => { getNativeVisibilityControllers(object.key as any).then(setNativeCtrls).catch(() => setNativeCtrls([])) }, [object.key])
 
-  const native = object.native.filter((f) => matches(query, f.label, f.key))
+  const native = object.native.filter((f) => matches(query, f.label, f.defaultLabel, f.key))
   const custom = object.custom.filter((p) => matches(query, p.name, p.internalName, p.description))
   const total = object.native.length + object.custom.length
   const editingId = editing && editing !== "new" ? editing.id : null
@@ -193,11 +201,14 @@ function BuiltinPanel({ object, query, createSignal }: { object: Extract<Propert
       <Card icon={object.icon} label={object.label} count={native.length + custom.length} total={total}>
         {native.length + custom.length === 0 && <p className="px-4 py-10 text-center text-sm text-zinc-400">No properties match.</p>}
         {native.map((f) => (
-          <Row key={f.key} name={f.label} sub={optionsLine(f.options, f.optionLabels)} type={typeLabel(f.type)}
+          <Row key={f.key} name={f.label} type={typeLabel(f.type)}
+            sub={[f.renamed ? `Originally "${f.defaultLabel}"` : null, optionsLine(f.options, f.optionLabels)].filter(Boolean).join(" · ") || null}
             tags={<>
-              <Tag title="Defined by the CRM. It can't be deleted or retyped.">Built-in</Tag>
+              {f.renamed && <Tag tone="blue" title={`Renamed from "${f.defaultLabel}". Every screen shows the new name.`}>Renamed</Tag>}
+              <Tag title="Defined by the CRM. It can be renamed, but not deleted or retyped.">Built-in</Tag>
               {f.readOnly && <Tag title="Set by the CRM, not edited by hand.">Read-only</Tag>}
-            </>} />
+            </>}
+            onEdit={() => setRenaming(f)} />
         ))}
         {custom.map((p) => (
           <Row key={p.id} name={p.name} sub={p.description || optionsLine(p.options, p.optionLabels)} type={typeLabel(p.type)}
@@ -235,7 +246,65 @@ function BuiltinPanel({ object, query, createSignal }: { object: Extract<Propert
           onClose={() => setEditing(null)}
         />
       )}
+
+      {renaming && <RenameFieldDialog objectType={object.key} field={renaming} onClose={() => setRenaming(null)} />}
     </>
+  )
+}
+
+/**
+ * Rename a built-in field. The name changes on every screen — lists, records,
+ * filters, forms, exports, workflows and reports; the data and the field's key
+ * don't change, so saved views, filters and tokens keep working.
+ */
+function RenameFieldDialog({ objectType, field, onClose }: { objectType: string; field: NativeFieldRow; onClose: () => void }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [label, setLabel] = useState(field.label)
+  const [err, setErr] = useState<string | null>(null)
+
+  function save(next: string | null) {
+    setErr(null)
+    startTransition(async () => {
+      const res = await setNativeFieldLabel(objectType, field.key, next)
+      if ("error" in res) { setErr(res.error); return }
+      router.refresh()
+      onClose()
+    })
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Rename “{field.label}”</DialogTitle></DialogHeader>
+        <div className="space-y-2 py-2">
+          <label className="block text-xs font-medium text-zinc-600">Name</label>
+          <input value={label} onChange={(e) => setLabel(e.target.value)} autoFocus maxLength={80}
+            onKeyDown={(e) => { if (e.key === "Enter") save(label) }}
+            className="h-9 w-full rounded-lg border border-zinc-200 px-3 text-sm focus:border-zinc-400 focus:outline-none" />
+          <p className="text-xs text-zinc-500">
+            Changes the name everywhere this field appears — lists, records, filters, forms, exports, workflows and
+            reports. The data, and saved views or filters that use it, don’t change.
+          </p>
+          {field.renamed && <p className="text-xs text-zinc-400">Default name: {field.defaultLabel}</p>}
+          {err && <p role="alert" className="text-xs text-red-600">{err}</p>}
+        </div>
+        <DialogFooter className="sm:justify-between">
+          {field.renamed ? (
+            <button onClick={() => save(null)} disabled={isPending} className="text-xs text-zinc-500 hover:text-zinc-800">
+              Reset to default
+            </button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="h-9 px-3 text-sm text-zinc-600 hover:text-zinc-800">Cancel</button>
+            <button onClick={() => save(label)} disabled={isPending || !label.trim()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+              {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save
+            </button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

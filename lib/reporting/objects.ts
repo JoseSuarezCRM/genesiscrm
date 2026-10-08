@@ -7,6 +7,7 @@ import { RECORD_FIELDS, type RecordFieldType } from "@/lib/record-field-catalog"
 import { recordPermKey } from "@/lib/record-perm-key"
 import { stageDurationFieldsFor } from "@/lib/stages/duration-fields"
 import { STATUS_LABELS } from "@/lib/utils"
+import { applyNativeLabels } from "@/lib/native-labels"
 import type { ReportField, ReportFieldType } from "./types"
 
 export interface ReportObjectMeta {
@@ -119,7 +120,9 @@ export async function reportFieldsFor(objectKey: string): Promise<ReportField[]>
     dynamicOptions.status = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label: String(label) }))
   }
 
-  for (const f of (RECORD_FIELDS[objectKey] ?? [])) {
+  // An admin's rename (Settings → Properties) reaches every filter, segment
+  // column, association column and report built from this list.
+  for (const f of await applyNativeLabels(objectKey, RECORD_FIELDS[objectKey] ?? [])) {
     if (userPaths.has(f.key)) continue // drop the raw FK-id field (e.g. assignedTo) in favor of the name field
     const dyn = dynamicOptions[f.key]
     fields.push({

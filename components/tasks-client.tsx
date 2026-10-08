@@ -43,6 +43,8 @@ import { type FilterField, type FilterState, emptyFilter, matchesFilter, activeC
 import { associationColumns, readAssocValue, type AssociationGroup } from "@/lib/association-columns"
 import { toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
 import AddToSegmentButton from "@/components/add-to-segment-button"
+import { useNativeLabels, useFieldLabel } from "@/components/native-labels-provider"
+import { relabel, labelFrom } from "@/lib/native-labels-shared"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -192,6 +194,8 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
   const [newQueue, setNewQueue] = useState<string | null>(null)
   const [err, setErr] = useState("")
   const descRef = useRef<NotesTextareaHandle>(null)
+  const fieldName = useFieldLabel()
+  const fl = (key: string, fallback: string) => fieldName("TASK", key, fallback)
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }))
 
   async function addQueue() {
@@ -222,13 +226,13 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
           scrollbar sits at the edge and focus rings aren't clipped). */}
       <div className="space-y-4 max-h-[62vh] overflow-y-auto overflow-x-hidden -mx-6 px-6 py-1">
       <div className="space-y-1.5">
-        <Label className={fieldLabel}>Task title *</Label>
+        <Label className={fieldLabel}>{fl("title", "Task title")} *</Label>
         <Input value={v.title} onChange={(e) => { set("title", e.target.value); setErr("") }} placeholder="What needs to be done?" autoFocus />
         {err && <p className="text-xs text-red-600">{err}</p>}
       </div>
 
       <div className="space-y-1.5">
-        <Label className={fieldLabel}>Due date</Label>
+        <Label className={fieldLabel}>{fl("dueDate", "Due date")}</Label>
         <DatePicker withTime autoOpen={false} value={v.dueDate} onCommit={(val) => set("dueDate", val)} onCancel={() => {}} />
       </div>
 
@@ -238,7 +242,7 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
       </label>
       {v.repeat !== "NONE" && (
         <div className="space-y-1.5">
-          <Label className={fieldLabel}>Repeats</Label>
+          <Label className={fieldLabel}>{fl("repeat", "Repeats")}</Label>
           <StyledSelect value={v.repeat} onChange={(e) => set("repeat", e.target.value as TaskRepeat)} className="w-full">
             {TASK_REPEATS.filter((r) => r.value !== "NONE").map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </StyledSelect>
@@ -247,13 +251,13 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className={fieldLabel}>Task type *</Label>
+          <Label className={fieldLabel}>{fl("type", "Task type")} *</Label>
           <StyledSelect value={v.type} onChange={(e) => set("type", e.target.value as TaskType)} className="w-full">
             {TASK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </StyledSelect>
         </div>
         <div className="space-y-1.5">
-          <Label className={fieldLabel}>Task stage</Label>
+          <Label className={fieldLabel}>{fl("status", "Task stage")}</Label>
           <StyledSelect value={v.status} onChange={(e) => set("status", e.target.value as TaskStatus)} className="w-full">
             {TASK_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </StyledSelect>
@@ -274,7 +278,7 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
           </StyledSelect>
         </div>
         <div className="space-y-1.5">
-          <Label className={fieldLabel}>Priority</Label>
+          <Label className={fieldLabel}>{fl("priority", "Priority")}</Label>
           <StyledSelect value={v.priority} onChange={(e) => set("priority", e.target.value as TaskPriority)} className="w-full">
             {Object.values(TaskPriority).map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
           </StyledSelect>
@@ -307,7 +311,7 @@ function TaskForm({ users, queues: initialQueues, objectTypes, defaultValues, on
       </div>
 
       <div className="space-y-1.5">
-        <Label className={fieldLabel}>Notes</Label>
+        <Label className={fieldLabel}>{fl("description", "Notes")}</Label>
         <NotesTextarea
           ref={descRef}
           value={v.description}
@@ -454,6 +458,9 @@ export default function TasksClient({ filterDefs, tasks: initialTasks, users, qu
   associations?: AssociationGroup[]
 }) {
   const [isPending, startTransition] = useTransition()
+  // Admins' names for built-in fields (Settings → Properties).
+  const renamed = useNativeLabels()
+  const fl = (key: string, fallback: string) => labelFrom(renamed, "TASK", key, fallback)
   const [tasks, setTasks] = useState(initialTasks)
   const [quick, setQuick] = useState(initialFilter ?? "all")
   const [createOpen, setCreateOpen] = useState(false)
@@ -489,7 +496,7 @@ export default function TasksClient({ filterDefs, tasks: initialTasks, users, qu
 
   // ── View mode + columns ──
   const [viewMode, setViewMode] = useState<"table" | "cards">("table")
-  const allTaskCols = [...TASK_COLUMNS, ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns.map((c) => ({ key: c.key, label: c.label, sortable: true, group: c.group }))]
+  const allTaskCols = [...relabel(renamed, "TASK", TASK_COLUMNS), ...customProps.map((p) => ({ key: `cp_${p.id}`, label: p.name })), ...assocColumns.map((c) => ({ key: c.key, label: c.label, sortable: true, group: c.group }))]
   const { columns: visibleCols, frozen: frozenCount, apply: applyCols, setColumns: setVisibleCols } = useColumnPrefs("taskCols", DEFAULT_TASK_COLS)
   const { colWidth, startResize } = useColumnResize("taskColWidths")
   const cols = (visibleCols.map((k) => allTaskCols.find((c) => c.key === k)).filter(Boolean) as { key: string; label: string; sortable?: boolean }[])
@@ -627,15 +634,15 @@ export default function TasksClient({ filterDefs, tasks: initialTasks, users, qu
       return { def: cpToFieldDef(p, key), value: t.customProperties?.[id], field: key }
     }
     switch (key) {
-      case "title": return { def: { key: "title", label: "Title", type: "text" }, value: t.title, field: "title" }
+      case "title": return { def: { key: "title", label: fl("title", "Title"), type: "text" }, value: t.title, field: "title" }
       case "status": {
         const s = stageMeta(t.status)
-        return { def: { key: "status", label: "Stage", type: "select", options: TASK_STAGES.map((x) => x.value), optionLabels: Object.fromEntries(TASK_STAGES.map((x) => [x.value, x.label])) }, value: t.status, field: "status", status: true, read: <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-semibold", s.pill)}>{s.label}</span> }
+        return { def: { key: "status", label: fl("status", "Stage"), type: "select", options: TASK_STAGES.map((x) => x.value), optionLabels: Object.fromEntries(TASK_STAGES.map((x) => [x.value, x.label])) }, value: t.status, field: "status", status: true, read: <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-semibold", s.pill)}>{s.label}</span> }
       }
-      case "type": return { def: { key: "type", label: "Type", type: "select", options: TASK_TYPES.map((x) => x.value), optionLabels: Object.fromEntries(TASK_TYPES.map((x) => [x.value, x.label])) }, value: t.type, field: "type", read: <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{typeLabel(t.type)}</span> }
-      case "priority": return { def: { key: "priority", label: "Priority", type: "select", options: Object.keys(PRIORITY_LABELS), optionLabels: PRIORITY_LABELS }, value: t.priority, field: "priority", read: <span className="inline-flex items-center gap-1 text-xs text-slate-600"><span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOT[t.priority])} />{PRIORITY_LABELS[t.priority]}</span> }
-      case "dueDate": return { def: { key: "dueDate", label: "Due Date", type: "datetime" }, value: t.dueDate, field: "dueDate" }
-      case "repeat": return { def: { key: "repeat", label: "Repeat", type: "select", options: TASK_REPEATS.map((x) => x.value), optionLabels: Object.fromEntries(TASK_REPEATS.map((x) => [x.value, x.label])) }, value: t.repeat, field: "repeat" }
+      case "type": return { def: { key: "type", label: fl("type", "Type"), type: "select", options: TASK_TYPES.map((x) => x.value), optionLabels: Object.fromEntries(TASK_TYPES.map((x) => [x.value, x.label])) }, value: t.type, field: "type", read: <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{typeLabel(t.type)}</span> }
+      case "priority": return { def: { key: "priority", label: fl("priority", "Priority"), type: "select", options: Object.keys(PRIORITY_LABELS), optionLabels: PRIORITY_LABELS }, value: t.priority, field: "priority", read: <span className="inline-flex items-center gap-1 text-xs text-slate-600"><span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOT[t.priority])} />{PRIORITY_LABELS[t.priority]}</span> }
+      case "dueDate": return { def: { key: "dueDate", label: fl("dueDate", "Due Date"), type: "datetime" }, value: t.dueDate, field: "dueDate" }
+      case "repeat": return { def: { key: "repeat", label: fl("repeat", "Repeat"), type: "select", options: TASK_REPEATS.map((x) => x.value), optionLabels: Object.fromEntries(TASK_REPEATS.map((x) => [x.value, x.label])) }, value: t.repeat, field: "repeat" }
       case "assignedTo": return { def: { key: "assignedTo", label: "Assigned To", type: "user" }, value: t.assignedTo?.id ?? "", field: "assignedToId", owner: true }
       default: return null
     }
@@ -660,7 +667,7 @@ export default function TasksClient({ filterDefs, tasks: initialTasks, users, qu
   }
 
   function buildExport() {
-    const headers = ["Title", ...colReorder.order.map((c) => c.label)]
+    const headers = [fl("title", "Title"), ...colReorder.order.map((c) => c.label)]
     const rows = sorted.map((t) => [t.title, ...colReorder.order.map((c) => {
       const k = c.key
       if (assocByKey[k]) return readAssocValue(t, assocByKey[k])
@@ -779,7 +786,7 @@ export default function TasksClient({ filterDefs, tasks: initialTasks, users, qu
                 <thead>
                   <tr className="border-b bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     <th style={cbFrozen ? { position: "sticky", left: 0, zIndex: 11 } : undefined} className={cn("px-3 py-2", cbFrozen && "bg-slate-50")}><input ref={headerCheckRef} type="checkbox" checked={allChecked} onChange={toggleAll} className="rounded border-slate-300 cursor-pointer" /></th>
-                    <th style={frozenHeadStyle(fmap.get("title"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden", frozenClass(fmap.get("title"), "bg-slate-50"))}><button onClick={() => toggleSort("title")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800"><span className="flex-1 min-w-0 truncate text-left">Title</span><SortIcon k="title" /></button><ColResizer onMouseDown={(e) => startResize("title", e)} /></th>
+                    <th style={frozenHeadStyle(fmap.get("title"))} className={cn("px-3 py-2 font-semibold relative overflow-hidden", frozenClass(fmap.get("title"), "bg-slate-50"))}><button onClick={() => toggleSort("title")} className="flex items-center gap-1 w-full min-w-0 hover:text-slate-800"><span className="flex-1 min-w-0 truncate text-left">{fl("title", "Title")}</span><SortIcon k="title" /></button><ColResizer onMouseDown={(e) => startResize("title", e)} /></th>
                     {colReorder.order.map((c) => (
                       <th key={c.key} {...colReorder.handleProps(c.key)} {...colReorder.cardProps(c.key)} style={frozenHeadStyle(fmap.get(c.key))}
                         className={cn("px-3 py-2 font-semibold relative overflow-hidden cursor-grab active:cursor-grabbing transition-colors", colReorder.dragging === c.key ? "bg-slate-200/70" : cn("hover:bg-slate-100", frozenClass(fmap.get(c.key), "bg-slate-50")))}>
@@ -830,7 +837,7 @@ export default function TasksClient({ filterDefs, tasks: initialTasks, users, qu
 
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} subject="tasks" defaultName="tasks" getData={buildExport} />
 
-      <ColumnChooserModal open={colModalOpen} onClose={() => setColModalOpen(false)} columns={[{ key: "title", label: "Title" }, ...allTaskCols]} required={["title"]} selected={visibleCols} frozen={frozenCount} onApply={(sel, fr) => { applyCols(sel.filter((k) => k !== "title"), fr) }} />
+      <ColumnChooserModal open={colModalOpen} onClose={() => setColModalOpen(false)} columns={[{ key: "title", label: fl("title", "Title") }, ...allTaskCols]} required={["title"]} selected={visibleCols} frozen={frozenCount} onApply={(sel, fr) => { applyCols(sel.filter((k) => k !== "title"), fr) }} />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">

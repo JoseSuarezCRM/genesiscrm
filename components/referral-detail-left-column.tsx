@@ -18,6 +18,7 @@ import CustomPropertyField from "@/components/custom-property-field"
 import { isPropertyVisible, RECORD_FIELDS } from "@/lib/record-field-catalog"
 import { PipelineChip } from "@/components/pipeline-chip"
 import StyledSelect from "@/components/ui/styled-select"
+import { useFieldLabel } from "@/components/native-labels-provider"
 
 interface CardLayout {
   cardName: string
@@ -77,15 +78,16 @@ function PipelineRow({ referralId, value, name, pipelines, canEdit, colorStyle =
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [cur, setCur] = useState(value ?? "")
+  const pipelineLabel = useFieldLabel()("REFERRAL", "pipelineId", "Pipeline")
   if (!canEdit) return (
     <div className="py-2.5 border-b border-slate-100 last:border-0">
-      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pipeline</span>
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">{pipelineLabel}</span>
       {name ? <PipelineChip name={name} color={pipelines.find((p) => p.id === value)?.color} style={colorStyle} /> : <span className="text-sm text-slate-400">—</span>}
     </div>
   )
   return (
     <div className="py-2.5 border-b border-slate-100 last:border-0">
-      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pipeline</span>
+      <span className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">{pipelineLabel}</span>
       <StyledSelect value={cur}
         onChange={(e) => { const v = e.target.value; setCur(v); startTransition(async () => { await updateReferralPipeline(referralId, v || null); router.refresh() }) }}
         className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-400">
@@ -99,7 +101,7 @@ function PipelineRow({ referralId, value, name, pipelines, canEdit, colorStyle =
 function EditableRow({
   referralId,
   field,
-  label,
+  label: screenLabel,
   value,
   type = "text",
   format,
@@ -114,6 +116,8 @@ function EditableRow({
   /** For `select`: the allowed values, from the field catalog. */
   options?: string[]
 }) {
+  // `field` is the catalog key, so an admin's rename (Settings → Properties) wins.
+  const label = useFieldLabel()("REFERRAL", field, screenLabel)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const [current, setCurrent] = useState<any>(value)
@@ -272,6 +276,7 @@ export default function ReferralDetailLeftColumn({
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
+  const fl = useFieldLabel()
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingCard, setEditingCard] = useState<CardLayout | null>(null)
 
@@ -329,13 +334,13 @@ export default function ReferralDetailLeftColumn({
     switch (fieldId) {
       case "status":
         return (
-          <WidgetBlock key={fieldId} label="Status">
+          <WidgetBlock key={fieldId} label={fl("REFERRAL", "status", "Status")}>
             <StatusButtons referral={referral} />
           </WidgetBlock>
         )
       case "assignedTo":
         return (
-          <WidgetBlock key={fieldId} label="Assigned To">
+          <WidgetBlock key={fieldId} label={fl("REFERRAL", "assignedTo", "Assigned To")}>
             <ReferralAssignee
               referralId={referral.id}
               assignedTo={referral.assignedTo}
@@ -425,7 +430,7 @@ export default function ReferralDetailLeftColumn({
               options={isSelect ? nf.options : undefined}
               format={nf.type === "phone" ? formatPhone : isDate ? formatDate : undefined} />
           }
-          return <PropertyRow key={fieldId} label={nf.label} value={v == null ? undefined : String(v)} />
+          return <PropertyRow key={fieldId} label={fl("REFERRAL", nf.key, nf.label)} value={v == null ? undefined : String(v)} />
         }
         return null
       }

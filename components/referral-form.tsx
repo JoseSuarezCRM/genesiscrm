@@ -35,6 +35,8 @@ import { isPropertyVisible, type RecordFieldDef } from "@/lib/record-field-catal
 import { type CreateFormField } from "@/app/actions/create-form"
 import CreateFormEditor from "@/components/create-form-editor"
 import { IMAGING_TYPES } from "@/lib/record-field-catalog"
+import { useNativeLabels } from "@/components/native-labels-provider"
+import { labelFrom } from "@/lib/native-labels-shared"
 
 // ─── Types passed from server ─────────────────────────────────────────────────
 
@@ -179,6 +181,10 @@ function parseDoctorTitle(fullName: string): { name: string; title?: string } {
 export default function ReferralForm({ practices, pipelines = [], defaultValues, referralId, prefillData, pendingFile, onSuccess, onCancel, customProps = [], createFormConfig = null, isAdmin = false, users = [] }: ReferralFormProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+  // Admins' names for built-in fields (Settings → Properties); unrenamed fields
+  // keep this form's own wording.
+  const renamed = useNativeLabels()
+  const fl = (objectType: string, key: string, fallback: string) => labelFrom(renamed, objectType, key, fallback)
   const today = new Date().toISOString().slice(0, 10)
   const [files, setFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -237,7 +243,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
   // reproduces today's fields. Custom properties honor their visibility rule, so a
   // property scoped to a pipeline shows only for it (generalizes Imaging-for-MRI).
   const [editorOpen, setEditorOpen] = useState(false)
-  const regionCatalog: RecordFieldDef[] = builtinCreateCatalog({ entityType: "REFERRAL", customProps })
+  const regionCatalog: RecordFieldDef[] = builtinCreateCatalog({ entityType: "REFERRAL", customProps, labels: renamed })
     .filter((f) => REGION_NATIVE_KEYS.includes(f.key) || f.key.startsWith("cp_"))
   const regionByKey = Object.fromEntries(regionCatalog.map((c) => [c.key, c]))
   const defaultRegion: CreateFormField[] = regionCatalog.map((c) => ({ key: c.key }))
@@ -646,18 +652,18 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
         <section>
           <SectionTitle>Patient Information</SectionTitle>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="First Name *" error={errors.patientFirstName?.message}>
+            <Field label={`${fl("REFERRAL", "patientFirstName", "First Name")} *`} error={errors.patientFirstName?.message}>
               <Input {...register("patientFirstName")} placeholder="Jane"
                 onBlur={(e) => { const v = toProperCase(e.target.value); if (v !== e.target.value) setValue("patientFirstName", v) }} />
             </Field>
-            <Field label="Last Name *" error={errors.patientLastName?.message}>
+            <Field label={`${fl("REFERRAL", "patientLastName", "Last Name")} *`} error={errors.patientLastName?.message}>
               <Input {...register("patientLastName")} placeholder="Smith"
                 onBlur={(e) => { const v = toProperCase(e.target.value); if (v !== e.target.value) setValue("patientLastName", v) }} />
             </Field>
-            <Field label="Referring MRN" error={errors.patientMrn?.message}>
+            <Field label={fl("REFERRAL", "patientMrn", "Referring MRN")} error={errors.patientMrn?.message}>
               <Input {...register("patientMrn")} placeholder="MRN from referral source" />
             </Field>
-            <Field label="Genesis MRN" error={errors.genesisMrn?.message}>
+            <Field label={fl("REFERRAL", "genesisMrn", "Genesis MRN")} error={errors.genesisMrn?.message}>
               <Input
                 {...register("genesisMrn")}
                 placeholder="Internal Genesis MRN"
@@ -667,10 +673,10 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 }}
               />
             </Field>
-            <Field label="Date of Birth" error={errors.patientDob?.message}>
+            <Field label={fl("REFERRAL", "patientDob", "Date of Birth")} error={errors.patientDob?.message}>
               <Input {...register("patientDob")} type="date" />
             </Field>
-            <Field label="Phone" error={errors.patientPhone?.message}>
+            <Field label={fl("REFERRAL", "patientPhone", "Phone")} error={errors.patientPhone?.message}>
               <Controller
                 name="patientPhone"
                 control={control}
@@ -679,7 +685,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 )}
               />
             </Field>
-            <Field label="Email" error={errors.patientEmail?.message}>
+            <Field label={fl("REFERRAL", "patientEmail", "Email")} error={errors.patientEmail?.message}>
               <Input {...register("patientEmail")} type="email" placeholder="jane@example.com" />
             </Field>
           </div>
@@ -796,13 +802,13 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
           </div>
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Field label="Provider name (if not listed above)" error={errors.referringDoctorName?.message}>
+            <Field label={fl("REFERRAL", "referringDoctorName", "Provider name (if not listed above)")} error={errors.referringDoctorName?.message}>
               <Input {...register("referringDoctorName")} placeholder="Dr. Johnson" />
             </Field>
-            <Field label="NPI" error={errors.referringNpi?.message}>
+            <Field label={fl("REFERRAL", "referringNpi", "NPI")} error={errors.referringNpi?.message}>
               <Input {...register("referringNpi")} placeholder="10-digit NPI number" />
             </Field>
-            <Field label="Referring Phone" error={errors.referringPhone?.message}>
+            <Field label={fl("REFERRAL", "referringPhone", "Referring Phone")} error={errors.referringPhone?.message}>
               <Controller
                 name="referringPhone"
                 control={control}
@@ -814,7 +820,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
           </div>
 
           <div className="mt-4">
-            <Field label="Referring Address" error={errors.referringAddress?.message}>
+            <Field label={fl("REFERRAL", "referringAddress", "Referring Address")} error={errors.referringAddress?.message}>
               <Input {...register("referringAddress")} placeholder="123 Main St, City, State 12345" />
             </Field>
           </div>
@@ -825,7 +831,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
           <SectionTitle>Status & Dates</SectionTitle>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {pipelines.length > 0 && (
-              <Field label="Pipeline" error={errors.pipelineId?.message}>
+              <Field label={fl("REFERRAL", "pipelineId", "Pipeline")} error={errors.pipelineId?.message}>
                 <Select
                   value={watch("pipelineId") ?? ""}
                   onValueChange={v => setValue("pipelineId", v)}
@@ -845,7 +851,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
               </Field>
             )}
             {pipelines.find(p => p.id === watch("pipelineId"))?.name?.toUpperCase().includes("MRI") && (
-              <Field label="Imaging Type">
+              <Field label={fl("REFERRAL", "imagingType", "Imaging Type")}>
                 <Select
                   value={watch("imagingType") ?? ""}
                   onValueChange={v => setValue("imagingType", v || undefined)}
@@ -859,7 +865,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 </Select>
               </Field>
             )}
-            <Field label="Status *" error={errors.status?.message}>
+            <Field label={`${fl("REFERRAL", "status", "Status")} *`} error={errors.status?.message}>
               <Select value={statusValue} onValueChange={(v) => setValue("status", v as ReferralStatus)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -869,10 +875,10 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Referral Date *" error={errors.referralDate?.message}>
+            <Field label={`${fl("REFERRAL", "referralDate", "Referral Date")} *`} error={errors.referralDate?.message}>
               <Input {...register("referralDate")} type="date" />
             </Field>
-            <Field label="Appointment Date" error={errors.appointmentDate?.message}>
+            <Field label={fl("REFERRAL", "appointmentDate", "Appointment Date")} error={errors.appointmentDate?.message}>
               <Input {...register("appointmentDate")} type="date" />
             </Field>
           </div>
@@ -985,7 +991,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
             <DialogTitle>Add New Practice</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <Field label="Practice Name *">
+            <Field label={`${fl("PRACTICE", "name", "Practice Name")} *`}>
               <Input
                 value={newPracticeName}
                 onChange={(e) => setNewPracticeName(e.target.value)}
@@ -993,10 +999,10 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 autoFocus
               />
             </Field>
-            <Field label="Phone">
+            <Field label={fl("PRACTICE", "phone", "Phone")}>
               <PhoneInput value={newPracticePhone} onChange={setNewPracticePhone} />
             </Field>
-            <Field label="Address">
+            <Field label={fl("PRACTICE", "address", "Address")}>
               <Input
                 value={newPracticeAddress}
                 onChange={(e) => setNewPracticeAddress(e.target.value)}
@@ -1022,7 +1028,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
             <DialogTitle>Add New Location</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <Field label="Location Name *">
+            <Field label={`${fl("LOCATION", "name", "Location Name")} *`}>
               <Input
                 value={newLocationName}
                 onChange={(e) => setNewLocationName(e.target.value)}
@@ -1030,10 +1036,10 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 autoFocus
               />
             </Field>
-            <Field label="Phone">
+            <Field label={fl("LOCATION", "phone", "Phone")}>
               <PhoneInput value={newLocationPhone} onChange={setNewLocationPhone} />
             </Field>
-            <Field label="Fax">
+            <Field label={fl("LOCATION", "fax", "Fax")}>
               <Input
                 value={newLocationFax}
                 onChange={(e) => setNewLocationFax(e.target.value)}
@@ -1041,7 +1047,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 type="tel"
               />
             </Field>
-            <Field label="Address">
+            <Field label={fl("LOCATION", "address", "Address")}>
               <Input
                 value={newLocationAddress}
                 onChange={(e) => setNewLocationAddress(e.target.value)}
@@ -1067,7 +1073,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
             <DialogTitle>Add New Provider</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <Field label="Provider Name *">
+            <Field label={`${fl("PROVIDER", "name", "Provider Name")} *`}>
               <Input
                 value={newDoctorName}
                 onChange={(e) => setNewDoctorName(e.target.value)}
@@ -1075,7 +1081,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 autoFocus
               />
             </Field>
-            <Field label="Title">
+            <Field label={fl("PROVIDER", "title", "Title")}>
               <Select value={newDoctorTitle || NONE} onValueChange={(v) => setNewDoctorTitle(v === NONE ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select title..." />
@@ -1088,7 +1094,7 @@ export default function ReferralForm({ practices, pipelines = [], defaultValues,
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="NPI">
+            <Field label={fl("PROVIDER", "npi", "NPI")}>
               <Input
                 value={newDoctorNpi}
                 onChange={(e) => setNewDoctorNpi(e.target.value)}

@@ -4,6 +4,8 @@ import { ReferralStatus } from "@prisma/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { STATUS_LABELS, formatDate } from "@/lib/utils"
+import { getNativeLabels } from "@/lib/native-labels"
+import { labelFrom } from "@/lib/native-labels-shared"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
@@ -77,6 +79,7 @@ const statCards = [
 export default async function DashboardPage() {
   const session = await auth()
   const { total, statusMap, recent } = await getStats()
+  const renamed = await getNativeLabels()
 
   const allStatuses = Object.values(ReferralStatus)
   const statusTotals = allStatuses.map((s) => ({ status: s, count: statusMap[s] ?? 0 }))
@@ -178,8 +181,8 @@ export default async function DashboardPage() {
                   <th className="text-left px-6 py-3 font-medium text-slate-500">Patient</th>
                   <th className="text-left px-6 py-3 font-medium text-slate-500">Referring Practice</th>
                   <th className="text-left px-6 py-3 font-medium text-slate-500">Referring Provider</th>
-                  <th className="text-left px-6 py-3 font-medium text-slate-500">Date</th>
-                  <th className="text-left px-6 py-3 font-medium text-slate-500">Status</th>
+                  <th className="text-left px-6 py-3 font-medium text-slate-500">{labelFrom(renamed, "REFERRAL", "referralDate", "Date")}</th>
+                  <th className="text-left px-6 py-3 font-medium text-slate-500">{labelFrom(renamed, "REFERRAL", "status", "Status")}</th>
                 </tr>
               </thead>
               <tbody>
