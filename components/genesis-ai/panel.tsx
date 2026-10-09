@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import { Sparkles, X, History, SquarePen, ArrowUp, Square, Loader2, Check, AlertCircle, Trash2, ChevronLeft } from "lucide-react"
 import Markdown from "@/components/genesis-ai/markdown"
+import ActionCard from "@/components/genesis-ai/action-card"
+import type { ActionView } from "@/lib/genesis-ai/actions/types"
 import { useGenesisChat, type UILine } from "@/components/genesis-ai/use-genesis-chat"
 import { listMyConversations, deleteMyConversation } from "@/app/actions/genesis-ai"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
@@ -12,7 +14,7 @@ const SUGGESTIONS = [
   "How many referrals came in last month, by practice?",
   "What are my open tasks due this week?",
   "Which providers referred the most patients this quarter?",
-  "Show the newest referrals that haven't been contacted yet",
+  "Make a segment of new referrals from the last 30 days",
 ]
 
 /** The Genesis AI side panel. Non-modal: the page behind stays usable. */
@@ -111,7 +113,7 @@ export default function GenesisPanel({ open, onClose, userName }: { open: boolea
             {chat.lines.length === 0 ? (
               <div className="flex h-full flex-col justify-center">
                 <p className="text-lg font-semibold text-zinc-900">Hi {firstName}, what would you like to know?</p>
-                <p className="mt-1 text-sm text-zinc-500">Ask about referrals, practices, providers, surgery cases, tasks, activities — anything in the CRM you can open.</p>
+                <p className="mt-1 text-sm text-zinc-500">Ask about anything in the CRM you can open — or ask it to make a change. Changes wait for your Confirm.</p>
                 <div className="mt-5 space-y-2">
                   {SUGGESTIONS.map((s) => (
                     <button key={s} onClick={() => submit(s)}
@@ -123,7 +125,7 @@ export default function GenesisPanel({ open, onClose, userName }: { open: boolea
               </div>
             ) : (
               <div className="space-y-5">
-                {chat.lines.map((l) => <Line key={l.id} line={l} />)}
+                {chat.lines.map((l) => <Line key={l.id} line={l} busy={chat.busy} onAction={chat.updateAction} />)}
               </div>
             )}
           </div>
@@ -165,7 +167,7 @@ export default function GenesisPanel({ open, onClose, userName }: { open: boolea
   )
 }
 
-function Line({ line }: { line: UILine }) {
+function Line({ line, busy, onAction }: { line: UILine; busy: boolean; onAction: (v: ActionView) => void }) {
   if (line.role === "user") {
     return (
       <div className="flex justify-end">
@@ -188,6 +190,11 @@ function Line({ line }: { line: UILine }) {
       )}
       {thinking && <p className="flex items-center gap-1.5 text-xs text-zinc-400"><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</p>}
       {line.text && <Markdown text={line.text} />}
+      {line.actions.length > 0 && (
+        <div className="space-y-2">
+          {line.actions.map((a) => <ActionCard key={a.id} action={a} disabled={busy} onChange={onAction} />)}
+        </div>
+      )}
       {line.notice && <p className="text-xs text-zinc-500">{line.notice}</p>}
       {line.error && <p className="flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="h-3.5 w-3.5" /> {line.error}</p>}
     </div>

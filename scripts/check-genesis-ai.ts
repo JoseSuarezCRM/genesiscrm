@@ -18,9 +18,22 @@
  * 6. Chats are private to their owner; the 30-day cleanup deletes only old ones;
  *    the window never shows thinking or raw tool results.
  * 7. Mutation tests — each guard fails when its condition is broken.
+ * 8. Actions — every propose_* tool refuses exactly when the screens would, for
+ *    every permission set and object; only allowlisted fields can change and
+ *    special fields go through their own action; values are converted right;
+ *    cards warn about patient messages; proposing changes nothing; a proposal
+ *    runs once, only for its owner, and expires. No proposal is ever executed.
  */
 import { prisma } from "../lib/prisma"
-import { TOOL_DEFINITIONS, runTool, LIMITS, TOOL_NAMES } from "../lib/genesis-ai/tools"
+import { TOOL_DEFINITIONS, ALL_TOOL_DEFINITIONS, runTool, LIMITS, TOOL_NAMES } from "../lib/genesis-ai/tools"
+import { ACTION_TOOL_DEFINITIONS, ACTION_TOOL_NAMES, proposeAction } from "../lib/genesis-ai/actions"
+import { canCreateObject, canCreateReport, canCreateSegment, canDeleteObject, canEditObject } from "../lib/genesis-ai/actions/gates"
+import { coerceValue, editableFields, type EditableField } from "../lib/genesis-ai/actions/fields"
+import { cancel, claim, finish } from "../lib/genesis-ai/actions/lifecycle"
+import { ACTION_TTL_MS } from "../lib/genesis-ai/actions/types"
+import { ACTION_NOTE_PREFIX } from "../lib/genesis-ai/conversation"
+import { RECORD_FIELDS } from "../lib/record-field-catalog"
+import { delegateFor, isCustomObject } from "../lib/automation-records"
 import { allowedColumns, allowedFilterDefs, canViewObject, columnSource, filterFieldSource, viewableObjects, type Viewer } from "../lib/genesis-ai/access"
 import { STATIC_SYSTEM, contextBlock } from "../lib/genesis-ai/prompt"
 import { appendTurns, conversationLines, createConversation, deleteConversation, displayLines, loadHistory, purgeExpired, RETENTION_DAYS } from "../lib/genesis-ai/conversation"
@@ -81,7 +94,7 @@ async function forbiddenSchemaText(): Promise<string[]> {
   // an admin happening to name a property "Call" or "State" doesn't put admin
   // text in the schema.
   for (const ok of ["notes", "name", "email", "phone", "status", "date", "type", "title", "owner", "description", "practice", "provider", "location", "referral", "referrals", "records",
-    "call", "state", "time", "referral date"]) words.delete(ok)
+    "call", "state", "time", "referral date", "outcome"]) words.delete(ok)
   return Array.from(words)
 }
 
@@ -91,10 +104,20 @@ function schemaLeaks(definitionsText: string, forbidden: string[]): string[] {
 }
 
 async function schemaChecks() {
-  const text = JSON.stringify(TOOL_DEFINITIONS)
-  check("tool definitions have no unions (anyOf / oneOf / type lists)", !/"anyOf"|"oneOf"|"type":\[/.test(text))
-  check("every tool has a validator and a definition", TOOL_DEFINITIONS.length === TOOL_NAMES.length && TOOL_DEFINITIONS.every((d) => TOOL_NAMES.includes(d.name as any)))
-  check("every tool schema forbids extra properties", TOOL_DEFINITIONS.every((d) => (d.input_schema as any).additionalProperties === false))
+  const text = JSON.stringify(ALL_TOOL_DEFINITIONS)
+  check(`tool definitions (${ALL_TOOL_DEFINITIONS.length}) have no unions (anyOf / oneOf / type lists)`, !/"anyOf"|"oneOf"|"type":\[/.test(text))
+  check("every read tool has a validator and a definition", TOOL_DEFINITIONS.length === TOOL_NAMES.length && TOOL_DEFINITIONS.every((d) => TOOL_NAMES.includes(d.name as any)))
+  check("every action tool has a validator and a definition", ACTION_TOOL_DEFINITIONS.length === ACTION_TOOL_NAMES.length && ACTION_TOOL_DEFINITIONS.every((d) => ACTION_TOOL_NAMES.includes(d.name as any)))
+  check("tool names are unique", new Set(ALL_TOOL_DEFINITIONS.map((d) => d.name)).size === ALL_TOOL_DEFINITIONS.length)
+  // Every object schema, nested ones included, forbids extra properties.
+  const openObjects: string[] = []
+  const walkSchema = (node: any, where: string) => {
+    if (!node || typeof node !== "object") return
+    if (node.type === "object" && node.additionalProperties !== false) openObjects.push(where)
+    for (const [k, v] of Object.entries(node)) if (v && typeof v === "object") walkSchema(v, `${where}.${k}`)
+  }
+  for (const d of ALL_TOOL_DEFINITIONS) walkSchema(d.input_schema, d.name)
+  check("every object in every tool schema forbids extra properties", openObjects.length === 0, openObjects)
   const forbidden = await forbiddenSchemaText()
   const leaks = schemaLeaks(text, forbidden)
   check(`tool definitions carry none of ${forbidden.length} admin-written names`, leaks.length === 0, leaks)
@@ -273,6 +296,171 @@ function mutationChecks() {
   check("mutation: a plain field reveals nothing else", filterFieldSource({ key: "notes", label: "Notes", type: "text", column: "notes", readPath: [] } as any) === null)
 }
 
+// ── 8. Actions ────────────────────────────────────────────────────────────────
+
+const ACCESS_REFUSAL = /don't have permission|isn't an object this person can see/
+
+/** A "field"-route save key must be a catalog field people may edit, a custom property, or a custom-object property. */
+function allowlistViolations(objectType: string, fields: EditableField[]): string[] {
+  const editableNative = new Set((RECORD_FIELDS[objectType] ?? []).filter((f) => !f.readOnly).map((f) => f.key))
+  const NEVER = new Set(["status", "assignedToId", "ownerId", "createdById", "updatedById", "stageId", "pipelineId", "id", "recordNumber", "objectDefId", "createdAt", "updatedAt", "referralDate"])
+  return fields.filter((f) => f.route === "field").filter((f) => {
+    if (isCustomObject(objectType)) return f.saveKey.startsWith("cp_") // custom-object props are bare ids
+    if (f.saveKey.startsWith("cp_")) return false
+    return !editableNative.has(f.saveKey) || NEVER.has(f.saveKey)
+  }).map((f) => `${objectType}.${f.saveKey}`)
+}
+
+async function sampleRecordId(objectType: string): Promise<string | null> {
+  const model = delegateFor(objectType)
+  if (!model) return null
+  const where = isCustomObject(objectType) ? { objectDef: { key: objectType.slice(3) } } : {}
+  return (await model.findFirst({ where, select: { id: true } }).catch(() => null))?.id ?? null
+}
+
+async function actionChecks(objects: { key: string; label: string }[]) {
+  // Field allowlist and routing, for every object.
+  const violations: string[] = []
+  const routes: Record<string, Record<string, string>> = {}
+  for (const o of objects) {
+    const fields = await editableFields(o.key)
+    violations.push(...allowlistViolations(o.key, fields))
+    routes[o.key] = Object.fromEntries(fields.map((f) => [f.key, f.route]))
+  }
+  check(`only allowlisted fields can change, on all ${objects.length} objects`, violations.length === 0, violations)
+  check("special fields go through their own action",
+    routes.REFERRAL?.status === "referral_status" && routes.REFERRAL?.owner === "referral_owner" && routes.REFERRAL?.pipelineId === "referral_pipeline" &&
+    routes.TASK?.status === "task_status" && routes.SURGERY?.status === "surgery" && routes.PRACTICE?.owner === "owner" && !("referralDate" in (routes.REFERRAL ?? {})),
+    { REFERRAL: routes.REFERRAL, TASK: routes.TASK })
+  const leaky: EditableField[] = [{ key: "createdById", label: "x", type: "text", route: "field", saveKey: "createdById" }]
+  check("mutation: a read-only column on the generic path is caught", allowlistViolations("REFERRAL", leaky).length === 1)
+
+  // Value conversion.
+  const users = [{ id: "u-me", name: "Pat Lee" }, { id: "u-2", name: "Sam Ortiz" }]
+  const sel: EditableField = { key: "status", label: "Status", type: "select", route: "referral_status", saveKey: "status", options: [{ value: "NEW", label: "New" }, { value: "SCHEDULED", label: "Scheduled" }] }
+  const conv = (f: EditableField, v: string[]): any => { try { return coerceValue(f, v, "u-me", users) } catch (e) { return { error: (e as Error).message } } }
+  check("values: an option by its label", conv(sel, ["scheduled"]).value === "SCHEDULED")
+  check("values: an unknown option is refused", !!conv(sel, ["Maybe"]).error)
+  check("values: a date becomes a calendar day", conv({ key: "d", label: "D", type: "date", route: "field", saveKey: "appointmentDate" }, ["2026-10-09"]).value === "2026-10-09")
+  check("values: a custom date property is stored at noon UTC", conv({ key: "cp_x", label: "D", type: "date", route: "field", saveKey: "cp_x" }, ["2026-10-09"]).value === "2026-10-09T12:00:00.000Z")
+  check("values: a bad date is refused", !!conv({ key: "d", label: "D", type: "date", route: "field", saveKey: "appointmentDate" }, ["next tuesday-ish"]).error)
+  check("values: \"@me\" and names resolve to people",
+    conv({ key: "owner", label: "O", type: "user", route: "owner", saveKey: "owner" }, ["@me"]).value === "u-me" &&
+    conv({ key: "owner", label: "O", type: "user", route: "owner", saveKey: "owner" }, ["sam ortiz"]).value === "u-2")
+  check("values: numbers, checkboxes, multi-select",
+    conv({ key: "n", label: "N", type: "number", route: "field", saveKey: "cp_n" }, ["$1,250"]).value === 1250 &&
+    conv({ key: "c", label: "C", type: "checkbox", route: "field", saveKey: "cp_c" }, ["yes"]).value === true &&
+    JSON.stringify(conv({ ...sel, multi: true, route: "field", saveKey: "cp_m" }, ["New", "Scheduled"]).value) === JSON.stringify(["NEW", "SCHEDULED"]))
+  check("values: [] clears a field", conv(sel, []).value === null)
+
+  // Proposals need a chat to belong to; everything made here is deleted at the end.
+  const owner = "genesis-check-actions"
+  const chat = await createConversation(owner, "check")
+  let n = 0
+  const ctx = () => ({ conversationId: chat.id, toolUseId: `check-tu-${++n}` })
+  try {
+    // Access: every permission set × object × kind refuses exactly when the screens would.
+    const sets = await permissionSets()
+    const samples = new Map<string, string | null>()
+    const textField = new Map<string, string | undefined>()
+    for (const o of objects) {
+      samples.set(o.key, await sampleRecordId(o.key))
+      textField.set(o.key, (await editableFields(o.key)).find((f) => f.route === "field" && (f.type === "text" || f.type === "long_text"))?.key)
+    }
+    const wrong: string[] = []
+    let checked = 0
+    const expect = (label: string, allowed: boolean, out: { isError?: boolean; content: string }) => {
+      checked++
+      const refused = !!out.isError && ACCESS_REFUSAL.test(out.content)
+      if (allowed === refused) wrong.push(`${label}: expected ${allowed ? "allowed" : "refused"} — ${out.content.slice(0, 90)}`)
+    }
+    // One real permission set per distinct outcome on each object: the gates are
+    // what's under test, and sets with the same answers would only repeat them.
+    let distinct = 0
+    for (const o of objects) {
+      const seen = new Set<string>()
+      for (const s of sets) {
+        const sig = [canViewObject(s.me, o.key), canEditObject(s.me, o.key), canDeleteObject(s.me, o.key), canCreateObject(s.me, o.key), canCreateSegment(s.me, o.key), canCreateReport(s.me, [o.key])].join("")
+        if (seen.has(sig)) continue
+        seen.add(sig)
+        distinct++
+        const id = samples.get(o.key)
+        const field = textField.get(o.key)
+        const see = canViewObject(s.me, o.key)
+        if (id && field) expect(`${s.label} update ${o.key}`, see && canEditObject(s.me, o.key), await proposeAction("propose_update_records", { object: o.key, record_ids: [id], changes: [{ field, values: ["genesis-check"] }] }, s.me, ctx()))
+        if (id) expect(`${s.label} delete ${o.key}`, see && canDeleteObject(s.me, o.key), await proposeAction("propose_delete_records", { object: o.key, record_ids: [id] }, s.me, ctx()))
+        expect(`${s.label} create ${o.key}`, see && canCreateObject(s.me, o.key), await proposeAction("propose_create_record", { object: o.key, values: [] }, s.me, ctx()))
+        expect(`${s.label} segment ${o.key}`, see && canCreateSegment(s.me, o.key), await proposeAction("propose_create_segment", { name: "check", object: o.key, kind: "active" }, s.me, ctx()))
+        expect(`${s.label} report ${o.key}`, see && canCreateReport(s.me, [o.key]), await proposeAction("propose_create_report", { name: "check", object: o.key, measure: "count", chart: "table", group_by: "nope" }, s.me, ctx()))
+      }
+    }
+    check(`${checked} proposals (${distinct} distinct access combinations from ${sets.length} permission sets × ${objects.length} objects) are refused exactly when the screens would`, wrong.length === 0, wrong.slice(0, 8))
+
+    // Non-vacuous: someone who may edit but not delete referrals.
+    const editor: Viewer = { id: "check-editor", name: "Check", role: "STAFF", permissions: ["REFERRALS:EDIT"] }
+    const refId = samples.get("REFERRAL")
+    if (refId) {
+      const up = await proposeAction("propose_update_records", { object: "REFERRAL", record_ids: [refId], changes: [{ field: "notes", values: ["x"] }] }, editor, ctx())
+      const del = await proposeAction("propose_delete_records", { object: "REFERRAL", record_ids: [refId] }, editor, ctx())
+      check("mutation guard: Edit without Delete — the update is allowed, the delete refused", !up.isError && !!del.isError && ACCESS_REFUSAL.test(del.content), [up.content.slice(0, 80), del.content.slice(0, 80)])
+
+      // Cards warn when a change will message the patient.
+      const sched = await proposeAction("propose_update_records", { object: "REFERRAL", record_ids: [refId], changes: [{ field: "status", values: ["Scheduled"] }] }, ADMIN, ctx())
+      const fresh = await proposeAction("propose_update_records", { object: "REFERRAL", record_ids: [refId], changes: [{ field: "status", values: ["New"] }] }, ADMIN, ctx())
+      check("a Scheduled status card warns about the patient text/email; a New one doesn't",
+        !!sched.action?.card.warnings.some((w) => /texts and emails the patient/.test(w)) && !fresh.action?.card.warnings.some((w) => /patient/.test(w)), [sched.action?.card, fresh.action?.card])
+      const delCard = await proposeAction("propose_delete_records", { object: "REFERRAL", record_ids: [refId] }, ADMIN, ctx())
+      check("a delete card is marked dangerous and says it can't be undone", !!delCard.action?.card.danger && !!delCard.action?.card.warnings.some((w) => /can't be undone/.test(w)))
+      const newRef = await proposeAction("propose_create_record", { object: "REFERRAL", values: [{ field: "patientFirstName", values: ["Check"] }, { field: "patientLastName", values: ["Only"] }] }, ADMIN, ctx())
+      check("a new-referral card warns about automated patient messages", !!newRef.action?.card.warnings.some((w) => /patient messages/.test(w)), newRef.content.slice(0, 120))
+      const readOnly = await proposeAction("propose_update_records", { object: "REFERRAL", record_ids: [refId], changes: [{ field: "referralDate", values: ["2026-01-01"] }] }, ADMIN, ctx())
+      check("a read-only field is refused even for an admin", !!readOnly.isError && /can't be changed/.test(readOnly.content))
+    }
+
+    // Proposing changes nothing.
+    const task = await prisma.task.findFirst({ where: { status: { not: "COMPLETED" } }, select: { id: true, status: true, updatedAt: true } })
+    if (task) {
+      const out = await proposeAction("propose_update_records", { object: "TASK", record_ids: [task.id], changes: [{ field: "status", values: ["Completed"] }] }, ADMIN, ctx())
+      const after = await prisma.task.findUnique({ where: { id: task.id }, select: { status: true, updatedAt: true } })
+      check("proposing \"mark complete\" changes nothing until Confirm",
+        !out.isError && /Mark task/.test(out.action?.card.title ?? "") && after?.status === task.status && after?.updatedAt.getTime() === task.updatedAt.getTime(),
+        { title: out.action?.card.title, before: task.status, after: after?.status })
+      check("the model is told it isn't done yet", /awaiting_confirmation/.test(out.content) && /Don't say it's done/.test(out.content))
+    }
+
+    // Lifecycle: owner only, once, and it expires.
+    const mk = (createdAt = new Date()) => prisma.aiPendingAction.create({
+      data: { userId: owner, conversationId: chat.id, toolUseId: `life-${++n}`, kind: "add_note", payload: {}, card: { title: "Check card", lines: [], warnings: [] }, createdAt },
+    })
+    const a = await mk()
+    check("another user can't confirm or cancel a proposal", (await claim("someone-else", a.id)) === null && (await cancel("someone-else", a.id)) === null)
+    const c1 = await claim(owner, a.id)
+    const c2 = await claim(owner, a.id)
+    check("a proposal is claimed once — a double click runs it once", c1?.kind === "run" && c2?.kind === "settled" && c2.view.status === "RUNNING", [c1?.kind, c2?.kind])
+    if (c1?.kind === "run") {
+      const v = await finish(owner, c1.row, { ok: true, message: "Did it." })
+      const c3 = await claim(owner, a.id)
+      check("a finished proposal can't run again", v.status === "DONE" && c3?.kind === "settled" && c3.view.status === "DONE")
+    }
+    const b = await mk()
+    const cancelled = await cancel(owner, b.id)
+    check("cancel marks it cancelled and it can't then run", cancelled?.status === "CANCELLED" && (await claim(owner, b.id))?.kind === "settled")
+    const old = await mk(new Date(Date.now() - ACTION_TTL_MS - 60_000))
+    const ex = await claim(owner, old.id)
+    check("after 30 minutes a proposal expires instead of running", ex?.kind === "settled" && ex.view.status === "EXPIRED")
+    const notes = await prisma.aiMessage.findMany({ where: { conversationId: chat.id }, select: { content: true } })
+    const texts = notes.map((m) => JSON.stringify(m.content))
+    check("the chat is told about done, cancelled and expired proposals",
+      ["it's done", "cancelled", "expired"].every((k) => texts.some((t) => t.includes("[Genesis action]") && t.includes(k))), texts.length)
+    const shown = (await conversationLines(owner, chat.id))?.lines ?? []
+    check("action notes are never shown as messages", !JSON.stringify(shown).includes(ACTION_NOTE_PREFIX.trim()))
+  } finally {
+    await prisma.aiConversation.deleteMany({ where: { id: chat.id } })
+  }
+  const leftover = await prisma.aiPendingAction.count({ where: { conversationId: chat.id } })
+  check("every test proposal was deleted", leftover === 0, leftover)
+}
+
 async function main() {
   const objects = await listReportObjects()
   await mappingChecks(objects)
@@ -282,6 +470,7 @@ async function main() {
   await validationChecks()
   await storageChecks()
   mutationChecks()
+  await actionChecks(objects)
   check("admin can see every object", (await viewableObjects(ADMIN)).length === objects.length)
   console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED")
   await prisma.$disconnect()

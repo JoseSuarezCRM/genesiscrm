@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import { recordPermKey } from "@/lib/record-perm-key"
 import { auth } from "@/lib/auth"
 import { requireAccess, requireSettingsPage } from "@/lib/auth-guard"
 import { revalidatePath } from "next/cache"
@@ -10,11 +11,10 @@ import { resolverFor, labelFor, listObjectTypes, type RegistryRecord } from "@/l
 // that page's box in User Management (lib/settings-pages.ts).
 const requirePageAccess = () => requireSettingsPage("data-model")
 
-// The permission object key that gates editing records of a given type.
-function permKeyFor(typeKey: string): string {
-  if (typeKey.startsWith("CO:")) return typeKey
-  return ({ REFERRAL: "REFERRALS", PROVIDER: "PROVIDERS", PRACTICE: "PRACTICES", LOCATION: "LOCATIONS", SURGERY: "SURGERY" } as Record<string, string>)[typeKey] ?? typeKey
-}
+// The permission object key that gates editing records of a given type. This
+// copy used to miss TASK and ACTIVITY (their keys are TASKS / ACTIVITIES), so
+// linking from a task or activity failed for everyone but admins.
+const permKeyFor = (typeKey: string): string => recordPermKey(typeKey)
 
 export { listObjectTypes }
 

@@ -8,6 +8,7 @@
 
 import type Anthropic from "@anthropic-ai/sdk"
 import { prisma } from "@/lib/prisma"
+import { ACTION_TTL_MS, type ActionCard, type ActionView } from "./actions/types"
 
 /** Chats untouched this long are deleted (/api/cron/ai-cleanup). */
 export const RETENTION_DAYS = 30
@@ -65,6 +66,16 @@ export async function appendTurns(userId: string, conversationId: string, turns:
   ])
 }
 
+/**
+ * Notes the CRM adds to a chat when a proposal is confirmed or cancelled, so the
+ * next answer knows what happened. Sent to the model; never shown as a message.
+ */
+export const ACTION_NOTE_PREFIX = "[Genesis action] "
+
+export async function appendActionNote(userId: string, conversationId: string, text: string) {
+  await appendTurns(userId, conversationId, [{ role: "user", content: [{ type: "text", text: `${ACTION_NOTE_PREFIX}${text}` }] }])
+}
+
 // ── What the chat window shows (never thinking blocks or raw tool results) ───
 
 export interface ChatLine {
@@ -72,6 +83,14 @@ export interface ChatLine {
   text: string
   /** Lookups made while answering, as short labels. */
   tools?: string[]
+  /** Changes proposed while answering, with what became of them. */
+  actions?: ActionView[]
+}
+
+/** A stored proposal as the window shows it — past its time, it reads as expired. */
+export function actionView(row: { id: string; card: unknown; status: string; result: unknown; createdAt: Date }, now = Date.now()): ActionView {
+  const expired = row.status === "PENDING" && now - row.createdAt.getTime() > ACTION_TTL_MS
+  return { id: row.id, card: row.card as ActionCard, status: (expired ? "EXPIRED" : row.status) as ActionView["status"], result: (row.result as ActionView["result"]) ?? null }
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -81,27 +100,38 @@ const TOOL_LABEL: Record<string, string> = {
   query_records: "Listed records",
   aggregate: "Summarized records",
   get_record: "Opened a record",
+  propose_update_records: "Prepared a change",
+  propose_create_record: "Prepared a new record",
+  propose_add_note: "Prepared a note",
+  propose_delete_records: "Prepared a deletion",
+  propose_link_records: "Prepared a link",
+  propose_create_segment: "Prepared a segment",
+  propose_create_report: "Prepared a report",
+  propose_create_view: "Prepared a view",
 }
 
-/** A stored chat as the window renders it: questions, answers and lookup labels. */
-export function displayLines(turns: { role: string; content: unknown }[]): ChatLine[] {
+/** A stored chat as the window renders it: questions, answers, lookup labels and change cards. */
+export function displayLines(turns: { role: string; content: unknown }[], actions: Map<string, ActionView> = new Map()): ChatLine[] {
   const lines: ChatLine[] = []
   for (const t of turns) {
     const blocks: any[] = typeof t.content === "string" ? [{ type: "text", text: t.content }] : ((t.content as any[]) ?? [])
     if (t.role === "user") {
-      const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim()
+      const text = blocks.filter((b) => b.type === "text" && !String(b.text).startsWith(ACTION_NOTE_PREFIX)).map((b) => b.text).join("\n").trim()
       if (text) lines.push({ role: "user", text })
-      continue // tool_result turns aren't shown
+      continue // tool_result turns and action notes aren't shown
     }
     const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("").trim()
-    const tools = blocks.filter((b) => b.type === "tool_use").map((b) => TOOL_LABEL[b.name] ?? "Looked something up")
+    const uses = blocks.filter((b) => b.type === "tool_use")
+    const tools = uses.map((b) => TOOL_LABEL[b.name] ?? "Looked something up")
+    const cards = uses.map((b) => actions.get(b.id)).filter((a): a is ActionView => !!a)
     const last = lines[lines.length - 1]
     // One answer can span several rounds (lookups, then text): show it as one.
     if (last?.role === "assistant") {
       if (text) last.text = last.text ? `${last.text}\n\n${text}` : text
       if (tools.length) last.tools = [...(last.tools ?? []), ...tools]
+      if (cards.length) last.actions = [...(last.actions ?? []), ...cards]
     } else {
-      lines.push({ role: "assistant", text, ...(tools.length ? { tools } : {}) })
+      lines.push({ role: "assistant", text, ...(tools.length ? { tools } : {}), ...(cards.length ? { actions: cards } : {}) })
     }
   }
   return lines
@@ -119,12 +149,19 @@ export async function listConversations(userId: string) {
 export async function conversationLines(userId: string, id: string): Promise<{ id: string; title: string; lines: ChatLine[] } | null> {
   const conv = await ownConversation(userId, id)
   if (!conv) return null
-  const turns = await prisma.aiMessage.findMany({
-    where: { conversationId: id, conversation: { userId } },
-    orderBy: { createdAt: "asc" },
-    select: { role: true, content: true },
-  })
-  return { id: conv.id, title: conv.title, lines: displayLines(turns) }
+  const [turns, rows] = await Promise.all([
+    prisma.aiMessage.findMany({
+      where: { conversationId: id, conversation: { userId } },
+      orderBy: { createdAt: "asc" },
+      select: { role: true, content: true },
+    }),
+    prisma.aiPendingAction.findMany({
+      where: { conversationId: id, userId },
+      select: { id: true, toolUseId: true, card: true, status: true, result: true, createdAt: true },
+    }),
+  ])
+  const actions = new Map(rows.map((r) => [r.toolUseId, actionView(r)]))
+  return { id: conv.id, title: conv.title, lines: displayLines(turns, actions) }
 }
 
 export async function deleteConversation(userId: string, id: string): Promise<boolean> {

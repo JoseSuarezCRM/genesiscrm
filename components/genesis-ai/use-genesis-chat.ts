@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react"
 import { getMyConversation } from "@/app/actions/genesis-ai"
+import type { ActionView } from "@/lib/genesis-ai/actions/types"
 
 // The chat window's state: one conversation at a time, answers streamed in from
 // /api/genesis-ai/chat (newline-delimited JSON events — see that route).
@@ -13,6 +14,8 @@ export interface UILine {
   role: "user" | "assistant"
   text: string
   tools: ToolLine[]
+  /** Changes proposed in this answer, waiting for (or past) Confirm. */
+  actions: ActionView[]
   notice?: string
   error?: string
   streaming?: boolean
@@ -46,8 +49,8 @@ export function useGenesisChat() {
     setBusy(true)
     setLines((ls) => [
       ...ls,
-      { id: lineId(), role: "user", text: message, tools: [] },
-      { id: lineId(), role: "assistant", text: "", tools: [], streaming: true },
+      { id: lineId(), role: "user", text: message, tools: [], actions: [] },
+      { id: lineId(), role: "assistant", text: "", tools: [], actions: [], streaming: true },
     ])
     try {
       const res = await fetch("/api/genesis-ai/chat", {
@@ -89,6 +92,9 @@ export function useGenesisChat() {
               break
             case "tool_done":
               patchLast((l) => ({ ...l, tools: l.tools.map((t) => (t.id === ev.id ? { ...t, status: ev.status, done: true, error: !!ev.error } : t)) }))
+              break
+            case "action":
+              patchLast((l) => ({ ...l, actions: [...l.actions, { id: ev.id, card: ev.card, status: "PENDING", result: null }] }))
               break
             case "notice":
               patchLast((l) => ({ ...l, notice: ev.d }))
@@ -134,9 +140,15 @@ export function useGenesisChat() {
     setLines(conv.lines.map((l) => ({
       id: lineId(), role: l.role, text: l.text,
       tools: (l.tools ?? []).map((s, i) => ({ id: `h${i}`, status: s, done: true })),
+      actions: l.actions ?? [],
     })))
     return true
   }, [])
 
-  return { conversationId, title, lines, busy, send, stop, reset, open }
+  /** Show what became of a proposal after Confirm / Cancel. */
+  const updateAction = useCallback((view: ActionView) => {
+    setLines((ls) => ls.map((l) => (l.actions.some((a) => a.id === view.id) ? { ...l, actions: l.actions.map((a) => (a.id === view.id ? view : a)) } : l)))
+  }, [])
+
+  return { conversationId, title, lines, busy, send, stop, reset, open, updateAction }
 }

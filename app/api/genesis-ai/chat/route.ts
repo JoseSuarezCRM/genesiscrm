@@ -7,6 +7,7 @@
  *   { t: "text", d }                    answer text, as it's written
  *   { t: "tool", id, status }           a lookup started
  *   { t: "tool_done", id, status, error } a lookup finished
+ *   { t: "action", id, card }           a proposed change, waiting for Confirm
  *   { t: "notice", d }                  a refusal, a cut-off answer, …
  *   { t: "error", message }             the question failed
  *   { t: "done" }                       always last
@@ -26,7 +27,7 @@ import { auth } from "@/lib/auth"
 import { getAnthropicClient } from "@/lib/anthropic"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { createAuditLog } from "@/lib/audit"
-import { TOOL_DEFINITIONS, runTool } from "@/lib/genesis-ai/tools"
+import { ALL_TOOL_DEFINITIONS, runAnyTool } from "@/lib/genesis-ai/tools"
 import { GENESIS_MODEL, systemFor } from "@/lib/genesis-ai/prompt"
 import { aiSafeLog, type ChatOutcome } from "@/lib/genesis-ai/safe-log"
 import { appendTurns, createConversation, loadHistory, ownConversation } from "@/lib/genesis-ai/conversation"
@@ -53,6 +54,14 @@ const STARTING: Record<string, string> = {
   query_records: "Listing records…",
   aggregate: "Crunching the numbers…",
   get_record: "Opening the record…",
+  propose_update_records: "Preparing the change…",
+  propose_create_record: "Preparing the new record…",
+  propose_add_note: "Preparing the note…",
+  propose_delete_records: "Preparing the deletion…",
+  propose_link_records: "Preparing the link…",
+  propose_create_segment: "Preparing the segment…",
+  propose_create_report: "Preparing the report…",
+  propose_create_view: "Preparing the view…",
 }
 
 type Param = Anthropic.Messages.MessageParam
@@ -116,7 +125,7 @@ export async function POST(req: Request) {
             model: GENESIS_MODEL,
             max_tokens: MAX_TOKENS,
             system,
-            tools: TOOL_DEFINITIONS,
+            tools: ALL_TOOL_DEFINITIONS,
             messages,
             output_config: { effort: "medium" },
             // Out of lookups: answer with what's been found.
@@ -157,12 +166,15 @@ export async function POST(req: Request) {
           for (const tu of toolUses) {
             toolCalls++
             send({ t: "tool", id: tu.id, status: STARTING[tu.name] ?? "Looking something up…" })
-            const out = await runTool(tu.name, tu.input, me)
+            // A propose_* tool only stores a proposal; nothing changes until the
+            // person clicks Confirm on its card (confirmGenesisAction).
+            const out = await runAnyTool(tu.name, tu.input, me, { conversationId: conv.id, toolUseId: tu.id })
             if (out.isError) toolErrors++
             toolsUsed.push(tu.name)
             out.objects.forEach((o) => objectsRead.add(o))
             for (const r of out.recordIds) if (recordsOpened.length < 50 && !recordsOpened.includes(r)) recordsOpened.push(r)
             send({ t: "tool_done", id: tu.id, status: out.status, error: !!out.isError })
+            if (out.action) send({ t: "action", id: out.action.id, card: out.action.card })
             results.push({ type: "tool_result", tool_use_id: tu.id, content: out.content, ...(out.isError ? { is_error: true } : {}) })
           }
           const turns: Param[] = [{ role: "assistant", content: msg.content as any }, { role: "user", content: results }]

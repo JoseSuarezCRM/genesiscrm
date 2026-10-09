@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import { recordPermKey } from "@/lib/record-perm-key"
 import { auth } from "@/lib/auth"
 import { requireAccess } from "@/lib/auth-guard"
 import { stageMeta } from "@/lib/task-meta"
@@ -35,11 +36,10 @@ export interface ActivityItem {
   attachments?: { name: string; url: string }[]
 }
 
-// Permission object key that gates editing a record of a given type.
-function permKeyFor(recordType: string): string {
-  if (recordType.startsWith("CO:")) return recordType
-  return ({ REFERRAL: "REFERRALS", PROVIDER: "PROVIDERS", PRACTICE: "PRACTICES", LOCATION: "LOCATIONS", SURGERY: "SURGERY" } as Record<string, string>)[recordType] ?? recordType
-}
+// Permission object key that gates editing a record of a given type. This copy
+// used to miss TASK and ACTIVITY (their keys are TASKS / ACTIVITIES), so notes
+// and calls on a task or activity failed for everyone but admins.
+const permKeyFor = (recordType: string): string => recordPermKey(recordType)
 
 function pathFor(recordType: string, recordId: string): string | null {
   if (recordType.startsWith("CO:")) return `/objects/${recordType.slice(3)}/${recordId}`

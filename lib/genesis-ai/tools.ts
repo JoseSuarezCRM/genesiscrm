@@ -15,16 +15,20 @@
 import type Anthropic from "@anthropic-ai/sdk"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { OPERATORS, uid, type Condition, type FieldType, type FilterState } from "@/lib/filters"
+import { uid, type FilterState } from "@/lib/filters"
 import { describeFilter, toFilterFields, type ObjectFieldDef } from "@/lib/object-fields"
-import { DATE_PRESET_GROUPS } from "@/lib/reporting/date-presets"
 import { buildObjectWhere, countObjectMatches, queryObjectIds } from "@/lib/object-query"
 import { loadSegmentRows, type SegmentColumn } from "@/lib/segment-table"
 import { runReport } from "@/lib/reporting/query"
-import { REPORT_OBJECTS, reportFieldsFor } from "@/lib/reporting/objects"
+import { REPORT_OBJECTS } from "@/lib/reporting/objects"
 import { recordHref } from "@/lib/record-href"
 import { delegateFor, isCustomObject, recordLabel } from "@/lib/automation-records"
-import { allowedColumns, allowedFilterDefs, canViewObject, viewableObjects, FK_TARGET, RELATION_TARGET, type Viewer } from "./access"
+import { allowedColumns, allowedFilterDefs, canViewObject, viewableObjects, RELATION_TARGET, type Viewer } from "./access"
+import { ActionError, FilterInput, groupableKeys, isPersonField, resolveObject, toFilterState } from "./shared"
+import { editableFields } from "./actions/fields"
+import { canCreateObject, canDeleteObject, canEditObject } from "./actions/gates"
+import { PICKS, REQUIRED } from "./actions/records"
+import { ACTION_TOOL_DEFINITIONS, isActionTool, proposeAction, type ProposeOutcome } from "./actions"
 
 // ── Limits ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +83,7 @@ export const TOOL_DEFINITIONS: Anthropic.Messages.Tool[] = [
   },
   {
     name: "describe_object",
-    description: "The fields of one object that this person may use: filter_fields (for filters) and display_fields (for columns, grouping and sums), with types and options. Call before filtering or grouping on an object you haven't described in this conversation.",
+    description: "The fields of one object that this person may use: filter_fields (for filters), display_fields (for columns, grouping and sums), and — when they may change records — editable_fields, create_picks and what they're allowed to do. Call before filtering, grouping or proposing a change on an object you haven't described in this conversation.",
     input_schema: { type: "object", properties: { object: OBJECT }, required: ["object"], additionalProperties: false },
   },
   {
@@ -146,11 +150,6 @@ export const TOOL_DEFINITIONS: Anthropic.Messages.Tool[] = [
 
 // ── Input validation (the server never trusts the model's input) ─────────────
 
-const FilterInput = z.object({
-  match: z.enum(["all", "any"]).optional(),
-  conditions: z.array(z.object({ field: z.string().min(1), operator: z.string().min(1), values: z.array(z.string()).max(200) })).max(20),
-}).strict()
-
 const Inputs = {
   list_objects: z.object({}).strict(),
   describe_object: z.object({ object: z.string().min(1) }).strict(),
@@ -184,8 +183,6 @@ export interface ToolOutcome {
   recordIds: string[]
 }
 
-class ToolError extends Error {}
-
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 const clamp = (n: number | undefined, dflt: number, max: number) => Math.min(Math.max(1, Math.floor(n ?? dflt)), max)
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`
@@ -205,69 +202,15 @@ function fit(obj: Record<string, unknown>): string {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** The object key the model meant: a key ("REFERRAL", "CO:athletes") or a label ("Referrals"). */
-async function resolveObject(me: Viewer, input: string): Promise<{ key: string; label: string }> {
-  const objects = await viewableObjects(me)
-  const q = input.trim().toLowerCase()
-  const hit = objects.find((o) => o.key.toLowerCase() === q)
-    ?? objects.find((o) => o.label.toLowerCase() === q)
-    ?? objects.find((o) => `co:${o.label.toLowerCase()}` === q)
-  if (hit) return hit
-  throw new ToolError(`"${input}" isn't an object this person can see. Objects they can see: ${objects.map((o) => `${o.key} (${o.label})`).join(", ") || "none"}.`)
-}
-
-const PERSON_FIELDS = new Set(Object.entries(FK_TARGET).filter(([, t]) => t === "USER").map(([k]) => k))
-const isPersonField = (d: ObjectFieldDef) => d.key === "__owner" || (!!d.column && PERSON_FIELDS.has(d.column) && d.type === "select")
-const PRESETS = new Set(DATE_PRESET_GROUPS.map((p) => p.value).filter((v) => v !== "custom"))
-
-/**
- * The model's filter as the CRM's FilterState, validated against the fields the
- * person may use. Option labels are accepted for option values ("New" → "NEW"),
- * and "@me" in a person field means the person asking.
- */
-function toFilterState(input: z.infer<typeof FilterInput> | undefined, defs: ObjectFieldDef[], me: Viewer): FilterState | null {
-  if (!input?.conditions?.length) return null
-  const byKey = new Map(defs.map((d) => [d.key, d]))
-  const conditions: Condition[] = input.conditions.map((c) => {
-    const def = byKey.get(c.field)
-    if (!def) throw new ToolError(`Unknown or unavailable filter field "${c.field}". Use a filter_fields key from describe_object.`)
-    const op = OPERATORS[def.type as FieldType]?.find((o) => o.value === c.operator)
-    if (!op) throw new ToolError(`"${c.operator}" isn't valid for ${def.label} (${def.type}). Valid: ${(OPERATORS[def.type as FieldType] ?? []).map((o) => o.value).join(", ")}.`)
-    let values = c.values.map((v) => v.trim())
-    if (isPersonField(def)) values = values.map((v) => (v.toLowerCase() === "@me" ? me.id : v))
-    if (def.type === "select" && def.options?.length) {
-      values = values.map((v) => {
-        const exact = def.options!.find((o) => o.value === v)
-        if (exact) return v
-        const byLabel = def.options!.find((o) => o.label.toLowerCase() === v.toLowerCase())
-        return byLabel ? byLabel.value : v
-      })
-    }
-    if (op.relative && !PRESETS.has(values[0] ?? "")) throw new ToolError(`"${values[0] ?? ""}" isn't a date preset. Valid: ${Array.from(PRESETS).join(", ")}.`)
-    if (op.range && values.length !== 2) throw new ToolError(`${c.operator} needs [from, to].`)
-    if (!op.noValue && !values.length) throw new ToolError(`${def.label} ${c.operator} needs a value.`)
-    const value: string | string[] = op.noValue ? "" : op.multi || op.range ? values : values[0]
-    return { id: uid("ai"), field: def.key, operator: op.value, value }
-  })
-  return { combinator: "AND", groups: [{ id: uid("aig"), combinator: input.match === "any" ? "OR" : "AND", conditions }] }
-}
-
 function columnOrThrow(cols: SegmentColumn[], key: string, what: string): SegmentColumn {
   const c = cols.find((x) => x.key === key)
-  if (!c) throw new ToolError(`Unknown or unavailable ${what} "${key}". Use a display_fields key from describe_object.`)
+  if (!c) throw new ActionError(`Unknown or unavailable ${what} "${key}". Use a display_fields key from describe_object.`)
   return c
 }
 
 /** The created-date column records sort by when nothing else is asked. */
 function createdColumn(objectType: string): string {
   return isCustomObject(objectType) ? "createdAt" : REPORT_OBJECTS[objectType]?.createdAtField ?? "createdAt"
-}
-
-/** Report keys a column can be grouped by (the report engine's own field list). */
-async function groupableKeys(objectType: string): Promise<Set<string>> {
-  const keys = new Set((await reportFieldsFor(objectType)).filter((f) => !f.stageDuration).map((f) => f.key))
-  for (const a of REPORT_OBJECTS[objectType]?.associations ?? []) if (a.target !== "USER") keys.add(`${a.path}.name`)
-  return keys
 }
 
 async function rowsFor(objectType: string, ids: string[], cols: SegmentColumn[], cellMax: number) {
@@ -295,22 +238,53 @@ async function listObjects(me: Viewer): Promise<ToolOutcome> {
 async function describeObject(me: Viewer, input: z.infer<typeof Inputs.describe_object>): Promise<ToolOutcome> {
   const obj = await resolveObject(me, input.object)
   const [defs, cols, groupable] = await Promise.all([allowedFilterDefs(me, obj.key), allowedColumns(me, obj.key), groupableKeys(obj.key)])
-  const opts = (o?: { value: string; label: string }[]) => {
-    if (!o?.length) return undefined
-    const shown = o.slice(0, LIMITS.options).map((x) => (x.value === x.label ? x.value : `${x.label} = ${x.value}`))
-    return o.length > LIMITS.options ? [...shown, `…and ${o.length - LIMITS.options} more (filter on the name field instead)`] : shown
+  const can = { edit: canEditObject(me, obj.key), create: canCreateObject(me, obj.key), delete: canDeleteObject(me, obj.key) }
+  // What they may change, only when they may change anything — the same rule the actions apply.
+  let editable: Record<string, unknown>[] | undefined
+  if (can.edit) {
+    const fields = await editableFields(obj.key)
+    const stageNames = fields.some((f) => f.route === "stage")
+      ? Array.from(new Set((await prisma.pipelineStage.findMany({ where: { pipeline: { objectType: obj.key } }, select: { name: true }, orderBy: { order: "asc" } })).map((s) => s.name)))
+      : []
+    editable = fields.map((f) => ({
+      key: f.key, label: f.label, type: f.type, ...(f.multi ? { multi: true } : {}),
+      ...(f.route === "stage" ? { options: stageNames } : f.options?.length ? { options: f.options.map((o) => o.label) } : {}),
+    }))
   }
-  return {
-    content: fit({
+  // Long option lists (every practice, every user) are trimmed — and on a big
+  // object trimmed harder — so the description always fits whole. People are
+  // named or "@me" anyway, and a long pick list can be filtered by name instead.
+  const build = (cap: number, displayOptions: boolean) => {
+    const opts = (o?: { value: string; label: string }[]) => {
+      if (!o?.length || cap === 0) return undefined
+      const shown = o.slice(0, cap).map((x) => (x.value === x.label ? x.value : `${x.label} = ${x.value}`))
+      return o.length > cap ? [...shown, `…and ${o.length - cap} more (filter on the name field instead)`] : shown
+    }
+    const capList = (o: unknown) => (Array.isArray(o) && cap > 0 ? (o.length > cap ? [...o.slice(0, cap), `…and ${o.length - cap} more`] : o) : undefined)
+    return JSON.stringify({
       object: obj.key,
       label: obj.label,
-      filter_fields: defs.map((d) => ({ key: d.key, label: d.label, type: d.type, ...(isPersonField(d) ? { person: true } : {}), ...(d.options ? { options: opts(d.options) } : {}) })),
+      filter_fields: defs.map((d) => ({
+        key: d.key, label: d.label, type: d.type,
+        ...(isPersonField(d) ? { person: true } : d.options ? { options: opts(d.options) } : {}),
+      })),
       display_fields: cols.map((c) => ({
         key: c.key, label: c.label, type: c.type,
         ...(groupable.has(c.key) ? { groupable: true } : {}),
-        ...(c.options?.length ? { options: opts(c.options) } : {}),
+        ...(displayOptions && c.options?.length ? { options: opts(c.options) } : {}),
       })),
-    }),
+      you_can: Object.entries(can).filter(([, v]) => v).map(([k]) => k),
+      ...(editable ? { editable_fields: editable.map((e) => ({ ...e, ...(e.options ? { options: capList(e.options) } : {}) })) } : {}),
+      ...(can.create ? { create_picks: (PICKS[obj.key] ?? []).map((p) => ({ key: p.key, label: p.label, picks: p.object, ...(p.multi ? { multi: true } : {}) })), required_to_create: REQUIRED[obj.key] ?? [] } : {}),
+    })
+  }
+  let content = build(LIMITS.options, true)
+  for (const [cap, display] of [[LIMITS.options, false], [25, false], [10, false], [0, false]] as const) {
+    if (content.length <= LIMITS.resultChars) break
+    content = build(cap, display)
+  }
+  return {
+    content,
     status: `Read the ${obj.label} fields`,
     objects: [obj.key],
     recordIds: [],
@@ -321,7 +295,7 @@ async function findRecords(me: Viewer, input: z.infer<typeof Inputs.find_records
   const obj = await resolveObject(me, input.object)
   const defs = await allowedFilterDefs(me, obj.key)
   const textFields = defs.filter((d) => d.type === "text" && !d.relationPath && !d.relationCount && d.key !== "__id").slice(0, 16)
-  if (!textFields.length) throw new ToolError(`${obj.label} has no text fields to search.`)
+  if (!textFields.length) throw new ActionError(`${obj.label} has no text fields to search.`)
   const words = input.text.trim().split(/\s+/).filter(Boolean).slice(0, 5)
   // Every word must match some text field: "jane doe" finds first name Jane + last name Doe.
   const state: FilterState = {
@@ -352,14 +326,14 @@ async function queryRecords(me: Viewer, input: z.infer<typeof Inputs.query_recor
   if (input.sort_by) {
     const d = defs.find((x) => x.key === input.sort_by)
     if (!d || !d.column || d.jsonBag || d.relationPath || d.relationCount || d.relationSome) {
-      throw new ToolError(`Can't sort by "${input.sort_by}": choose a plain field from filter_fields (not a custom property or a joined field).`)
+      throw new ActionError(`Can't sort by "${input.sort_by}": choose a plain field from filter_fields (not a custom property or a joined field).`)
     }
     orderColumn = d.column
   }
   const orderBy = { [orderColumn]: input.sort_direction ?? "desc" }
   const limit = clamp(input.limit, 20, LIMITS.rows)
   const model = delegateFor(obj.key)
-  if (!model) throw new ToolError(`${obj.label} can't be listed.`)
+  if (!model) throw new ActionError(`${obj.label} can't be listed.`)
 
   const fields = toFilterFields(defs)
   const { where, explanation } = await buildObjectWhere(obj.key, state, fields)
@@ -401,17 +375,17 @@ async function aggregate(me: Viewer, input: z.infer<typeof Inputs.aggregate>): P
   const groupCol = (key: string | undefined, what: string) => {
     if (!key) return null
     const c = columnOrThrow(cols, key, what)
-    if (!groupable.has(c.key)) throw new ToolError(`"${c.label}" can't be grouped. Choose a display_fields key marked groupable.`)
+    if (!groupable.has(c.key)) throw new ActionError(`"${c.label}" can't be grouped. Choose a display_fields key marked groupable.`)
     return c
   }
   const g = groupCol(input.group_by, "group_by field")
   const b = groupCol(input.breakdown_by, "breakdown field")
-  if (input.date_bucket && g?.type !== "date") throw new ToolError("date_bucket needs group_by to be a date field.")
+  if (input.date_bucket && g?.type !== "date") throw new ActionError("date_bucket needs group_by to be a date field.")
   let mField: SegmentColumn | null = null
   if (input.measure !== "count") {
-    if (!input.measure_field) throw new ToolError(`${input.measure} needs measure_field (a number field).`)
+    if (!input.measure_field) throw new ActionError(`${input.measure} needs measure_field (a number field).`)
     mField = columnOrThrow(cols, input.measure_field, "measure field")
-    if (mField.type !== "number" || mField.joinPath) throw new ToolError(`"${mField.label}" isn't a number field of ${obj.label}.`)
+    if (mField.type !== "number" || mField.joinPath) throw new ActionError(`"${mField.label}" isn't a number field of ${obj.label}.`)
   }
 
   // The same matching set as query_records (lib/object-query), handed to the
@@ -456,12 +430,12 @@ async function aggregate(me: Viewer, input: z.infer<typeof Inputs.aggregate>): P
 async function getRecord(me: Viewer, input: z.infer<typeof Inputs.get_record>): Promise<ToolOutcome> {
   const obj = await resolveObject(me, input.object)
   const model = delegateFor(obj.key)
-  if (!model) throw new ToolError(`${obj.label} records can't be opened.`)
+  if (!model) throw new ActionError(`${obj.label} records can't be opened.`)
   const scope = isCustomObject(obj.key)
     ? { objectDef: { key: obj.key.slice(3) } }
     : {}
   const exists = await model.findFirst({ where: { id: input.id, ...scope }, select: { id: true } }).catch(() => null)
-  if (!exists) throw new ToolError(`No ${obj.label} record with id ${input.id}.`)
+  if (!exists) throw new ActionError(`No ${obj.label} record with id ${input.id}.`)
 
   const cols = (await allowedColumns(me, obj.key)).filter((c) => c.key !== "__id")
   const [row] = await loadSegmentRows(obj.key, [input.id], cols)
@@ -544,9 +518,19 @@ export async function runTool(name: string, rawInput: unknown, me: Viewer): Prom
       case "get_record": return await getRecord(me, parsed.data)
     }
   } catch (e) {
-    if (e instanceof ToolError) return { content: e.message, isError: true, status: STATUS_FAILED, objects: [], recordIds: [] }
+    if (e instanceof ActionError) return { content: e.message, isError: true, status: STATUS_FAILED, objects: [], recordIds: [] }
     // Database errors echo their arguments (PHI) — never pass them on.
     return { content: `${name} failed on the server. Try a simpler question.`, isError: true, status: STATUS_FAILED, objects: [], recordIds: [] }
   }
   return { content: `Unknown tool "${name}".`, isError: true, status: STATUS_FAILED, objects: [], recordIds: [] }
 }
+
+// ── Everything the chat route offers: read tools + proposals ─────────────────
+
+export const ALL_TOOL_DEFINITIONS: Anthropic.Messages.Tool[] = [...TOOL_DEFINITIONS, ...ACTION_TOOL_DEFINITIONS]
+
+/** A read tool, or a propose_* tool (which needs the chat and tool-call it belongs to). */
+export async function runAnyTool(name: string, input: unknown, me: Viewer, ctx: { conversationId: string; toolUseId: string }): Promise<ProposeOutcome> {
+  return isActionTool(name) ? proposeAction(name, input, me, ctx) : runTool(name, input, me)
+}
+
