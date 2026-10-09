@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Trash2, Pencil, Search, GripVertical, Box, Loader2 } from "lucide-react"
+import { Plus, Trash2, Pencil, Search, GripVertical, Loader2 } from "lucide-react"
 import StyledSelect from "@/components/ui/styled-select"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import PropertyEditor, { type PropertyDraft } from "@/components/property-editor"
@@ -50,8 +50,8 @@ export interface BuiltinPropRow {
 }
 
 export type PropertiesObject =
-  | { kind: "builtin"; key: string; label: string; icon: string; native: NativeFieldRow[]; custom: BuiltinPropRow[] }
-  | { kind: "custom"; key: string; label: string; icon: null; defId: string; properties: CustomObjectProperty[] }
+  | { kind: "builtin"; key: string; label: string; native: NativeFieldRow[]; custom: BuiltinPropRow[] }
+  | { kind: "custom"; key: string; label: string; defId: string; properties: CustomObjectProperty[] }
 
 // Type pills: custom property types, and the built-in catalog's own types.
 const TYPE_LABELS: Record<string, string> = {
@@ -90,7 +90,7 @@ export default function PropertiesSettings({ objects, initialObject }: { objects
           <span className="text-sm font-medium text-zinc-500">Object</span>
           <StyledSelect searchable value={selected.key} onChange={(e) => choose(e.target.value)} className="min-w-[220px]">
             {objects.map((o) => (
-              <option key={o.key} value={o.key}>{o.icon ? `${o.icon}  ` : ""}{o.label}{o.kind === "custom" ? " · custom" : ""}</option>
+              <option key={o.key} value={o.key}>{o.label}</option>
             ))}
           </StyledSelect>
         </div>
@@ -122,13 +122,12 @@ function useCreateSignal(signal: number, open: () => void) {
 
 // ── Shared list chrome (the Custom Objects design) ────────────────────────────
 
-function Card({ icon, label, count, total, children, footer }: {
-  icon: React.ReactNode; label: string; count: number; total: number; children: React.ReactNode; footer?: React.ReactNode
+function Card({ label, count, total, children, footer }: {
+  label: string; count: number; total: number; children: React.ReactNode; footer?: React.ReactNode
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
       <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
-        <span className="text-base">{icon}</span>
         <h2 className="text-sm font-semibold text-zinc-800">{label}</h2>
         <span className="text-xs text-zinc-400">{count === total ? total : `${count} of ${total}`}</span>
       </div>
@@ -198,7 +197,7 @@ function BuiltinPanel({ object, query, createSignal }: { object: Extract<Propert
 
   return (
     <>
-      <Card icon={object.icon} label={object.label} count={native.length + custom.length} total={total}>
+      <Card label={object.label} count={native.length + custom.length} total={total}>
         {native.length + custom.length === 0 && <p className="px-4 py-10 text-center text-sm text-zinc-400">No properties match.</p>}
         {native.map((f) => (
           <Row key={f.key} name={f.label} type={typeLabel(f.type)}
@@ -373,7 +372,7 @@ function CustomPanel({ object, query, createSignal }: { object: Extract<Properti
   return (
     <>
       {err && <p role="alert" className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
-      <Card icon={<Box className="h-4 w-4 text-zinc-400" />} label={object.label} count={list.length} total={props.length}>
+      <Card label={object.label} count={list.length} total={props.length}>
         {list.length === 0 && <p className="px-4 py-10 text-center text-sm text-zinc-400">{props.length ? "No properties match." : "No properties yet."}</p>}
         {list.map((p) => (
           <Row key={p.id} name={p.name} sub={p.description || optionsLine(p.options, p.optionLabels)} type={typeLabel(p.type)}

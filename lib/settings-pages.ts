@@ -38,6 +38,7 @@ const page = (slug: string, label: string, section: SettingsSection, description
 
 export const SETTINGS_PAGES: SettingsPage[] = [
   page("users", "User Management", "Team & Access", "Users, teams and their permissions — they can't grant more than they hold"),
+  page("navigation", "Navigation", "Team & Access", "The sidebar menu for everyone — order, sections, icons, names, hidden items and links"),
   page("objects", "Objects", "Objects & Data", "Every object, built-in and custom — create, rename and delete custom objects"),
   // A tab inside Objects, with its own box. Not a menu item: the Objects entry
   // links here for someone who has this box but not Objects (settings layout).

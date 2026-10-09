@@ -5,110 +5,14 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { useState, useEffect, useRef } from "react"
-import {
-  Users,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  CalendarRange,
-  ClipboardList,
-  Stethoscope,
-  Settings,
-  MessageCircle,
-  UserCog,
-  Box,
-  Workflow,
-  LayoutDashboard,
-  BarChart3,
-  PhoneIncoming,
-} from "lucide-react"
+import { LogOut, ChevronLeft, ChevronRight, UserCog, ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { userCanLevel, type AccessLevel } from "@/lib/permissions"
-import { canOpenSettingsPage, SETTINGS_PAGE_KEYS } from "@/lib/settings-pages"
+import { resolveNav, visibleNav, type NavLayoutData } from "@/lib/nav-layout"
+import { navIcon } from "@/lib/nav-icons"
 
-// `level` is the access the item needs on `object` (View unless stated) — "New call"
-// is useless to someone who can only read the call log.
-// `settingsPage`: shown only to people who can open that settings page (lib/settings-pages.ts).
-type NavItem = { href: string; label: string; object?: string; level?: AccessLevel; settingsPage?: string }
-
-const referralItems: NavItem[] = [
-  { href: "/",                  label: "Dashboard" },
-  { href: "/referrals",         label: "Referrals",  object: "REFERRALS" },
-  { href: "/practices",         label: "Practices",  object: "PRACTICES" },
-  { href: "/locations",         label: "Locations",  object: "LOCATIONS" },
-  { href: "/referring-doctors", label: "Providers",  object: "PROVIDERS" },
-  { href: "/activities",        label: "Activities", object: "ACTIVITIES" },
-  { href: "/tasks",             label: "Tasks",      object: "TASKS" },
-  { href: "/segments",          label: "Segments",   object: "SEGMENTS" },
-  { href: "/messages",          label: "SMS Inbox",  object: "SMS" },
-  { href: "/reports/referral-analytics", label: "Referral Analytics", object: "REPORTS" },
-  { href: "/broadcasts",        label: "Broadcasts", object: "BROADCASTS" },
-]
-
-const reportingItems: NavItem[] = [
-  { href: "/reports/dashboard", label: "Dashboards", object: "REPORTS" },
-  { href: "/reports",           label: "Reports",    object: "REPORTS" },
-]
-
-const appointmentItems: NavItem[] = [
-  { href: "/appointments",           label: "Completed Appts" },
-  { href: "/appointments/providers", label: "Referring Providers" },
-]
-
-const schedulingItems: NavItem[] = [
-  { href: "/scheduler",         label: "Weekly Schedule" },
-  { href: "/scheduler/staff",   label: "Staff Roster" },
-]
-
-// The Operations Planner keeps its own nested sidebar, so the CRM's global nav
-// links only at its four sections.
-const schedulingV2Items: NavItem[] = [
-  { href: "/scheduling-v2",                  label: "Master Schedule" },
-  { href: "/scheduling-v2/schedule-builder", label: "Schedule Builder" },
-  { href: "/scheduling-v2/roster",           label: "Roster" },
-  { href: "/scheduling-v2/settings",         label: "Settings" },
-]
-
-const surgeryItems: NavItem[] = [
-  { href: "/surgery",         label: "Surgery Cases",   object: "SURGERY" },
-  { href: "/surgery/reports", label: "Surgery Reports", object: "SURGERY" },
-]
-
-const communicationsItems: NavItem[] = [
-  { href: "/communications/sms",   label: "SMS",   object: "TEMPLATES" },
-  { href: "/communications/email", label: "Email", object: "TEMPLATES" },
-  { href: "/communications/documents", label: "Documents", object: "TEMPLATES" },
-  { href: "/communications/media", label: "Media", object: "TEMPLATES" },
-]
-
-const automationItems: NavItem[] = [
-  { href: "/automations",        label: "Workflows", object: "AUTOMATIONS" },
-  { href: "/settings/reconcile", label: "Appt Reconciliation", settingsPage: "reconcile" },
-]
-
-// Admin/config pages now live in the Settings page's own nav; the sidebar just
-// links to Settings, which lands on the first page this person can open.
-const adminItems: NavItem[] = [
-  { href: "/settings", label: "Settings" },
-]
-
-const onCallItems: NavItem[] = [
-  { href: "/on-call",                label: "New call", object: "CO:referral-calls", level: "EDIT" },
-  { href: "/objects/referral-calls", label: "Call log", object: "CO:referral-calls" },
-]
-
-const sections = [
-  { key: "NAV_REFERRALS",    title: "Referrals",    icon: Users,         items: referralItems },
-  { key: "NAV_APPOINTMENTS", title: "Appointments", icon: ClipboardList, items: appointmentItems },
-  { key: "NAV_SCHEDULING",   title: "Scheduling",   icon: CalendarRange, items: schedulingItems },
-  { key: "NAV_SCHEDULING",   title: "Scheduling v2", icon: LayoutDashboard, items: schedulingV2Items },
-  { key: "NAV_SURGERY",      title: "Surgery",      icon: Stethoscope,   items: surgeryItems },
-  { key: "NAV_ONCALL",       title: "On-call",      icon: PhoneIncoming, items: onCallItems },
-  { key: "NAV_COMMUNICATIONS", title: "Communications", icon: MessageCircle, items: communicationsItems },
-  { key: "NAV_REPORTING",    title: "Reporting",    icon: BarChart3,     items: reportingItems },
-  { key: "NAV_AUTOMATIONS",  title: "Automations",  icon: Workflow,      items: automationItems },
-  { key: "NAV_ADMIN",        title: "Settings",     icon: Settings,      items: adminItems },
-]
+// The menu itself — sections, items, icons, who sees what — lives in
+// lib/nav-catalog.ts, arranged by the organisation's layout from Settings →
+// Navigation (lib/nav-layout.ts). This component only draws it.
 
 interface SidebarProps {
   userName: string | null | undefined
@@ -116,49 +20,24 @@ interface SidebarProps {
   userRole: string
   userPermissions: string[]
   customObjects?: { key: string; plural: string }[]
+  /** Settings → Navigation; null = the default menu. */
+  navLayout?: NavLayoutData | null
 }
 
 function isItemActive(href: string, pathname: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/")
 }
 
-export default function Sidebar({ userName, userEmail, userRole, userPermissions, customObjects = [] }: SidebarProps) {
+export default function Sidebar({ userName, userEmail, userRole, userPermissions, customObjects = [], navLayout = null }: SidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(true)
   const [openSection, setOpenSection] = useState<string | null>(null)
   const [flyoutTop, setFlyoutTop] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const isSuperAdmin = userRole === "ADMIN"
-  const hasNavPerms = userPermissions.some(p => p.startsWith("NAV_"))
-  // If no NAV_* perms set (no team assigned), show all non-admin sections
-  const me = { role: userRole, permissions: userPermissions }
-  // Settings shows for the Settings menu permission or any settings page's box.
-  // Not for older ways into a page (Manage Users opens API Keys): those people
-  // never had a Settings entry and still reach the page as before.
-  const canSettings = userPermissions.includes("NAV_ADMIN") || userPermissions.some((p) => SETTINGS_PAGE_KEYS.includes(p))
-  const can = (key: string) => key === "NAV_ADMIN"
-    ? isSuperAdmin || canSettings
-    : isSuperAdmin || (hasNavPerms ? userPermissions.includes(key) : true)
-  // An item tied to an object is hidden when the user has no View access to it.
-  const canViewItem = (item: NavItem) =>
-    isSuperAdmin || (
-      (!item.object || userCanLevel(me, item.object, item.level ?? "VIEW")) &&
-      (!item.settingsPage || canOpenSettingsPage(me, item.settingsPage))
-    )
-
-  // Custom objects form their own section, gated per-object by CO:<key> view access.
-  // The call log already has a home under On-call; list it here only for someone
-  // who can't see that section.
-  const listedObjects = customObjects.filter((o) => o.key !== "referral-calls" || !can("NAV_ONCALL"))
-  const objectsSection = listedObjects.length > 0
-    ? [{ key: "OBJECTS", title: "Objects", icon: Box, items: listedObjects.map((o) => ({ href: `/objects/${o.key}`, label: o.plural, object: `CO:${o.key}` })) }]
-    : []
-
-  const visibleSections = [...sections.filter((s) => can(s.key)), ...objectsSection]
-    .map((s) => ({ ...s, items: s.items.filter(canViewItem) }))
-    .filter((s) => s.items.length > 0)
-  const activeFlyout = visibleSections.find((s) => s.title === openSection)
+  // Each item keeps its own access rules wherever the layout puts it.
+  const visibleSections = visibleNav(resolveNav(navLayout, customObjects), { role: userRole, permissions: userPermissions })
+  const activeFlyout = visibleSections.find((s) => s.id === openSection)
 
   // Close the flyout after navigating
   useEffect(() => {
@@ -184,15 +63,15 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
     }
   }, [openSection])
 
-  const handleSectionClick = (title: string, e: React.MouseEvent<HTMLButtonElement>) => {
-    if (openSection === title) {
+  const handleSectionClick = (id: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (openSection === id) {
       setOpenSection(null)
       return
     }
     const rect = e.currentTarget.getBoundingClientRect()
     // Keep the panel on screen for sections near the bottom
     setFlyoutTop(Math.min(rect.top, Math.max(80, window.innerHeight - 420)))
-    setOpenSection(title)
+    setOpenSection(id)
   }
 
   return (
@@ -231,13 +110,13 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
         {/* Navigation: top-level categories */}
         <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto sidebar-scroll">
           {visibleSections.map((section) => {
-            const Icon = section.icon
-            const hasActive = section.items.some((item) => isItemActive(item.href, pathname))
-            const isOpen = openSection === section.title
+            const Icon = navIcon(section.icon)
+            const hasActive = section.items.some((item) => !item.external && isItemActive(item.href, pathname))
+            const isOpen = openSection === section.id
             return (
               <button
-                key={section.title}
-                onClick={(e) => handleSectionClick(section.title, e)}
+                key={section.id}
+                onClick={(e) => handleSectionClick(section.id, e)}
                 title={collapsed ? section.title : undefined}
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
@@ -317,10 +196,24 @@ export default function Sidebar({ userName, userEmail, userRole, userPermissions
           </p>
           <div className="space-y-0.5">
             {activeFlyout.items.map((item) => {
+              // An outside website opens in a new tab.
+              if (item.external) return (
+                <a
+                  key={item.id}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setOpenSection(null)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-slate-200 hover:bg-slate-700 hover:text-white transition-colors"
+                >
+                  <span className="flex-1 truncate">{item.label}</span>
+                  <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                </a>
+              )
               const isActive = isItemActive(item.href, pathname)
               return (
                 <Link
-                  key={item.href}
+                  key={item.id}
                   href={item.href}
                   onClick={() => setOpenSection(null)}
                   className={cn(

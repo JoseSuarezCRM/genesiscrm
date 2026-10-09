@@ -26,7 +26,6 @@ export default async function PropertiesSettingsPage({ searchParams }: { searchP
       kind: "builtin",
       key: e.type,
       label: e.label,
-      icon: e.icon,
       native: (RECORD_FIELDS[e.type] ?? []).map((f) => ({
         key: f.key, label: renamed[e.type]?.[f.key] ?? f.label, defaultLabel: f.label, renamed: !!renamed[e.type]?.[f.key], type: f.type, options: f.options ?? [], optionLabels: f.optionLabels, readOnly: !!f.readOnly,
       })),
@@ -43,7 +42,6 @@ export default async function PropertiesSettingsPage({ searchParams }: { searchP
       kind: "custom",
       key: `CO:${o.key}`,
       label: o.plural,
-      icon: null,
       defId: o.id,
       properties: o.properties,
     })),

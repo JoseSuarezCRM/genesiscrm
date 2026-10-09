@@ -58,7 +58,8 @@ export const CAPABILITIES: PermissionDef[] = [
   { key: "DELETE_ACTIVITIES", label: "Delete Activities",    description: "Delete notes, calls, meetings, emails and SMS from a record's activity feed" },
 ]
 
-// Nav sections (control sidebar visibility). Keep keys in sync with sidebar.tsx.
+// Menu Access boxes. Each one gates the pages born in its section (lib/nav-catalog.ts
+// navKey), wherever Settings → Navigation places them.
 export const NAV_PERMISSIONS: PermissionDef[] = [
   { key: "NAV_REFERRALS",    label: "Referrals",    description: "Dashboard, Referrals, Practices, Locations, Providers, Activities, Tasks, SMS, Reports, Broadcasts" },
   { key: "NAV_REPORTING",    label: "Reporting",    description: "Dashboards and the report builder" },

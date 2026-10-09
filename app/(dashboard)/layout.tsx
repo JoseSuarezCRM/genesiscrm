@@ -10,6 +10,7 @@ import NavHistoryTracker from "@/components/nav-history-tracker"
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog"
 import { NativeLabelsProvider } from "@/components/native-labels-provider"
 import { getNativeLabels } from "@/lib/native-labels"
+import { getNavLayout } from "@/lib/nav-layout-server"
 
 export default async function DashboardLayout({
   children,
@@ -33,6 +34,8 @@ export default async function DashboardLayout({
   // Admins' names for built-in fields — every screen below reads them
   // (Settings → Properties → Rename).
   const nativeLabels = await getNativeLabels()
+  // The organisation's menu (Settings → Navigation); null = the default menu.
+  const navLayout = await getNavLayout()
 
   return (
     <NativeLabelsProvider labels={nativeLabels}>
@@ -43,6 +46,7 @@ export default async function DashboardLayout({
         userRole={(session.user as any).role ?? "STAFF"}
         userPermissions={(session.user as any).permissions ?? []}
         customObjects={customObjects}
+        navLayout={navLayout}
       />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopToolbar

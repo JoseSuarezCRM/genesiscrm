@@ -186,7 +186,7 @@ function PermissionEditor({ perms, onChange: setPerms, disabled }: { perms: stri
     <div className="space-y-5">
       <div>
         <Label className="mb-1 block">Menu Access</Label>
-        <p className="text-xs text-slate-500 mb-3">Which sections of the navigation this {disabled ? "user" : "set"} can see.</p>
+        <p className="text-xs text-slate-500 mb-3">Which sections of the navigation this {disabled ? "user" : "set"} can see. Each box follows its pages wherever they're placed in the menu (Settings → Navigation).</p>
         <PermissionChecklist selected={perms} onChange={onChange} items={NAV_PERMISSIONS} disabled={disabled} />
       </div>
       <div>

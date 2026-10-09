@@ -29,7 +29,6 @@ export default async function ObjectsSettingsPage({ searchParams }: { searchPara
   const builtins: ObjectRow[] = await Promise.all(CP_ENTITIES.map(async (e) => ({
     key: e.type,
     label: e.label,
-    icon: e.icon,
     kind: "builtin" as const,
     propertyCount: (RECORD_FIELDS[e.type]?.length ?? 0) + ((cpCounts as any[]).find((c) => c.entityType === e.type)?._count._all ?? 0),
     recordCount: await delegateFor(e.type)?.count().catch(() => null) ?? null,
@@ -41,7 +40,6 @@ export default async function ObjectsSettingsPage({ searchParams }: { searchPara
   const custom: ObjectRow[] = customs.map((o) => ({
     key: `CO:${o.key}`,
     label: o.plural,
-    icon: null,
     kind: "custom" as const,
     id: o.id,
     singular: o.singular,

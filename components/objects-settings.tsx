@@ -3,18 +3,15 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Plus, Loader2, Box, Pencil, Trash2, ExternalLink, ListChecks, GitBranch, Search } from "lucide-react"
+import { Plus, Loader2, Pencil, Trash2, ExternalLink, ListChecks, GitBranch, Search } from "lucide-react"
 import { confirmDialog } from "@/components/ui/confirm-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { createCustomObject, updateCustomObject, deleteCustomObject } from "@/app/actions/custom-objects"
-import { cn } from "@/lib/utils"
 
 export interface ObjectRow {
   /** Registry key: "REFERRAL", "PROVIDER", … or "CO:<key>". */
   key: string
   label: string
-  /** Emoji for built-ins; custom objects use the Box icon. */
-  icon: string | null
   kind: "builtin" | "custom"
   id?: string
   singular?: string
@@ -104,7 +101,6 @@ export default function ObjectsSettings({ objects, canProperties, canPipelines, 
           <thead>
             <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
               <th className="px-4 py-2.5">Object</th>
-              <th className="px-4 py-2.5">Type</th>
               <th className="px-4 py-2.5 text-right">Properties</th>
               <th className="px-4 py-2.5 text-right">Records</th>
               <th className="px-4 py-2.5 text-right">Pipelines</th>
@@ -113,15 +109,12 @@ export default function ObjectsSettings({ objects, canProperties, canPipelines, 
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-zinc-400">No objects match “{query}”.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-zinc-400">No objects match “{query}”.</td></tr>
             )}
             {rows.map((o) => (
               <tr key={o.key} className="group hover:bg-zinc-50/60">
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2.5">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-sm">
-                      {o.icon ?? <Box className="h-3.5 w-3.5 text-zinc-500" />}
-                    </span>
                     {o.kind === "custom" ? (
                       <button onClick={() => openEdit(o)} className="font-medium text-zinc-900 hover:underline">{o.label}</button>
                     ) : (
@@ -132,11 +125,6 @@ export default function ObjectsSettings({ objects, canProperties, canPipelines, 
                         className="text-[10px] font-medium uppercase text-zinc-500">Locked</span>
                     )}
                   </div>
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className={cn("rounded-full px-2 py-0.5 text-xs", o.kind === "builtin" ? "bg-zinc-100 text-zinc-600" : "bg-blue-50 text-blue-700")}>
-                    {o.kind === "builtin" ? "Built-in" : "Custom"}
-                  </span>
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600">{o.propertyCount}</td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600">{o.recordCount?.toLocaleString() ?? "—"}</td>

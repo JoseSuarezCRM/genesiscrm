@@ -434,6 +434,16 @@ model NativeFieldLabel {
   @@id([objectType, fieldKey])
 }
 
+// The organisation's sidebar layout (Settings → Navigation): section order,
+// names and icons, item placement, renames, hidden items and external links.
+// One row; none = the default menu. Shape and rules: lib/nav-layout.ts.
+model NavLayout {
+  id          String   @id @default("default")
+  data        Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
 model CardLayout {
   id         String                   @id @default(cuid())
   entityType CustomPropertyEntityType
