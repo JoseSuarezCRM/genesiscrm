@@ -50,6 +50,7 @@ enum AuditAction {
   RECORD_CREATE // a custom-object record created (keys only in metadata, never values)
   RECORD_UPDATE
   AI_EXTRACTION // one AI reading of call notes/screenshot: model, outcome, tokens — never content
+  AI_ASSISTANT // one Genesis AI question: model, tokens, tools, objects and record ids read — never content
 }
 
 enum OutreachChannel {
@@ -442,6 +443,34 @@ model NavLayout {
   data        Json
   updatedById String?
   updatedAt   DateTime @updatedAt
+}
+
+// Genesis AI chats (the top-bar assistant). Private to their owner and deleted
+// 30 days after their last message (/api/cron/ai-cleanup). They hold patient
+// details, so nothing outside the owner's own requests ever reads them.
+model AiConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  title     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AiMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([updatedAt])
+}
+
+// One API turn, stored exactly as sent/received (thinking blocks included) — the
+// model requires its own earlier turns back unchanged. `role` is user|assistant.
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  role           String
+  content        Json
+  createdAt      DateTime       @default(now())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 model CardLayout {

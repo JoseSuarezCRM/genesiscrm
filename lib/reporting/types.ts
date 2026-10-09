@@ -69,6 +69,14 @@ export interface ReportConfig {
    * changes rather than freezing a copy of the filter.
    */
   segmentId?: string | null
+  /**
+   * Restrict the report to these records. For callers that build the matching
+   * set themselves through lib/object-query (Genesis AI), so a count agrees with
+   * the list it summarises. Not stored in saved reports.
+   */
+  recordIds?: string[] | null
+  /** Rows loaded before aggregating (default ROW_CAP, at most MAX_ROW_CAP). Not stored. */
+  rowCap?: number | null
   sort?: { by: "value" | "label"; dir: "asc" | "desc" } | null
   limit?: number | null
   tableMode?: "summarized" | "unsummarized" // table viz: grouped rows vs raw records

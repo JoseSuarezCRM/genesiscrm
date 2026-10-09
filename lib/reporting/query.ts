@@ -14,6 +14,8 @@ import { computeStageDurations } from "@/lib/stages/durations"
 import { segmentRecordIds } from "@/lib/segments"
 
 const ROW_CAP = 10000
+/** The ceiling a caller may raise rowCap to (lib/object-query's PREFILTER_CAP). */
+const MAX_ROW_CAP = 25000
 
 // Resolve a date-range preset (or custom from/to) to a [start, end] window.
 function resolveWindow(dr: NonNullable<ReportConfig["dateRange"]>): { start: Date; end: Date } | null {
@@ -161,6 +163,9 @@ async function loadReportRows(config: ReportConfig, window?: { start: Date; end:
       clauses.push({ id: { in: [] } })
     }
   }
+  // A caller-built record set (see ReportConfig.recordIds) — also in the `where`,
+  // for the same reason as the segment above.
+  if (config.recordIds) clauses.push({ id: { in: config.recordIds } })
   // Date-range window on the chosen (primary) date field.
   const dr = config.dateRange
   if (dr?.field) {
@@ -179,14 +184,15 @@ async function loadReportRows(config: ReportConfig, window?: { start: Date; end:
   for (const a of (REPORT_OBJECTS[primary]?.associations ?? [])) {
     if (a.target === "USER" && !(a.path in include)) include[a.path] = { select: { name: true, email: true } }
   }
-  const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: ROW_CAP }).catch(() => [])
+  const cap = Math.min(Math.max(1, config.rowCap ?? ROW_CAP), MAX_ROW_CAP)
+  const rows: any[] = await model.findMany({ where, ...(Object.keys(include).length ? { include } : {}), take: cap }).catch(() => [])
 
   // If any referenced field is a stage duration, compute time-in-stage per row
   // from the StageTransition log (attach row.__sd for readValue).
   if (allFields.some((f) => f.stageDuration) && rows.length) {
     await attachStageDurations(primary, rows)
   }
-  return { rows, fields, byKey, total: rows.length, capped: rows.length >= ROW_CAP }
+  return { rows, fields, byKey, total: rows.length, capped: rows.length >= cap }
 }
 
 // Load StageTransitions for the loaded rows and compute per-record durations.

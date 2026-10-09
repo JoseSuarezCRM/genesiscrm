@@ -11,6 +11,7 @@ import { ConfirmDialogHost } from "@/components/ui/confirm-dialog"
 import { NativeLabelsProvider } from "@/components/native-labels-provider"
 import { getNativeLabels } from "@/lib/native-labels"
 import { getNavLayout } from "@/lib/nav-layout-server"
+import { GenesisAIProvider } from "@/components/genesis-ai/provider"
 
 export default async function DashboardLayout({
   children,
@@ -39,6 +40,7 @@ export default async function DashboardLayout({
 
   return (
     <NativeLabelsProvider labels={nativeLabels}>
+    <GenesisAIProvider userName={session.user.name || session.user.email || ""}>
     <div className="flex h-screen h-dvh bg-slate-50 overflow-hidden">
       <Sidebar
         userName={session.user.name}
@@ -64,6 +66,7 @@ export default async function DashboardLayout({
       <ConfirmDialogHost />
       <NavHistoryTracker />
     </div>
+    </GenesisAIProvider>
     </NativeLabelsProvider>
   )
 }
